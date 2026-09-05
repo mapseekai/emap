@@ -68,11 +68,17 @@ function applyPatch(
   if (!record) return;
   // Forward: write everything in `to`.
   for (const key of Object.keys(to)) {
-    record[key] = to[key];
+    // Define an own data property, including keys such as __proto__.
+    Object.defineProperty(record, key, {
+      value: to[key],
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
   // Cleanup: drop keys that existed in `from` but are no longer in `to`.
   for (const key of Object.keys(from)) {
-    if (!(key in to)) {
+    if (!Object.hasOwn(to, key)) {
       delete record[key];
     }
   }

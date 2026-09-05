@@ -72,6 +72,8 @@ export interface PolygonFillOptions {
 
 export interface ArrowDotPathOptions {
   shapes: readonly (PathShape | null | undefined)[];
+  /** Optional feature indices to render without materializing sparse shape arrays. */
+  shapeIndices?: Uint32Array;
   cacheKey: string;
   geometryRevision: number;
 }
@@ -86,6 +88,8 @@ export interface CorePainter {
     shapes: readonly (FeatureShape | null | undefined)[],
     style: StrokeStyle,
     arcs: ArcCollection,
+    arcFilter?: (i: number) => boolean,
+    shapeIndices?: Uint32Array,
   ): void;
   drawArcs(
     arcs: ArcCollection,
@@ -94,7 +98,11 @@ export interface CorePainter {
     arcIds?: Uint32Array,
     arrowDot?: ArrowDotPathOptions,
   ): void;
-  drawPoints(shapes: readonly (FeatureShape | null | undefined)[], style: PointStyle): void;
+  drawPoints(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    style: PointStyle,
+    shapeIndices?: Uint32Array,
+  ): void;
   drawPolygonFill(
     shapes: readonly (FeatureShape | null | undefined)[],
     arcs: ArcCollection,

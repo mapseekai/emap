@@ -62,11 +62,12 @@ export function renderLayers(
             })
           : null;
       if (resolution) {
-        for (let i = 0; i < resolution.fillBuckets.length; i++) {
-          ctx.painter.drawPoints(selectShapes(ml.shapes, resolution.fillBuckets[i]), {
-            ...style,
-            color: resolution.styles[i],
-          });
+        for (let i = 0; i < resolution.buckets.length; i++) {
+          ctx.painter.drawPoints(
+            ml.shapes,
+            { ...style, color: resolution.styles[i] },
+            resolution.buckets[i],
+          );
         }
       } else {
         ctx.painter.drawPoints(ml.shapes, style);
@@ -119,17 +120,18 @@ function renderLineLayer(
           })
         : null;
     if (resolution) {
-      for (let i = 0; i < resolution.fillBuckets.length; i++) {
-        const shapes = selectShapes(ml.shapes, resolution.fillBuckets[i]);
+      for (let i = 0; i < resolution.buckets.length; i++) {
+        const bucket = resolution.buckets[i];
         const bucketStyle = { ...style, color: resolution.styles[i] };
         if (bucketStyle.dashType === 'arrow-dot') {
           ctx.painter.drawArcs(arcs, bucketStyle, viewportFilter, undefined, {
-            shapes: shapes as readonly (PathShape | null)[],
+            shapes: ml.shapes as readonly (PathShape | null)[],
+            shapeIndices: bucket,
             cacheKey: `${layer.source}:${layer['source-layer'] || 'default'}:${layer.id}:${i}`,
             geometryRevision,
           });
         } else {
-          ctx.painter.drawPaths(shapes, bucketStyle, arcs);
+          ctx.painter.drawPaths(ml.shapes, bucketStyle, arcs, viewportFilter, bucket);
         }
       }
     } else {
@@ -138,12 +140,6 @@ function renderLineLayer(
   } else {
     ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs));
   }
-}
-
-function selectShapes<T>(shapes: readonly T[], indices: Uint32Array): (T | null)[] {
-  const selected = new Array<T | null>(shapes.length).fill(null);
-  for (const index of indices) selected[index] = shapes[index];
-  return selected;
 }
 
 function renderFillLayer(
@@ -186,7 +182,7 @@ function renderFillLayer(
       ...(resolution
         ? {
             styleBuckets: {
-              buckets: resolution.fillBuckets,
+              buckets: resolution.buckets,
               colors: resolution.styles,
             },
           }

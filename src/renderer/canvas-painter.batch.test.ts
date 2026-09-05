@@ -64,8 +64,9 @@ function makeVertexCountArcs(vertexCounts: number[]) {
   };
 }
 
-function makeCountingArcs(visited: number[]) {
+function makeCountingArcs(visited: number[], size = 4) {
   return {
+    size: () => size,
     getArcIter: (i: number) => {
       visited.push(i);
       let done = false;
@@ -184,6 +185,23 @@ describe('CanvasPainter batching', () => {
     expect(dashes).toEqual([[6, 3]]);
   });
 
+  it('drawPaths consumes feature indices directly, applies viewport culling, and deduplicates shared arcs', () => {
+    const visited: number[] = [];
+    const painter = makePainter([]);
+    const arcs = makeCountingArcs(visited, 4);
+    const shapes = [[[0, 1]], [[1, 2]], [[3]]] as any;
+
+    painter.drawPaths(
+      shapes,
+      { color: '#333', width: 1 },
+      arcs as any,
+      (arcId) => arcId !== 2,
+      Uint32Array.from([0, 1]),
+    );
+
+    expect(visited).toEqual([0, 1]);
+  });
+
   it('flushes drawPoints every 100 points plus a final fill', () => {
     const fills: string[] = [];
     const painter = makePointPainter(fills);
@@ -203,6 +221,18 @@ describe('CanvasPainter batching', () => {
     painter.drawPoints([[[10, 10]], [[500, 500]]] as any, { color: '#333', radius: 4, fill: true });
 
     expect(arcs).toHaveLength(1);
+  });
+
+  it('drawPoints consumes feature indices directly without scanning unrelated shapes', () => {
+    const fills: string[] = [];
+    const arcs: unknown[] = [];
+    const painter = makePointPainter(fills, arcs);
+    const shapes = [[[10, 10]], [[20, 20]], [[30, 30]]] as any;
+
+    painter.drawPoints(shapes, { color: '#333', radius: 4, fill: true }, Uint32Array.from([1]));
+
+    expect(arcs).toHaveLength(1);
+    expect(arcs[0]).toEqual([20, 20, 4, 0, Math.PI * 2]);
   });
 
   it('does not flush empty point batches for offscreen points after a full batch', () => {

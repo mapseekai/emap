@@ -59,7 +59,12 @@ export interface EmapEventMap {
   // that `EventDispatcher.fire` produces for a no-arg event.
   crschange: Record<never, never>;
   resize: Record<never, never>;
-  data: { sourceId?: string; reason?: 'edit' | 'load' | 'replace' | 'reproject' };
+  data: {
+    sourceId?: string;
+    reason?: 'edit' | 'load' | 'replace' | 'reproject';
+    /** External input replacement, rather than an undoable command replay. */
+    origin?: 'external';
+  };
   layerchange: LayerChangeEvent;
   editmodechange: { mode: EditMode };
   error: { error: Error };

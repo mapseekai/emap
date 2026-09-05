@@ -40,6 +40,16 @@ describe('production dependency audit allowlist', () => {
     });
   });
 
+  it('never allows critical findings even when the id and docs path were approved', () => {
+    const result = evaluateAuditReport(
+      report('packages/docs>@docusaurus/core>vulnerable-package', 'critical'),
+      allowlist,
+      new Date('2026-09-04T00:00:00Z'),
+    );
+    expect(result.allowed).toEqual([]);
+    expect(result.blocking).toHaveLength(1);
+  });
+
   it('blocks unapproved high advisory ids even on documentation paths', () => {
     const result = evaluateAuditReport(
       {

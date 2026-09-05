@@ -119,7 +119,12 @@ export class Transaction implements TransactionInternal {
     }
     this._end();
     const cmds = this._host._history.endCapture();
+    this._datasetSnapshots.clear();
     if (cmds.length === 0) {
+      // Restore controls disabled at beginTransaction(), even without edits.
+      if (this._host._history.canUndo() || this._host._history.canRedo()) {
+        this._host._fireHistoryChange();
+      }
       return this._host._removed ? Err.hostRemoved() : OK;
     }
     const composite = new CompositeCommand(cmds, label);
@@ -167,6 +172,7 @@ export class Transaction implements TransactionInternal {
       const source = this._host._sources.get(sourceId);
       if (source) source.setDataset(before);
     }
+    this._datasetSnapshots.clear();
     // Restore selection. `restore` returns the diff between the
     // current (transaction-modified) state and the snapshot so we can
     // fire one `selectionchange` event with the right `added`/`removed`.

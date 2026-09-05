@@ -25,8 +25,6 @@ import {
   type VertexDotStyle,
 } from '../types/mapshaper-types';
 
-const POLYGON_FILL_BATCH_SHAPE_LIMIT = 100;
-const POLYGON_FILL_BATCH_VERTEX_LIMIT = 12_000;
 const ARC_STROKE_BATCH_ARC_LIMIT = 100;
 const ARC_STROKE_BATCH_VERTEX_LIMIT = 12_000;
 const ARROW_DOT_BATCH_SEGMENT_LIMIT = 12_000;
@@ -215,6 +213,7 @@ function clipSegmentToCanvas(
 interface ArrowDotCacheEntry {
   arcs: ArcCollection;
   shapes: ArrowDotPathOptions['shapes'];
+  shapeIndices: Uint32Array | undefined;
   geometryRevision: number;
   mx: number;
   my: number;
@@ -255,6 +254,8 @@ export class CanvasPainter implements EditPainter {
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
+  private _arcVisitMarks = new Uint32Array(0);
+  private _arcVisitEpoch = 0;
 
   constructor(private _canvas: HTMLCanvasElement) {
     const ctx = _canvas.getContext('2d');
@@ -293,34 +294,66 @@ export class CanvasPainter implements EditPainter {
     shapes: readonly (FeatureShape | null | undefined)[],
     style: StrokeStyle,
     arcs: ArcCollection,
+    arcFilter?: (i: number) => boolean,
+    shapeIndices?: Uint32Array,
   ): void {
-    // Width 0 means "no outline" — skip the whole pass so callers can use it
-    // to disable strokes (e.g. fill-only polygons) without paying any cost.
     if (style.width === 0) return;
     const ctx = this._ctx;
-    const batchSize = 100;
+    const vertexCounts = arcs.getVertexData?.().nn ?? null;
+    const visitEpoch = this._beginArcVisit(arcs.size());
 
     this._applyStrokeStyle(style, style.dash ?? []);
 
-    let count = 0;
+    let arcCount = 0;
+    let vertexCount = 0;
+    let hasPath = false;
     ctx.beginPath();
 
-    shapes.forEach((shape) => {
-      if (!shape) return;
+    const flush = () => {
+      if (!hasPath) return;
+      ctx.stroke();
+      ctx.beginPath();
+      arcCount = 0;
+      vertexCount = 0;
+      hasPath = false;
+    };
 
-      (shape as PathShape).forEach((part) => {
-        part.forEach((arcId) => {
-          if (count > 0 && count % batchSize === 0) {
-            ctx.stroke();
-            ctx.beginPath();
+    const shapeCount = shapeIndices?.length ?? shapes.length;
+    for (let i = 0; i < shapeCount; i++) {
+      const shape = shapes[shapeIndices?.[i] ?? i];
+      if (!shape) continue;
+      for (const part of shape as PathShape) {
+        for (const signedArcId of part) {
+          const arcId = absArcId(signedArcId);
+          if (arcFilter && !arcFilter(arcId)) continue;
+          if (this._arcVisitMarks[arcId] === visitEpoch) continue;
+          this._arcVisitMarks[arcId] = visitEpoch;
+          const arcVertexCount = vertexCounts?.[arcId] ?? 1;
+          if (
+            hasPath &&
+            (arcCount >= ARC_STROKE_BATCH_ARC_LIMIT ||
+              vertexCount + arcVertexCount > ARC_STROKE_BATCH_VERTEX_LIMIT)
+          ) {
+            flush();
           }
-          const iter = arcs.getArcIter(arcId);
-          this.drawPathSnapping(iter, ctx);
-          count++;
-        });
-      });
-    });
-    ctx.stroke();
+          this.drawPathSnapping(arcs.getArcIter(signedArcId), ctx);
+          arcCount++;
+          vertexCount += arcVertexCount;
+          hasPath = true;
+        }
+      }
+    }
+    flush();
+  }
+
+  private _beginArcVisit(arcCount: number): number {
+    if (this._arcVisitMarks.length < arcCount) this._arcVisitMarks = new Uint32Array(arcCount);
+    this._arcVisitEpoch = (this._arcVisitEpoch + 1) >>> 0;
+    if (this._arcVisitEpoch === 0) {
+      this._arcVisitMarks.fill(0);
+      this._arcVisitEpoch = 1;
+    }
+    return this._arcVisitEpoch;
   }
 
   // Direct arc rendering for maximum performance (bypasses shape iteration)
@@ -481,6 +514,7 @@ export class CanvasPainter implements EditPainter {
       cached &&
       cached.arcs === arcs &&
       cached.shapes === options.shapes &&
+      cached.shapeIndices === options.shapeIndices &&
       cached.geometryRevision === options.geometryRevision &&
       cached.mx === transform.mx &&
       cached.my === transform.my &&
@@ -497,7 +531,14 @@ export class CanvasPainter implements EditPainter {
       return cached.commands;
     }
 
-    const commands = this.buildArrowDotCommands(arcs, filter, options.shapes, spacing, size);
+    const commands = this.buildArrowDotCommands(
+      arcs,
+      filter,
+      options.shapes,
+      options.shapeIndices,
+      spacing,
+      size,
+    );
     if (!cached && this._arrowDotCache.size >= ARROW_DOT_CACHE_LIMIT) {
       const oldestKey = this._arrowDotCache.keys().next().value;
       if (oldestKey !== undefined) this._arrowDotCache.delete(oldestKey);
@@ -505,6 +546,7 @@ export class CanvasPainter implements EditPainter {
     this._arrowDotCache.set(options.cacheKey, {
       arcs,
       shapes: options.shapes,
+      shapeIndices: options.shapeIndices,
       geometryRevision: options.geometryRevision,
       mx: transform.mx,
       my: transform.my,
@@ -524,6 +566,7 @@ export class CanvasPainter implements EditPainter {
     arcs: ArcCollection,
     filter: ((i: number) => boolean) | undefined,
     shapes: ArrowDotPathOptions['shapes'],
+    shapeIndices: Uint32Array | undefined,
     spacing: number,
     size: number,
   ): Float64Array {
@@ -536,7 +579,9 @@ export class CanvasPainter implements EditPainter {
     const right = this._canvas.width;
     const bottom = this._canvas.height;
 
-    for (const shape of shapes) {
+    const shapeCount = shapeIndices?.length ?? shapes.length;
+    for (let shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++) {
+      const shape = shapes[shapeIndices?.[shapeIndex] ?? shapeIndex];
       if (!shape) continue;
       for (const part of shape) {
         let visibleDistance = 0;
@@ -648,7 +693,11 @@ export class CanvasPainter implements EditPainter {
     return endDistance;
   }
 
-  drawPoints(_shapes: readonly (FeatureShape | null | undefined)[], _style: PointStyle): void {
+  drawPoints(
+    _shapes: readonly (FeatureShape | null | undefined)[],
+    _style: PointStyle,
+    shapeIndices?: Uint32Array,
+  ): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -675,13 +724,15 @@ export class CanvasPainter implements EditPainter {
     let count = 0;
     ctx.beginPath();
 
-    _shapes.forEach((shape) => {
-      if (!shape) return;
+    const shapeCount = shapeIndices?.length ?? _shapes.length;
+    for (let shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++) {
+      const shape = _shapes[shapeIndices?.[shapeIndex] ?? shapeIndex];
+      if (!shape) continue;
       const points = normalizePointShape(shape);
-      points.forEach((p) => {
+      for (const p of points) {
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
-        if (x < left || x > right || y < top || y > bottom) return;
+        if (x < left || x > right || y < top || y > bottom) continue;
         if (count > 0 && count % batchSize === 0) {
           if (fill) ctx.fill();
           else ctx.stroke();
@@ -689,8 +740,8 @@ export class CanvasPainter implements EditPainter {
         }
         addPointMarkerPath(ctx, x, y, radius, markerShape);
         count++;
-      });
-    });
+      }
+    }
 
     if (fill) {
       ctx.fill();
@@ -853,9 +904,10 @@ export class CanvasPainter implements EditPainter {
   }
 
   /**
-   * Fill the shapes addressed by `indices` (`null` = 0..length-1) as one
-   * batched evenodd fill sequence. Carries the batching/culling logic;
-   * style switching is the caller's job.
+   * Fill each independent feature separately. Its shell and holes share an
+   * evenodd path, but another feature must not cancel its overlapping area.
+   * Opacity uses normal per-feature source-over compositing. Style buckets
+   * still avoid redundant style changes; viewport culling stays part-aware.
    */
   private _fillShapeIndices(
     shapes: readonly (FeatureShape | null | undefined)[],
@@ -865,74 +917,24 @@ export class CanvasPainter implements EditPainter {
     viewBBox: readonly [number, number, number, number] | number[] | null,
   ): void {
     const ctx = this._ctx;
-
-    // Smaller batches keep each `fill('evenodd')` call's path object
-    // bounded because Canvas2D engines slow superlinearly with subpath count.
-    // Keep mapshaper's same-style batching idea, but also cap by vertex
-    // budget because a few huge features can be much more expensive than
-    // hundreds of tiny polygons. Do not split a single shape across flushes:
-    // polygon holes have to stay in the same evenodd path as their shell.
-    const vertexCounts = arcs.getVertexData?.().nn ?? null;
     const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
     const bbox = [0, 0, 0, 0];
-    let shapeCount = 0;
-    let vertexCount = 0;
-
-    ctx.beginPath();
     const indexCount = indices ? indices.length : shapes.length;
     for (let k = 0; k < indexCount; k++) {
-      const sIdx = indices ? indices[k] : k;
-      const shape = shapes[sIdx];
+      const shape = shapes[indices ? indices[k] : k];
       if (!shape) continue;
-
-      const pathShape = shape as PathShape;
-      let visiblePartCount = 0;
-      let shapeVertexCount = 0;
-      for (const part of pathShape) {
+      let hasVisiblePart = false;
+      for (const part of shape as PathShape) {
         const visible =
           getSimpleShapeBbox && viewBBox
             ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
             : partPassesArcFilter(part, filter);
         if (!visible) continue;
-        visiblePartCount++;
-        if (vertexCounts) {
-          for (const arcId of part) {
-            shapeVertexCount += vertexCounts[absArcId(arcId)] ?? 0;
-          }
-        } else {
-          shapeVertexCount++;
-        }
+        if (!hasVisiblePart) ctx.beginPath();
+        hasVisiblePart = true;
+        this._traceSnapped(arcs.getShapeIter!(part), ctx);
       }
-      if (visiblePartCount === 0) continue;
-
-      if (
-        shapeCount > 0 &&
-        (shapeCount >= POLYGON_FILL_BATCH_SHAPE_LIMIT ||
-          vertexCount + shapeVertexCount > POLYGON_FILL_BATCH_VERTEX_LIMIT)
-      ) {
-        ctx.fill('evenodd');
-        ctx.beginPath();
-        shapeCount = 0;
-        vertexCount = 0;
-      }
-
-      for (const part of pathShape) {
-        const visible =
-          getSimpleShapeBbox && viewBBox
-            ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
-            : partPassesArcFilter(part, filter);
-        if (!visible) continue;
-        const iter = arcs.getShapeIter!(part);
-
-        this._traceSnapped(iter, ctx);
-      }
-
-      shapeCount++;
-      vertexCount += shapeVertexCount;
-    }
-
-    if (shapeCount > 0) {
-      ctx.fill('evenodd');
+      if (hasVisiblePart) ctx.fill('evenodd');
     }
   }
 

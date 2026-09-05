@@ -170,6 +170,7 @@ export class EditHistory {
    * a step was traversed.
    */
   undo(): EditCommand | null {
+    if (this.isCapturing()) return null;
     const cmd = this._undoStack.at(-1);
     if (!cmd) return null;
     if (cmd.stale) {
@@ -192,6 +193,7 @@ export class EditHistory {
    * are still orphaned even though the entry is moving forward in time.
    */
   redo(): EditCommand | null {
+    if (this.isCapturing()) return null;
     const cmd = this._redoStack.at(-1);
     if (!cmd) return null;
     if (cmd.stale) {
@@ -207,17 +209,20 @@ export class EditHistory {
 
   /** Empty both stacks. */
   clear(): void {
+    if (this.isCapturing()) {
+      throw new Error('EditHistory: cannot clear history during an active transaction capture');
+    }
     this._undoStack.length = 0;
     this._redoStack.length = 0;
     this._lastSkippedStale = false;
   }
 
   canUndo(): boolean {
-    return this._undoStack.length > 0;
+    return !this.isCapturing() && this._undoStack.length > 0;
   }
 
   canRedo(): boolean {
-    return this._redoStack.length > 0;
+    return !this.isCapturing() && this._redoStack.length > 0;
   }
 
   /** Number of commands currently in the undo stack. */
@@ -231,8 +236,8 @@ export class EditHistory {
     let staleCount = 0;
     for (const cmd of this._undoStack) if (cmd.stale) staleCount++;
     const snap: HistoryStateSnapshot = {
-      canUndo: this._undoStack.length > 0,
-      canRedo: this._redoStack.length > 0,
+      canUndo: this.canUndo(),
+      canRedo: this.canRedo(),
       label: top?.label,
       staleCount,
       topIsStale: !!top?.stale,

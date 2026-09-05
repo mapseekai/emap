@@ -192,19 +192,20 @@ export function enqueueMultiSourceOperation<T>(
     queues = new Map();
     operationQueues.set(host, queues);
   }
-  const predecessors = ids.map((sourceId) => queues.get(sourceId) ?? Promise.resolve());
+  const sourceQueues = queues;
+  const predecessors = ids.map((sourceId) => sourceQueues.get(sourceId) ?? Promise.resolve());
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  for (const sourceId of ids) queues.set(sourceId, gate);
+  for (const sourceId of ids) sourceQueues.set(sourceId, gate);
 
   return Promise.all(predecessors.map((predecessor) => predecessor.catch(() => undefined)))
     .then(run)
     .finally(() => {
       release();
       for (const sourceId of ids) {
-        if (queues?.get(sourceId) === gate) queues.delete(sourceId);
+        if (sourceQueues.get(sourceId) === gate) sourceQueues.delete(sourceId);
       }
     });
 }

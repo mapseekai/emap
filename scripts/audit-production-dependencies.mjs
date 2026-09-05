@@ -85,7 +85,11 @@ export function evaluateAuditReport(report, allowlist, now = new Date()) {
 
     for (const path of paths) {
       const finding = { id: String(advisory.id), severity, path };
-      if (approvedIds.has(String(advisory.id)) && isAllowedPath(path, prefixes)) {
+      if (
+        severity === 'high' &&
+        approvedIds.has(String(advisory.id)) &&
+        isAllowedPath(path, prefixes)
+      ) {
         allowed.push(finding);
       } else {
         blocking.push(finding);
@@ -107,12 +111,15 @@ export function evaluateAuditReport(report, allowlist, now = new Date()) {
 
 const sleep = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
-async function readAuditReport(root, attempts = 3) {
+export async function readAuditReport(root, attempts = 3) {
   const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  // pnpm run can re-inject the installation registry into the child environment.
+  // A command-line registry keeps security auditing independent of that mirror.
+  const registry = process.env.EMAP_AUDIT_REGISTRY || 'https://registry.npmjs.org';
   let lastFailure = 'unknown audit failure';
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const audit = spawnSync(pnpm, ['audit', '--json', '--prod'], {
+    const audit = spawnSync(pnpm, [`--registry=${registry}`, 'audit', '--json', '--prod'], {
       cwd: root,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,

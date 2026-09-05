@@ -137,8 +137,9 @@ describe('renderLayers style integration', () => {
     expect(painter.drawPaths).toHaveBeenCalledTimes(2);
     expect(painter.drawPaths.mock.calls[0]?.[1]).toMatchObject({ color: '#111111' });
     expect(painter.drawPaths.mock.calls[1]?.[1]).toMatchObject({ color: '#999999' });
-    expect(painter.drawPaths.mock.calls[0]?.[0]).toEqual([[[0]], null]);
-    expect(painter.drawPaths.mock.calls[1]?.[0]).toEqual([null, [[1]]]);
+    expect(painter.drawPaths.mock.calls[0]?.[0]).toBe(ml.shapes);
+    expect([...painter.drawPaths.mock.calls[0]?.[4]]).toEqual([0]);
+    expect([...painter.drawPaths.mock.calls[1]?.[4]]).toEqual([1]);
   });
 
   it('styleSource opt-in reads baked stroke field for line layers', () => {
@@ -191,8 +192,9 @@ describe('renderLayers style integration', () => {
     expect(painter.drawPoints).toHaveBeenCalledTimes(2);
     expect(painter.drawPoints.mock.calls[0]?.[1]).toMatchObject({ color: '#111111' });
     expect(painter.drawPoints.mock.calls[1]?.[1]).toMatchObject({ color: '#999999' });
-    expect(painter.drawPoints.mock.calls[0]?.[0]).toEqual([[[1, 1]], null]);
-    expect(painter.drawPoints.mock.calls[1]?.[0]).toEqual([null, [[2, 2]]]);
+    expect(painter.drawPoints.mock.calls[0]?.[0]).toBe(ml.shapes);
+    expect([...painter.drawPoints.mock.calls[0]?.[2]]).toEqual([0]);
+    expect([...painter.drawPoints.mock.calls[1]?.[2]]).toEqual([1]);
   });
 
   it('styleSource opt-in reads baked fill field for circle layers', () => {

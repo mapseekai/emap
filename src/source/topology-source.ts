@@ -184,24 +184,34 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this._datasetNormalizer = normalizer;
   }
 
+  /** Replace external input, invalidating history tied to the previous dataset. */
   async replaceDataset(dataset: MapshaperDataset): Promise<void> {
     const currentDataset = this._dataset;
     const currentEditVersion = currentDataset?.editVersion ?? 0;
-    const normalized = this._datasetNormalizer ? await this._datasetNormalizer(dataset) : dataset;
+    const currentAttributeVersion = currentDataset?.attributeVersion ?? 0;
+    const loadVersion = this._loadVersion;
+    const normalizer = this._datasetNormalizer;
+    const normalized = normalizer ? await normalizer(dataset) : dataset;
 
     if (
       this._dataset !== currentDataset ||
-      (currentDataset?.editVersion ?? 0) !== currentEditVersion
+      (currentDataset?.editVersion ?? 0) !== currentEditVersion ||
+      (currentDataset?.attributeVersion ?? 0) !== currentAttributeVersion ||
+      this._loadVersion !== loadVersion ||
+      this._datasetNormalizer !== normalizer
     ) {
       throw new Error(`TopologySource "${this.id}" changed during dataset replacement`);
     }
 
     if (isNormalizedDatasetCommit(normalized)) {
       normalized.assertCommittable();
-      this.setDataset(normalized.dataset);
-      return;
+      this.setDataset(normalized.dataset, false);
+    } else {
+      this.setDataset(normalized, false);
     }
-    this.setDataset(normalized);
+    // Keep reason='replace' for consumers; only external replacements reset
+    // map history. EditCommand replay deliberately does not set this origin.
+    this.fire('data', { reason: 'replace', origin: 'external' });
   }
 
   /** @internal Set or clear the owning map's authoritative CRS provider. */
@@ -649,8 +659,12 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Use `map.reproject()` to change the CRS of a registered source.
    */
   public async reproject(targetCrs: string, targetCrsMetadata?: string): Promise<void> {
-    const managedCrs = this._managedCrs?.();
+    const managedCrsProvider = this._managedCrs;
+    const managedCrs = managedCrsProvider?.();
     const startDataset = this._dataset;
+    const editVersion = startDataset?.editVersion ?? 0;
+    const attributeVersion = startDataset?.attributeVersion ?? 0;
+    const loadVersion = this._loadVersion;
     let resolvedManaged: string | undefined;
     if (managedCrs) {
       const [resolvedTarget, managed] = await Promise.all([
@@ -676,11 +690,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       if (!currentManaged || (await resolveProjectCrs(currentManaged)) !== resolvedManaged) {
         throw new Error(`Map CRS changed during reprojection of source "${this.id}"`);
       }
-      if (this._dataset !== startDataset) {
-        throw new Error(`TopologySource "${this.id}" changed during reprojection`);
-      }
     }
-    this.setDataset(prepared);
+    if (
+      this._dataset !== startDataset ||
+      (startDataset?.editVersion ?? 0) !== editVersion ||
+      (startDataset?.attributeVersion ?? 0) !== attributeVersion ||
+      this._loadVersion !== loadVersion ||
+      this._managedCrs !== managedCrsProvider
+    ) {
+      throw new Error(`TopologySource "${this.id}" changed during reprojection`);
+    }
+    // Public source reprojection is an external replacement, not a history
+    // replay. The map normalizer also rejects commits into an active transaction.
+    await this.replaceDataset(prepared);
   }
 
   getExtent(): Bounds {

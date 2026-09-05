@@ -42,8 +42,8 @@ describe('StyleResolver.resolveFill', () => {
       layer,
     })!;
     expect(res.styles).toEqual(['#111111', '#999999']);
-    expect([...res.fillBuckets[0]]).toEqual([0, 2]);
-    expect([...res.fillBuckets[1]]).toEqual([1]);
+    expect([...res.buckets[0]]).toEqual([0, 2]);
+    expect([...res.buckets[1]]).toEqual([1]);
   });
 
   it('declared static fill-color wins over styleSource opt-in', () => {
@@ -72,7 +72,7 @@ describe('StyleResolver.resolveFill', () => {
     })!;
     expect(res.styles[0]).toBe('#123456');
     // 42 与缺失 → null 桶（最后一个桶，主题色）
-    expect([...res.fillBuckets[1]]).toEqual([1, 2]);
+    expect([...res.buckets[1]]).toEqual([1, 2]);
   });
 
   it('continuous interpolate stays bucket-bounded (≤ 257 + null)', () => {

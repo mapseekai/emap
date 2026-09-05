@@ -54,6 +54,7 @@ describe('CanvasPainter theme colors', () => {
     mockMissingThemeVariables();
 
     painter.drawPaths([[[0]]] as any, { color: EMAP_THEME_COLORS.primary, width: 1 }, {
+      size: () => 1,
       getArcIter: () =>
         makeArcIterator([
           [0, 0],
@@ -96,6 +97,7 @@ describe('CanvasPainter theme colors', () => {
     } as CSSStyleDeclaration);
 
     painter.drawPaths([[[0]]] as any, { color: EMAP_THEME_COLORS.primary, width: 1 }, {
+      size: () => 1,
       getArcIter: () =>
         makeArcIterator([
           [0, 0],

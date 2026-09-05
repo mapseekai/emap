@@ -18,6 +18,7 @@ export interface ReprojectedSource {
   source: MutableTopologySource;
   before: MapshaperDataset;
   beforeEditVersion: number;
+  beforeAttributeVersion: number;
   after: MapshaperDataset;
 }
 
@@ -91,8 +92,16 @@ export class Projection {
       const before = source.getDataset();
       if (!before) continue;
       const beforeEditVersion = before.editVersion ?? 0;
+      const beforeAttributeVersion = before.attributeVersion ?? 0;
       const after = await source.prepareReproject(targetCrs, targetCrsMetadata);
-      replacements.push({ sourceId, source, before, beforeEditVersion, after });
+      replacements.push({
+        sourceId,
+        source,
+        before,
+        beforeEditVersion,
+        beforeAttributeVersion,
+        after,
+      });
     }
 
     const adapter = getDefaultMapshaperAdapter();

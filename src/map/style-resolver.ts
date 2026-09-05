@@ -14,7 +14,7 @@ import {
 
 export interface StyleResolution {
   styles: readonly string[];
-  fillBuckets: Uint32Array[];
+  buckets: Uint32Array[];
 }
 
 interface CacheEntry {
@@ -146,7 +146,7 @@ export class StyleResolver {
     }
     const resolution: StyleResolution = {
       styles,
-      fillBuckets: bucketLists.map((list) => Uint32Array.from(list)),
+      buckets: bucketLists.map((list) => Uint32Array.from(list)),
     };
     this._cache.set(args.layerId, {
       fingerprint,

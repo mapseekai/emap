@@ -2,6 +2,7 @@
 // schema editing (add/remove/rename field). Composed onto Emap as
 // `emap.attributes`.
 
+import type { EditCommand } from '../edit/edit-command';
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
 import { FieldAddCommand } from '../edit/commands/field-add';
 import { FieldRemoveCommand } from '../edit/commands/field-remove';
@@ -43,11 +44,11 @@ export class AttributeOps {
     const record = records?.[ref.id];
     if (!record) return Err.notFound('field', `record#${ref.id}`);
 
-    const prev: Record<string, unknown> = {};
-    const next: Record<string, unknown> = {};
+    const prev: Record<string, unknown> = Object.create(null);
+    const next: Record<string, unknown> = Object.create(null);
 
     for (const key of Object.keys(props)) {
-      const had = key in record;
+      const had = Object.hasOwn(record, key);
       const prevValue = had ? record[key] : undefined;
       const nextValue = props[key];
 
@@ -71,11 +72,7 @@ export class AttributeOps {
       next,
       dataset,
     });
-    cmd.do();
-    this._emap._history.push(cmd);
-    this._emap._fireHistoryChange();
-    this._emap._scheduleRender();
-    return OK;
+    return this._commit(cmd);
   }
 
   /**
@@ -101,11 +98,7 @@ export class AttributeOps {
       defaultValue: opts.defaultValue,
       dataset,
     });
-    cmd.do();
-    this._emap._history.push(cmd);
-    this._emap._fireHistoryChange();
-    this._emap._scheduleRender();
-    return OK;
+    return this._commit(cmd);
   }
 
   /**
@@ -119,11 +112,7 @@ export class AttributeOps {
     const dataset = this._emap._sources.get(opts.source)?.getDataset();
     if (!dataset) return Err.notFound('source', opts.source);
     const cmd = new FieldRemoveCommand({ layer, field: opts.field, dataset });
-    cmd.do();
-    this._emap._history.push(cmd);
-    this._emap._fireHistoryChange();
-    this._emap._scheduleRender();
-    return OK;
+    return this._commit(cmd);
   }
 
   /**
@@ -140,13 +129,17 @@ export class AttributeOps {
     if (!records) return Err.validation('target', 'data table has no records');
     if (opts.from === opts.to) return Err.validation('to', '`from` and `to` are identical');
     for (const r of records) {
-      if (r && opts.from in r && opts.to in r) {
+      if (r && Object.hasOwn(r, opts.from) && Object.hasOwn(r, opts.to)) {
         return Err.validation('to', `would overwrite existing '${opts.to}' on at least one record`);
       }
     }
     const dataset = this._emap._sources.get(opts.source)?.getDataset();
     if (!dataset) return Err.notFound('source', opts.source);
     const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to, dataset });
+    return this._commit(cmd);
+  }
+
+  private _commit(cmd: EditCommand): OpResult {
     cmd.do();
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();

@@ -1219,6 +1219,9 @@ export class Emap extends EventDispatcher {
 
   /** Atomically normalize and register a source from a ready preflight plan. */
   public async confirmSource(plan: ReadySourceLoadPlan): Promise<void> {
+    if (this._activeTransaction) {
+      throw new Error('Cannot add a source during an active transaction');
+    }
     const state = consumeReadySourceLoadPlan(this, plan);
     if (this._removed) {
       throw sourceLoadError('source-load-cancelled', 'Cannot confirm a source after map removal');
@@ -1360,6 +1363,12 @@ export class Emap extends EventDispatcher {
   }
 
   private _assertSourceLoadState(state: ReadySourceLoadState, token: symbol): void {
+    if (this._removed) {
+      throw sourceLoadError('source-load-cancelled', 'Map was removed during source loading');
+    }
+    if (this._activeTransaction) {
+      throw new Error('Cannot add a source during an active transaction');
+    }
     if (this._pendingSourceCommits.get(state.id) !== token) {
       throw sourceLoadError('source-load-cancelled', `Source load for "${state.id}" was cancelled`);
     }
@@ -1378,7 +1387,7 @@ export class Emap extends EventDispatcher {
   private _handleSourceData(
     id: string,
     source: MutableTopologySource,
-    event: { reason?: 'edit' | 'load' | 'replace' | 'reproject' },
+    event: { reason?: 'edit' | 'load' | 'replace' | 'reproject'; origin?: 'external' },
     renderedLayersBefore = this.getRenderedLayers(),
     crsChanged = false,
   ): void {
@@ -1389,11 +1398,18 @@ export class Emap extends EventDispatcher {
     if (!renderedLayersEqual(renderedLayersBefore, renderedLayersAfter)) {
       this._fireLayerChange('effective', undefined, renderedLayersAfter);
     }
-    if (event.reason === 'load') {
+    if (event.reason === 'load' || event.origin === 'external') {
       this._clearHistory();
+      const selected = this._selection.getAll().filter((ref) => ref.source === id);
+      if (selected.length > 0) this._fireSelectionChange(this._selection.remove(selected));
+      this._highlightManager?.removeSource(id);
     }
     if (crsChanged) this.fire('crschange');
-    this.fire('data', { sourceId: id, reason: event.reason });
+    this.fire('data', {
+      sourceId: id,
+      reason: event.reason,
+      ...(event.origin ? { origin: event.origin } : {}),
+    });
     this._scheduleRender();
   }
 
@@ -1414,6 +1430,7 @@ export class Emap extends EventDispatcher {
     source: MutableTopologySource,
     dataset: MapshaperDataset,
   ): Promise<MapshaperDataset | PreparedDatasetCommit> {
+    this._assertNormalizationCommit(id, source, this._projection.crs);
     if (this._sources.get(id) !== source) {
       throw new Error(`Source "${id}" is no longer registered`);
     }
@@ -1452,6 +1469,10 @@ export class Emap extends EventDispatcher {
    * registration and the map CRS that authorized it must both still hold.
    */
   private _assertNormalizationCommit(id: string, source: MutableTopologySource, crs: string): void {
+    if (this._removed) throw new Error('Cannot replace data after map removal');
+    if (this._activeTransaction) {
+      throw new Error('Cannot replace external data during an active transaction');
+    }
     if (this._sources.get(id) !== source) {
       throw new Error(`Source "${id}" is no longer registered`);
     }
@@ -1818,6 +1839,38 @@ export class Emap extends EventDispatcher {
     if (targetCrs.trim().length === 0) {
       throw new Error('targetCrs must be a non-empty CRS string');
     }
+    const startCrs = this._projection.crs;
+    const sourceStates = new Map(
+      Array.from(this._sources, ([id, source]) => {
+        const dataset = source.getDataset();
+        return [
+          id,
+          {
+            source,
+            dataset,
+            editVersion: dataset?.editVersion ?? 0,
+            attributeVersion: dataset?.attributeVersion ?? 0,
+          },
+        ] as const;
+      }),
+    );
+    const assertCurrent = () => {
+      if (this._removed) throw new Error('Map was removed during reprojection');
+      if (this._activeTransaction) throw new Error('Cannot reproject during an active transaction');
+      if (this._projection.crs !== startCrs) throw new Error('Map CRS changed during reprojection');
+      if (this._sources.size !== sourceStates.size)
+        throw new Error('Map sources changed during reprojection');
+      for (const [id, state] of sourceStates) {
+        if (
+          this._sources.get(id) !== state.source ||
+          state.source.getDataset() !== state.dataset ||
+          (state.dataset?.editVersion ?? 0) !== state.editVersion ||
+          (state.dataset?.attributeVersion ?? 0) !== state.attributeVersion
+        )
+          throw new Error(`Source "${id}" changed during reprojection`);
+      }
+    };
+    assertCurrent();
     const targetCrsMetadata = normalizeProjectCrsMetadata(targetCrs);
     const normalizedTarget = await resolveProjectCrs(targetCrs);
     let normalizedCurrent: string;
@@ -1827,41 +1880,28 @@ export class Emap extends EventDispatcher {
       if (!(err instanceof EpsgProjectionError)) throw err;
       normalizedCurrent = normalizeProjectCrs(this._projection.crs);
     }
+    assertCurrent();
     if (normalizedCurrent === normalizedTarget) return;
 
     const beforeView = {
       crs: this._projection.crs,
       extent: this._viewport.extent.clone(),
     };
-    // Snapshot every registered source with its current dataset identity.
-    // prepareReproject skips sources that have not loaded yet; if one of them
-    // commits (or the registry changes) while preparation is in flight, the
-    // command must abort instead of switching the CRS around it.
-    const sourceDatasets = new Map(
-      Array.from(this._sources, ([sourceId, source]) => [sourceId, source.getDataset()]),
-    );
     const prepared = await this._projection.prepareReproject(
       normalizedTarget,
       this._sources,
       targetCrsMetadata,
     );
+    assertCurrent();
     for (const replacement of prepared.replacements) {
       if (
         this._sources.get(replacement.sourceId) !== replacement.source ||
         replacement.source.getDataset() !== replacement.before ||
-        (replacement.before.editVersion ?? 0) !== replacement.beforeEditVersion
+        (replacement.before.editVersion ?? 0) !== replacement.beforeEditVersion ||
+        (replacement.before.attributeVersion ?? 0) !== (replacement.beforeAttributeVersion ?? 0)
       ) {
         throw new Error(`Source "${replacement.sourceId}" changed during reprojection`);
       }
-    }
-    for (const [sourceId, dataset] of sourceDatasets) {
-      const current = this._sources.get(sourceId);
-      if (!current || current.getDataset() !== dataset) {
-        throw new Error(`Source "${sourceId}" changed during reprojection`);
-      }
-    }
-    if (this._sources.size !== sourceDatasets.size) {
-      throw new Error('Map sources changed during reprojection');
     }
 
     const afterExtent = prepared.extent.hasBounds()
@@ -2536,7 +2576,10 @@ export class Emap extends EventDispatcher {
    * await tx.commit('Process boundaries');
    */
   public beginTransaction(): Transaction {
-    return new Transaction(this);
+    if (this._removed) throw new Error('Cannot begin a transaction after map removal');
+    const transaction = new Transaction(this);
+    this._fireHistoryChange();
+    return transaction;
   }
 
   /**
@@ -2589,7 +2632,8 @@ export class Emap extends EventDispatcher {
    * one but its result is irrelevant once the host is gone.
    */
   private _runAfterCommitValidators(): void {
-    if (this._validators.size === 0) return;
+    // A capture-state notification updates history controls, not committed data.
+    if (this._validators.size === 0 || this._history.isCapturing()) return;
     const top = this._history.snapshot();
     const change = { label: top.label ?? '' };
     void this._validators.runFor('after-commit', this, change).then((results) => {
@@ -2600,35 +2644,6 @@ export class Emap extends EventDispatcher {
       }
     });
   }
-
-  // ---------------------------------------------------------------------------
-  // Whole-dataset operations (clip / erase / future dissolve, buffer, ...)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Clip a layer to the polygons in a mask layer using mapshaper's `-clip`
-   * pipeline. Target and mask must live in the same source. Returns `true`
-   * on success, `false` for unresolvable source / target / mask.
-   *
-   * The operation is recorded as a single undoable history entry. Note that
-   * dataset-replace operations clear prior fine-grained edit history (see
-   * design.md for the rationale).
-   */
-
-  /**
-   * Translate every selected feature by `(dx, dy)` in source-data coordinates.
-   * Returns `false` for an empty selection or zero offset.
-   *
-   * Lightweight in-place mutation — does not replace the dataset, does not
-   * clear the selection, composes freely with other commands in one undo
-   * timeline. For multi-source selections, one `FeatureTranslateCommand` is
-   * built per source and they are wrapped in a single `CompositeCommand` so
-   * one undo reverses the whole nudge.
-   *
-   * Known limitation: arcs shared with unselected features will be translated
-   * along with the selection, distorting the unselected neighbours. Safe for
-   * isolated features and contiguous polygon subsets; documented in the spec.
-   */
 
   /**
    * Tear the map down: cancel pending renders, detach every `data` listener

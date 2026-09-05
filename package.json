@@ -87,6 +87,7 @@
     "test:run": "vitest run",
     "test:bundle": "vitest run src/build/bundle-self-contained.test.ts src/build/package-exports.test.ts",
     "bundle:smoke": "node scripts/check-bundle-smoke.mjs",
+    "test:rendering": "pnpm run build && node scripts/check-audit-rendering.mjs",
     "browser:install": "playwright install --with-deps chrome firefox webkit",
     "test:browser": "pnpm run examples:build && playwright test",
     "test:browser:chrome": "pnpm run examples:build && playwright test --project=chrome",

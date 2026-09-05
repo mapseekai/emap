@@ -31,7 +31,7 @@ export class FieldRemoveCommand implements EditCommand {
     this._snapshot.clear();
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
-      if (r && this.opts.field in r) {
+      if (r && Object.hasOwn(r, this.opts.field)) {
         this._snapshot.set(i, r[this.opts.field]);
         delete r[this.opts.field];
       }
@@ -44,7 +44,13 @@ export class FieldRemoveCommand implements EditCommand {
     if (!records) return;
     for (const [i, value] of this._snapshot) {
       const r = records[i];
-      if (r) r[this.opts.field] = value;
+      if (r)
+        Object.defineProperty(r, this.opts.field, {
+          value,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
     }
     bumpAttributeVersion(this.opts.dataset);
   }

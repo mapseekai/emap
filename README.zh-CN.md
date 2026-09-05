@@ -126,16 +126,32 @@ if (map.canRedo()) map.redo();
 需要整体提交或回滚的操作使用事务：
 
 ```ts
-const transaction = map.beginTransaction();
-try {
-  await map.ops.cleanLayer({ source: 'districts' });
-  await map.ops.simplifyLayer({ source: 'districts', percentage: 20 });
-  await transaction.commit();
-} catch (error) {
-  await transaction.rollback();
-  throw error;
+import type { Emap } from '@mapseekai/emap';
+
+export async function cleanAndSimplify(map: Emap, source: string, target: string) {
+  const transaction = map.beginTransaction();
+  try {
+    const cleaned = await map.ops.cleanLayer({ source, target });
+    if (!cleaned.ok) {
+      transaction.rollback();
+      return cleaned;
+    }
+    const simplified = await map.ops.simplifyLayer({ source, target, percentage: 20 });
+    if (!simplified.ok) {
+      transaction.rollback();
+      return simplified;
+    }
+    return await transaction.commit('Clean and simplify');
+  } catch (error) {
+    if (transaction.isOpen) transaction.rollback();
+    throw error;
+  }
 }
 ```
+
+操作返回 `OpResult`，需要检查 `ok`，不能仅依赖 `try/catch`。这里的 `source` 是已注册的数据源 ID，`target` 是数据源内的数据图层名称或 ID。
+
+事务期间禁用撤销／重做，并拒绝清空历史或替换外部输入。外部数据替换会清理旧历史以及该数据源的选择和高亮；正常命令的撤销／重做不会触发这类重置。
 
 传递给 mapshaper 的字符串表达式默认关闭。只有配置和数据完全可信时，才设置 `expressionPolicy: 'trusted'`。
 

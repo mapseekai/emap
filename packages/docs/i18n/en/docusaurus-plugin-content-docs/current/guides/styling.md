@@ -268,8 +268,12 @@ than 256 classes still render and fire a `warning` event.
 
 Performance: expression results are cached by (expression, dataset reference,
 attributeVersion); vertex-level geometry edits do not trigger recomputation.
-Measured: cold build for 100k records is about 4ms; cache hits are
-effectively free.
+Point and line attribute styling forwards cached `Uint32Array` bucket indices
+directly to the painter instead of materializing full-length sparse shape arrays.
+Line rendering also preserves viewport arc culling and deduplicates shared topology
+arcs within each color bucket. Runtime depends on data size, expression complexity,
+and the target environment; use the repository's `STYLE_BENCH=1` benchmark for
+machine-specific measurements.
 
 ## Defaults and troubleshooting
 

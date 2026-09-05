@@ -128,16 +128,34 @@ if (map.canRedo()) map.redo();
 Group related operations in a transaction when they must commit or roll back together:
 
 ```ts
-const transaction = map.beginTransaction();
-try {
-  await map.ops.cleanLayer({ source: 'districts' });
-  await map.ops.simplifyLayer({ source: 'districts', percentage: 20 });
-  await transaction.commit();
-} catch (error) {
-  await transaction.rollback();
-  throw error;
+import type { Emap } from '@mapseekai/emap';
+
+export async function cleanAndSimplify(map: Emap, source: string, target: string) {
+  const transaction = map.beginTransaction();
+  try {
+    const cleaned = await map.ops.cleanLayer({ source, target });
+    if (!cleaned.ok) {
+      transaction.rollback();
+      return cleaned;
+    }
+    const simplified = await map.ops.simplifyLayer({ source, target, percentage: 20 });
+    if (!simplified.ok) {
+      transaction.rollback();
+      return simplified;
+    }
+    return await transaction.commit('Clean and simplify');
+  } catch (error) {
+    if (transaction.isOpen) transaction.rollback();
+    throw error;
+  }
 }
 ```
+
+Operations return `OpResult`; check `ok` rather than relying only on `try/catch`.
+Here `source` is the registered source ID and `target` is its data layer name or ID.
+Undo/redo are disabled while a transaction is active, and clearing history or
+replacing external input is rejected. External dataset replacement clears old
+history and that source's selection/highlight; normal command undo/redo does not.
 
 String expressions forwarded to mapshaper are disabled by default. Only set `expressionPolicy: 'trusted'` when configuration and data are fully controlled by the application.
 

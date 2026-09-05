@@ -69,31 +69,29 @@ concise issue when none exists; never leave a finding only in chat.
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **emap** (13849 symbols, 41852 relationships, 475 execution flows).
+This project is indexed by GitNexus as **emap** (8548 symbols, 29817 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-> Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
+> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
 ## Always Do
 
-- **MUST run impact analysis before editing.** Use `impact({target: "symbolName", direction: "upstream"})` (MCP) or `node .gitnexus/run.cjs impact "symbolName" --direction upstream --repo .` (CLI fallback); report callers, processes, and risk. Never substitute grep for graph analysis.
-- **MUST analyze graph changes before committing.** Use `detect_changes({scope: "all"})` (MCP) or `node .gitnexus/run.cjs detect-changes --scope all --repo .` (CLI fallback). `partial: true` or `truncated: true` is not a clean check — a zero means unseen, not unaffected; re-run it. For regression review: `detect_changes({scope: "compare", base_ref: "master"})` or `node .gitnexus/run.cjs detect-changes --scope compare --base-ref "master" --repo .`.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "master"})`.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- **MUST treat `risk: UNKNOWN` as unresolved, not as low.** An empty caller set is not evidence the symbol is unused — it can also mean the callers are not resolvable by the index (plain-object property access, dynamic dispatch, cross-language calls). `impact` pairs `UNKNOWN` with a `riskNote` saying so. Confirm with a text search before treating the symbol as safe to change or delete; do not proceed on the strength of a zero.
-- When exploring unfamiliar code, use `query({search_query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When exploring unfamiliar code, use `query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
-- For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
 
 ## Never Do
 
-- NEVER edit a function, class, or method before MCP/CLI impact analysis.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis, and never read `UNKNOWN` as an all-clear — it means the walk could not answer, which is the one verdict that requires confirming by other means.
+- NEVER edit a function, class, or method without first running `impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit before MCP/CLI graph change analysis.
+- NEVER commit changes without running `detect_changes()` to check affected scope.
 
 ## Resources
 
 | Resource | Use for |
-| --- | --- |
+|----------|---------|
 | `gitnexus://repo/emap/context` | Codebase overview, check index freshness |
 | `gitnexus://repo/emap/clusters` | All functional areas |
 | `gitnexus://repo/emap/processes` | All execution flows |
@@ -102,17 +100,38 @@ This project is indexed by GitNexus as **emap** (13849 symbols, 41852 relationsh
 ## CLI
 
 | Task | Read this skill file |
-| --- | --- |
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Work in the Map area (508 symbols) | `.claude/skills/generated/map/SKILL.md` |
+| Work in the Duckdb area (435 symbols) | `.claude/skills/generated/duckdb/SKILL.md` |
+| Work in the Handlers area (272 symbols) | `.claude/skills/generated/handlers/SKILL.md` |
+| Work in the Ops area (263 symbols) | `.claude/skills/generated/ops/SKILL.md` |
+| Work in the Commands area (158 symbols) | `.claude/skills/generated/commands/SKILL.md` |
+| Work in the Ui area (141 symbols) | `.claude/skills/generated/ui/SKILL.md` |
+| Work in the Geo area (139 symbols) | `.claude/skills/generated/geo/SKILL.md` |
+| Work in the Adapter area (123 symbols) | `.claude/skills/generated/adapter/SKILL.md` |
+| Work in the Arrow area (103 symbols) | `.claude/skills/generated/arrow/SKILL.md` |
+| Work in the Renderer area (64 symbols) | `.claude/skills/generated/renderer/SKILL.md` |
+| Work in the Scripts area (64 symbols) | `.claude/skills/generated/scripts/SKILL.md` |
+| Work in the Source area (45 symbols) | `.claude/skills/generated/source/SKILL.md` |
+| Work in the Examples area (16 symbols) | `.claude/skills/generated/examples/SKILL.md` |
+| Work in the Cluster_12 area (10 symbols) | `.claude/skills/generated/cluster-12/SKILL.md` |
+| Work in the Cluster_230 area (10 symbols) | `.claude/skills/generated/cluster-230/SKILL.md` |
+| Work in the Edit area (9 symbols) | `.claude/skills/generated/edit/SKILL.md` |
+| Work in the Cluster_15 area (7 symbols) | `.claude/skills/generated/cluster-15/SKILL.md` |
+| Work in the Cluster_1 area (6 symbols) | `.claude/skills/generated/cluster-1/SKILL.md` |
+| Work in the Cluster_2 area (6 symbols) | `.claude/skills/generated/cluster-2/SKILL.md` |
+| Work in the Cluster_107 area (6 symbols) | `.claude/skills/generated/cluster-107/SKILL.md` |
 
 <!-- gitnexus:end -->
 
 <!-- rtk-instructions v2 -->
+
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
 ## Golden Rule
@@ -120,6 +139,7 @@ This project is indexed by GitNexus as **emap** (13849 symbols, 41852 relationsh
 **Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
 
 **Important**: Even in command chains with `&&`, use `rtk`:
+
 ```bash
 # ❌ Wrong
 git add . && git commit -m "msg" && git push
@@ -131,6 +151,7 @@ rtk git add . && rtk git commit -m "msg" && rtk git push
 ## RTK Commands by Workflow
 
 ### Build & Compile (80-90% savings)
+
 ```bash
 rtk cargo build         # Cargo build output
 rtk cargo check         # Cargo check output
@@ -142,6 +163,7 @@ rtk next build          # Next.js build with route metrics (87%)
 ```
 
 ### Test (60-99% savings)
+
 ```bash
 rtk cargo test          # Cargo test failures only (90%)
 rtk go test             # Go test failures only (90%)
@@ -155,6 +177,7 @@ rtk test <cmd>          # Generic test wrapper - failures only
 ```
 
 ### Git (59-80% savings)
+
 ```bash
 rtk git status          # Compact status
 rtk git log             # Compact log (works with all git flags)
@@ -173,6 +196,7 @@ rtk git worktree        # Compact worktree
 Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
 
 ### GitHub (26-87% savings)
+
 ```bash
 rtk gh pr view <num>    # Compact PR view (87%)
 rtk gh pr checks        # Compact PR checks (79%)
@@ -182,6 +206,7 @@ rtk gh api              # Compact API responses (26%)
 ```
 
 ### JavaScript/TypeScript Tooling (70-90% savings)
+
 ```bash
 rtk pnpm list           # Compact dependency tree (70%)
 rtk pnpm outdated       # Compact outdated packages (80%)
@@ -193,6 +218,7 @@ rtk uv run <cmd>        # Compact uv project command output
 ```
 
 ### Files & Search (60-75% savings)
+
 ```bash
 rtk ls <path>           # Tree format, compact (65%)
 rtk read <file>         # Code reading with filtering (60%)
@@ -201,6 +227,7 @@ rtk find <pattern>      # Find grouped by directory (70%)
 ```
 
 ### Analysis & Debug (70-90% savings)
+
 ```bash
 rtk err <cmd>           # Filter errors only from any command
 rtk log <file>          # Deduplicated logs with counts
@@ -212,6 +239,7 @@ rtk diff                # Ultra-compact diffs
 ```
 
 ### Infrastructure (85% savings)
+
 ```bash
 rtk docker ps           # Compact container list
 rtk docker images       # Compact image list
@@ -221,12 +249,14 @@ rtk kubectl logs        # Deduplicated pod logs
 ```
 
 ### Network (65-70% savings)
+
 ```bash
 rtk curl <url>          # Compact HTTP responses (70%)
 rtk wget <url>          # Compact download output (65%)
 ```
 
 ### Meta Commands
+
 ```bash
 rtk gain                # View token savings statistics
 rtk gain --history      # View command history with savings
@@ -238,25 +268,16 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 ## Token Savings Overview
 
-| Category | Commands | Typical Savings |
-|----------|----------|-----------------|
-| Tests | vitest, playwright, cargo test | 90-99% |
-| Build | next, tsc, lint, prettier | 70-87% |
-| Git | status, log, diff, add, commit | 59-80% |
-| GitHub | gh pr, gh run, gh issue | 26-87% |
-| Package Managers | pnpm, npm, npx | 70-90% |
-| Files | ls, read, grep, find | 60-75% |
-| Infrastructure | docker, kubectl | 85% |
-| Network | curl, wget | 65-70% |
+| Category         | Commands                       | Typical Savings |
+| ---------------- | ------------------------------ | --------------- |
+| Tests            | vitest, playwright, cargo test | 90-99%          |
+| Build            | next, tsc, lint, prettier      | 70-87%          |
+| Git              | status, log, diff, add, commit | 59-80%          |
+| GitHub           | gh pr, gh run, gh issue        | 26-87%          |
+| Package Managers | pnpm, npm, npx                 | 70-90%          |
+| Files            | ls, read, grep, find           | 60-75%          |
+| Infrastructure   | docker, kubectl                | 85%             |
+| Network          | curl, wget                     | 65-70%          |
 
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
-
-
-<claude-mem-context>
-# Memory Context
-
-# [emap] recent context, 2026-08-10 9:37pm GMT+8
-
-No previous sessions found.
-</claude-mem-context>

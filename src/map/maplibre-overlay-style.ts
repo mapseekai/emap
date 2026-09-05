@@ -128,8 +128,9 @@ function normalizeSourceUrls(
     resourceUrls.add(normalizedUrl);
   }
   for (const property of ['tiles', 'urls'] as const) {
-    if (!Array.isArray(source[property])) continue;
-    source[property] = source[property].map((url) => {
+    const urls = source[property];
+    if (!Array.isArray(urls)) continue;
+    source[property] = urls.map((url: unknown) => {
       if (typeof url !== 'string') return url;
       const normalizedUrl = resolveUrl(url, baseUrl);
       resourceUrls.add(normalizedUrl);

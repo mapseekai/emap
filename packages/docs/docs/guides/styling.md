@@ -253,8 +253,11 @@ map.addLayer({
 异常隔离到主题色 null 桶，不影响其余要素渲染。类别数超过 256 时照常渲染并
 触发 `warning` 事件。
 
-性能：表达式结果按 （表达式, 数据集引用, attributeVersion) 缓存，几何编辑
-（顶点级）不触发重算。实测 10 万记录冷构建约 4ms，缓存命中接近 0。
+性能：表达式结果按（表达式、数据集引用、attributeVersion）缓存，几何编辑
+（顶点级）不触发重算。点/线属性样式直接把缓存的 `Uint32Array` bucket 索引传给
+painter，不再为每个 bucket 构造与全图要素数等长的稀疏数组；线渲染同时保留
+viewport arc culling，并在同一颜色 bucket 内去重共享 topology arc。具体耗时与
+数据规模、表达式和运行环境有关，建议使用仓库内 `STYLE_BENCH=1` 基准在目标环境验证。
 
 ## 默认颜色
 

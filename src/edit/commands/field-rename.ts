@@ -19,29 +19,46 @@ export interface FieldRenameCommandOptions {
  */
 export class FieldRenameCommand implements EditCommand {
   readonly label: string;
+  private _renamedIndices: number[] = [];
 
   constructor(private readonly opts: FieldRenameCommandOptions) {
     this.label = `Rename field ${opts.from} → ${opts.to}`;
   }
 
   do(): void {
-    rename(this.opts.layer, this.opts.from, this.opts.to);
+    this._renamedIndices = rename(this.opts.layer, this.opts.from, this.opts.to);
     bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
-    rename(this.opts.layer, this.opts.to, this.opts.from);
+    rename(this.opts.layer, this.opts.to, this.opts.from, this._renamedIndices);
     bumpAttributeVersion(this.opts.dataset);
   }
 }
 
-function rename(layer: MapshaperLayer, from: string, to: string): void {
+function rename(
+  layer: MapshaperLayer,
+  from: string,
+  to: string,
+  indices?: readonly number[],
+): number[] {
   const records = layer.data?.getRecords?.();
-  if (!records) return;
-  for (const r of records) {
-    if (r && from in r) {
-      r[to] = r[from];
+  const changed: number[] = [];
+  if (!records || from === to) return changed;
+  const count = indices?.length ?? records.length;
+  for (let k = 0; k < count; k++) {
+    const i = indices ? indices[k] : k;
+    const r = records[i];
+    if (r && Object.hasOwn(r, from)) {
+      Object.defineProperty(r, to, {
+        value: r[from],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
       delete r[from];
+      changed.push(i);
     }
   }
+  return changed;
 }

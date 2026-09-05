@@ -91,6 +91,10 @@ jobs:
         run: pnpm run browser:install
       - name: Run real-browser example smoke tests
         run: pnpm run test:browser
+      - name: Verify polygon fill pixels in all browsers
+        env:
+          EMAP_AUDIT_BROWSERS: chrome,firefox,webkit
+        run: pnpm run test:rendering
 
   docs:
     name: Documentation and examples

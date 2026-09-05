@@ -35,8 +35,13 @@ export class FieldAddCommand implements EditCommand {
     const value = this.opts.defaultValue ?? null;
     this._addedIndices = [];
     for (let i = 0; i < records.length; i++) {
-      if (records[i] && !(this.opts.field in records[i])) {
-        records[i][this.opts.field] = value;
+      if (records[i] && !Object.hasOwn(records[i], this.opts.field)) {
+        Object.defineProperty(records[i], this.opts.field, {
+          value,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
         this._addedIndices.push(i);
       }
     }

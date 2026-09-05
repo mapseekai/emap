@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { examples } from '../../docs-meta/examples.ts';
 
 function collectRuntimeErrors(page) {
   const errors = [];
@@ -13,8 +14,12 @@ test('example catalog is generated from the shared manifest', async ({ page }) =
   const errors = collectRuntimeErrors(page);
   await page.goto('/mapseekai/emap/examples/');
 
-  await expect(page.locator('a.example-card')).toHaveCount(90);
-  await expect(page.locator('.catalog-total-count')).toContainText('90');
+  await expect(page.locator('a.example-card')).toHaveCount(examples.length);
+  await expect(page.locator('.catalog-total-count')).toContainText(String(examples.length));
+  const routes = await page.locator('a.example-card').evaluateAll((cards) =>
+    cards.map((card) => new URL(card.href).pathname).sort(),
+  );
+  expect(routes).toEqual(examples.map((example) => `/mapseekai/emap${example.route}`).sort());
   await expect(page.locator('a.example-card').first()).toHaveAttribute(
     'href',
     /\/mapseekai\/emap\/examples\//,
