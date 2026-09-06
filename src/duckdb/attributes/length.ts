@@ -1,7 +1,8 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import { runAttribute, type AttributeOptions } from './_shared';
+import { runAttribute } from './_shared';
+import type { AttributeOptions } from './types';
 export function length(
   input: MapshaperDataset,
   options: AttributeOptions = {},

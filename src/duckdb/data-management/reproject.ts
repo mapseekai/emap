@@ -1,15 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { resolveDatasetCRSMetadata, setDatasetCrsMetadata } from '../../geo/crs-resolver';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import {
-  processingValidation,
-  runSingleInputTool,
-  sqlString,
-  type DuckDbProcessingGeometryOptions,
-} from '../core/runners/processing';
+import { processingValidation, runSingleInputTool, sqlString } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-export interface ReprojectOptions extends DuckDbProcessingGeometryOptions {
+export interface ReprojectOptions extends ProcessingOptions {
   sourceCrs?: string;
   targetCrs: string;
   alwaysXY?: boolean;

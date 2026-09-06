@@ -1,14 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import {
-  coverageCte,
-  runTwoInputTool,
-  type DuckDbProcessingGeometryOptions,
-} from '../core/runners/processing';
+import { coverageCte, runTwoInputTool } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
-export type SymmetricDifferenceOptions = DuckDbProcessingGeometryOptions;
+export type SymmetricDifferenceOptions = ProcessingOptions;
 export function symmetricDifference(
   input: MapshaperDataset,
   overlay: MapshaperDataset,

@@ -1,11 +1,12 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import type { DuckDbRelationHelperOptions, DuckDbRelationOperationId } from './_operations';
+import type { RelationOptions } from '../core/relation/operations';
+import type { RelationOperationId } from '../core/relation/types';
 import { spatialRelation } from './spatial-relation';
 
-export type SpatialFilterPredicate = Exclude<DuckDbRelationOperationId, 'distance'>;
-export interface SpatialFilterOptions extends DuckDbRelationHelperOptions {
+export type SpatialFilterPredicate = Exclude<RelationOperationId, 'distance'>;
+export interface SpatialFilterOptions extends RelationOptions {
   predicate: SpatialFilterPredicate;
 }
 export function spatialFilter(

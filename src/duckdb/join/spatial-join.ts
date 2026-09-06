@@ -1,19 +1,13 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import {
-  processingValidation,
-  runTwoInputTool,
-  type DuckDbProcessingGeometryOptions,
-} from '../core/runners/processing';
+import { processingValidation, runTwoInputTool } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import type { DuckDbRelationOperationId } from '../selection/_operations';
+import type { RelationOperationId } from '../core/relation/types';
 
-export type SpatialJoinPredicate = Exclude<
-  DuckDbRelationOperationId,
-  'distance' | 'distanceWithin'
->;
-export interface SpatialJoinOptions extends DuckDbProcessingGeometryOptions {
+export type SpatialJoinPredicate = Exclude<RelationOperationId, 'distance' | 'distanceWithin'>;
+export interface SpatialJoinOptions extends ProcessingOptions {
   predicate?: SpatialJoinPredicate;
   joinType?: 'left' | 'inner';
 }

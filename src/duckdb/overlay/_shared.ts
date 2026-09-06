@@ -1,6 +1,4 @@
-import type { DuckDbOverlayOperation, DuckDbOverlayOptions } from '../core/runners/overlay';
-
-export type OverlayOptions = DuckDbOverlayOptions;
+import type { DuckDbOverlayOperation } from '../core/runners/overlay';
 export type OverlayOperationId = 'intersect' | 'difference';
 
 export const OVERLAY_OPERATIONS: Record<OverlayOperationId, DuckDbOverlayOperation> = {

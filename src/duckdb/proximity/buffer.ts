@@ -2,10 +2,11 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { isGeographicCrs } from '../../geo/crs-resolver';
 import { DuckDbOperationError } from '../errors';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { runUnaryGeometryTool, type DuckDbUnaryGeometryOptions } from '../core/runners/geometry';
+import { runUnaryGeometryTool } from '../core/runners/geometry';
+import type { ProcessingOptions } from '../core/types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
-export interface BufferOptions extends DuckDbUnaryGeometryOptions {
+export interface BufferOptions extends ProcessingOptions {
   distance: number;
   failOnGeographicCrs?: boolean;
 }

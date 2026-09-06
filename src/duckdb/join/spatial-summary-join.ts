@@ -218,6 +218,33 @@ export const spatialSummaryJoinTool = defineDuckDbTool({
       enumValues: Object.keys(PREDICATE_FUNCTIONS),
     },
     {
+      name: 'aggregations',
+      description: 'One or more aggregate calculations to append to each target feature.',
+      type: 'object[]',
+      required: true,
+      minItems: 1,
+      itemProperties: [
+        {
+          name: 'operation',
+          description: 'Aggregate operation.',
+          type: 'enum',
+          required: true,
+          enumValues: ['count', 'sum', 'avg', 'min', 'max'],
+        },
+        {
+          name: 'field',
+          description: 'Join field for sum, avg, min or max; omitted for count.',
+          type: 'string',
+        },
+        {
+          name: 'outputColumn',
+          description: 'Output field receiving the aggregate value.',
+          type: 'string',
+          required: true,
+        },
+      ],
+    },
+    {
       name: 'joinType',
       description: 'Keep unmatched target features or only matched targets.',
       type: 'enum',
@@ -229,7 +256,7 @@ export const spatialSummaryJoinTool = defineDuckDbTool({
   units: 'none',
   output: {
     geometry: 'preserve',
-    cardinality: 'filter',
+    cardinality: 'variable',
     attributes: 'append',
     mutatesInput: false,
   },

@@ -5,7 +5,7 @@ Follow the repository-wide guidance in [AGENTS.md](AGENTS.md). GitNexus index st
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **emap** (8795 symbols, 31038 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **emap** (8794 symbols, 31037 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -43,25 +43,5 @@ This project is indexed by GitNexus as **emap** (8795 symbols, 31038 relationshi
 | Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
 | Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-| Work in the Map area (518 symbols) | `.claude/skills/generated/map/SKILL.md` |
-| Work in the Ops area (284 symbols) | `.claude/skills/generated/ops/SKILL.md` |
-| Work in the Handlers area (271 symbols) | `.claude/skills/generated/handlers/SKILL.md` |
-| Work in the Duckdb area (177 symbols) | `.claude/skills/generated/duckdb/SKILL.md` |
-| Work in the Commands area (152 symbols) | `.claude/skills/generated/commands/SKILL.md` |
-| Work in the Geo area (151 symbols) | `.claude/skills/generated/geo/SKILL.md` |
-| Work in the Ui area (141 symbols) | `.claude/skills/generated/ui/SKILL.md` |
-| Work in the Arrow area (103 symbols) | `.claude/skills/generated/arrow/SKILL.md` |
-| Work in the Runners area (102 symbols) | `.claude/skills/generated/runners/SKILL.md` |
-| Work in the Adapter area (95 symbols) | `.claude/skills/generated/adapter/SKILL.md` |
-| Work in the Renderer area (65 symbols) | `.claude/skills/generated/renderer/SKILL.md` |
-| Work in the Scripts area (64 symbols) | `.claude/skills/generated/scripts/SKILL.md` |
-| Work in the Attributes area (46 symbols) | `.claude/skills/generated/attributes/SKILL.md` |
-| Work in the Source area (45 symbols) | `.claude/skills/generated/source/SKILL.md` |
-| Work in the Join area (43 symbols) | `.claude/skills/generated/join/SKILL.md` |
-| Work in the Geometry area (39 symbols) | `.claude/skills/generated/geometry/SKILL.md` |
-| Work in the Geoparquet area (33 symbols) | `.claude/skills/generated/geoparquet/SKILL.md` |
-| Work in the Cluster_250 area (23 symbols) | `.claude/skills/generated/cluster-250/SKILL.md` |
-| Work in the Selection area (23 symbols) | `.claude/skills/generated/selection/SKILL.md` |
-| Work in the Examples area (16 symbols) | `.claude/skills/generated/examples/SKILL.md` |
 
 <!-- gitnexus:end -->

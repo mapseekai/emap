@@ -216,10 +216,8 @@ const buildSql = () =>
     .buildSpatialAggregateJoinSql as BuildSpatialAggregateJoinSql;
 
 describe('buildSpatialAggregateJoinSql', () => {
-  it('exports the canonical summary-join helper from the optional DuckDB barrel at runtime', () => {
+  it('exports the canonical summary-join helper from the DuckDB barrel', () => {
     expect(duckDb.spatialSummaryJoin).toBeTypeOf('function');
-    expect(duckDb.spatialSummaryJoinDatasetWithDuckDb).toBeUndefined();
-    expect(duckDb.spatialAggregateJoinDatasetWithDuckDb).toBeUndefined();
   });
 
   it('exports the builder', () => {

@@ -6,6 +6,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
 import {
   DUCKDB_TOOLBOX,
+  executeDuckDbTool,
   getDuckDbTool,
   listDuckDbTools,
   requireDuckDbTool,
@@ -149,9 +150,76 @@ describe('DuckDB toolbox metadata', () => {
     expect(searchDuckDbTools('repair invalid geometry')[0]?.id).toBe('repairGeometry');
     expect(searchDuckDbTools('closest feature')[0]?.id).toBe('nearest');
   });
+
+  it('describes spatial summary aggregations for agent callers', () => {
+    const aggregations = getDuckDbTool('spatialSummaryJoin')?.parameters.find(
+      (parameter) => parameter.name === 'aggregations',
+    );
+    expect(aggregations).toMatchObject({ type: 'object[]', required: true, minItems: 1 });
+    expect(aggregations?.itemProperties?.map((property) => property.name)).toEqual([
+      'operation',
+      'field',
+      'outputColumn',
+    ]);
+    expect(getDuckDbTool('spatialSummaryJoin')?.output.cardinality).toBe('variable');
+  });
 });
 
 describe('DuckDB toolbox execution', () => {
+  it('validates agent parameters before executing tools', async () => {
+    const dataset = await polygonDataset();
+
+    await expect(
+      executeDuckDbTool('buffer', { inputs: { input: dataset }, params: {} }),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'distance' });
+
+    await expect(
+      executeDuckDbTool('spatialJoin', {
+        inputs: { input: dataset, join: dataset },
+        params: { predicate: 'not-a-predicate' },
+      }),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'predicate' });
+
+    await expect(
+      executeDuckDbTool('spatialSummaryJoin', {
+        inputs: { input: dataset, join: dataset },
+        params: { predicate: 'intersects', aggregations: [] },
+      }),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'aggregations' });
+
+    await expect(
+      executeDuckDbTool('spatialSummaryJoin', {
+        inputs: { input: dataset, join: dataset },
+        params: {
+          predicate: 'intersects',
+          aggregations: [{ operation: 'count', outputColumn: 'count', typo: true }],
+        },
+      }),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'aggregations[0].typo' });
+
+    await expect(
+      executeDuckDbTool('buffer', {
+        inputs: { input: dataset },
+        params: { distance: 1, unexpected: true },
+      }),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'unexpected' });
+  });
+
+  it('applies toolbox defaults before execution', async () => {
+    const left = await polygonDataset();
+    const right = await polygonDataset();
+    const runtime = runtimeFor(left);
+
+    await executeDuckDbTool('spatialJoin', {
+      inputs: { input: left, join: right },
+      params: {},
+      runtime,
+    });
+
+    expect(primarySql(runtime)).toContain('LEFT JOIN');
+    expect(primarySql(runtime)).toContain('ST_Intersects');
+  });
+
   it('exposes a normalized category/tool registry without duplicate ids', () => {
     const ids = DUCKDB_TOOLBOX.map((tool) => tool.id);
     expect(new Set(ids).size).toBe(ids.length);

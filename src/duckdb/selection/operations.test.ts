@@ -3,8 +3,8 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { runRelationTool, type DuckDbRelationOperation } from '../core/runners/relation';
 import { DuckDbOperationError } from '../errors';
 import type { DuckDbRuntime } from '../runtime';
-import { getDuckDbRelationOperation, runNamedDuckDbRelationOperation } from './_operations';
-import { buildRelationAttributeSql, buildRelationFilterSql } from './_relation-sql';
+import { getRelationOperation, runNamedRelationOperation } from '../core/relation/operations';
+import { buildRelationAttributeSql, buildRelationFilterSql } from '../core/sql/relation';
 
 vi.mock('../core/runners/relation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/runners/relation')>();
@@ -134,7 +134,7 @@ describe('DuckDB relation operations', () => {
       maskGeometryColumn: 'zone_geom',
     };
 
-    await runNamedDuckDbRelationOperation('filter', 'intersects', input, mask, opts, runtime);
+    await runNamedRelationOperation('filter', 'intersects', input, mask, opts, runtime);
 
     expect(runRelationToolMock).toHaveBeenCalledWith(
       input,
@@ -152,7 +152,7 @@ describe('DuckDB relation operations', () => {
   it.each(
     TOPOLOGICAL_RELATION_CASES,
   )('builds %s filter relation operations', async (id, duckDbFunction) => {
-    await runNamedDuckDbRelationOperation('filter', id, dataset(), dataset());
+    await runNamedRelationOperation('filter', id, dataset(), dataset());
 
     expect(lastRelationOperation()).toEqual({
       id,
@@ -165,7 +165,7 @@ describe('DuckDB relation operations', () => {
   it.each(
     TOPOLOGICAL_RELATION_CASES,
   )('builds %s attribute relation operations with default columns', async (id, duckDbFunction, outputColumn) => {
-    await runNamedDuckDbRelationOperation('attribute', id, dataset(), dataset());
+    await runNamedRelationOperation('attribute', id, dataset(), dataset());
 
     expect(lastRelationOperation()).toEqual({
       id,
@@ -179,7 +179,7 @@ describe('DuckDB relation operations', () => {
   });
 
   it('passes distanceWithin threshold into filter SQL', async () => {
-    await runNamedDuckDbRelationOperation('filter', 'distanceWithin', dataset(), dataset(), {
+    await runNamedRelationOperation('filter', 'distanceWithin', dataset(), dataset(), {
       distance: 25,
     });
 
@@ -194,7 +194,7 @@ describe('DuckDB relation operations', () => {
   });
 
   it('builds distance attribute SQL with the default output column', async () => {
-    await runNamedDuckDbRelationOperation('attribute', 'distance', dataset(), dataset());
+    await runNamedRelationOperation('attribute', 'distance', dataset(), dataset());
 
     expect(lastRelationOperation()).toEqual({
       id: 'distance',
@@ -208,7 +208,7 @@ describe('DuckDB relation operations', () => {
   });
 
   it('builds distanceWithin attribute SQL with the default output column', async () => {
-    await runNamedDuckDbRelationOperation('attribute', 'distanceWithin', dataset(), dataset(), {
+    await runNamedRelationOperation('attribute', 'distanceWithin', dataset(), dataset(), {
       distance: 10.5,
     });
 
@@ -225,7 +225,7 @@ describe('DuckDB relation operations', () => {
   });
 
   it('lets callers override attribute output columns', async () => {
-    await runNamedDuckDbRelationOperation('attribute', 'contains', dataset(), dataset(), {
+    await runNamedRelationOperation('attribute', 'contains', dataset(), dataset(), {
       outputColumn: 'matches_mask',
     });
 
@@ -240,13 +240,8 @@ describe('DuckDB relation operations', () => {
   it.each(
     TOPOLOGICAL_RELATION_CASES.map(([id]) => id),
   )('allows topological operation %s with EPSG:4326', async (id) => {
-    await runNamedDuckDbRelationOperation('filter', id, dataset('EPSG:4326'), dataset('EPSG:4326'));
-    await runNamedDuckDbRelationOperation(
-      'attribute',
-      id,
-      dataset('EPSG:4326'),
-      dataset('EPSG:4326'),
-    );
+    await runNamedRelationOperation('filter', id, dataset('EPSG:4326'), dataset('EPSG:4326'));
+    await runNamedRelationOperation('attribute', id, dataset('EPSG:4326'), dataset('EPSG:4326'));
 
     expect(runRelationToolMock).toHaveBeenCalledTimes(2);
   });
@@ -257,15 +252,9 @@ describe('DuckDB relation operations', () => {
   ] as const)('rejects %s operations on geographic CRS by default', async (operation, mode) => {
     await expectValidationError(
       () =>
-        runNamedDuckDbRelationOperation(
-          mode,
-          operation,
-          dataset('EPSG:4326'),
-          dataset('EPSG:4326'),
-          {
-            distance: 5,
-          },
-        ),
+        runNamedRelationOperation(mode, operation, dataset('EPSG:4326'), dataset('EPSG:4326'), {
+          distance: 5,
+        }),
       'crs',
     );
   });
@@ -280,7 +269,7 @@ describe('DuckDB relation operations', () => {
       { id: 'distanceWithin', distance: 5 },
     ],
   ] as const)('allows distance operation %s on geographic CRS when failOnGeographicCrs is false', async (_name, operation, mode, expectedOperation) => {
-    await runNamedDuckDbRelationOperation(mode, operation, dataset('EPSG:4326'), dataset(), {
+    await runNamedRelationOperation(mode, operation, dataset('EPSG:4326'), dataset(), {
       distance: 5,
       failOnGeographicCrs: false,
     });
@@ -296,7 +285,7 @@ describe('DuckDB relation operations', () => {
   ])('rejects invalid distanceWithin distance %s', async (distance) => {
     await expectValidationError(
       () =>
-        runNamedDuckDbRelationOperation('filter', 'distanceWithin', dataset(), dataset(), {
+        runNamedRelationOperation('filter', 'distanceWithin', dataset(), dataset(), {
           distance,
         }),
       'distance',
@@ -309,7 +298,7 @@ describe('DuckDB relation operations', () => {
   ] as const)('validates distance before geographic CRS for distanceWithin %s mode', async (mode) => {
     await expectValidationError(
       () =>
-        runNamedDuckDbRelationOperation(
+        runNamedRelationOperation(
           mode,
           'distanceWithin',
           dataset('EPSG:4326'),
@@ -322,7 +311,7 @@ describe('DuckDB relation operations', () => {
     );
     await expectValidationError(
       () =>
-        runNamedDuckDbRelationOperation(
+        runNamedRelationOperation(
           mode,
           'distanceWithin',
           dataset('EPSG:4326'),
@@ -334,25 +323,25 @@ describe('DuckDB relation operations', () => {
 
   it('rejects missing distanceWithin distance', async () => {
     await expectValidationError(
-      () => runNamedDuckDbRelationOperation('attribute', 'distanceWithin', dataset(), dataset()),
+      () => runNamedRelationOperation('attribute', 'distanceWithin', dataset(), dataset()),
       'distance',
     );
   });
 
   it('returns immutable named operations for map-op integration', () => {
-    expect(getDuckDbRelationOperation('intersects')).toEqual({
+    expect(getRelationOperation('intersects')).toEqual({
       id: 'intersects',
       duckDbFunction: 'ST_Intersects',
       outputColumn: 'duckdb_intersects',
       output: 'predicate',
     });
-    expect(getDuckDbRelationOperation('distance')).toEqual({
+    expect(getRelationOperation('distance')).toEqual({
       id: 'distance',
       duckDbFunction: 'ST_Distance',
       outputColumn: 'duckdb_distance',
       output: 'distance',
     });
-    expect(getDuckDbRelationOperation('distanceWithin')).toEqual({
+    expect(getRelationOperation('distanceWithin')).toEqual({
       id: 'distanceWithin',
       duckDbFunction: 'ST_Distance',
       outputColumn: 'duckdb_distance_within',
@@ -365,7 +354,7 @@ describe('DuckDB relation operations', () => {
     duckDbFunction,
     outputColumn,
   }) => {
-    expect(getDuckDbRelationOperation(id)).toEqual({
+    expect(getRelationOperation(id)).toEqual({
       id,
       duckDbFunction,
       outputColumn,
@@ -374,8 +363,8 @@ describe('DuckDB relation operations', () => {
   });
 
   it('throws validation errors for unknown operations', () => {
-    expect(() => getDuckDbRelationOperation('unsupported')).toThrowError(DuckDbOperationError);
-    expect(() => getDuckDbRelationOperation('unsupported')).toThrowError(
+    expect(() => getRelationOperation('unsupported' as never)).toThrowError(DuckDbOperationError);
+    expect(() => getRelationOperation('unsupported' as never)).toThrowError(
       /Unsupported DuckDB relation operation/,
     );
   });

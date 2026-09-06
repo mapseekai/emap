@@ -113,7 +113,7 @@ const summary = await spatialSummaryJoin(zones, points, {
 
 ```ts
 const centers = await centroid(polygons);
-const simple = await simplify(polygons, { tolerance: 2, preserveTopology: true });
+const simple = await simplifyPreserveTopology(polygons, { tolerance: 2 });
 const dense = await densify(lines, { maxSegmentLength: 10 });
 const single = await multipartToSinglepart(multipart);
 const vertices = await extractVertices(lines);

@@ -2,13 +2,13 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { isGeographicCrs } from '../../geo/crs-resolver';
 import { DuckDbOperationError } from '../errors';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { runUnaryGeometryTool, type DuckDbUnaryGeometryOptions } from '../core/runners/geometry';
+import { runUnaryGeometryTool } from '../core/runners/geometry';
+import type { ProcessingOptions } from '../core/types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
-export interface SimplifyOptions extends DuckDbUnaryGeometryOptions {
+export interface SimplifyOptions extends ProcessingOptions {
   tolerance: number;
   failOnGeographicCrs?: boolean;
-  preserveTopology?: boolean;
 }
 function normalize(input: MapshaperDataset, options: SimplifyOptions) {
   if (!Number.isFinite(options.tolerance) || options.tolerance < 0)
@@ -32,13 +32,12 @@ export async function simplify(
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ) {
   const normalized = normalize(input, options);
-  const fn = options.preserveTopology ? 'ST_SimplifyPreserveTopology' : 'ST_Simplify';
   return runUnaryGeometryTool(
     input,
     normalized,
     {
-      id: options.preserveTopology ? 'simplifyPreserveTopology' : 'simplify',
-      duckDbFunction: fn,
+      id: 'simplify',
+      duckDbFunction: 'ST_Simplify',
       args: [normalized.tolerance],
     },
     runtime,
@@ -46,10 +45,20 @@ export async function simplify(
 }
 export async function simplifyPreserveTopology(
   input: MapshaperDataset,
-  options: Omit<SimplifyOptions, 'preserveTopology'>,
+  options: SimplifyOptions,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ) {
-  return simplify(input, { ...options, preserveTopology: true }, runtime);
+  const normalized = normalize(input, options);
+  return runUnaryGeometryTool(
+    input,
+    normalized,
+    {
+      id: 'simplifyPreserveTopology',
+      duckDbFunction: 'ST_SimplifyPreserveTopology',
+      args: [normalized.tolerance],
+    },
+    runtime,
+  );
 }
 export const simplifyTool = defineDuckDbTool({
   id: 'simplify',
@@ -71,12 +80,6 @@ export const simplifyTool = defineDuckDbTool({
       type: 'number',
       required: true,
       minimum: 0,
-    },
-    {
-      name: 'preserveTopology',
-      description: 'Use topology-preserving simplification.',
-      type: 'boolean',
-      default: false,
     },
   ],
   crs: 'projected',

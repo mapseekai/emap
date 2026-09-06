@@ -6,7 +6,7 @@ import { parseGeoMetadata } from '../../../arrow/geoparquet-metadata';
 import type { MapshaperDataset } from '../../../types/mapshaper-types';
 import { runOverlayTool, type DuckDbOverlayOperation } from './overlay';
 import type { DuckDbConnection, DuckDbRuntime } from '../../runtime';
-import { buildOverlaySql } from '../../overlay/_sql';
+import { buildOverlaySql } from '../sql/overlay';
 
 const INPUT_FC = {
   type: 'FeatureCollection',

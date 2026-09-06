@@ -2,7 +2,8 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { runOverlayTool } from '../core/runners/overlay';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import { OVERLAY_OPERATIONS, type OverlayOptions } from './_shared';
+import { OVERLAY_OPERATIONS } from './_shared';
+import type { OverlayOptions } from './types';
 
 export type IntersectOptions = OverlayOptions;
 

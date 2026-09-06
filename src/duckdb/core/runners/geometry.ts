@@ -6,7 +6,7 @@ import {
   runDuckDbPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
-import { buildUnaryGeometrySql } from '../../geometry/_sql';
+import { buildUnaryGeometrySql } from '../sql/geometry';
 
 export interface DuckDbUnaryGeometryOptions {
   layer?: string | number;

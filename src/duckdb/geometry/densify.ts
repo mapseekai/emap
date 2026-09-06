@@ -3,14 +3,11 @@ import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { resolveLayerInList } from '../../map/layer-registry';
 import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import {
-  finitePositive,
-  processingValidation,
-  type DuckDbProcessingGeometryOptions,
-} from '../core/runners/processing';
+import { finitePositive, processingValidation } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import type { DuckDbRuntime } from '../runtime';
 
-export interface DensifyOptions extends DuckDbProcessingGeometryOptions {
+export interface DensifyOptions extends ProcessingOptions {
   maxSegmentLength: number;
 }
 function densifyArc(

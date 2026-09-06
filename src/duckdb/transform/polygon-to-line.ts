@@ -1,6 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import type { GeometryOptions } from '../geometry/_shared';
+import type { GeometryOptions } from '../geometry/types';
 import { boundary } from '../geometry/boundary';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 export function polygonToLine(

@@ -21,7 +21,7 @@ import {
   type DuckDbSpatialSummaryJoinLayerOptions,
   type DuckDbSpatialSummaryJoinLayerResult,
 } from './map-operations';
-import { buildUnaryGeometrySql } from './geometry/_sql';
+import { buildUnaryGeometrySql } from './core/sql/geometry';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',

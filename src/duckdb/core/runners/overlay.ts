@@ -10,7 +10,7 @@ import {
   runDuckDbPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
-import { buildOverlaySql, type OverlayDuckDbFunction } from '../../overlay/_sql';
+import { buildOverlaySql, type OverlayDuckDbFunction } from '../sql/overlay';
 
 export interface DuckDbOverlayOptions {
   inputLayer?: string | number;

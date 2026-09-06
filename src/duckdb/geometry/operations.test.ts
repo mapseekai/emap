@@ -10,7 +10,6 @@ import {
   centroid,
   convexHull,
   envelope,
-  makeValid,
   simplify,
   simplifyPreserveTopology,
 } from './index';
@@ -95,7 +94,6 @@ describe('geometry operations', () => {
       fn: 'ST_ConvexHull',
     },
     { name: 'boundary', helper: boundary, fn: 'ST_Boundary' },
-    { name: 'makeValid', helper: makeValid, fn: 'ST_MakeValid' },
   ] as const;
 
   it.each(cases)('$name runs $fn without geographic CRS rejection', async ({ helper, fn }) => {

@@ -3,7 +3,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { aggregateSql, runSingleInputTool } from '../core/runners/processing';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import type { AggregateOptions } from './_shared';
+import type { AggregateOptions } from './types';
 
 export function collect(
   input: MapshaperDataset,

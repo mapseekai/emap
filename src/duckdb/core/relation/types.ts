@@ -1,4 +1,4 @@
-import type { RelationDuckDbFunction } from './_relation-sql';
+import type { RelationDuckDbFunction } from '../sql/relation';
 
 export const RELATION_OPERATIONS = {
   intersects: { duckDbFunction: 'ST_Intersects', outputColumn: 'duckdb_intersects' },
@@ -20,14 +20,11 @@ export const RELATION_OPERATIONS = {
   { duckDbFunction: RelationDuckDbFunction; outputColumn: string }
 >;
 
-export type DuckDbTopologicalRelationOperationId = keyof typeof RELATION_OPERATIONS;
-export type DuckDbRelationOperationId =
-  | DuckDbTopologicalRelationOperationId
-  | 'distance'
-  | 'distanceWithin';
+export type TopologicalRelationOperationId = keyof typeof RELATION_OPERATIONS;
+export type RelationOperationId = TopologicalRelationOperationId | 'distance' | 'distanceWithin';
 
-export interface DuckDbNamedRelationOperation {
-  id: DuckDbRelationOperationId;
+export interface NamedRelationOperation {
+  id: RelationOperationId;
   duckDbFunction: RelationDuckDbFunction | 'ST_Distance';
   outputColumn?: string;
   output: 'predicate' | 'distance';

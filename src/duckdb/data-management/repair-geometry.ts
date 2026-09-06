@@ -1,15 +1,20 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import type { GeometryOptions } from '../geometry/_shared';
-import { makeValid } from '../geometry/make-valid';
+import { runUnaryGeometryTool } from '../core/runners/geometry';
+import type { ProcessingOptions } from '../core/types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-export type RepairGeometryOptions = GeometryOptions;
+export type RepairGeometryOptions = ProcessingOptions;
 export function repairGeometry(
   input: MapshaperDataset,
   options: RepairGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ) {
-  return makeValid(input, options, runtime);
+  return runUnaryGeometryTool(
+    input,
+    options,
+    { id: 'repairGeometry', duckDbFunction: 'ST_MakeValid' },
+    runtime,
+  );
 }
 export const repairGeometryTool = defineDuckDbTool({
   id: 'repairGeometry',

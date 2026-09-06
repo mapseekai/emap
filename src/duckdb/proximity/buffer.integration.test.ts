@@ -7,7 +7,8 @@ import { datasetFromGeoJSON } from '../../arrow/test-utils';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { buffer } from './buffer';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
-import { centroid, envelope, makeValid, simplifyPreserveTopology } from '../geometry';
+import { centroid, envelope, simplifyPreserveTopology } from '../geometry';
+import { repairGeometry } from '../data-management';
 
 const describeDuckDbIntegration =
   process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
@@ -206,12 +207,12 @@ describeDuckDbIntegration('DuckDB-Wasm buffer integration', () => {
     expect(result.info?.crs_string).toBe('EPSG:3857');
   }, 60_000);
 
-  it('runs make-valid with the real DuckDB-Wasm runtime', async () => {
+  it('runs repair-geometry with the real DuckDB-Wasm runtime', async () => {
     const dataset = await step('create input dataset', () => polygonDataset());
     const duckDbRuntime = await getIntegrationRuntime();
 
-    const result = await step('make-valid dataset with DuckDB-Wasm', () =>
-      makeValid(dataset, { outputLayer: 'valid' }, duckDbRuntime),
+    const result = await step('repair geometry dataset with DuckDB-Wasm', () =>
+      repairGeometry(dataset, { outputLayer: 'valid' }, duckDbRuntime),
     );
 
     expect(result.layers[0]?.name).toBe('valid');

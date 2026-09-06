@@ -1,14 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import {
-  runNamedDuckDbRelationOperation,
-  type DuckDbRelationHelperOptions,
-  type DuckDbRelationOperationId,
-} from './_operations';
+import { runNamedRelationOperation, type RelationOptions } from '../core/relation/operations';
+import type { RelationOperationId } from '../core/relation/types';
 
-export interface SpatialRelationOptions extends DuckDbRelationHelperOptions {
-  predicate: DuckDbRelationOperationId;
+export interface SpatialRelationOptions extends RelationOptions {
+  predicate: RelationOperationId;
   mode?: 'filter' | 'attribute';
 }
 
@@ -18,7 +15,7 @@ export function spatialRelation(
   options: SpatialRelationOptions,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ) {
-  return runNamedDuckDbRelationOperation(
+  return runNamedRelationOperation(
     options.mode ?? 'filter',
     options.predicate,
     input,

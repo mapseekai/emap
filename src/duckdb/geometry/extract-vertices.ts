@@ -1,13 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import {
-  runSingleInputTool,
-  type DuckDbProcessingGeometryOptions,
-} from '../core/runners/processing';
+import { runSingleInputTool } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { dumpSql } from './_dump';
-export type ExtractVerticesOptions = DuckDbProcessingGeometryOptions;
+export type ExtractVerticesOptions = ProcessingOptions;
 export function extractVertices(
   input: MapshaperDataset,
   options: ExtractVerticesOptions = {},

@@ -5,11 +5,9 @@ import { ARROW_EXTENSION_NAME } from '../../arrow/geoparquet-metadata';
 import { datasetFromGeoJSON } from '../../arrow/test-utils';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
-import { buffer, normalizeBufferOptions } from './buffer';
+import { buildUnaryGeometrySql } from '../core/sql/geometry';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
-import { buildAttributeSql } from '../attributes/_sql';
-import { buildUnaryGeometrySql } from '../geometry/_sql';
-import { buildRelationAttributeSql, buildRelationFilterSql } from '../selection/_relation-sql';
+import { buffer, normalizeBufferOptions } from './buffer';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -91,14 +89,12 @@ class FakeRuntime implements DuckDbRuntime {
 describe('DuckDB buffer operation validation', () => {
   it('rejects non-positive buffer distance', async () => {
     const dataset = await polygonDataset('EPSG:3857');
-
     expect(() => normalizeBufferOptions(dataset, { distance: 0 })).toThrow(DuckDbOperationError);
     expect(() => normalizeBufferOptions(dataset, { distance: 0 })).toThrow(/greater than zero/);
   });
 
   it('rejects non-finite buffer distance', async () => {
     const dataset = await polygonDataset('EPSG:3857');
-
     expect(() => normalizeBufferOptions(dataset, { distance: Number.NaN })).toThrow(
       DuckDbOperationError,
     );
@@ -106,7 +102,6 @@ describe('DuckDB buffer operation validation', () => {
 
   it('rejects geographic CRS by default', async () => {
     const dataset = await polygonDataset('EPSG:4326');
-
     expect(() => normalizeBufferOptions(dataset, { distance: 10 })).toThrow(
       /reproject to a projected CRS/,
     );
@@ -138,18 +133,13 @@ describe('DuckDB buffer operation validation', () => {
 
   it('allows geographic CRS when explicitly requested', async () => {
     const dataset = await polygonDataset('OGC:CRS84');
-
     expect(
       normalizeBufferOptions(dataset, { distance: 10, failOnGeographicCrs: false }),
-    ).toMatchObject({
-      distance: 10,
-      failOnGeographicCrs: false,
-    });
+    ).toMatchObject({ distance: 10, failOnGeographicCrs: false });
   });
 
   it('normalizes optional layer, output layer, and geometry column settings', async () => {
     const dataset = await polygonDataset('EPSG:3857');
-
     expect(
       normalizeBufferOptions(dataset, {
         layer: 'parcels',
@@ -167,321 +157,6 @@ describe('DuckDB buffer operation validation', () => {
   });
 });
 
-describe('DuckDB buffer SQL', () => {
-  const ADDITIONAL_RELATION_CASES = [
-    { id: 'overlaps', duckDbFunction: 'ST_Overlaps', outputColumn: 'duckdb_overlaps' },
-    { id: 'equals', duckDbFunction: 'ST_Equals', outputColumn: 'duckdb_equals' },
-    { id: 'crosses', duckDbFunction: 'ST_Crosses', outputColumn: 'duckdb_crosses' },
-    { id: 'covers', duckDbFunction: 'ST_Covers', outputColumn: 'duckdb_covers' },
-    { id: 'coveredBy', duckDbFunction: 'ST_CoveredBy', outputColumn: 'duckdb_covered_by' },
-    {
-      id: 'containsProperly',
-      duckDbFunction: 'ST_ContainsProperly',
-      outputColumn: 'duckdb_contains_properly',
-    },
-  ] as const;
-
-  it('builds a unary geometry query with an explicit WKB bridge', () => {
-    expect(
-      buildUnaryGeometrySql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: 'ST_Centroid',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        '  * EXCLUDE ("geometry"),',
-        '  ST_Centroid("geometry") AS "geometry"',
-        'FROM "input"',
-        'WHERE "geometry" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-
-  it('builds a unary geometry query with numeric operation arguments', () => {
-    expect(
-      buildUnaryGeometrySql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: 'ST_SimplifyPreserveTopology',
-        args: [2.5],
-      }),
-    ).toContain('ST_SimplifyPreserveTopology("geometry", 2.5)');
-  });
-
-  it('builds a buffer query with quoted table and geometry identifiers', () => {
-    expect(
-      buildUnaryGeometrySql({
-        tableName: 'input table',
-        geometryColumn: 'geom"col',
-        duckDbFunction: 'ST_Buffer',
-        args: [3],
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        '  * EXCLUDE ("geom""col"),',
-        '  ST_Buffer("geom""col", 3) AS "geom""col"',
-        'FROM "input table"',
-        'WHERE "geom""col" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-
-  it('builds an attribute query that preserves geometry and appends a scalar column', () => {
-    expect(
-      buildAttributeSql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: 'ST_Area',
-        outputColumn: 'duckdb_area',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        '  *,',
-        '  ST_Area("geometry") AS "duckdb_area"',
-        'FROM "input"',
-        'WHERE "geometry" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-
-  it('quotes attribute query identifiers', () => {
-    expect(
-      buildAttributeSql({
-        tableName: 'input table',
-        geometryColumn: 'geom"col',
-        duckDbFunction: 'ST_GeometryType',
-        outputColumn: 'type"field',
-      }),
-    ).toContain('ST_GeometryType("geom""col") AS "type""field"');
-  });
-  it('builds relation filter query for intersecting input and mask geometries', () => {
-    expect(
-      buildRelationFilterSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Intersects',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*',
-        'FROM "input" AS i',
-        'WHERE i."geometry" IS NOT NULL',
-        ' AND EXISTS (',
-        '  SELECT 1',
-        '  FROM "mask" AS m',
-        '  WHERE m."geometry" IS NOT NULL',
-        '   AND ST_Intersects(i."geometry", m."geometry")',
-        ' )',
-      ].join('\n'),
-    );
-  });
-
-  it('quotes relation table names and geometry column identifiers', () => {
-    expect(
-      buildRelationFilterSql({
-        inputTableName: 'input table',
-        maskTableName: 'mask"table',
-        inputGeometryColumn: 'input geom',
-        maskGeometryColumn: 'mask"geom',
-        duckDbFunction: 'ST_Intersects',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*',
-        'FROM "input table" AS i',
-        'WHERE i."input geom" IS NOT NULL',
-        ' AND EXISTS (',
-        '  SELECT 1',
-        '  FROM "mask""table" AS m',
-        '  WHERE m."mask""geom" IS NOT NULL',
-        '   AND ST_Intersects(i."input geom", m."mask""geom")',
-        ' )',
-      ].join('\n'),
-    );
-  });
-
-  it('builds relation attribute query with boolean predicate output', () => {
-    expect(
-      buildRelationAttributeSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Intersects',
-        outputColumn: 'duckdb_intersects',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*,',
-        ' EXISTS (',
-        '  SELECT 1',
-        '  FROM "mask" AS m',
-        '  WHERE m."geometry" IS NOT NULL',
-        '   AND ST_Intersects(i."geometry", m."geometry")',
-        ' ) AS "duckdb_intersects"',
-        'FROM "input" AS i',
-        'WHERE i."geometry" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-
-  it.each(
-    ADDITIONAL_RELATION_CASES,
-  )('builds additional filter and attribute SQL for $duckDbFunction', ({
-    duckDbFunction,
-    outputColumn,
-  }) => {
-    const base = {
-      inputTableName: 'input',
-      maskTableName: 'mask',
-      inputGeometryColumn: 'geometry',
-      maskGeometryColumn: 'geometry',
-      duckDbFunction,
-    };
-
-    const filterSql = buildRelationFilterSql(base);
-    const attributeSql = buildRelationAttributeSql({ ...base, outputColumn });
-    const predicate = `${duckDbFunction}(i."geometry", m."geometry")`;
-
-    expect(filterSql).toContain(' AND EXISTS (');
-    expect(filterSql).toContain(predicate);
-    expect(attributeSql).toContain(' EXISTS (');
-    expect(attributeSql).toContain(predicate);
-    expect(attributeSql).toContain(`AS "${outputColumn}"`);
-  });
-
-  it('builds relation attribute query with minimum distance output', () => {
-    expect(
-      buildRelationAttributeSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Distance',
-        outputColumn: 'duckdb_distance',
-        output: 'distance',
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*,',
-        ' (',
-        '  SELECT MIN(ST_Distance(i."geometry", m."geometry"))',
-        '  FROM "mask" AS m',
-        '  WHERE m."geometry" IS NOT NULL',
-        ' ) AS "duckdb_distance"',
-        'FROM "input" AS i',
-        'WHERE i."geometry" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-
-  it('builds distanceWithin relation filter and attribute SQL with distance threshold', () => {
-    expect(
-      buildRelationFilterSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Distance',
-        distance: 42,
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*',
-        'FROM "input" AS i',
-        'WHERE i."geometry" IS NOT NULL',
-        ' AND EXISTS (',
-        '  SELECT 1',
-        '  FROM "mask" AS m',
-        '  WHERE m."geometry" IS NOT NULL',
-        '   AND ST_Distance(i."geometry", m."geometry") <= 42',
-        ' )',
-      ].join('\n'),
-    );
-
-    expect(
-      buildRelationAttributeSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Distance',
-        outputColumn: 'duckdb_distance_within',
-        distance: 42,
-      }),
-    ).toBe(
-      [
-        'SELECT',
-        ' i.*,',
-        ' EXISTS (',
-        '  SELECT 1',
-        '  FROM "mask" AS m',
-        '  WHERE m."geometry" IS NOT NULL',
-        '   AND ST_Distance(i."geometry", m."geometry") <= 42',
-        ' ) AS "duckdb_distance_within"',
-        'FROM "input" AS i',
-        'WHERE i."geometry" IS NOT NULL',
-      ].join('\n'),
-    );
-  });
-});
-
-describe('DuckDB SQL function-name safety', () => {
-  it('rejects unsafe unary geometry function names', () => {
-    expect(() =>
-      buildUnaryGeometrySql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: 'ST_Buffer(geometry); DROP TABLE input; --',
-      }),
-    ).toThrow(/unsafe duckdb function/i);
-  });
-
-  it('rejects unsafe attribute function names', () => {
-    expect(() =>
-      buildAttributeSql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: '1); DROP TABLE input; --',
-        outputColumn: 'out',
-      }),
-    ).toThrow(/unsafe duckdb function/i);
-  });
-
-  it('rejects unsafe relation function names (defense-in-depth)', () => {
-    expect(() =>
-      buildRelationFilterSql({
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction: 'ST_Intersects(i.geometry, m.geometry) OR 1=1; --' as never,
-      }),
-    ).toThrow(/unsafe duckdb function/i);
-  });
-
-  it('accepts legitimate ST_* function names', () => {
-    expect(() =>
-      buildUnaryGeometrySql({
-        tableName: 'input',
-        geometryColumn: 'geometry',
-        duckDbFunction: 'ST_Centroid',
-      }),
-    ).not.toThrow();
-  });
-});
-
 describe('buffer', () => {
   it('processes dataset buffers through an injected DuckDB runtime', async () => {
     const dataset = await polygonDataset('EPSG:3857');
@@ -491,16 +166,11 @@ describe('buffer', () => {
 
     const result = await buffer(
       dataset,
-      {
-        layer: 'parcels',
-        distance: 12.5,
-        outputLayer: 'buffered',
-      },
+      { layer: 'parcels', distance: 12.5, outputLayer: 'buffered' },
       runtime,
     );
 
     const inputTableName = runtime.connection.inserted[0]!.opts.name;
-
     expect(runtime.events).toEqual([
       'ensureSpatial',
       'connect',
@@ -563,7 +233,6 @@ describe('buffer', () => {
 
   it('rejects missing DuckDB runtimes before opening a connection', async () => {
     const dataset = await polygonDataset('EPSG:3857');
-
     await expect(buffer(dataset, { distance: 10 }, null)).rejects.toMatchObject({
       kind: 'runtime-unavailable',
     });
@@ -573,7 +242,6 @@ describe('buffer', () => {
     const dataset = await polygonDataset('EPSG:3857');
     const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
     const runtime = new FakeRuntime(resultTable, new Error('query exploded'));
-
     await expect(buffer(dataset, { distance: 10 }, runtime)).rejects.toMatchObject({
       kind: 'query-failed',
     });
@@ -584,9 +252,7 @@ describe('buffer', () => {
     const dataset = await polygonDataset('EPSG:3857');
     const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
     const runtime = new FakeRuntime(resultTable, undefined, new Error('insert exploded'));
-
     const error = await buffer(dataset, { distance: 10 }, runtime).catch((err) => err);
-
     expect(error).toBeInstanceOf(DuckDbOperationError);
     expect(error).toMatchObject({ kind: 'query-failed' });
     expect(runtime.connection.closed).toBe(true);

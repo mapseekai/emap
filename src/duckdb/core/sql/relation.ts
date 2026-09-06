@@ -1,5 +1,5 @@
-import { quoteIdentifier } from '../core/pipeline';
-import { assertSafeDuckDbFunction } from '../core/sql-safety';
+import { quoteIdentifier } from '../pipeline';
+import { assertSafeDuckDbFunction } from '../sql-safety';
 
 export type RelationDuckDbFunction =
   | 'ST_Intersects'

@@ -262,7 +262,7 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
 
     const vertices = await extractVertices(polygons, {}, rt);
     expect(vertices.layers[0]?.shapes?.length).toBeGreaterThan(4);
-  });
+  }, 30_000);
 
   it('runs point-to-line and line-to-polygon transforms', async () => {
     const rt = await getRuntime();

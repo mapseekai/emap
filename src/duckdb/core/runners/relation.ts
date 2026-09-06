@@ -15,7 +15,7 @@ import {
   buildRelationAttributeSql,
   buildRelationFilterSql,
   type RelationDuckDbFunction,
-} from '../../selection/_relation-sql';
+} from '../sql/relation';
 
 export type DuckDbRelationMode = 'filter' | 'attribute';
 export type DuckDbRelationOutputKind = 'predicate' | 'distance';

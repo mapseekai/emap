@@ -1,10 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { runTwoInputTool, type DuckDbProcessingGeometryOptions } from '../core/runners/processing';
+import { runTwoInputTool } from '../core/runners/processing';
+import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
-export interface AttributeJoinOptions extends DuckDbProcessingGeometryOptions {
+export interface AttributeJoinOptions extends ProcessingOptions {
   leftKey: string;
   rightKey: string;
   joinType?: 'left' | 'inner';

@@ -1,29 +1,9 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { isGeographicCrs } from '../../geo/crs-resolver';
 import { DuckDbOperationError } from '../errors';
-import {
-  runAttributeTool,
-  type DuckDbAttributeOperation,
-  type DuckDbAttributeOptions,
-} from '../core/runners/attribute';
+import { runAttributeTool, type DuckDbAttributeOperation } from '../core/runners/attribute';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-
-export type AttributeOperationId =
-  | 'area'
-  | 'length'
-  | 'perimeter'
-  | 'geometryType'
-  | 'isValid'
-  | 'isEmpty'
-  | 'isSimple'
-  | 'x'
-  | 'y'
-  | 'centroidX'
-  | 'centroidY';
-
-export interface AttributeOptions extends DuckDbAttributeOptions {
-  failOnGeographicCrs?: boolean;
-}
+import type { AttributeOperationId, AttributeOptions } from './types';
 
 export interface AttributeOperationDefinition extends DuckDbAttributeOperation {
   defaultOutputColumn: string;
@@ -128,30 +108,5 @@ export async function runAttribute(
     },
     operation,
     runtime,
-  );
-}
-
-export function getDuckDbAttributeOperation(operationId: AttributeOperationId) {
-  return ATTRIBUTE_OPERATIONS[operationId];
-}
-
-export function runNamedDuckDbAttributeOperation(
-  input: MapshaperDataset,
-  operationId: string,
-  options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null | undefined = getDuckDbRuntime(),
-) {
-  if (!(operationId in ATTRIBUTE_OPERATIONS)) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB attribute operation '${operationId}'`,
-      { field: 'operation' },
-    );
-  }
-  return runAttribute(
-    operationId as AttributeOperationId,
-    input,
-    options,
-    runtime === undefined ? getDuckDbRuntime() : runtime,
   );
 }

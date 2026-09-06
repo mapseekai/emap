@@ -27,7 +27,7 @@ import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from
 
 export type DuckDbSpatialOperation =
   | 'centroid' | 'envelope' | 'convexHull' | 'boundary' | 'simplify'
-  | 'simplifyPreserveTopology' | 'makeValid' | 'area' | 'length' | 'perimeter'
+  | 'simplifyPreserveTopology' | 'repairGeometry' | 'area' | 'length' | 'perimeter'
   | 'geometryType' | 'isValid' | 'isEmpty' | 'isSimple' | 'x' | 'y' | 'centroidX'
   | 'centroidY' | 'intersects' | 'contains' | 'within' | 'touches' | 'disjoint'
   | 'overlaps' | 'equals' | 'crosses' | 'covers' | 'coveredBy' | 'containsProperly'
@@ -77,7 +77,7 @@ export const duckDbSpatialOperationDefinitions: readonly DuckDbSpatialOperationD
   definition('centroid', 'geometry', 'Centroid'), definition('envelope', 'geometry', 'Envelope'),
   definition('convexHull', 'geometry', 'Convex Hull'), definition('boundary', 'geometry', 'Boundary'),
   definition('simplify', 'geometry', 'Simplify', toleranceControls), definition('simplifyPreserveTopology', 'geometry', 'Simplify Preserve Topology', toleranceControls),
-  definition('makeValid', 'geometry', 'Make Valid'), definition('area', 'attribute', 'Area Attribute'),
+  definition('repairGeometry', 'geometry', 'Repair Geometry'), definition('area', 'attribute', 'Area Attribute'),
   definition('length', 'attribute', 'Length Attribute'), definition('perimeter', 'attribute', 'Perimeter Attribute'),
   definition('geometryType', 'attribute', 'Geometry Type Attribute'), definition('isValid', 'attribute', 'Is Valid Attribute'),
   definition('isEmpty', 'attribute', 'Is Empty Attribute'), definition('isSimple', 'attribute', 'Is Simple Attribute'),
@@ -319,7 +319,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       case 'boundary': return boundary(dataset, options, runtime);
       case 'simplify': return simplify(dataset, options, runtime);
       case 'simplifyPreserveTopology': return simplifyPreserveTopology(dataset, options, runtime);
-      case 'makeValid': return repairGeometry(dataset, options, runtime);
+      case 'repairGeometry': return repairGeometry(dataset, options, runtime);
       case 'area': return area(dataset, options, runtime);
       case 'length': return length(dataset, options, runtime);
       case 'perimeter': return perimeter(dataset, options, runtime);

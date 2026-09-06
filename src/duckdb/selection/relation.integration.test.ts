@@ -9,7 +9,7 @@ import {
   distanceRelation,
   runDistanceWithinRelation,
   runTopologicalRelation,
-} from './_relation-engine';
+} from '../core/relation/operations';
 
 const describeDuckDbIntegration =
   process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;

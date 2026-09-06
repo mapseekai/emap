@@ -11,6 +11,7 @@ export type {
   DuckDbToolExecutionContext,
   DuckDbToolInputSpec,
   DuckDbToolParameterSpec,
+  DuckDbToolObjectPropertySpec,
   DuckDbToolOutputSpec,
   DuckDbAgentMetadata,
   DuckDbToolCategory,

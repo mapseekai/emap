@@ -1,27 +1,22 @@
-import type { MapshaperDataset } from '../../types/mapshaper-types';
-import { isGeographicCrs } from '../../geo/crs-resolver';
-import { DuckDbOperationError } from '../errors';
-import {
-  runRelationTool,
-  type DuckDbRelationOperation,
-  type DuckDbRelationOptions,
-} from '../core/runners/relation';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import type { MapshaperDataset } from '../../../types/mapshaper-types';
+import { isGeographicCrs } from '../../../geo/crs-resolver';
+import { DuckDbOperationError } from '../../errors';
+import { runRelationTool, type DuckDbRelationOperation } from '../runners/relation';
+import type { BinaryRelationOptions } from '../types';
+import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import {
   RELATION_OPERATIONS,
-  type DuckDbNamedRelationOperation,
-  type DuckDbRelationOperationId,
-  type DuckDbTopologicalRelationOperationId,
-} from './_relation-types';
+  type NamedRelationOperation,
+  type RelationOperationId,
+  type TopologicalRelationOperationId,
+} from './types';
 
-export interface DuckDbRelationHelperOptions extends DuckDbRelationOptions {
+export interface RelationOptions extends BinaryRelationOptions {
   distance?: number;
   failOnGeographicCrs?: boolean;
 }
 
-export function getDuckDbRelationOperation(
-  operationId: DuckDbRelationOperationId,
-): DuckDbNamedRelationOperation {
+export function getRelationOperation(operationId: RelationOperationId): NamedRelationOperation {
   if (operationId === 'distance') {
     return {
       id: operationId,
@@ -52,9 +47,9 @@ export function getDuckDbRelationOperation(
 function assertProjectedCrsForDistance(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions,
+  options: RelationOptions,
 ): void {
-  if (opts.failOnGeographicCrs === false) return;
+  if (options.failOnGeographicCrs === false) return;
   if (!isGeographicCrs(inputDataset) && !isGeographicCrs(maskDataset)) return;
   throw new DuckDbOperationError(
     'validation',
@@ -73,11 +68,11 @@ function requireDistance(distance: number | undefined): number {
 }
 
 export function runTopologicalRelation(
-  operationId: DuckDbTopologicalRelationOperationId,
+  operationId: TopologicalRelationOperationId,
   mode: 'filter' | 'attribute',
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
+  options: RelationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   const operationDefinition = RELATION_OPERATIONS[operationId];
@@ -88,20 +83,20 @@ export function runTopologicalRelation(
           id: operationId,
           mode,
           duckDbFunction: operationDefinition.duckDbFunction,
-          outputColumn: opts.outputColumn ?? operationDefinition.outputColumn,
+          outputColumn: options.outputColumn ?? operationDefinition.outputColumn,
         };
-  return runRelationTool(inputDataset, maskDataset, opts, operation, runtime);
+  return runRelationTool(inputDataset, maskDataset, options, operation, runtime);
 }
 
 export function runDistanceWithinRelation(
   mode: 'filter' | 'attribute',
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
+  options: RelationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const distance = requireDistance(opts.distance);
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
+  const distance = requireDistance(options.distance);
+  assertProjectedCrsForDistance(inputDataset, maskDataset, options);
   const operation: DuckDbRelationOperation =
     mode === 'filter'
       ? { id: 'distanceWithin', mode, duckDbFunction: 'ST_Distance', distance }
@@ -110,29 +105,76 @@ export function runDistanceWithinRelation(
           mode,
           duckDbFunction: 'ST_Distance',
           distance,
-          outputColumn: opts.outputColumn ?? 'duckdb_distance_within',
+          outputColumn: options.outputColumn ?? 'duckdb_distance_within',
         };
-  return runRelationTool(inputDataset, maskDataset, opts, operation, runtime);
+  return runRelationTool(inputDataset, maskDataset, options, operation, runtime);
 }
 
 export function distanceRelation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
+  options: RelationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
+  assertProjectedCrsForDistance(inputDataset, maskDataset, options);
   return runRelationTool(
     inputDataset,
     maskDataset,
-    opts,
+    options,
     {
       id: 'distance',
       mode: 'attribute',
       duckDbFunction: 'ST_Distance',
       output: 'distance',
-      outputColumn: opts.outputColumn ?? 'duckdb_distance',
+      outputColumn: options.outputColumn ?? 'duckdb_distance',
     },
+    runtime,
+  );
+}
+
+export function runNamedRelationOperation(
+  mode: string,
+  operationId: string,
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  options: RelationOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  if (mode !== 'filter' && mode !== 'attribute') {
+    throw new DuckDbOperationError('validation', `Unknown DuckDB relation mode '${mode}'`, {
+      field: 'mode',
+    });
+  }
+  if (
+    !(operationId in RELATION_OPERATIONS) &&
+    operationId !== 'distance' &&
+    operationId !== 'distanceWithin'
+  ) {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB relation operation '${operationId}'`,
+      { field: 'operation' },
+    );
+  }
+  if (operationId === 'distance') {
+    if (mode === 'filter') {
+      throw new DuckDbOperationError(
+        'validation',
+        "DuckDB relation operation 'distance' only supports attribute mode",
+        { field: 'operation' },
+      );
+    }
+    return distanceRelation(inputDataset, maskDataset, options, runtime);
+  }
+  if (operationId === 'distanceWithin') {
+    return runDistanceWithinRelation(mode, inputDataset, maskDataset, options, runtime);
+  }
+  return runTopologicalRelation(
+    operationId as TopologicalRelationOperationId,
+    mode,
+    inputDataset,
+    maskDataset,
+    options,
     runtime,
   );
 }

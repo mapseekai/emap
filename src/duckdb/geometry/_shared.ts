@@ -1,18 +1,10 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
-import {
-  runUnaryGeometryTool,
-  type DuckDbGeometryOperation,
-  type DuckDbUnaryGeometryOptions,
-} from '../core/runners/geometry';
+import { runUnaryGeometryTool, type DuckDbGeometryOperation } from '../core/runners/geometry';
+import type { GeometryOptions } from './types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
-export type UnaryGeometryOperationId =
-  | 'centroid'
-  | 'envelope'
-  | 'convexHull'
-  | 'boundary'
-  | 'makeValid';
+export type UnaryGeometryOperationId = 'centroid' | 'envelope' | 'convexHull' | 'boundary';
 
 export const UNARY_GEOMETRY_OPERATIONS: Record<UnaryGeometryOperationId, DuckDbGeometryOperation> =
   {
@@ -20,13 +12,12 @@ export const UNARY_GEOMETRY_OPERATIONS: Record<UnaryGeometryOperationId, DuckDbG
     envelope: { id: 'envelope', duckDbFunction: 'ST_Envelope' },
     convexHull: { id: 'convexHull', duckDbFunction: 'ST_ConvexHull' },
     boundary: { id: 'boundary', duckDbFunction: 'ST_Boundary' },
-    makeValid: { id: 'makeValid', duckDbFunction: 'ST_MakeValid' },
   };
 
 export function runUnary(
   operationId: UnaryGeometryOperationId,
   input: MapshaperDataset,
-  options: DuckDbUnaryGeometryOptions = {},
+  options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ) {
   const operation = UNARY_GEOMETRY_OPERATIONS[operationId];
@@ -44,5 +35,3 @@ export function runUnary(
     runtime,
   );
 }
-
-export type GeometryOptions = DuckDbUnaryGeometryOptions;

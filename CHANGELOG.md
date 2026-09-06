@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a unified browser-side DuckDB Processing Toolbox covering eight GIS processing groups: Overlay (Clip, Intersect, Union, Difference, Symmetric Difference), Proximity (Buffer, Near, Nearest), Aggregate (Dissolve, Collect), Join (Attribute Join, Spatial Join, Spatial Summary Join), Geometry (Centroid, Boundary, Simplify, Densify, Multipart to Singlepart, Extract Vertices), Transform (Point to Line, Line to Polygon, Polygon to Line), Selection (Attribute Filter, Spatial Filter), and Data Management (Merge, Append, Reproject, Repair Geometry). `DUCKDB_PROCESSING_TOOLBOX` exposes the canonical registry and the new helpers reuse the existing Arrow → DuckDB-Wasm → dataset pipeline.
-- Added `spatialRelationDatasetWithDuckDb` for advanced predicate/distance attribute workflows and renamed the aggregate form of spatial join to the explicit `spatialSummaryJoinDatasetWithDuckDb`; the normal `spatialJoinDatasetWithDuckDb` now performs a regular one-to-many spatial join.
+- Added a unified browser-side DuckDB Processing Toolbox covering Overlay, Proximity, Aggregate, Join, Geometry, Transform, Selection, Data Management, and Attribute tools. `DUCKDB_TOOLBOX` is the canonical Agent/UI/workflow registry and all tools reuse the shared Arrow → DuckDB-Wasm → dataset pipeline.
+- Added the canonical short processing APIs, including `spatialRelation`, `spatialJoin`, and `spatialSummaryJoin`, with Agent-oriented metadata, semantic aliases, parameter schemas, and a unified `executeDuckDbTool()` entry point.
 - Added `map.ops.fillRing()` and the `fill` mode of `map.ringEdit` to turn an
   existing polygon hole into a new feature that reuses the hole's boundary
   arcs. The advanced edit toolbar now exposes a **Fill Hole** action, and the
@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **Breaking:** removed legacy DuckDB public helper names from `@mapseekai/emap/duckdb`. Migrate `queryDatasetWithDuckDb` → `attributeFilterDatasetWithDuckDb`, `intersectionDatasetWithDuckDb` → `intersectDatasetWithDuckDb` or `clipDatasetWithDuckDb`, `makeValidDatasetWithDuckDb` → `repairGeometryDatasetWithDuckDb`, `spatialAggregateJoinDatasetWithDuckDb` → `spatialSummaryJoinDatasetWithDuckDb`, `duckDbQueryLayer` → `duckDbAttributeFilterLayer`, and `duckDbSpatialAggregateJoinLayer` → `duckDbSpatialSummaryJoinLayer`. Individual public relation helpers such as `intersectsDatasetWithDuckDb` / `containsDatasetWithDuckDb` are replaced by `spatialFilterDatasetWithDuckDb` or `spatialRelationDatasetWithDuckDb`; the old registry/executor functions remain internal implementation details only.
+- **Breaking:** removed all legacy DuckDB executor/registry APIs and `xxxDatasetWithDuckDb` helper names from `@mapseekai/emap/duckdb`. Migrate directly to the final short APIs such as `attributeFilter`, `intersect`, `clip`, `repairGeometry`, `spatialJoin`, `spatialSummaryJoin`, and `spatialRelation`; map adapters use `duckDbAttributeFilterLayer` and `duckDbSpatialSummaryJoinLayer`. The old registry/executor implementation paths are no longer part of the runtime architecture.
 - Removed the obsolete public exports `quoteCliArg`, `isValidLayerName`,
   `HighlightFeatureRef`, and `LassoStyle`. Internal compatibility aliases,
   string-command runner paths, duplicated control contracts, and superseded arc

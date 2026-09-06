@@ -15,7 +15,21 @@ export type DuckDbToolCategory =
 export type DuckDbGeometryKind = 'point' | 'polyline' | 'polygon' | 'any';
 export type DuckDbCrsRequirement = 'any' | 'known' | 'projected';
 export type DuckDbToolCost = 'low' | 'medium' | 'high';
-export type DuckDbParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'string[]';
+export type DuckDbParameterType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'enum'
+  | 'string[]'
+  | 'object[]';
+
+export interface DuckDbToolObjectPropertySpec {
+  name: string;
+  description: string;
+  type: Exclude<DuckDbParameterType, 'string[]' | 'object[]'>;
+  required?: boolean;
+  enumValues?: readonly string[];
+}
 
 export interface DuckDbToolInputSpec {
   name: string;
@@ -35,6 +49,8 @@ export interface DuckDbToolParameterSpec {
   enumValues?: readonly string[];
   minimum?: number;
   exclusiveMinimum?: number;
+  minItems?: number;
+  itemProperties?: readonly DuckDbToolObjectPropertySpec[];
 }
 
 export interface DuckDbToolOutputSpec {

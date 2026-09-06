@@ -3,10 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../arrow/test-utils';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
-import { DuckDbOperationError } from '../errors';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
 import { difference, intersect } from './index';
-import { getDuckDbOverlayOperation } from './_operations';
+import { OVERLAY_OPERATIONS } from './_shared';
 
 const INPUT_FC = {
   type: 'FeatureCollection',
@@ -97,37 +96,10 @@ async function runtimeFor(dataset: MapshaperDataset): Promise<CaptureRuntime> {
 }
 
 describe('DuckDB overlay operations', () => {
-  it('returns the intersection operation', () => {
-    expect(getDuckDbOverlayOperation('intersection')).toEqual({
-      id: 'intersection',
-      duckDbFunction: 'ST_Intersection',
-    });
-  });
-
-  it('returns the difference operation', () => {
-    expect(getDuckDbOverlayOperation('difference')).toEqual({
-      id: 'difference',
-      duckDbFunction: 'ST_Difference',
-    });
-  });
-
-  it.each([
-    'union',
-    'toString',
-    'constructor',
-    '__proto__',
-  ])('rejects unsupported overlay operation %s', (operation) => {
-    let caught: unknown;
-    try {
-      getDuckDbOverlayOperation(operation);
-    } catch (err) {
-      caught = err;
-    }
-
-    expect(caught).toBeInstanceOf(DuckDbOperationError);
-    expect(caught).toMatchObject({
-      kind: 'validation',
-      message: `Unsupported DuckDB overlay operation: ${operation}`,
+  it('defines the canonical intersect and difference descriptors', () => {
+    expect(OVERLAY_OPERATIONS).toEqual({
+      intersect: { id: 'intersect', duckDbFunction: 'ST_Intersection' },
+      difference: { id: 'difference', duckDbFunction: 'ST_Difference' },
     });
   });
 

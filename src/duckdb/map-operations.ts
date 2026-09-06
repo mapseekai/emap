@@ -2,27 +2,13 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './errors';
 import { buffer, type BufferOptions } from './proximity';
-import {
-  runNamedDuckDbGeometryOperation,
-  type DuckDbUnaryGeometryOperationId,
-} from './geometry/_dispatch';
-import {
-  runNamedDuckDbAttributeOperation,
-  type AttributeOperationId,
-  type AttributeOptions,
-} from './attributes';
-import {
-  runNamedDuckDbRelationOperation,
-  type DuckDbRelationHelperOptions,
-  type DuckDbRelationOperationId,
-} from './selection/_operations';
-import {
-  runNamedDuckDbOverlayOperation,
-  type OverlayOptions,
-  type DuckDbOverlayOperationId,
-} from './overlay/_operations';
+import type { AttributeOperationId, AttributeOptions } from './attributes';
+import { runNamedRelationOperation, type RelationOptions } from './core/relation/operations';
+import type { RelationOperationId } from './core/relation/types';
+import type { ProcessingOptions } from './core/types';
+import { difference, intersect, type OverlayOptions } from './overlay';
 import type { DuckDbRuntime } from './runtime';
-import type { DuckDbUnaryGeometryOptions } from './core/runners/geometry';
+import { getDuckDbTool } from './toolbox';
 import { attributeFilter, type AttributeFilterOptions } from './selection/attribute-filter';
 import {
   type DuckDbGeoParquetQuerySource,
@@ -48,9 +34,9 @@ export interface DuckDbBufferLayerOptions extends BufferOptions {
   runtime?: DuckDbRuntime;
 }
 
-export interface DuckDbGeometryLayerOptions extends DuckDbUnaryGeometryOptions {
+export interface DuckDbGeometryLayerOptions extends ProcessingOptions {
   src: string;
-  operation: DuckDbUnaryGeometryOperationId | string;
+  operation: string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
   tolerance?: number;
@@ -64,11 +50,11 @@ export interface DuckDbAttributeLayerOptions extends AttributeOptions {
   runtime?: DuckDbRuntime;
 }
 
-export interface DuckDbRelationLayerOptions extends DuckDbRelationHelperOptions {
+export interface DuckDbRelationLayerOptions extends RelationOptions {
   src: string;
   mask: string;
   mode: 'filter' | 'attribute' | string;
-  operation: DuckDbRelationOperationId | string;
+  operation: RelationOperationId | string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
@@ -206,14 +192,6 @@ export function duckDbAttributeFilterLayer(
   );
 }
 
-function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryOptions {
-  return {
-    layer: opts.layer,
-    outputLayer: opts.outputLayer,
-    geometryColumn: opts.geometryColumn,
-  };
-}
-
 function attributeOptions(opts: DuckDbAttributeLayerOptions): AttributeOptions {
   return {
     layer: opts.layer,
@@ -224,7 +202,7 @@ function attributeOptions(opts: DuckDbAttributeLayerOptions): AttributeOptions {
   };
 }
 
-function relationOptions(opts: DuckDbRelationLayerOptions): DuckDbRelationHelperOptions {
+function relationOptions(opts: DuckDbRelationLayerOptions): RelationOptions {
   return {
     inputLayer: opts.inputLayer,
     maskLayer: opts.maskLayer,
@@ -241,28 +219,44 @@ function runGeometryOperation(
   dataset: MapshaperDataset,
   opts: DuckDbGeometryLayerOptions,
 ): Promise<MapshaperDataset> {
-  return runNamedDuckDbGeometryOperation(
-    dataset,
-    opts.operation,
-    {
-      ...geometryOptions(opts),
+  const tool = getDuckDbTool(opts.operation);
+  if (!tool || (tool.category !== 'geometry' && tool.id !== 'repairGeometry')) {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB geometry operation '${opts.operation}'`,
+      { field: 'operation' },
+    );
+  }
+  return tool.execute({
+    inputs: { input: dataset },
+    params: {
+      layer: opts.layer,
+      outputLayer: opts.outputLayer,
+      geometryColumn: opts.geometryColumn,
       tolerance: opts.tolerance,
       failOnGeographicCrs: opts.failOnGeographicCrs,
     },
-    opts.runtime,
-  );
+    runtime: opts.runtime,
+  });
 }
 
 function runAttributeOperation(
   dataset: MapshaperDataset,
   opts: DuckDbAttributeLayerOptions,
 ): Promise<MapshaperDataset> {
-  return runNamedDuckDbAttributeOperation(
-    dataset,
-    opts.operation,
-    attributeOptions(opts),
-    opts.runtime,
-  );
+  const tool = getDuckDbTool(opts.operation);
+  if (!tool || tool.category !== 'attributes') {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB attribute operation '${opts.operation}'`,
+      { field: 'operation' },
+    );
+  }
+  return tool.execute({
+    inputs: { input: dataset },
+    params: { ...attributeOptions(opts) },
+    runtime: opts.runtime,
+  });
 }
 
 export function runRelationOperation(
@@ -270,7 +264,7 @@ export function runRelationOperation(
   maskDataset: MapshaperDataset,
   opts: DuckDbRelationLayerOptions,
 ): Promise<MapshaperDataset> {
-  return runNamedDuckDbRelationOperation(
+  return runNamedRelationOperation(
     opts.mode,
     opts.operation,
     inputDataset,
@@ -369,7 +363,7 @@ export async function duckDbGeoParquetQueryLayer(
 export interface DuckDbOverlayLayerOptions {
   src: string;
   mask: string;
-  operation: DuckDbOverlayOperationId | string;
+  operation: 'intersect' | 'difference' | string;
   inputLayer?: string | number;
   maskLayer?: string | number;
   inputGeometryColumn?: string;
@@ -396,12 +390,16 @@ function runOverlayOperation(
   maskDataset: MapshaperDataset,
   opts: DuckDbOverlayLayerOptions,
 ): Promise<MapshaperDataset> {
-  return runNamedDuckDbOverlayOperation(
-    opts.operation,
-    inputDataset,
-    maskDataset,
-    overlayOptions(opts),
-    opts.runtime,
+  if (opts.operation === 'intersect' || opts.operation === 'intersection') {
+    return intersect(inputDataset, maskDataset, overlayOptions(opts), opts.runtime);
+  }
+  if (opts.operation === 'difference') {
+    return difference(inputDataset, maskDataset, overlayOptions(opts), opts.runtime);
+  }
+  throw new DuckDbOperationError(
+    'validation',
+    `Unsupported DuckDB overlay operation: ${opts.operation}`,
+    { field: 'operation' },
   );
 }
 

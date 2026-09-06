@@ -1,4 +1,4 @@
-export type { OverlayOptions } from './_shared';
+export type { OverlayOptions } from './types';
 export * from './clip';
 export * from './intersect';
 export * from './difference';

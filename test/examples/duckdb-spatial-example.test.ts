@@ -9,6 +9,7 @@ const duckDb = vi.hoisted(() => ({
   setDuckDbRuntime: vi.fn(),
   centroid: vi.fn(async (dataset) => dataset),
   envelope: vi.fn(async (dataset) => dataset),
+  repairGeometry: vi.fn(async (dataset) => dataset),
   area: vi.fn(async (dataset) => dataset),
   x: vi.fn(async (dataset) => dataset),
   y: vi.fn(async (dataset) => dataset),
@@ -37,7 +38,7 @@ const operationNames = [
   'boundary',
   'simplify',
   'simplifyPreserveTopology',
-  'makeValid',
+  'repairGeometry',
   'area',
   'length',
   'perimeter',
@@ -178,7 +179,7 @@ const geometryPages = [
   ['duckdb/geometry/boundary', 'boundary'],
   ['duckdb/geometry/simplify', 'simplify'],
   ['duckdb/geometry/simplify-preserve-topology', 'simplifyPreserveTopology'],
-  ['duckdb/geometry/make-valid', 'makeValid'],
+  ['duckdb/geometry/make-valid', 'repairGeometry'],
 ] as const;
 
 const attributePages = [

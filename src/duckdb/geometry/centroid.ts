@@ -1,7 +1,8 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import { runUnary, type GeometryOptions } from './_shared';
+import { runUnary } from './_shared';
+import type { GeometryOptions } from './types';
 export function centroid(
   input: MapshaperDataset,
   options: GeometryOptions = {},

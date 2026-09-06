@@ -9,7 +9,7 @@ import {
   runDuckDbPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
-import { buildAttributeSql } from '../../attributes/_sql';
+import { buildAttributeSql } from '../sql/attribute';
 
 export interface DuckDbAttributeOptions {
   layer?: string | number;

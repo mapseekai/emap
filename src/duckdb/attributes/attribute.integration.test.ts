@@ -75,7 +75,10 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
     const conn = db.connect() as unknown as BlockingDuckDbConnectionLike;
     return {
       async insertArrowTable(table, opts) {
-        conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), { ...opts, create: true });
+        conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), {
+          ...opts,
+          create: true,
+        });
       },
       async query(sql) {
         return conn.query(sql);
