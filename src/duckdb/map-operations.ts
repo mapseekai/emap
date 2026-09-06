@@ -1,38 +1,35 @@
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './errors';
-import { bufferDatasetWithDuckDb, type DuckDbBufferOptions } from './buffer';
+import { buffer, type BufferOptions } from './proximity';
 import {
   runNamedDuckDbGeometryOperation,
   type DuckDbUnaryGeometryOperationId,
-} from './geometry-registry';
+} from './geometry/_dispatch';
 import {
   runNamedDuckDbAttributeOperation,
-  type DuckDbAttributeOperationId,
-  type DuckDbAttributeOperationOptions,
-} from './attribute-registry';
+  type AttributeOperationId,
+  type AttributeOptions,
+} from './attributes';
 import {
   runNamedDuckDbRelationOperation,
   type DuckDbRelationHelperOptions,
   type DuckDbRelationOperationId,
-} from './relation-registry';
+} from './selection/_operations';
 import {
   runNamedDuckDbOverlayOperation,
-  type DuckDbOverlayHelperOptions,
+  type OverlayOptions,
   type DuckDbOverlayOperationId,
-} from './overlay-registry';
+} from './overlay/_operations';
 import type { DuckDbRuntime } from './runtime';
-import type { DuckDbUnaryGeometryOptions } from './geometry-executor';
-import { queryDatasetWithDuckDb, type DuckDbQueryOptions } from './query-executor';
+import type { DuckDbUnaryGeometryOptions } from './core/runners/geometry';
+import { attributeFilter, type AttributeFilterOptions } from './selection/attribute-filter';
 import {
   type DuckDbGeoParquetQuerySource,
   queryGeoParquetWithDuckDb,
   type DuckDbGeoParquetQueryOptions,
-} from './geoparquet-query';
-import {
-  spatialAggregateJoinDatasetWithDuckDb,
-  type DuckDbSpatialAggregateJoinOptions,
-} from './spatial-aggregate-join';
+} from './geoparquet';
+import { spatialSummaryJoin, type SpatialSummaryJoinOptions } from './join';
 
 export interface DuckDbMapOpSource {
   getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
@@ -45,7 +42,7 @@ export interface DuckDbMapOpContext {
   setSourceDataset(id: string, dataset: MapshaperDataset): void | Promise<void>;
 }
 
-export interface DuckDbBufferLayerOptions extends DuckDbBufferOptions {
+export interface DuckDbBufferLayerOptions extends BufferOptions {
   src: string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
@@ -60,9 +57,9 @@ export interface DuckDbGeometryLayerOptions extends DuckDbUnaryGeometryOptions {
   failOnGeographicCrs?: boolean;
 }
 
-export interface DuckDbAttributeLayerOptions extends DuckDbAttributeOperationOptions {
+export interface DuckDbAttributeLayerOptions extends AttributeOptions {
   src: string;
-  operation: DuckDbAttributeOperationId | string;
+  operation: AttributeOperationId | string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
@@ -76,14 +73,14 @@ export interface DuckDbRelationLayerOptions extends DuckDbRelationHelperOptions 
   runtime?: DuckDbRuntime;
 }
 
-export interface DuckDbSpatialAggregateJoinLayerOptions extends DuckDbSpatialAggregateJoinOptions {
+export interface DuckDbSpatialSummaryJoinLayerOptions extends SpatialSummaryJoinOptions {
   src: string;
   join: string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
 
-export interface DuckDbQueryLayerOptions extends DuckDbQueryOptions {
+export interface DuckDbAttributeFilterLayerOptions extends AttributeFilterOptions {
   src: string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
@@ -104,8 +101,8 @@ export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbSpatialAggregateJoinLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbQueryLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbSpatialSummaryJoinLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbAttributeFilterLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
@@ -196,16 +193,16 @@ export function duckDbBufferLayer(
   opts: DuckDbBufferLayerOptions,
 ): Promise<DuckDbBufferLayerResult> {
   return runDuckDbLayerOp(ctx, opts, 'duckdb-buffer', (dataset) =>
-    bufferDatasetWithDuckDb(dataset, opts, opts.runtime),
+    buffer(dataset, opts, opts.runtime),
   );
 }
 
-export function duckDbQueryLayer(
+export function duckDbAttributeFilterLayer(
   ctx: DuckDbMapOpContext,
-  opts: DuckDbQueryLayerOptions,
-): Promise<DuckDbQueryLayerResult> {
-  return runDuckDbLayerOp(ctx, opts, 'duckdb-query', (dataset) =>
-    queryDatasetWithDuckDb(dataset, opts, opts.runtime),
+  opts: DuckDbAttributeFilterLayerOptions,
+): Promise<DuckDbAttributeFilterLayerResult> {
+  return runDuckDbLayerOp(ctx, opts, 'duckdb-attribute-filter', (dataset) =>
+    attributeFilter(dataset, opts, opts.runtime),
   );
 }
 
@@ -217,7 +214,7 @@ function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryO
   };
 }
 
-function attributeOptions(opts: DuckDbAttributeLayerOptions): DuckDbAttributeOperationOptions {
+function attributeOptions(opts: DuckDbAttributeLayerOptions): AttributeOptions {
   return {
     layer: opts.layer,
     outputLayer: opts.outputLayer,
@@ -305,16 +302,12 @@ export function duckDbRelationLayer(
   );
 }
 
-export function duckDbSpatialAggregateJoinLayer(
+export function duckDbSpatialSummaryJoinLayer(
   ctx: DuckDbMapOpContext,
-  opts: DuckDbSpatialAggregateJoinLayerOptions,
-): Promise<DuckDbSpatialAggregateJoinLayerResult> {
-  return runDuckDbBinaryLayerOp(
-    ctx,
-    opts,
-    'join',
-    'duckdb-spatial-aggregate-join',
-    (target, join) => spatialAggregateJoinDatasetWithDuckDb(target, join, opts, opts.runtime),
+  opts: DuckDbSpatialSummaryJoinLayerOptions,
+): Promise<DuckDbSpatialSummaryJoinLayerResult> {
+  return runDuckDbBinaryLayerOp(ctx, opts, 'join', 'duckdb-spatial-summary-join', (target, join) =>
+    spatialSummaryJoin(target, join, opts, opts.runtime),
   );
 }
 
@@ -388,7 +381,7 @@ export interface DuckDbOverlayLayerOptions {
 
 export type DuckDbOverlayLayerResult = OpResult<DuckDbLayerSuccess>;
 
-function overlayOptions(opts: DuckDbOverlayLayerOptions): DuckDbOverlayHelperOptions {
+function overlayOptions(opts: DuckDbOverlayLayerOptions): OverlayOptions {
   return {
     inputLayer: opts.inputLayer,
     maskLayer: opts.maskLayer,

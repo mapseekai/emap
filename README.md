@@ -234,19 +234,19 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 ```ts
 import {
   createDuckDbRuntimeFromJsDelivr,
-  queryDatasetWithDuckDb,
+  attributeFilter,
   setDuckDbRuntime,
 } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
 setDuckDbRuntime(runtime);
 
-const result = await queryDatasetWithDuckDb(source.getDataset()!, {
+const result = await attributeFilter(source.getDataset()!, {
   sql: 'SELECT geometry, name FROM input WHERE active = true',
 });
 ```
 
-The query API accepts a restricted single-`SELECT` contract. Distance-like operations reject geographic CRS by default when their result would otherwise use degrees.
+The attribute-filter API accepts a restricted single-`SELECT` contract. The DuckDB processing toolbox also exposes overlay, proximity, aggregate, join, geometry, transform, selection, and data-management operations. Distance-like operations reject geographic CRS by default when their result would otherwise use degrees.
 
 ## Optional MapLibre Services
 

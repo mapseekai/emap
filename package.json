@@ -91,7 +91,7 @@
     "browser:install": "playwright install --with-deps chrome firefox webkit",
     "test:browser": "pnpm run examples:build && playwright test",
     "test:browser:chrome": "pnpm run examples:build && playwright test --project=chrome",
-    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/buffer.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/attribute.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/relation.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/geoparquet-query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/overlay.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/spatial-aggregate-join.integration.test.ts",
+    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/*.integration.test.ts src/duckdb/*/*.integration.test.ts",
     "audit:prod": "node scripts/audit-production-dependencies.mjs",
     "security:audit": "pnpm run audit:prod",
     "api:check-surface": "node scripts/check-public-api-surface.mjs",

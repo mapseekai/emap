@@ -47,7 +47,7 @@
       import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
       import {
-        bufferDatasetWithDuckDb,
+        buffer,
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
         setDuckDbRuntime,
@@ -234,7 +234,7 @@
           const targetLayer = targetSelect.value || undefined;
           const runtime = await getRuntime();
           applyInputCrs();
-          const result = await bufferDatasetWithDuckDb(
+          const result = await buffer(
             inputDataset,
             {
               layer: targetLayer,

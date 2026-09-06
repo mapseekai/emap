@@ -34,8 +34,8 @@
           <div class="emap-example-field">
             <label for="operation">Overlay</label>
             <select id="operation">
-              <option value="intersection">intersectionDatasetWithDuckDb</option>
-              <option value="difference">differenceDatasetWithDuckDb</option>
+              <option value="intersect">intersect</option>
+              <option value="difference">difference</option>
             </select>
           </div>
           <div class="emap-example-field">
@@ -61,9 +61,9 @@
       import {
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
-        differenceDatasetWithDuckDb,
+        difference,
         duckDbOverlayLayer,
-        intersectionDatasetWithDuckDb,
+        intersect,
         setDuckDbRuntime,
       } from '@mapseekai/emap/duckdb';
 
@@ -289,17 +289,17 @@
             const result = await duckDbOverlayLayer(createMapOpContext(), {
               src: INPUT_SOURCE_ID,
               mask: MASK_SOURCE_ID,
-              operation,
+              operation: operation === "intersect" ? "intersection" : operation,
               ...opts,
               output: { sourceId: OUTPUT_SOURCE_ID },
               runtime,
             });
             if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
-          } else if (operation === "intersection") {
-            resultDataset = await intersectionDatasetWithDuckDb(inputDataset, maskDataset, opts, runtime);
+          } else if (operation === "intersect") {
+            resultDataset = await intersect(inputDataset, maskDataset, opts, runtime);
           } else {
-            resultDataset = await differenceDatasetWithDuckDb(inputDataset, maskDataset, opts, runtime);
+            resultDataset = await difference(inputDataset, maskDataset, opts, runtime);
           }
           const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, "duckdb-overlay-output", {
             fill: "#fef3c7",

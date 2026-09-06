@@ -1,27 +1,26 @@
 import {
-  areaDatasetWithDuckDb,
-  boundaryDatasetWithDuckDb,
-  centroidDatasetWithDuckDb,
-  centroidXDatasetWithDuckDb,
-  centroidYDatasetWithDuckDb,
+  area,
+  boundary,
+  centroid,
+  centroidX,
+  centroidY,
   closeDuckDbRuntime,
-  containsProperlyDatasetWithDuckDb,
-  convexHullDatasetWithDuckDb,
+  convexHull,
   createDuckDbRuntimeFromJsDelivr,
-  envelopeDatasetWithDuckDb,
-  geometryTypeDatasetWithDuckDb,
-  isEmptyDatasetWithDuckDb,
-  isSimpleDatasetWithDuckDb,
-  isValidDatasetWithDuckDb,
-  lengthDatasetWithDuckDb,
-  makeValidDatasetWithDuckDb,
-  perimeterDatasetWithDuckDb,
-  runRelationOperation as runDuckDbRelationOperation,
+  envelope,
+  geometryType,
+  isEmpty,
+  isSimple,
+  isValid,
+  length,
+  repairGeometry,
+  perimeter,
+  spatialRelation,
   setDuckDbRuntime,
-  simplifyDatasetWithDuckDb,
-  simplifyPreserveTopologyDatasetWithDuckDb,
-  xDatasetWithDuckDb,
-  yDatasetWithDuckDb,
+  simplify,
+  simplifyPreserveTopology,
+  x,
+  y,
 } from '@mapseekai/emap/duckdb';
 import type { SourceLoadDraft } from '@mapseekai/emap';
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from './example-runtime';
@@ -314,24 +313,24 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
 
   async function runGeometryOrAttribute(dataset: object, options: object, runtime: Awaited<ReturnType<typeof ensureRuntime>>) {
     switch (operation.operation) {
-      case 'centroid': return centroidDatasetWithDuckDb(dataset, options, runtime);
-      case 'envelope': return envelopeDatasetWithDuckDb(dataset, options, runtime);
-      case 'convexHull': return convexHullDatasetWithDuckDb(dataset, options, runtime);
-      case 'boundary': return boundaryDatasetWithDuckDb(dataset, options, runtime);
-      case 'simplify': return simplifyDatasetWithDuckDb(dataset, options, runtime);
-      case 'simplifyPreserveTopology': return simplifyPreserveTopologyDatasetWithDuckDb(dataset, options, runtime);
-      case 'makeValid': return makeValidDatasetWithDuckDb(dataset, options, runtime);
-      case 'area': return areaDatasetWithDuckDb(dataset, options, runtime);
-      case 'length': return lengthDatasetWithDuckDb(dataset, options, runtime);
-      case 'perimeter': return perimeterDatasetWithDuckDb(dataset, options, runtime);
-      case 'geometryType': return geometryTypeDatasetWithDuckDb(dataset, options, runtime);
-      case 'isValid': return isValidDatasetWithDuckDb(dataset, options, runtime);
-      case 'isEmpty': return isEmptyDatasetWithDuckDb(dataset, options, runtime);
-      case 'isSimple': return isSimpleDatasetWithDuckDb(dataset, options, runtime);
-      case 'x': return xDatasetWithDuckDb(dataset, options, runtime);
-      case 'y': return yDatasetWithDuckDb(dataset, options, runtime);
-      case 'centroidX': return centroidXDatasetWithDuckDb(dataset, options, runtime);
-      case 'centroidY': return centroidYDatasetWithDuckDb(dataset, options, runtime);
+      case 'centroid': return centroid(dataset, options, runtime);
+      case 'envelope': return envelope(dataset, options, runtime);
+      case 'convexHull': return convexHull(dataset, options, runtime);
+      case 'boundary': return boundary(dataset, options, runtime);
+      case 'simplify': return simplify(dataset, options, runtime);
+      case 'simplifyPreserveTopology': return simplifyPreserveTopology(dataset, options, runtime);
+      case 'makeValid': return repairGeometry(dataset, options, runtime);
+      case 'area': return area(dataset, options, runtime);
+      case 'length': return length(dataset, options, runtime);
+      case 'perimeter': return perimeter(dataset, options, runtime);
+      case 'geometryType': return geometryType(dataset, options, runtime);
+      case 'isValid': return isValid(dataset, options, runtime);
+      case 'isEmpty': return isEmpty(dataset, options, runtime);
+      case 'isSimple': return isSimple(dataset, options, runtime);
+      case 'x': return x(dataset, options, runtime);
+      case 'y': return y(dataset, options, runtime);
+      case 'centroidX': return centroidX(dataset, options, runtime);
+      case 'centroidY': return centroidY(dataset, options, runtime);
       default: throw new Error(`Unknown unary DuckDB spatial operation: ${operation.operation}`);
     }
   }
@@ -406,14 +405,13 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
           ...maskInput,
           layers: [maskInput.layers[mask.layerIndex]],
         };
-        result = await runDuckDbRelationOperation(dataset, maskDataset, {
+        result = await spatialRelation(dataset, maskDataset, {
           ...options,
           maskLayer: 0,
-          operation: operation.operation,
-          mode: operation.operation === 'distance' ? 'attribute' : relationMode!.value,
-          runtime,
+          predicate: operation.operation,
+          mode: operation.operation === 'distance' ? 'attribute' : relationMode!.value as 'filter' | 'attribute',
           ...(operation.controls.distance ? { distance: Number(distanceInput!.value) } : {}),
-        });
+        }, runtime);
       } else result = await runGeometryOrAttribute(dataset, options, runtime);
       if (map.getSource(INPUT_SOURCE_ID) !== inputSource) { status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。'; return; }
       const outputSource = new TopologySource(OUTPUT_SOURCE_ID);

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a unified browser-side DuckDB Processing Toolbox covering eight GIS processing groups: Overlay (Clip, Intersect, Union, Difference, Symmetric Difference), Proximity (Buffer, Near, Nearest), Aggregate (Dissolve, Collect), Join (Attribute Join, Spatial Join, Spatial Summary Join), Geometry (Centroid, Boundary, Simplify, Densify, Multipart to Singlepart, Extract Vertices), Transform (Point to Line, Line to Polygon, Polygon to Line), Selection (Attribute Filter, Spatial Filter), and Data Management (Merge, Append, Reproject, Repair Geometry). `DUCKDB_PROCESSING_TOOLBOX` exposes the canonical registry and the new helpers reuse the existing Arrow → DuckDB-Wasm → dataset pipeline.
+- Added `spatialRelationDatasetWithDuckDb` for advanced predicate/distance attribute workflows and renamed the aggregate form of spatial join to the explicit `spatialSummaryJoinDatasetWithDuckDb`; the normal `spatialJoinDatasetWithDuckDb` now performs a regular one-to-many spatial join.
 - Added `map.ops.fillRing()` and the `fill` mode of `map.ringEdit` to turn an
   existing polygon hole into a new feature that reuses the hole's boundary
   arcs. The advanced edit toolbar now exposes a **Fill Hole** action, and the
@@ -56,10 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   split writes use batched allocation/truncation while preserving retained
   intervals and simplification thresholds. The old compatibility shims were
   removed after all edit commands migrated to the canonical adapter boundary.
-- DuckDB named geometry, attribute, relation, and overlay helpers now share
-  descriptor-backed dispatch while retaining their existing named public
-  functions. The `@mapseekai/emap/duckdb` entry point uses explicit exports to
-  prevent internal runners from becoming accidental API.
+- DuckDB named geometry, attribute, relation, and overlay internals continue to share descriptor-backed dispatch, while `@mapseekai/emap/duckdb` is now organized around the canonical Processing Toolbox API. Examples, README content, and DuckDB documentation use the new tool names consistently.
 - `apache-arrow`, `parquet-wasm`, and `@duckdb/duckdb-wasm` are now optional peer
   dependencies rather than mandatory core dependencies. Applications importing
   the Arrow or DuckDB subpaths must install the integrations they use; core-only
@@ -72,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** removed legacy DuckDB public helper names from `@mapseekai/emap/duckdb`. Migrate `queryDatasetWithDuckDb` → `attributeFilterDatasetWithDuckDb`, `intersectionDatasetWithDuckDb` → `intersectDatasetWithDuckDb` or `clipDatasetWithDuckDb`, `makeValidDatasetWithDuckDb` → `repairGeometryDatasetWithDuckDb`, `spatialAggregateJoinDatasetWithDuckDb` → `spatialSummaryJoinDatasetWithDuckDb`, `duckDbQueryLayer` → `duckDbAttributeFilterLayer`, and `duckDbSpatialAggregateJoinLayer` → `duckDbSpatialSummaryJoinLayer`. Individual public relation helpers such as `intersectsDatasetWithDuckDb` / `containsDatasetWithDuckDb` are replaced by `spatialFilterDatasetWithDuckDb` or `spatialRelationDatasetWithDuckDb`; the old registry/executor functions remain internal implementation details only.
 - Removed the obsolete public exports `quoteCliArg`, `isValidLayerName`,
   `HighlightFeatureRef`, and `LassoStyle`. Internal compatibility aliases,
   string-command runner paths, duplicated control contracts, and superseded arc

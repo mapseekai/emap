@@ -108,8 +108,8 @@ function usesAggregateQueryCoordinator(runHandler: string): boolean {
     options.includes('register: registerAggregateOutput') &&
     !outsideCoordinator.includes('executeAggregateQuery(') &&
     !outsideCoordinator.includes('registerAggregateOutput(') &&
-    !outsideCoordinator.includes('duckDbSpatialAggregateJoinLayer(') &&
-    !outsideCoordinator.includes('spatialAggregateJoinDatasetWithDuckDb(')
+    !outsideCoordinator.includes('duckDbSpatialSummaryJoinLayer(') &&
+    !outsideCoordinator.includes('spatialSummaryJoin(')
   );
 }
 
@@ -169,8 +169,8 @@ describe('DuckDB new feature examples', () => {
 
   it('covers restricted dataset SELECT helper and map-op entrypoints', () => {
     const html = examples.query;
-    expect(html).toContain('queryDatasetWithDuckDb');
-    expect(html).toContain('duckDbQueryLayer');
+    expect(html).toContain('attributeFilter');
+    expect(html).toContain('duckDbAttributeFilterLayer');
     expect(html).toContain('validateDuckDbSelectSql');
     expect(html).toContain('SELECT * FROM input LIMIT 50');
     expect(html).toContain('src: SOURCE_ID');
@@ -211,11 +211,11 @@ describe('DuckDB new feature examples', () => {
 
   it('covers overlay helper and map-op entrypoints', () => {
     const html = examples.overlay;
-    expect(html).toContain('intersectionDatasetWithDuckDb');
-    expect(html).toContain('differenceDatasetWithDuckDb');
+    expect(html).toContain('intersect');
+    expect(html).toContain('difference');
     expect(html).toContain('duckDbOverlayLayer');
-    expect(html).toContain('<option value="intersection">intersectionDatasetWithDuckDb</option>');
-    expect(html).toContain('<option value="difference">differenceDatasetWithDuckDb</option>');
+    expect(html).toContain('<option value="intersect">intersect</option>');
+    expect(html).toContain('<option value="difference">difference</option>');
     expect(html).toContain('function clearOverlayOutput()');
     expect(html).toContain('contextSources.delete(OUTPUT_SOURCE_ID)');
     expect(html).toContain('src: INPUT_SOURCE_ID');
@@ -225,8 +225,8 @@ describe('DuckDB new feature examples', () => {
 
   it('covers spatial aggregate join helper and map-op entrypoints', () => {
     const html = examples.spatialAggregateJoin;
-    expect(html).toContain('spatialAggregateJoinDatasetWithDuckDb');
-    expect(html).toContain('duckDbSpatialAggregateJoinLayer');
+    expect(html).toContain('spatialSummaryJoin');
+    expect(html).toContain('duckDbSpatialSummaryJoinLayer');
     expect(html).toContain("predicate: 'contains'");
     expect(html).toContain('<option value="left">left</option>');
     expect(html).toContain('<option value="inner">inner</option>');
@@ -358,8 +358,8 @@ describe('DuckDB new feature examples', () => {
     expect(coordinatorOptions).toContain('publish({ dataset, registration })');
     expect(coordinatorOptions).toContain('publishError(err)');
     expect(coordinatorOptions).toContain('finish: updateRunState');
-    expect(queryExecutor).toContain('runMapOp: () => duckDbSpatialAggregateJoinLayer(');
-    expect(queryExecutor).toContain('runHelper: () => spatialAggregateJoinDatasetWithDuckDb(');
+    expect(queryExecutor).toContain('runMapOp: () => duckDbSpatialSummaryJoinLayer(');
+    expect(queryExecutor).toContain('runHelper: () => spatialSummaryJoin(');
     expect(queryExecutor).not.toContain('await runCoordinator.run(');
     expect(
       usesAggregateQueryCoordinator(
@@ -375,8 +375,8 @@ describe('DuckDB new feature examples', () => {
       ),
     ).toBe(false);
     for (const bypassedEntrypoint of [
-      'await spatialAggregateJoinDatasetWithDuckDb();',
-      'await duckDbSpatialAggregateJoinLayer();',
+      'await spatialSummaryJoin();',
+      'await duckDbSpatialSummaryJoinLayer();',
     ]) {
       expect(
         usesAggregateQueryCoordinator(

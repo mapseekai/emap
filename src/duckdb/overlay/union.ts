@@ -1,0 +1,63 @@
+import type { MapshaperDataset } from '../../types/mapshaper-types';
+import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
+import {
+  coverageCte,
+  runTwoInputTool,
+  type DuckDbProcessingGeometryOptions,
+} from '../core/runners/processing';
+import { quoteIdentifier } from '../core/pipeline';
+import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+
+export type UnionOptions = DuckDbProcessingGeometryOptions;
+export function union(
+  input: MapshaperDataset,
+  overlay: MapshaperDataset,
+  options: UnionOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+) {
+  return runTwoInputTool(
+    input,
+    overlay,
+    'union',
+    options,
+    (left, right, geometryColumn) => {
+      const geom = quoteIdentifier(geometryColumn);
+      return `WITH\n${coverageCte(left, geometryColumn, 'a')},\n${coverageCte(right, geometryColumn, 'b')}\nSELECT ST_AsWKB(ST_Union(a.geom, b.geom)) AS ${geom}\nFROM a CROSS JOIN b\nWHERE a.geom IS NOT NULL OR b.geom IS NOT NULL`;
+    },
+    runtime,
+    true,
+  );
+}
+export const unionTool = defineDuckDbTool({
+  id: 'union',
+  category: 'overlay',
+  title: 'Union',
+  description: 'Create the union coverage of two datasets.',
+  inputs: [
+    { name: 'input', description: 'Primary coverage.', required: true, geometry: ['any'] },
+    { name: 'overlay', description: 'Secondary coverage.', required: true, geometry: ['any'] },
+  ],
+  parameters: [],
+  crs: 'known',
+  units: 'none',
+  output: {
+    geometry: 'derived',
+    cardinality: 'aggregate',
+    attributes: 'replace',
+    mutatesInput: false,
+  },
+  cost: 'high',
+  agent: {
+    summary: 'Combine two spatial coverages into one geometry result.',
+    whenToUse: ['Merge overlapping spatial coverage from two layers.'],
+    avoidWhen: ['You need full QGIS-style split overlay attributes from both layers.'],
+    keywords: ['union', 'overlay', 'combine coverage'],
+  },
+  execute: (context) =>
+    union(
+      requireToolInput(context, 'input'),
+      requireToolInput(context, 'overlay'),
+      toolParams<UnionOptions>(context),
+      context.runtime,
+    ),
+});

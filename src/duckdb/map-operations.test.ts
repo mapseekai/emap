@@ -6,22 +6,22 @@ import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
 import { DuckDbOperationError } from './errors';
-import type { DuckDbGeoParquetQuerySource } from './geoparquet-query';
+import type { DuckDbGeoParquetQuerySource } from './geoparquet';
 import {
   duckDbAttributeLayer,
   duckDbBufferLayer,
   duckDbGeoParquetQueryLayer,
   duckDbGeometryLayer,
   duckDbOverlayLayer,
-  duckDbQueryLayer,
+  duckDbAttributeFilterLayer,
   duckDbRelationLayer,
-  duckDbSpatialAggregateJoinLayer,
+  duckDbSpatialSummaryJoinLayer,
   type DuckDbMapOpContext,
   type DuckDbMapOpSource,
-  type DuckDbSpatialAggregateJoinLayerOptions,
-  type DuckDbSpatialAggregateJoinLayerResult,
+  type DuckDbSpatialSummaryJoinLayerOptions,
+  type DuckDbSpatialSummaryJoinLayerResult,
 } from './map-operations';
-import { buildUnaryGeometrySql } from './sql';
+import { buildUnaryGeometrySql } from './geometry/_sql';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -246,7 +246,7 @@ describe('duckDbBufferLayer', () => {
     });
   });
 
-  it('passes layer and distance options to bufferDatasetWithDuckDb', async () => {
+  it('passes layer and distance options to buffer', async () => {
     const dataset = await polygonDataset();
     dataset.layers[0]!.name = 'parcels';
     const ctx = makeContext('src', dataset);
@@ -389,13 +389,13 @@ describe('duckDbGeometryLayer', () => {
   });
 });
 
-describe('duckDbQueryLayer', () => {
+describe('duckDbAttributeFilterLayer', () => {
   it('writes an output source dataset after a successful SELECT query', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
     const runtime = new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] }));
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'src',
       sql: 'SELECT name FROM input',
       output: { sourceId: 'query' },
@@ -414,7 +414,7 @@ describe('duckDbQueryLayer', () => {
   it('returns not-found when the input source is missing', async () => {
     const ctx = new FakeContext();
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'missing',
       sql: 'SELECT name FROM input',
       output: { sourceId: 'query' },
@@ -430,7 +430,7 @@ describe('duckDbQueryLayer', () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'src',
       sql: 'SELECT name FROM input',
     });
@@ -450,7 +450,7 @@ describe('duckDbQueryLayer', () => {
     const ctx = makeContext('src', dataset);
     const runtime = new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] }));
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'src',
       sql: 'SELECT name FROM input',
       output: { sourceId: 42 as unknown as string },
@@ -473,7 +473,7 @@ describe('duckDbQueryLayer', () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'src',
       sql: 'DELETE FROM input',
       output: { sourceId: 'query' },
@@ -484,7 +484,7 @@ describe('duckDbQueryLayer', () => {
       ok: false,
       error: {
         kind: 'duckdb',
-        operation: 'duckdb-query',
+        operation: 'duckdb-attribute-filter',
         duckDbKind: 'validation',
         field: 'sql',
       },
@@ -500,7 +500,7 @@ describe('duckDbQueryLayer', () => {
       new Error('query failed'),
     );
 
-    const result = await duckDbQueryLayer(ctx, {
+    const result = await duckDbAttributeFilterLayer(ctx, {
       src: 'src',
       sql: 'SELECT name FROM input',
       output: { sourceId: 'query' },
@@ -917,14 +917,14 @@ describe('duckDbRelationLayer', () => {
   });
 });
 
-describe('duckDbSpatialAggregateJoinLayer', () => {
+describe('duckDbSpatialSummaryJoinLayer', () => {
   const aggregationOptions = {
     predicate: 'contains',
     aggregations: [
       { operation: 'count', outputColumn: 'match_count' },
       { operation: 'sum', field: 'sales', outputColumn: 'sales_total' },
     ],
-  } as const satisfies Omit<DuckDbSpatialAggregateJoinLayerOptions, 'src' | 'join'>;
+  } as const satisfies Omit<DuckDbSpatialSummaryJoinLayerOptions, 'src' | 'join'>;
 
   const invalidOutputSourceIds = [
     ['undefined', undefined],
@@ -979,22 +979,19 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       tableFromArrays({ __emap_rowid: [1], match_count: [1], sales_total: [12] }),
     );
 
-    const result: DuckDbSpatialAggregateJoinLayerResult = await duckDbSpatialAggregateJoinLayer(
-      ctx,
-      {
-        src: 'target',
-        join: 'join',
-        ...aggregationOptions,
-        joinType: 'inner',
-        targetLayer: 'target-selected',
-        joinLayer: 'join-selected',
-        targetGeometryColumn: 'target geom',
-        joinGeometryColumn: 'join geom',
-        outputLayer: 'joined statistics',
-        output: { sourceId: paddedSourceId },
-        runtime,
-      },
-    );
+    const result: DuckDbSpatialSummaryJoinLayerResult = await duckDbSpatialSummaryJoinLayer(ctx, {
+      src: 'target',
+      join: 'join',
+      ...aggregationOptions,
+      joinType: 'inner',
+      targetLayer: 'target-selected',
+      joinLayer: 'join-selected',
+      targetGeometryColumn: 'target geom',
+      joinGeometryColumn: 'join geom',
+      outputLayer: 'joined statistics',
+      output: { sourceId: paddedSourceId },
+      runtime,
+    });
 
     expect(result.ok).toBe(true);
     expect(ctx.outputDatasets.get(paddedSourceId)).toBe(
@@ -1021,7 +1018,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     const ctx = new FakeContext();
 
     await expect(
-      duckDbSpatialAggregateJoinLayer(ctx, {
+      duckDbSpatialSummaryJoinLayer(ctx, {
         src: 'missing',
         join: 'join',
         ...aggregationOptions,
@@ -1039,7 +1036,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
 
     await expect(
-      duckDbSpatialAggregateJoinLayer(ctx, {
+      duckDbSpatialSummaryJoinLayer(ctx, {
         src: 'target',
         join: 'join',
         ...aggregationOptions,
@@ -1060,7 +1057,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     const ctx = makeContext('target', await polygonDataset());
 
     await expect(
-      duckDbSpatialAggregateJoinLayer(ctx, {
+      duckDbSpatialSummaryJoinLayer(ctx, {
         src: 'target',
         join: 'missing',
         ...aggregationOptions,
@@ -1078,7 +1075,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     ctx.sources.set('join', new FakeSource(null));
 
     await expect(
-      duckDbSpatialAggregateJoinLayer(ctx, {
+      duckDbSpatialSummaryJoinLayer(ctx, {
         src: 'target',
         join: 'join',
         ...aggregationOptions,
@@ -1101,7 +1098,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     ctx.sources.set('join', new FakeSource(await polygonDataset()));
 
     await expect(
-      duckDbSpatialAggregateJoinLayer(ctx, {
+      duckDbSpatialSummaryJoinLayer(ctx, {
         src: 'target',
         join: 'join',
         ...aggregationOptions,
@@ -1126,7 +1123,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [12] }),
     );
 
-    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+    const result = await duckDbSpatialSummaryJoinLayer(ctx, {
       src: 'target',
       join: 'join',
       ...aggregationOptions,
@@ -1156,7 +1153,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       tableFromArrays({ __emap_rowid_1: [0], match_count: [1], sales_total: [2] }),
     );
 
-    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+    const result = await duckDbSpatialSummaryJoinLayer(ctx, {
       src: 'target',
       join: 'join',
       ...aggregationOptions,
@@ -1180,7 +1177,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       }),
     );
 
-    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+    const result = await duckDbSpatialSummaryJoinLayer(ctx, {
       src: 'target',
       join: 'join',
       ...aggregationOptions,
@@ -1192,7 +1189,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       ok: false,
       error: {
         kind: 'duckdb',
-        operation: 'duckdb-spatial-aggregate-join',
+        operation: 'duckdb-spatial-summary-join',
         duckDbKind: 'validation',
         field: 'predicate',
         reason: 'aggregate validation failed',

@@ -230,19 +230,19 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 ```ts
 import {
   createDuckDbRuntimeFromJsDelivr,
-  queryDatasetWithDuckDb,
+  attributeFilter,
   setDuckDbRuntime,
 } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
 setDuckDbRuntime(runtime);
 
-const result = await queryDatasetWithDuckDb(source.getDataset()!, {
+const result = await attributeFilter(source.getDataset()!, {
   sql: 'SELECT geometry, name FROM input WHERE active = true',
 });
 ```
 
-查询接口只接受受限的单条 `SELECT`。距离类操作在需要平面单位时默认拒绝地理坐标系，避免把角度误当作长度。
+属性筛选接口只接受受限的单条 `SELECT`。DuckDB Processing Toolbox 同时提供 Overlay、Proximity、Aggregate、Join、Geometry、Transform、Selection 和 Data Management 八类工具。距离类操作在需要平面单位时默认拒绝地理坐标系，避免把角度误当作长度。
 
 ## 可选 MapLibre 服务
 

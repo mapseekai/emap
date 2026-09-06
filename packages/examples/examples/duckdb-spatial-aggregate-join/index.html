@@ -55,7 +55,7 @@
             <label for="entrypoint">执行入口</label>
             <select id="entrypoint">
               <option value="helper">dataset helper</option>
-              <option value="mapop">duckDbSpatialAggregateJoinLayer</option>
+              <option value="mapop">duckDbSpatialSummaryJoinLayer</option>
             </select>
           </div>
           <div class="emap-example-field">
@@ -80,9 +80,9 @@
       import {
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
-        duckDbSpatialAggregateJoinLayer,
+        duckDbSpatialSummaryJoinLayer,
         setDuckDbRuntime,
-        spatialAggregateJoinDatasetWithDuckDb,
+        spatialSummaryJoin,
       } from '@mapseekai/emap/duckdb';
 
       const emap = await loadExampleRuntime();
@@ -352,7 +352,7 @@
         };
         return executeDuckDbSpatialAggregateQuery({
           entrypoint: entrypointSelect.value === 'mapop' ? 'mapop' : 'helper',
-          runMapOp: () => duckDbSpatialAggregateJoinLayer(createMapOpContext(), {
+          runMapOp: () => duckDbSpatialSummaryJoinLayer(createMapOpContext(), {
             src: TARGET_SOURCE_ID,
             join: JOIN_SOURCE_ID,
             predicate: 'contains',
@@ -364,7 +364,7 @@
             output: { sourceId: OUTPUT_SOURCE_ID },
             runtime,
           }),
-          runHelper: () => spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime),
+          runHelper: () => spatialSummaryJoin(targetDataset, joinDataset, opts, runtime),
         });
       }
 
