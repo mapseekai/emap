@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-07
+
 ### Added
 
 - Added `release:verify` as the single complete gate for CI, local npm publication,
@@ -44,9 +46,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added real-browser smoke coverage for the generated example catalog, GeoJSON
   loading, Canvas painting, pointer interaction, and wheel navigation in Chrome,
   Firefox, and WebKit.
+- Added spatial-index render candidates. Layers with at least 10,000 shapes
+  prebuild a Flatbush index during source loading, shared with feature queries;
+  point, line, and fill rendering visit only the indexed viewport candidates
+  when the view covers less than a quarter of the layer extent, and keep the
+  direct scan otherwise. Classified line buckets additionally cache each style
+  bucket's ordered arc list, keyed by geometry revision.
 
 ### Changed
 
+- Pan and zoom now reuse the existing canvas bitmap once a full draw exceeds a
+  30fps budget (about 33 ms, previously 100 ms), and redraw at full quality
+  after the interaction ends. A full frame rendered partway through a gesture
+  rebases the fast-navigation transform instead of compounding stale deltas.
 - **Breaking:** the DuckDB tool metadata types drop the `Spec` suffix:
   `DuckDbToolInputSpec` → `DuckDbToolInput`, `DuckDbToolParameterSpec` →
   `DuckDbToolParameter`, `DuckDbToolObjectPropertySpec` → `DuckDbToolObjectProperty`,
@@ -971,7 +983,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mapseekai/emap/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mapseekai/emap/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mapseekai/emap/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mapseekai/emap/compare/v0.7.1...v0.7.2
