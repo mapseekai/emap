@@ -195,7 +195,11 @@ function createBareMap(): Emap {
   setPrivate(map, '_listeners', {});
   // Initialize selection so select / deselect / clearSelection have somewhere to write
   setPrivate(map, '_selection', new Selection());
-  setPrivate(map, '_featureQuery', { clear: vi.fn() });
+  setPrivate(map, '_featureQuery', {
+    clear: vi.fn(),
+    prebuildForRendering: vi.fn(),
+    getRenderCandidates: () => null,
+  });
   setPrivate(map, '_activeTransaction', null);
   setPrivate(map, '_history', new EditHistory());
   // Stub _scheduleRender so it doesn't try to use requestAnimationFrame
@@ -209,6 +213,23 @@ function createBareMap(): Emap {
 }
 
 describe('Emap rendering', () => {
+  it('rebases fast navigation on a full frame rendered partway through a gesture', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const transform = new AffineTransform(2, -2, 40, 20);
+    setPrivate(map, '_viewport', { transform });
+    setPrivate(map, '_navSnapshotTransform', { mx: 1, my: -1, bx: 0, by: 0 });
+    setPrivate(map, '_clearFastTransform', vi.fn());
+    setPrivate(map, '_renderImpl', vi.fn());
+    setPrivate(map, '_captureRenderSnapshot', () => ({
+      canvasWidth: 100,
+      canvasHeight: 100,
+      pixelRatio: 1,
+    }));
+    setPrivate(map, '_scheduler', { recordFrame: vi.fn() });
+    callPrivate(map, '_renderFull');
+    transform.translate(7, -3);
+    expect(callPrivate(map, '_computeNavDelta')).toEqual({ sx: 1, sy: 1, tx: 7, ty: -3 });
+  });
   it('publishes a move after reset restores the initial view', () => {
     const map = createBareMap();
     const viewport = new Viewport();
@@ -891,7 +912,7 @@ describe('Emap layer management', () => {
 
       const drawPoints = vi.fn();
       setPrivate(map, '_painter', { drawPoints });
-      setPrivate(map, '_viewport', {});
+      setPrivate(map, '_viewport', { getViewBounds: () => null });
       callPrivate(map, '_renderLayers', 1, 1);
 
       expect(drawPoints.mock.calls.map(([, style]) => style.color)).toEqual(['#111', '#eee']);
@@ -980,7 +1001,10 @@ describe('Emap layer management', () => {
       map.addLayer({ id: 'second', type: 'line', source: 'a', 'source-layer': 'b:c' });
       const drawArcs = vi.fn();
       setPrivate(map, '_painter', { drawArcs });
-      setPrivate(map, '_viewport', { getArcFilter: vi.fn(() => undefined) });
+      setPrivate(map, '_viewport', {
+        getArcFilter: vi.fn(() => undefined),
+        getViewBounds: () => null,
+      });
 
       callPrivate(map, '_renderLayers', 1, 1);
 

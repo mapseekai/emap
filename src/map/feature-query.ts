@@ -4,7 +4,13 @@ import { AffineTransform } from '../geo/transform';
 import type { MutableTopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryFeaturesOptions, QueriedFeature } from './types';
-import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  MapshaperDataset,
+  MapshaperLayer,
+  PathPart,
+  PathShape,
+} from '../types/mapshaper-types';
 import { hasLayerKey, type VisibleLayerLookup } from './structured-keys';
 
 /** Pixel distance for a bullseye hit on point features */
@@ -16,9 +22,20 @@ const POINT_HIT_THRESHOLD = 25;
 type FlatbushIndex = InstanceType<typeof Flatbush>;
 
 /** Sentinel returned by `_getOrBuildIndex` for layers with no shapes. */
-type IndexedLayer = { index: FlatbushIndex; shapeCount: number } | null;
+type IndexedLayer = {
+  index: FlatbushIndex;
+  shapeCount: number;
+  bounds: number[];
+  renderQuery?: { bounds: readonly number[]; ids: Uint32Array };
+} | null;
+
+const RENDER_INDEX_MIN_SHAPES = 10_000;
+const RENDER_INDEX_MAX_FRACTION = 0.25;
+const EMPTY_RENDER_CANDIDATES = new Uint32Array();
 
 interface IndexedLayerCacheEntry {
+  shapes: MapshaperLayer['shapes'];
+  dataset: MapshaperDataset | undefined;
   shapeCount: number;
   arcsSize: number;
   editVersion: number;
@@ -87,6 +104,61 @@ export class FeatureQuery {
     }
   }
 
+  /** Prepare large render layers during source loading, before the first gesture. */
+  prebuildForRendering(sourceId: string): void {
+    const source = this._sources.get(sourceId);
+    if (!source) return;
+    const layers = source.getLayers();
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i] as MapshaperLayer;
+      if ((layer.shapes?.length ?? 0) >= RENDER_INDEX_MIN_SHAPES) {
+        this._getOrBuildIndex(sourceId, i, layer, source.getArcs(), source.getDataset?.());
+      }
+    }
+  }
+
+  /** Ordered broad-phase IDs only; null keeps the direct scan, [] means no candidates. */
+  getRenderCandidates(
+    sourceId: string,
+    layer: MapshaperLayer,
+    bounds: readonly number[],
+  ): Uint32Array | null {
+    if ((layer.shapes?.length ?? 0) < RENDER_INDEX_MIN_SHAPES) return null;
+    const source = this._sources.get(sourceId);
+    if (!source) return null;
+    const layerIndex = source.getLayers().indexOf(layer);
+    if (layerIndex < 0) return null;
+    const indexed = this._getOrBuildIndex(
+      sourceId,
+      layerIndex,
+      layer,
+      source.getArcs(),
+      source.getDataset?.(),
+    );
+    if (!indexed) return null;
+    const cached = indexed.renderQuery;
+    if (cached && cached.bounds.every((value, i) => value === bounds[i])) return cached.ids;
+    const [xmin, ymin, xmax, ymax] = bounds;
+    const extent = indexed.bounds;
+    if (xmax < extent[0] || xmin > extent[2] || ymax < extent[1] || ymin > extent[3])
+      return EMPTY_RENDER_CANDIDATES;
+    const width = extent[2] - extent[0],
+      height = extent[3] - extent[1];
+    const xFraction =
+      width > 0 ? (Math.min(xmax, extent[2]) - Math.max(xmin, extent[0])) / width : 1;
+    const yFraction =
+      height > 0 ? (Math.min(ymax, extent[3]) - Math.max(ymin, extent[1])) / height : 1;
+    // A cheap coverage estimate avoids even searching near full extent. Skewed
+    // distributions still use the actual candidate-count guard below.
+    if (xFraction * yFraction >= RENDER_INDEX_MAX_FRACTION) return null;
+    const ids: number[] = indexed.index.search(xmin, ymin, xmax, ymax);
+    // Avoid the expensive sort/materialization when drawing most of the layer anyway.
+    if (ids.length >= indexed.shapeCount * RENDER_INDEX_MAX_FRACTION) return null;
+    const candidates = Uint32Array.from(ids.sort((a, b) => a - b));
+    indexed.renderQuery = { bounds: bounds.slice(), ids: candidates };
+    return candidates;
+  }
+
   /**
    * Drop cached spatial indexes for one source (or all). Necessary after
    * in-place geometry edits (translateSelected, vertex commands) that
@@ -139,12 +211,18 @@ export class FeatureQuery {
   ): IndexedLayer {
     const shapes = layer?.shapes;
     if (!shapes || shapes.length === 0) return null;
-    const arcsSize = arcs?.size?.() ?? 0;
+    // A conservative full-detail bbox is shared by picking and every render LOD.
+    const source = this._sources.get(sourceId);
+    const datasetIdentity = source?.getDataset?.();
+    arcs = source?.getArcs() ?? arcs;
+    const arcsSize = layer.geometry_type === 'point' ? 0 : (arcs?.size?.() ?? 0);
     const editVersion = dataset?.editVersion ?? 0;
     const sourceCache = this._indexCache.get(sourceId);
     const cached = sourceCache?.get(layerIndex);
     if (
       cached &&
+      cached.shapes === shapes &&
+      cached.dataset === datasetIdentity &&
       cached.shapeCount === shapes.length &&
       cached.arcsSize === arcsSize &&
       cached.editVersion === editVersion
@@ -155,6 +233,7 @@ export class FeatureQuery {
     const isPoint = layer.geometry_type === 'point';
     const index = new Flatbush(shapes.length);
     const partBox: number[] = [];
+    const bounds = [Infinity, Infinity, -Infinity, -Infinity];
 
     for (let id = 0; id < shapes.length; id++) {
       const shp = shapes[id];
@@ -192,11 +271,17 @@ export class FeatureQuery {
         continue;
       }
       index.add(xmin, ymin, xmax, ymax);
+      bounds[0] = Math.min(bounds[0], xmin);
+      bounds[1] = Math.min(bounds[1], ymin);
+      bounds[2] = Math.max(bounds[2], xmax);
+      bounds[3] = Math.max(bounds[3], ymax);
     }
     index.finish();
-    const entry: IndexedLayer = { index, shapeCount: shapes.length };
+    const entry: IndexedLayer = { index, shapeCount: shapes.length, bounds };
     const layerCache = sourceCache ?? new globalThis.Map<number, IndexedLayerCacheEntry>();
     layerCache.set(layerIndex, {
+      shapes,
+      dataset: datasetIdentity,
       shapeCount: shapes.length,
       arcsSize,
       editVersion,

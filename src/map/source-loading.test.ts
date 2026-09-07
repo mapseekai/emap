@@ -33,7 +33,7 @@ function createBareMap(): {
   setPrivate(map, '_layerArcIdsCache', new globalThis.Map());
   setPrivate(map, '_selection', new Selection());
   setPrivate(map, '_history', new EditHistory());
-  setPrivate(map, '_featureQuery', { clear: vi.fn() });
+  setPrivate(map, '_featureQuery', { clear: vi.fn(), prebuildForRendering: vi.fn() });
   setPrivate(map, '_highlightManager', { removeSource: vi.fn() });
   setPrivate(map, '_scheduleRender', scheduleRender);
   setPrivate(map, '_listeners', {});

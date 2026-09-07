@@ -64,6 +64,8 @@ export interface FillStyleBuckets {
 }
 
 export interface PolygonFillOptions {
+  /** Ordered spatial candidates for a single-color fill. */
+  shapeIndices?: Uint32Array;
   /** Current viewport bbox in data coordinates, used to reject offscreen parts before path iteration. */
   viewBBox?: readonly [number, number, number, number] | number[] | null;
   /** 存在时逐桶填充（每桶一次样式切换）；缺省走原单样式路径。 */
@@ -90,12 +92,14 @@ export interface CorePainter {
     arcs: ArcCollection,
     arcFilter?: (i: number) => boolean,
     shapeIndices?: Uint32Array,
+    /** Bump when shapes or bucket membership mutate; enables ordered arc-list caching. */
+    geometryRevision?: number,
   ): void;
   drawArcs(
     arcs: ArcCollection,
     style: StrokeStyle,
     filter?: (i: number) => boolean,
-    arcIds?: Uint32Array,
+    arcIds?: Uint32Array | Int32Array,
     arrowDot?: ArrowDotPathOptions,
   ): void;
   drawPoints(

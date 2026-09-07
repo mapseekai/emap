@@ -54,7 +54,7 @@ function bareMap() {
     _layerArcIdsCache: new Map(),
     _selection: new Selection(),
     _history: history,
-    _featureQuery: { clear: vi.fn() },
+    _featureQuery: { clear: vi.fn(), prebuildForRendering: vi.fn() },
     _highlightManager: highlights,
     _scheduleRender: vi.fn(),
     _listeners: Object.create(null),

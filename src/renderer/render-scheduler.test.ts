@@ -41,7 +41,7 @@ describe('RenderScheduler', () => {
       getSnapshot: () => snapshot(),
     });
 
-    scheduler.recordFrame(100, snapshot());
+    scheduler.recordFrame(16, snapshot());
     scheduler.schedule({ action: 'nav', navDelta: { tx: 1, ty: 1, sx: 1, sy: 1 } });
 
     expect(fullRedraw).toHaveBeenCalledTimes(1);
@@ -62,6 +62,22 @@ describe('RenderScheduler', () => {
 
     expect(fastNav).not.toHaveBeenCalled();
     expect(fullRedraw).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the existing navigation snapshot when drawing exceeds a 30fps budget', () => {
+    const fullRedraw = vi.fn();
+    const fastNav = vi.fn();
+    const scheduler = new RenderScheduler({
+      fullRedraw,
+      fastNav,
+      requestRedraw: vi.fn(),
+      getSnapshot: () => snapshot(),
+    });
+    scheduler.recordFrame(50, snapshot());
+    scheduler.schedule({ action: 'nav', navDelta: { tx: 2, ty: 3, sx: 1, sy: 1 } });
+    expect(fullRedraw).not.toHaveBeenCalled();
+    expect(fastNav).toHaveBeenCalledTimes(1);
+    scheduler.dispose();
   });
 
   it('requests a redraw if interaction end arrived before the fast-nav frame ran', () => {

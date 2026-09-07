@@ -256,6 +256,15 @@ export class CanvasPainter implements EditPainter {
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
   private _arcVisitMarks = new Uint32Array(0);
   private _arcVisitEpoch = 0;
+  private _pathArcCache = new WeakMap<
+    Uint32Array,
+    {
+      shapes: readonly (FeatureShape | null | undefined)[];
+      arcs: ArcCollection;
+      revision: number;
+      arcIds: Int32Array;
+    }
+  >();
 
   constructor(private _canvas: HTMLCanvasElement) {
     const ctx = _canvas.getContext('2d');
@@ -296,8 +305,37 @@ export class CanvasPainter implements EditPainter {
     arcs: ArcCollection,
     arcFilter?: (i: number) => boolean,
     shapeIndices?: Uint32Array,
+    geometryRevision?: number,
   ): void {
     if (style.width === 0) return;
+    if (shapeIndices && geometryRevision !== undefined) {
+      let cached = this._pathArcCache.get(shapeIndices);
+      if (
+        !cached ||
+        cached.shapes !== shapes ||
+        cached.arcs !== arcs ||
+        cached.revision !== geometryRevision
+      ) {
+        const epoch = this._beginArcVisit(arcs.size());
+        const ids: number[] = [];
+        for (const shapeId of shapeIndices) {
+          const shape = shapes[shapeId];
+          if (!shape) continue;
+          for (const part of shape as PathShape) {
+            for (const signedId of part) {
+              const id = absArcId(signedId);
+              if (this._arcVisitMarks[id] === epoch) continue;
+              this._arcVisitMarks[id] = epoch;
+              ids.push(signedId);
+            }
+          }
+        }
+        cached = { shapes, arcs, revision: geometryRevision, arcIds: Int32Array.from(ids) };
+        this._pathArcCache.set(shapeIndices, cached);
+      }
+      this.drawArcs(arcs, style, arcFilter, cached.arcIds);
+      return;
+    }
     const ctx = this._ctx;
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
     const visitEpoch = this._beginArcVisit(arcs.size());
@@ -361,7 +399,7 @@ export class CanvasPainter implements EditPainter {
     arcs: ArcCollection,
     style: StrokeStyle,
     filter?: (i: number) => boolean,
-    arcIds?: Uint32Array,
+    arcIds?: Uint32Array | Int32Array,
     arrowDot?: ArrowDotPathOptions,
   ): void {
     if (style.width === 0) return;
@@ -391,7 +429,8 @@ export class CanvasPainter implements EditPainter {
     };
 
     for (let index = 0; index < n; index++) {
-      const arcId = arcIds?.[index] ?? index;
+      const signedArcId = arcIds?.[index] ?? index;
+      const arcId = absArcId(signedArcId);
       if (filter && !filter(arcId)) continue;
       const arcVertexCount = vertexCounts?.[arcId] ?? 1;
       if (
@@ -401,7 +440,7 @@ export class CanvasPainter implements EditPainter {
       ) {
         flush();
       }
-      const iter = arcs.getArcIter(arcId);
+      const iter = arcs.getArcIter(signedArcId);
       this.drawPathSnapping(iter, ctx);
       arcCount++;
       vertexCount += arcVertexCount;
@@ -897,7 +936,7 @@ export class CanvasPainter implements EditPainter {
       }
     } else {
       ctx.fillStyle = this._resolveColor(fillColor, 'muted');
-      this._fillShapeIndices(shapes, arcs, null, filter, viewBBox);
+      this._fillShapeIndices(shapes, arcs, options.shapeIndices ?? null, filter, viewBBox);
     }
 
     if (overrideAlpha) ctx.globalAlpha = prevAlpha;

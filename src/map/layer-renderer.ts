@@ -11,7 +11,7 @@ import type {
 import { resolvePointStyle, resolveStrokeStyle } from './layer';
 import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
 import { EMAP_THEME_COLORS } from '../theme/colors';
-import type { StyleResolver } from './style-resolver';
+import type { StyleResolution, StyleResolver } from './style-resolver';
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
@@ -22,6 +22,67 @@ export interface LayerRendererContext {
   styleResolver?: StyleResolver;
   resolveSourceLayer(sourceId: string, sourceLayerName?: string): MapshaperLayer | null;
   getLayerArcIds(sourceId: string, ml: MapshaperLayer, arcs: ArcCollection): Uint32Array | null;
+  getRenderCandidates?(
+    sourceId: string,
+    ml: MapshaperLayer,
+    bounds: readonly number[],
+  ): Uint32Array | null;
+}
+
+const bucketMembership = new WeakMap<
+  StyleResolution,
+  {
+    count: number;
+    ids: Uint32Array;
+    candidates?: Uint32Array;
+    filtered?: StyleResolution;
+  }
+>();
+
+function visibleStyleBuckets(
+  resolution: StyleResolution | null,
+  candidates: Uint32Array | null,
+  count: number,
+): StyleResolution | null {
+  if (!resolution || !candidates) return resolution;
+  let membership = bucketMembership.get(resolution);
+  if (!membership || membership.count !== count) {
+    const ids = new Uint32Array(count);
+    for (let b = 0; b < resolution.buckets.length; b++) {
+      for (const id of resolution.buckets[b]) ids[id] = b + 1;
+    }
+    membership = { count, ids };
+    bucketMembership.set(resolution, membership);
+  }
+  if (membership.candidates === candidates && membership.filtered) return membership.filtered;
+  const lists: number[][] = resolution.buckets.map(() => []);
+  for (const id of candidates) {
+    const bucket = membership.ids[id];
+    if (bucket) lists[bucket - 1].push(id);
+  }
+  membership.candidates = candidates;
+  membership.filtered = {
+    styles: resolution.styles,
+    buckets: lists.map((ids) => Uint32Array.from(ids)),
+  };
+  return membership.filtered;
+}
+
+function getCandidates(
+  ctx: LayerRendererContext,
+  sourceId: string,
+  ml: MapshaperLayer,
+  padding = 0,
+): Uint32Array | null {
+  if (!ctx.getRenderCandidates) return null;
+  const bounds = ctx.viewport.getViewBounds();
+  if (!bounds) return null;
+  return ctx.getRenderCandidates(sourceId, ml, [
+    bounds[0] - padding,
+    bounds[1] - padding,
+    bounds[2] + padding,
+    bounds[3] + padding,
+  ]);
 }
 
 export function renderLayers(
@@ -51,7 +112,13 @@ export function renderLayers(
       renderFillLayer(ctx, layer, ml, arcs, dataset?.editVersion ?? 0, lineScale, dataset);
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
-      const resolution =
+      const candidates = getCandidates(
+        ctx,
+        layer.source,
+        ml,
+        (Number(style.radius) || 4) * pixelSize,
+      );
+      const resolution = visibleStyleBuckets(
         ctx.styleResolver && dataset
           ? ctx.styleResolver.resolveCircle({
               layerId: layer.id,
@@ -60,9 +127,13 @@ export function renderLayers(
               dataset,
               layer: ml,
             })
-          : null;
+          : null,
+        candidates,
+        ml.shapes.length,
+      );
       if (resolution) {
         for (let i = 0; i < resolution.buckets.length; i++) {
+          if (resolution.buckets[i].length === 0) continue;
           ctx.painter.drawPoints(
             ml.shapes,
             { ...style, color: resolution.styles[i] },
@@ -70,7 +141,8 @@ export function renderLayers(
           );
         }
       } else {
-        ctx.painter.drawPoints(ml.shapes, style);
+        if (candidates) ctx.painter.drawPoints(ml.shapes, style, candidates);
+        else ctx.painter.drawPoints(ml.shapes, style);
       }
     }
   }
@@ -84,16 +156,36 @@ function drawOutline(
   style: StrokeStyle,
   viewportFilter: (arcId: number) => boolean,
   geometryRevision: number,
+  candidates: Uint32Array | null = null,
 ): void {
   if (style.dashType === 'arrow-dot') {
     ctx.painter.drawArcs(arcs, style, viewportFilter, undefined, {
       shapes: ml.shapes as readonly (PathShape | null)[],
       cacheKey: `${layer.source}:${layer['source-layer'] || 'default'}:${layer.id}`,
       geometryRevision,
+      ...(candidates ? { shapeIndices: candidates } : {}),
     });
     return;
   }
-  const arcIds = ctx.getLayerArcIds(layer.source, ml, arcs);
+  let arcIds: Uint32Array | null;
+  if (candidates) {
+    // Candidate shapes keep source order, hence the first occurrence of every
+    // visible shared arc keeps the same order as the full layer arc list.
+    const ids = new Set<number>();
+    for (const id of candidates) {
+      const shape = ml.shapes?.[id] as PathShape | null | undefined;
+      if (!shape) continue;
+      for (const part of shape) {
+        for (const signedId of part) {
+          const arcId = signedId >= 0 ? signedId : ~signedId;
+          if (!viewportFilter || viewportFilter(arcId)) ids.add(arcId);
+        }
+      }
+    }
+    arcIds = Uint32Array.from(ids);
+  } else {
+    arcIds = ctx.getLayerArcIds(layer.source, ml, arcs);
+  }
   ctx.painter.drawArcs(arcs, style, viewportFilter, arcIds ?? undefined);
 }
 
@@ -109,7 +201,8 @@ function renderLineLayer(
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
     const viewportFilter = ctx.viewport.getArcFilter(arcs);
-    const resolution =
+    const candidates = getCandidates(ctx, layer.source, ml);
+    const resolution = visibleStyleBuckets(
       ctx.styleResolver && dataset
         ? ctx.styleResolver.resolveLine({
             layerId: layer.id,
@@ -118,10 +211,14 @@ function renderLineLayer(
             dataset,
             layer: ml,
           })
-        : null;
+        : null,
+      candidates,
+      ml.shapes.length,
+    );
     if (resolution) {
       for (let i = 0; i < resolution.buckets.length; i++) {
         const bucket = resolution.buckets[i];
+        if (bucket.length === 0) continue;
         const bucketStyle = { ...style, color: resolution.styles[i] };
         if (bucketStyle.dashType === 'arrow-dot') {
           ctx.painter.drawArcs(arcs, bucketStyle, viewportFilter, undefined, {
@@ -131,11 +228,18 @@ function renderLineLayer(
             geometryRevision,
           });
         } else {
-          ctx.painter.drawPaths(ml.shapes, bucketStyle, arcs, viewportFilter, bucket);
+          ctx.painter.drawPaths(
+            ml.shapes,
+            bucketStyle,
+            arcs,
+            viewportFilter,
+            bucket,
+            geometryRevision,
+          );
         }
       }
     } else {
-      drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision);
+      drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision, candidates);
     }
   } else {
     ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs));
@@ -161,7 +265,10 @@ function renderFillLayer(
   // actual drawing cheap. Mapshaper's getShapeFilter applies the same
   // skip-below-1.1 rule.
   const cullParts = ctx.viewport.getMapScale() > 1.1;
-  const resolution =
+  // At full extent the fill deliberately bypasses part culling. Keep that
+  // behavior, including polygons whose boundary encloses the whole viewport.
+  const candidates = cullParts ? getCandidates(ctx, layer.source, ml) : null;
+  const resolution = visibleStyleBuckets(
     ctx.styleResolver && dataset
       ? ctx.styleResolver.resolveFill({
           layerId: layer.id,
@@ -170,7 +277,10 @@ function renderFillLayer(
           dataset,
           layer: ml,
         })
-      : null;
+      : null,
+    candidates,
+    ml.shapes!.length,
+  );
   ctx.painter.drawPolygonFill(
     ml.shapes!,
     arcs,
@@ -179,6 +289,7 @@ function renderFillLayer(
     fillOpacity,
     {
       viewBBox: cullParts ? ctx.viewport.getViewBounds() : null,
+      ...(candidates && !resolution ? { shapeIndices: candidates } : {}),
       ...(resolution
         ? {
             styleBuckets: {
@@ -191,6 +302,6 @@ function renderFillLayer(
   );
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if ((style.width ?? 0) > 0) {
-    drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision);
+    drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision, candidates);
   }
 }

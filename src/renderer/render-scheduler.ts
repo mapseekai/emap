@@ -1,6 +1,7 @@
 import type { AffineDelta, RenderAction, RenderRequest } from '../map/types';
 
-const SLOW_FRAME_MS = 100;
+// Reuse the navigation snapshot once full drawing exceeds a 30fps budget.
+const SLOW_FRAME_MS = 1000 / 30;
 export const FAST_SETTLE_FALLBACK_MS = 2000;
 
 export interface RenderSnapshot {

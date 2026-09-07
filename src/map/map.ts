@@ -1399,6 +1399,7 @@ export class Emap extends EventDispatcher {
     if (this._sources.get(id) !== source) return;
     this._defaultLayersDirty = true;
     this._invalidateShapeCachesForSources([id]);
+    if (event.reason !== 'edit') this._featureQuery?.prebuildForRendering(id);
     const renderedLayersAfter = this.getRenderedLayers();
     if (!renderedLayersEqual(renderedLayersBefore, renderedLayersAfter)) {
       this._fireLayerChange('effective', undefined, renderedLayersAfter);
@@ -2192,6 +2193,11 @@ export class Emap extends EventDispatcher {
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
+    // A full frame during a gesture replaces the bitmap that fast-nav transforms.
+    if (this._navSnapshotTransform) {
+      const { mx, my, bx, by } = this._viewport.transform;
+      this._navSnapshotTransform = { mx, my, bx, by };
+    }
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
   }
 
@@ -2249,6 +2255,8 @@ export class Emap extends EventDispatcher {
         resolveSourceLayer: (sourceId, sourceLayerName) =>
           this.layers.resolve(sourceId, sourceLayerName),
         getLayerArcIds: (sourceId, ml, arcs) => this._getLayerArcIds(sourceId, ml, arcs),
+        getRenderCandidates: (sourceId, ml, bounds) =>
+          this._featureQuery?.getRenderCandidates(sourceId, ml, bounds) ?? null,
       },
       pixelSize,
       lineScale,
