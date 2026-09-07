@@ -14,6 +14,7 @@ const duckDb = vi.hoisted(() => ({
   x: vi.fn(async (dataset) => dataset),
   y: vi.fn(async (dataset) => dataset),
   spatialRelation: vi.fn(async (input) => input),
+  reproject: vi.fn(async (dataset) => dataset),
 }));
 
 const exampleRuntime = vi.hoisted(() => ({
@@ -63,6 +64,22 @@ const operationNames = [
   'containsProperly',
   'distance',
   'distanceWithin',
+  'densify',
+  'multipartToSinglepart',
+  'extractVertices',
+  'pointToLine',
+  'lineToPolygon',
+  'polygonToLine',
+  'near',
+  'nearest',
+  'spatialFilter',
+  'spatialJoin',
+  'attributeJoin',
+  'dissolve',
+  'collect',
+  'merge',
+  'append',
+  'reproject',
 ] as const;
 
 type Source = ReturnType<typeof createSource>;
@@ -212,6 +229,41 @@ const relationPages = [
   ['duckdb/relation/distance-within', 'distanceWithin'],
 ] as const;
 
+const densifyPage = [['duckdb/geometry/densify', 'densify']] as const;
+const unaryGeometryPages = [
+  ['duckdb/geometry/multipart-to-singlepart', 'multipartToSinglepart'],
+  ['duckdb/geometry/extract-vertices', 'extractVertices'],
+  ['duckdb/transform/line-to-polygon', 'lineToPolygon'],
+  ['duckdb/transform/polygon-to-line', 'polygonToLine'],
+] as const;
+const fieldPages = [
+  ['duckdb/transform/point-to-line', 'pointToLine'],
+  ['duckdb/aggregate/dissolve', 'dissolve'],
+  ['duckdb/aggregate/collect', 'collect'],
+] as const;
+const maskPages = [
+  ['duckdb/proximity/near', 'near'],
+  ['duckdb/proximity/nearest', 'nearest'],
+  ['duckdb/data-management/merge', 'merge'],
+  ['duckdb/data-management/append', 'append'],
+] as const;
+const predicatePages = [
+  ['duckdb/selection/spatial-filter', 'spatialFilter'],
+  ['duckdb/join/spatial-join', 'spatialJoin'],
+] as const;
+const joinKeyPages = [['duckdb/join/attribute-join', 'attributeJoin']] as const;
+const crsPages = [['duckdb/data-management/reproject', 'reproject']] as const;
+
+const newOperationPages = [
+  ...densifyPage,
+  ...unaryGeometryPages,
+  ...fieldPages,
+  ...maskPages,
+  ...predicatePages,
+  ...joinKeyPages,
+  ...crsPages,
+] as const;
+
 async function executePage(
   id: string,
   mount: (config: { id: string; operation: string }) => Promise<void>,
@@ -241,6 +293,7 @@ describe('DuckDB spatial example runner', () => {
     ...geometryPages,
     ...attributePages,
     ...relationPages,
+    ...newOperationPages,
   ])('mounts %s with its fixed %s operation', async (id, operation) => {
     const mount = vi.fn(async () => {});
 
@@ -333,6 +386,12 @@ describe('DuckDB spatial example runner', () => {
     ...geometryPages,
     ...attributePages,
     ...relationPages,
+    ...densifyPage,
+    ...unaryGeometryPages,
+    ...fieldPages,
+    ...maskPages,
+    ...predicatePages,
+    ...joinKeyPages,
   ])('%s uses standard workbench sections and field spacing', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
@@ -384,22 +443,170 @@ describe('DuckDB spatial example runner', () => {
     ).not.toBeNull();
   });
 
-  it('declares only required controls for simplify and distance relations', () => {
+  it('declares only required controls for each operation family', () => {
     expect(getDuckDbSpatialOperationDefinition('simplify').controls).toEqual({
       tolerance: true,
+      geographicGuard: true,
       relationMode: false,
       distance: false,
+      mask: false,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: false,
     });
     expect(getDuckDbSpatialOperationDefinition('distance').controls).toEqual({
       tolerance: false,
+      geographicGuard: false,
       relationMode: false,
       distance: true,
+      mask: true,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: false,
     });
     expect(getDuckDbSpatialOperationDefinition('distanceWithin').controls).toEqual({
       tolerance: false,
+      geographicGuard: false,
       relationMode: true,
       distance: true,
+      mask: true,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: false,
     });
+    expect(getDuckDbSpatialOperationDefinition('densify').controls).toEqual({
+      tolerance: true,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: false,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: false,
+    });
+    expect(getDuckDbSpatialOperationDefinition('near').controls).toEqual({
+      tolerance: false,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: true,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: false,
+    });
+    expect(getDuckDbSpatialOperationDefinition('spatialFilter').controls).toEqual({
+      tolerance: false,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: true,
+      predicate: true,
+      field: false,
+      joinField: false,
+      crs: false,
+    });
+    expect(getDuckDbSpatialOperationDefinition('attributeJoin').controls).toEqual({
+      tolerance: false,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: true,
+      predicate: false,
+      field: true,
+      joinField: true,
+      crs: false,
+    });
+    expect(getDuckDbSpatialOperationDefinition('dissolve').controls).toEqual({
+      tolerance: false,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: false,
+      predicate: false,
+      field: true,
+      joinField: false,
+      crs: false,
+    });
+    expect(getDuckDbSpatialOperationDefinition('reproject').controls).toEqual({
+      tolerance: false,
+      geographicGuard: false,
+      relationMode: false,
+      distance: false,
+      mask: false,
+      predicate: false,
+      field: false,
+      joinField: false,
+      crs: true,
+    });
+  });
+
+  it.each(maskPages)('%s exposes mask controls without relation extras', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#mask-file')).not.toBeNull();
+    expect(page.querySelector('#mask-layer')).not.toBeNull();
+    for (const selector of ['#relation-mode', '#distance', '#tolerance', '#predicate', '#field']) {
+      expect(page.querySelector(selector)).toBeNull();
+    }
+  });
+
+  it.each(predicatePages)('%s exposes mask and predicate controls', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#mask-layer')).not.toBeNull();
+    expect(
+      Array.from(
+        page.querySelectorAll<HTMLOptionElement>('#predicate option'),
+        ({ value }) => value,
+      ),
+    ).toEqual([
+      'intersects',
+      'contains',
+      'within',
+      'touches',
+      'disjoint',
+      'overlaps',
+      'equals',
+      'crosses',
+      'covers',
+      'coveredBy',
+      'containsProperly',
+    ]);
+  });
+
+  it.each(fieldPages)('%s exposes a group field without mask controls', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#field')).not.toBeNull();
+    expect(page.querySelector('#mask-layer')).toBeNull();
+  });
+
+  it.each(joinKeyPages)('%s exposes both join key fields and mask controls', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#mask-layer')).not.toBeNull();
+    expect(page.querySelector('#field')).not.toBeNull();
+    expect(page.querySelector('#join-field')).not.toBeNull();
+  });
+
+  it.each(densifyPage)('%s exposes a segment length without the geographic guard', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#tolerance')).not.toBeNull();
+    expect(page.querySelector('#allow-geographic')).toBeNull();
+  });
+
+  it.each(crsPages)('%s exposes a labelled target CRS input', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    expect(page.querySelector('#crs')).not.toBeNull();
+    expect(page.querySelector('label[for="crs"]')).not.toBeNull();
+    expect(page.querySelector('#mask-layer')).toBeNull();
   });
 
   it('requires only controls used by the selected operation', async () => {

@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"id": "mask-b", "name": "East mask", "group": "mask"}, "geometry": {"type": "Polygon", "coordinates": [[[-122.4, 37.775], [-122.34, 37.775], [-122.34, 37.825], [-122.4, 37.825], [-122.4, 37.775]]]}}]}

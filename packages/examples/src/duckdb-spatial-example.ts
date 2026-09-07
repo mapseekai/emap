@@ -1,20 +1,36 @@
 import {
+  append,
   area,
+  attributeJoin,
   boundary,
   centroid,
   centroidX,
   centroidY,
   closeDuckDbRuntime,
+  collect,
   convexHull,
   createDuckDbRuntimeFromJsDelivr,
+  densify,
+  dissolve,
   envelope,
+  extractVertices,
   geometryType,
   isEmpty,
   isSimple,
   isValid,
   length,
+  lineToPolygon,
+  merge,
+  multipartToSinglepart,
+  near,
+  nearest,
+  pointToLine,
+  polygonToLine,
   repairGeometry,
+  reproject,
   perimeter,
+  spatialFilter,
+  spatialJoin,
   spatialRelation,
   setDuckDbRuntime,
   simplify,
@@ -22,7 +38,8 @@ import {
   x,
   y,
 } from '@mapseekai/emap/duckdb';
-import type { SourceLoadDraft } from '@mapseekai/emap';
+import type { DuckDbRuntime, SpatialFilterPredicate, SpatialJoinPredicate, SpatialRelationOptions } from '@mapseekai/emap/duckdb';
+import type { MapshaperDataset, SourceLoadDraft } from '@mapseekai/emap';
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from './example-runtime';
 
 export type DuckDbSpatialOperation =
@@ -31,14 +48,24 @@ export type DuckDbSpatialOperation =
   | 'geometryType' | 'isValid' | 'isEmpty' | 'isSimple' | 'x' | 'y' | 'centroidX'
   | 'centroidY' | 'intersects' | 'contains' | 'within' | 'touches' | 'disjoint'
   | 'overlaps' | 'equals' | 'crosses' | 'covers' | 'coveredBy' | 'containsProperly'
-  | 'distance' | 'distanceWithin';
+  | 'distance' | 'distanceWithin'
+  | 'densify' | 'multipartToSinglepart' | 'extractVertices'
+  | 'pointToLine' | 'lineToPolygon' | 'polygonToLine'
+  | 'near' | 'nearest' | 'spatialFilter' | 'spatialJoin' | 'attributeJoin'
+  | 'dissolve' | 'collect' | 'merge' | 'append' | 'reproject';
 
 type DuckDbSpatialExampleKind = 'geometry' | 'attribute' | 'relation';
 
 type DuckDbSpatialControls = {
   readonly tolerance: boolean;
+  readonly geographicGuard: boolean;
   readonly relationMode: boolean;
   readonly distance: boolean;
+  readonly mask: boolean;
+  readonly predicate: boolean;
+  readonly field: boolean;
+  readonly joinField: boolean;
+  readonly crs: boolean;
 };
 
 export interface DuckDbSpatialOperationDefinition {
@@ -63,11 +90,24 @@ type PendingCrsLoad = {
   readonly draft: SourceLoadDraft;
 };
 
-const noControls: DuckDbSpatialControls = { tolerance: false, relationMode: false, distance: false };
-const toleranceControls: DuckDbSpatialControls = { tolerance: true, relationMode: false, distance: false };
-const relationControls: DuckDbSpatialControls = { tolerance: false, relationMode: true, distance: false };
-const distanceControls: DuckDbSpatialControls = { tolerance: false, relationMode: false, distance: true };
-const distanceWithinControls: DuckDbSpatialControls = { tolerance: false, relationMode: true, distance: true };
+function controls(partial: Partial<DuckDbSpatialControls> = {}): DuckDbSpatialControls {
+  return {
+    tolerance: false, geographicGuard: false, relationMode: false, distance: false, mask: false,
+    predicate: false, field: false, joinField: false, crs: false, ...partial,
+  };
+}
+
+const noControls = controls();
+const toleranceControls = controls({ tolerance: true, geographicGuard: true });
+const densifyControls = controls({ tolerance: true });
+const relationControls = controls({ relationMode: true, mask: true });
+const distanceControls = controls({ distance: true, mask: true });
+const distanceWithinControls = controls({ relationMode: true, distance: true, mask: true });
+const maskControls = controls({ mask: true });
+const predicateControls = controls({ mask: true, predicate: true });
+const joinKeyControls = controls({ mask: true, field: true, joinField: true });
+const fieldControls = controls({ field: true });
+const crsControls = controls({ crs: true });
 
 function definition(operation: DuckDbSpatialOperation, kind: DuckDbSpatialExampleKind, label: string, controls = noControls): DuckDbSpatialOperationDefinition {
   return { operation, kind, label, controls };
@@ -90,6 +130,22 @@ export const duckDbSpatialOperationDefinitions: readonly DuckDbSpatialOperationD
   definition('covers', 'relation', 'Covers', relationControls), definition('coveredBy', 'relation', 'Covered By', relationControls),
   definition('containsProperly', 'relation', 'Contains Properly', relationControls), definition('distance', 'attribute', 'Distance', distanceControls),
   definition('distanceWithin', 'relation', 'Distance Within', distanceWithinControls),
+  definition('densify', 'geometry', 'Densify', densifyControls),
+  definition('multipartToSinglepart', 'geometry', 'Multipart to Singlepart'),
+  definition('extractVertices', 'geometry', 'Extract Vertices'),
+  definition('pointToLine', 'geometry', 'Point to Line', fieldControls),
+  definition('lineToPolygon', 'geometry', 'Line to Polygon'),
+  definition('polygonToLine', 'geometry', 'Polygon to Line'),
+  definition('near', 'relation', 'Near', maskControls),
+  definition('nearest', 'relation', 'Nearest', maskControls),
+  definition('spatialFilter', 'relation', 'Spatial Filter', predicateControls),
+  definition('spatialJoin', 'relation', 'Spatial Join', predicateControls),
+  definition('attributeJoin', 'relation', 'Attribute Join', joinKeyControls),
+  definition('dissolve', 'geometry', 'Dissolve', fieldControls),
+  definition('collect', 'geometry', 'Collect', fieldControls),
+  definition('merge', 'relation', 'Merge', maskControls),
+  definition('append', 'relation', 'Append', maskControls),
+  definition('reproject', 'geometry', 'Reproject', crsControls),
 ];
 
 export function getDuckDbSpatialOperationDefinition(operation: DuckDbSpatialOperation): DuckDbSpatialOperationDefinition {
@@ -113,7 +169,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   const crsRecoveryLabel = requireElement<HTMLLabelElement>('crs-recovery-label');
   const crsRecoveryInput = requireElement<HTMLInputElement>('crs-recovery-input');
   const crsRecoveryApply = requireElement<HTMLButtonElement>('crs-recovery-apply');
-  const allowGeographicInput = operation.controls.tolerance
+  const allowGeographicInput = operation.controls.geographicGuard
     ? requireElement<HTMLInputElement>('allow-geographic')
     : null;
   const runButton = requireElement<HTMLButtonElement>('run');
@@ -127,11 +183,23 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     ? requireElement<HTMLInputElement>('distance')
     : null;
   const distanceLabel = document.getElementById('distance-label');
+  const predicateSelect = operation.controls.predicate
+    ? requireElement<HTMLSelectElement>('predicate')
+    : null;
+  const fieldInput = operation.controls.field
+    ? requireElement<HTMLInputElement>('field')
+    : null;
+  const joinFieldInput = operation.controls.joinField
+    ? requireElement<HTMLInputElement>('join-field')
+    : null;
+  const crsInput = operation.controls.crs
+    ? requireElement<HTMLInputElement>('crs')
+    : null;
   const relationMode = operation.controls.relationMode
     ? requireElement<HTMLSelectElement>('relation-mode')
     : null;
   const relationModeLabel = document.getElementById('relation-mode-label');
-  const maskLayerSelect = operation.kind === 'relation' || operation.operation === 'distance'
+  const maskLayerSelect = operation.controls.mask
     ? requireElement<HTMLSelectElement>('mask-layer')
     : null;
   const maskLayerLabel = document.getElementById('mask-layer-label');
@@ -207,9 +275,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   function updateControls() {
     if (toleranceLabel) toleranceLabel.style.display = operation.controls.tolerance ? 'inline-flex' : 'none';
     if (toleranceInput) toleranceInput.disabled = !operation.controls.tolerance;
-    if (allowGeographicInput) allowGeographicInput.disabled = !operation.controls.tolerance;
+    if (allowGeographicInput) allowGeographicInput.disabled = !operation.controls.geographicGuard;
     if (relationModeLabel) relationModeLabel.style.display = operation.controls.relationMode ? 'inline-flex' : 'none';
-    if (maskLayerLabel) maskLayerLabel.style.display = operation.kind === 'relation' || operation.operation === 'distance' ? 'inline-flex' : 'none';
+    if (maskLayerLabel) maskLayerLabel.style.display = operation.controls.mask ? 'inline-flex' : 'none';
     if (distanceLabel) distanceLabel.style.display = operation.controls.distance ? 'inline-flex' : 'none';
     if (relationMode) relationMode.disabled = !operation.controls.relationMode;
     if (maskLayerSelect) maskLayerSelect.disabled = layerPickerEntries.length === 0;
@@ -311,14 +379,16 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     return runtimePromise;
   }
 
-  async function runGeometryOrAttribute(dataset: object, options: object, runtime: Awaited<ReturnType<typeof ensureRuntime>>) {
+  type DuckDbRunnerOptions = { layer: number; outputLayer: string };
+
+  async function runGeometryOrAttribute(dataset: MapshaperDataset, options: DuckDbRunnerOptions, runtime: DuckDbRuntime) {
     switch (operation.operation) {
       case 'centroid': return centroid(dataset, options, runtime);
       case 'envelope': return envelope(dataset, options, runtime);
       case 'convexHull': return convexHull(dataset, options, runtime);
       case 'boundary': return boundary(dataset, options, runtime);
-      case 'simplify': return simplify(dataset, options, runtime);
-      case 'simplifyPreserveTopology': return simplifyPreserveTopology(dataset, options, runtime);
+      case 'simplify': return simplify(dataset, { ...options, tolerance: Number(toleranceInput!.value), failOnGeographicCrs: !allowGeographicInput!.checked }, runtime);
+      case 'simplifyPreserveTopology': return simplifyPreserveTopology(dataset, { ...options, tolerance: Number(toleranceInput!.value), failOnGeographicCrs: !allowGeographicInput!.checked }, runtime);
       case 'repairGeometry': return repairGeometry(dataset, options, runtime);
       case 'area': return area(dataset, options, runtime);
       case 'length': return length(dataset, options, runtime);
@@ -331,6 +401,15 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       case 'y': return y(dataset, options, runtime);
       case 'centroidX': return centroidX(dataset, options, runtime);
       case 'centroidY': return centroidY(dataset, options, runtime);
+      case 'densify': return densify(dataset, { ...options, maxSegmentLength: Number(toleranceInput!.value) }, runtime);
+      case 'multipartToSinglepart': return multipartToSinglepart(dataset, options, runtime);
+      case 'extractVertices': return extractVertices(dataset, options, runtime);
+      case 'pointToLine': return pointToLine(dataset, { ...options, groupBy: fieldInput?.value.trim() ? [fieldInput.value.trim()] : [] }, runtime);
+      case 'lineToPolygon': return lineToPolygon(dataset, options, runtime);
+      case 'polygonToLine': return polygonToLine(dataset, options, runtime);
+      case 'dissolve': return dissolve(dataset, { ...options, groupBy: fieldInput?.value.trim() ? [fieldInput.value.trim()] : [] }, runtime);
+      case 'collect': return collect(dataset, { ...options, groupBy: fieldInput?.value.trim() ? [fieldInput.value.trim()] : [] }, runtime);
+      case 'reproject': return reproject(dataset, { ...options, targetCrs: crsInput!.value.trim() }, runtime);
       default: throw new Error(`Unknown unary DuckDB spatial operation: ${operation.operation}`);
     }
   }
@@ -376,20 +455,22 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     const inputSource = map.getSource(INPUT_SOURCE_ID);
     const selected = layerPickerEntries.find((entry) => entry.value === targetSelect.value);
     const selectedSource = selected ? map.getSource(selected.sourceId) : null;
-    if (!inputSource?.getDataset() || !selectedSource?.getDataset() || !selected) { status.textContent = '请先上传数据文件。'; return; }
+    const dataset = selectedSource?.getDataset() as MapshaperDataset | undefined;
+    if (!inputSource?.getDataset() || !selected || !dataset) { status.textContent = '请先上传数据文件。'; return; }
     runButton.disabled = true;
     try {
       const runtime = await ensureRuntime();
-      const dataset = selectedSource.getDataset();
       const options = {
         layer: selected.layerIndex,
         outputLayer: `${getLayerId(dataset.layers[selected.layerIndex], selected.layerIndex)}_${operation.operation}`,
-        ...(operation.controls.tolerance
-          ? { tolerance: Number(toleranceInput!.value), failOnGeographicCrs: !allowGeographicInput!.checked }
-          : {}),
       };
       let result;
-      if (operation.kind === 'relation' || operation.operation === 'distance') {
+      // 记录本次运行消费的 source 身份；发布后若被替换（如 CRS 修复重载）则丢弃结果
+      const consumedSources = new Map<string, unknown>([
+        [INPUT_SOURCE_ID, inputSource],
+        [selected.sourceId, selectedSource],
+      ]);
+      if (operation.controls.mask) {
         const mask = layerPickerEntries.find((entry) => entry.value === maskLayerSelect!.value) ?? selected;
         if (
           operation.operation === 'distance' &&
@@ -399,28 +480,95 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
           throw new Error('Distance requires a different Mask layer.');
         }
         const maskSource = map.getSource(mask.sourceId);
-        const maskInput = maskSource?.getDataset();
+        consumedSources.set(mask.sourceId, maskSource);
+        const maskInput = maskSource?.getDataset() as MapshaperDataset | undefined;
         if (!maskInput) throw new Error('请选择 Mask 图层。');
-        const maskDataset = {
+        const maskDataset: MapshaperDataset = {
           ...maskInput,
-          layers: [maskInput.layers[mask.layerIndex]],
+          layers: [maskInput.layers[mask.layerIndex]!],
         };
-        result = await spatialRelation(dataset, maskDataset, {
-          ...options,
-          maskLayer: 0,
-          predicate: operation.operation,
-          mode: operation.operation === 'distance' ? 'attribute' : relationMode!.value as 'filter' | 'attribute',
-          ...(operation.controls.distance ? { distance: Number(distanceInput!.value) } : {}),
-        }, runtime);
+        // near/nearest 要求投影 CRS；GeoJSON 总是以 EPSG:4326 载入，先 reproject 再算；
+        // 结果带 3857 元数据，addSource 会在注册时规范化回地图 CRS
+        const projectBoth = async () => ({
+          input: await reproject(dataset, { targetCrs: 'EPSG:3857', layer: selected.layerIndex }, runtime),
+          mask: await reproject(maskDataset, { targetCrs: 'EPSG:3857', layer: 0 }, runtime),
+        });
+        switch (operation.operation) {
+          case 'near': {
+            const projected = await projectBoth();
+            result = await near(projected.input, projected.mask, {
+              inputLayer: 0,
+              referenceLayer: 0,
+              outputLayer: options.outputLayer,
+            }, runtime);
+            break;
+          }
+          case 'nearest': {
+            const projected = await projectBoth();
+            result = await nearest(projected.input, projected.mask, { ...options, layer: 0 }, runtime);
+            break;
+          }
+          case 'spatialFilter':
+            result = await spatialFilter(dataset, maskDataset, {
+              ...options,
+              inputLayer: selected.layerIndex,
+              maskLayer: 0,
+              predicate: predicateSelect!.value as SpatialFilterPredicate,
+            }, runtime);
+            break;
+          case 'spatialJoin':
+            result = await spatialJoin(dataset, maskDataset, {
+              ...options,
+              predicate: predicateSelect!.value as SpatialJoinPredicate,
+            }, runtime);
+            break;
+          case 'attributeJoin':
+            result = await attributeJoin(dataset, maskDataset, {
+              ...options,
+              leftKey: fieldInput!.value.trim(),
+              rightKey: joinFieldInput!.value.trim(),
+            }, runtime);
+            break;
+          case 'merge':
+            result = await merge(dataset, maskDataset, options, runtime);
+            break;
+          case 'append':
+            result = await append(dataset, maskDataset, options, runtime);
+            break;
+          default: {
+            // distance/distanceWithin 同样要求投影 CRS，与 near/nearest 共用预投影
+            const distanceOp = operation.operation === 'distance' || operation.operation === 'distanceWithin';
+            const projected = distanceOp ? await projectBoth() : undefined;
+            result = await spatialRelation(
+              projected?.input ?? dataset,
+              projected?.mask ?? maskDataset,
+              {
+                ...options,
+                inputLayer: projected ? 0 : selected.layerIndex,
+                maskLayer: 0,
+                predicate: operation.operation as SpatialRelationOptions['predicate'],
+                mode: operation.operation === 'distance' ? 'attribute' : relationMode!.value as 'filter' | 'attribute',
+                ...(operation.controls.distance ? { distance: Number(distanceInput!.value) } : {}),
+              },
+              runtime,
+            );
+          }
+        }
       } else result = await runGeometryOrAttribute(dataset, options, runtime);
-      if (map.getSource(INPUT_SOURCE_ID) !== inputSource) { status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。'; return; }
+      // allowOutputReplacement：发布后 OUTPUT_SOURCE_ID 被新 source 替换是预期行为，不算过期
+      const inputsStale = (allowOutputReplacement: boolean) =>
+        [...consumedSources].some(
+          ([id, source]) =>
+            !(allowOutputReplacement && id === OUTPUT_SOURCE_ID) && map.getSource(id) !== source,
+        );
+      if (inputsStale(false)) { status.textContent = '输入数据已变更，结果已丢弃，请重新运行。'; return; }
       const outputSource = new TopologySource(OUTPUT_SOURCE_ID);
       outputSource.setDataset(result);
       removeSourceWithLayers(OUTPUT_SOURCE_ID);
       await map.addSource(OUTPUT_SOURCE_ID, outputSource);
-      if (map.getSource(INPUT_SOURCE_ID) !== inputSource) {
+      if (inputsStale(true)) {
         if (map.getSource(OUTPUT_SOURCE_ID) === outputSource) removeSourceWithLayers(OUTPUT_SOURCE_ID);
-        status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。';
+        status.textContent = '输入数据已变更，结果已丢弃，请重新运行。';
         return;
       }
       addDisplayLayers(OUTPUT_SOURCE_ID, outputSource, 'duckdb-spatial-output', { fill: '#fef3c7', fillOpacity: 0.5, line: '#b45309', lineWidth: 2.5, pointRadius: 5 });

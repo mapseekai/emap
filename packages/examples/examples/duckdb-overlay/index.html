@@ -36,6 +36,9 @@
             <select id="operation">
               <option value="intersect">intersect</option>
               <option value="difference">difference</option>
+              <option value="clip">clip</option>
+              <option value="union">union</option>
+              <option value="symmetricDifference">symmetricDifference</option>
             </select>
           </div>
           <div class="emap-example-field">
@@ -60,11 +63,14 @@
 
       import {
         closeDuckDbRuntime,
+        clip,
         createDuckDbRuntimeFromJsDelivr,
         difference,
         duckDbOverlayLayer,
         intersect,
         setDuckDbRuntime,
+        symmetricDifference,
+        union,
       } from '@mapseekai/emap/duckdb';
 
       const emap = await loadExampleRuntime();
@@ -285,11 +291,14 @@
             outputLayer: outputLayerInput.value.trim() || `duckdb_${operation}_result`,
           };
           let resultDataset;
-          if (entrypointSelect.value === "mapop") {
+          if (
+            entrypointSelect.value === "mapop" &&
+            (operation === "intersect" || operation === "difference" || operation === "clip")
+          ) {
             const result = await duckDbOverlayLayer(mapOpContext, {
               src: INPUT_SOURCE_ID,
               mask: MASK_SOURCE_ID,
-              operation: operation === "intersect" ? "intersection" : operation,
+              operation: operation === "intersect" || operation === "clip" ? "intersection" : operation,
               ...opts,
               output: { sourceId: OUTPUT_SOURCE_ID },
               runtime,
@@ -298,8 +307,14 @@
             resultDataset = result.value.dataset;
           } else if (operation === "intersect") {
             resultDataset = await intersect(inputDataset, maskDataset, opts, runtime);
-          } else {
+          } else if (operation === "difference") {
             resultDataset = await difference(inputDataset, maskDataset, opts, runtime);
+          } else if (operation === "clip") {
+            resultDataset = await clip(inputDataset, maskDataset, opts, runtime);
+          } else if (operation === "union") {
+            resultDataset = await union(inputDataset, maskDataset, opts, runtime);
+          } else {
+            resultDataset = await symmetricDifference(inputDataset, maskDataset, opts, runtime);
           }
           const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, "duckdb-overlay-output", {
             fill: "#fef3c7",

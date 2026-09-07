@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Generated API page and anchor links are now validated in both documentation languages.
 - Added regression coverage for null geometries, nearest-neighbor field collisions,
   deterministic ordering, stale writeback, literal tool IDs, and required output destinations.
+- Added DuckDB example pages for every remaining `duckDbToolbox` processing tool:
+  densify, multipart-to-singlepart, extract-vertices, point-to-line,
+  line-to-polygon, polygon-to-line, near, nearest, spatial-filter, spatial-join,
+  attribute-join, dissolve, collect, merge, append, and reproject, plus a
+  `duckdb-toolbox` page demonstrating `duckDbToolbox.search()`/`execute()`. The
+  DuckDB overlay example now also offers clip, union, and symmetric-difference,
+  and a shared coverage test maps all 43 toolbox tools to example
+  actions/pages.
 - Added a unified browser-side DuckDB Processing Toolbox covering Overlay, Proximity, Aggregate, Join, Geometry, Transform, Selection, Data Management, and Attribute tools. `duckDbToolbox` is the canonical Agent/UI/workflow registry and all tools reuse the shared Arrow → DuckDB-Wasm → dataset pipeline.
 - Added the canonical short processing APIs, including `spatialRelation`, `spatialJoin`, and `spatialSummaryJoin`, with Agent-oriented metadata, semantic aliases, parameter schemas, and a unified `duckDbToolbox.execute()` entry point.
 - Added `map.ops.fillRing()` and the `fill` mode of `map.ringEdit` to turn an

@@ -443,6 +443,74 @@ const exampleDescriptions = {
     zh: '使用 DuckDB 的 ST_Distance 按距离范围筛选或标注目标图层与遮罩图层的关系。',
     en: 'Uses DuckDB ST_Distance to filter or annotate target features within a distance of the mask layer.',
   },
+  'duckdb/geometry/densify': {
+    zh: '使用 DuckDB 按最大分段长度为线或面几何插入顶点。',
+    en: 'Uses DuckDB to insert vertices so no segment exceeds a maximum length.',
+  },
+  'duckdb/geometry/multipart-to-singlepart': {
+    zh: '使用 DuckDB 将多部件几何拆分为独立的单部件要素。',
+    en: 'Uses DuckDB to split multi-part geometries into independent single-part features.',
+  },
+  'duckdb/geometry/extract-vertices': {
+    zh: '使用 DuckDB 提取目标图层中每个几何的顶点并生成点要素。',
+    en: 'Uses DuckDB to extract the vertices of each target-layer geometry into point features.',
+  },
+  'duckdb/transform/point-to-line': {
+    zh: '使用 DuckDB 按可选分组字段把点要素连接成线。',
+    en: 'Uses DuckDB to connect point features into lines with an optional grouping field.',
+  },
+  'duckdb/transform/line-to-polygon': {
+    zh: '使用 DuckDB 把闭合线网多边形化为面要素。',
+    en: 'Uses DuckDB to polygonize closed linework into polygon features.',
+  },
+  'duckdb/transform/polygon-to-line': {
+    zh: '使用 DuckDB 把面要素的边界转换为线要素。',
+    en: 'Uses DuckDB to convert polygon boundaries into line features.',
+  },
+  'duckdb/proximity/near': {
+    zh: '使用 DuckDB 计算每个输入要素到参考图层的最小距离并追加为属性。',
+    en: 'Uses DuckDB to append the minimum distance from each input feature to a reference layer.',
+  },
+  'duckdb/proximity/nearest': {
+    zh: '使用 DuckDB 为每个输入要素查找最近的参考要素，并追加其标识与距离。',
+    en: 'Uses DuckDB to find the nearest reference feature for each input and append its id and distance.',
+  },
+  'duckdb/selection/spatial-filter': {
+    zh: '使用 DuckDB 按空间谓词筛选与参考图层满足关系的要素。',
+    en: 'Uses DuckDB to filter features that satisfy a spatial predicate against a reference layer.',
+  },
+  'duckdb/join/spatial-join': {
+    zh: '使用 DuckDB 按空间谓词把参考图层的属性连接到目标图层。',
+    en: 'Uses DuckDB to join attributes from a reference layer using a spatial predicate.',
+  },
+  'duckdb/join/attribute-join': {
+    zh: '使用 DuckDB 按键字段把第二个数据集的属性连接到目标图层。',
+    en: 'Uses DuckDB to join attributes from a second dataset using matching key fields.',
+  },
+  'duckdb/aggregate/dissolve': {
+    zh: '使用 DuckDB 按可选分组字段融合目标图层的几何。',
+    en: 'Uses DuckDB to dissolve target-layer geometries, optionally grouped by a field.',
+  },
+  'duckdb/aggregate/collect': {
+    zh: '使用 DuckDB 按可选分组字段把几何收集为多部件要素。',
+    en: 'Uses DuckDB to collect geometries into multi-part features, optionally grouped by a field.',
+  },
+  'duckdb/data-management/merge': {
+    zh: '使用 DuckDB 把两个数据集的图层合并为一个数据集。',
+    en: 'Uses DuckDB to merge the layers of two datasets into one dataset.',
+  },
+  'duckdb/data-management/append': {
+    zh: '使用 DuckDB 把第二个数据集的要素追加到目标图层。',
+    en: 'Uses DuckDB to append features from a second dataset to the target layer.',
+  },
+  'duckdb/data-management/reproject': {
+    zh: '使用 DuckDB 把目标图层投影转换到指定的目标坐标系。',
+    en: 'Uses DuckDB to reproject the target layer to the chosen target CRS.',
+  },
+  'duckdb-toolbox': {
+    zh: '通过 duckDbToolbox 搜索并按 JSON 参数执行任意 DuckDB 处理工具。',
+    en: 'Searches DuckDB processing tools through duckDbToolbox and executes one with JSON parameters.',
+  },
   'flatgeobuf-viewer': {
     zh: '通过 registerFormat 注册的 FlatGeobuf 插件加载 .fgb 文件，并从文件头读取坐标系。',
     en: 'Loads .fgb files through a FlatGeobuf plugin registered via registerFormat, reading the CRS from the file header.',
@@ -716,6 +784,23 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/relation/contains-properly', 'data-analysis', 'DuckDB 严格包含关系', 'DuckDB contains properly relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'contains-properly'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/distance', 'data-analysis', 'DuckDB 距离属性', 'DuckDB distance attribute', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/distance-within', 'data-analysis', 'DuckDB 距离范围关系', 'DuckDB distance-within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/geometry/densify', 'data-analysis', 'DuckDB 顶点加密', 'DuckDB densify', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'densify'], [task7LineFixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/multipart-to-singlepart', 'data-analysis', 'DuckDB 多部件转单部件', 'DuckDB multipart to singlepart', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7LineFixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/extract-vertices', 'data-analysis', 'DuckDB 顶点提取', 'DuckDB extract vertices', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/transform/point-to-line', 'data-analysis', 'DuckDB 点转线', 'DuckDB point to line', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [duckDbSpatialAggregatePointsFixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/transform/line-to-polygon', 'data-analysis', 'DuckDB 线转面', 'DuckDB line to polygon', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7LineFixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/transform/polygon-to-line', 'data-analysis', 'DuckDB 面转线', 'DuckDB polygon to line', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/proximity/near', 'data-analysis', 'DuckDB 邻近距离', 'DuckDB near', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'proximity'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/proximity/nearest', 'data-analysis', 'DuckDB 最近要素', 'DuckDB nearest', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'proximity'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/selection/spatial-filter', 'data-analysis', 'DuckDB 空间过滤', 'DuckDB spatial filter', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'filter'], [task7Fixture, 'fixtures/task-7-mask-east.geojson'], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/join/spatial-join', 'data-analysis', 'DuckDB 空间连接', 'DuckDB spatial join', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'join'], [task7Fixture, task7MaskFixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb/join/attribute-join', 'data-analysis', 'DuckDB 属性连接', 'DuckDB attribute join', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'join', 'attribute'], [task6Fixture, 'fixtures/duckdb-attribute-join-right.geojson'], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb/aggregate/dissolve', 'data-analysis', 'DuckDB 融合', 'DuckDB dissolve', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'aggregate'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/aggregate/collect', 'data-analysis', 'DuckDB 几何收集', 'DuckDB collect', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'aggregate'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/data-management/merge', 'data-analysis', 'DuckDB 图层合并', 'DuckDB merge', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'merge'], [task6Fixture, task6MergeFixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb/data-management/append', 'data-analysis', 'DuckDB 要素追加', 'DuckDB append', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'append'], [task6Fixture, task6MergeFixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb/data-management/reproject', 'data-analysis', 'DuckDB 投影转换', 'DuckDB reproject', [docsDuckDb, docsCrs], 'Emap', ['duckdb', 'crs'], [task7Fixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb-toolbox', 'data-analysis', 'DuckDB 工具箱', 'DuckDB toolbox', [docsDuckDb, docsOperations], 'duckDbToolbox', ['duckdb', 'toolbox'], [task7Fixture, task7MaskFixture], { id: 'duckdb', section: 'workflow' }),
 ];
 
 export const exampleIds = examples.map(({ id }) => id);

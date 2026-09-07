@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { importGeoParquet } from '../../src/arrow/geoparquet-io';
+import { examples } from '../../docs-meta/examples';
 import { setParquetWasm } from '../../src/arrow/parquet-wasm-loader';
 import { injectParquetWasmForTests } from '../../src/arrow/test-utils';
 import {
@@ -540,6 +541,19 @@ describe('example starter fixtures', () => {
     expect(fixtureManifest['duckdb-geoparquet-query']).toEqual([
       { selector: '#file', paths: ['fixtures/example-geoparquet.parquet'] },
     ]);
+  });
+
+  it('binds every fixture to a file input that exists in the example page', async () => {
+    for (const example of examples) {
+      const bindings = fixtureManifest[example.id] ?? [];
+      if (bindings.length === 0) continue;
+      const html = await readFile(resolve(example.source.html), 'utf8');
+      const page = new DOMParser().parseFromString(html, 'text/html');
+      for (const binding of bindings) {
+        const input = page.querySelector<HTMLInputElement>(binding.selector);
+        expect(input?.type, `${example.id}: ${binding.selector} must be a file input`).toBe('file');
+      }
+    }
   });
 
   it('ships a real GeoParquet fixture that can be imported again', async () => {

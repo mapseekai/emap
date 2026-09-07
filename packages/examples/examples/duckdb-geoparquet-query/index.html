@@ -24,6 +24,7 @@
             <select id="entrypoint">
               <option value="helper">DuckDbGeoParquetQuerySource.query</option>
               <option value="mapop">duckDbGeoParquetQueryLayer</option>
+              <option value="direct">queryGeoParquetWithDuckDb</option>
             </select>
           </div>
           <div class="emap-example-field">
@@ -52,6 +53,7 @@
         createDuckDbGeoParquetQuerySource,
         createDuckDbRuntimeFromJsDelivr,
         duckDbGeoParquetQueryLayer,
+        queryGeoParquetWithDuckDb,
         setDuckDbRuntime,
       } from '@mapseekai/emap/duckdb';
 
@@ -171,8 +173,8 @@
       async function getGeoParquetQuerySource(runtime) {
         if (geoParquetQuerySource) return geoParquetQuerySource;
         if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
+        // 保留 bytes：direct 入口 queryGeoParquetWithDuckDb 每次都要原始数据
         geoParquetQuerySource = await createDuckDbGeoParquetQuerySource(geoParquetBytes, runtime);
-        geoParquetBytes = undefined;
         return geoParquetQuerySource;
       }
 
@@ -216,6 +218,9 @@
             });
             if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
+          } else if (entrypointSelect.value === "direct") {
+            if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
+            resultDataset = await queryGeoParquetWithDuckDb(geoParquetBytes, opts, runtime);
           } else {
             resultDataset = await querySource.query(opts);
           }
