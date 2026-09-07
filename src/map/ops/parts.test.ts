@@ -369,6 +369,65 @@ describe('addPart direct edit', () => {
 });
 
 describe('deletePart', () => {
+  it('removes a polygon exterior together with its holes and restores them on undo', async () => {
+    const hole: Position[] = [
+      [2, 2],
+      [2, 8],
+      [8, 8],
+      [8, 2],
+      [2, 2],
+    ];
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square, hole] });
+    const before = exported(fixture.dataset());
+    const layer = fixture.dataset().layers[0]!;
+    const arcCount = fixture.dataset().arcs!.size();
+
+    await expect(deletePart(fixture.ctx, { point: [1, 1] })).resolves.toMatchObject({ ok: true });
+    expect(layer.shapes).toHaveLength(0);
+    expect(layer.data!.getRecords()).toHaveLength(0);
+    expect(fixture.ctx.host._selection.getAll()).toEqual([]);
+    expect(fixture.dataset().arcs!.size()).toBe(arcCount);
+
+    fixture.entries[0]!.undo();
+    expect(exported(fixture.dataset())).toEqual(before);
+    expect(layer.data!.getRecords()).toHaveLength(1);
+    expect(fixture.ctx.host._selection.getAll()).toEqual([
+      { source: 'source', layer: 'parts', id: 0 },
+    ]);
+    fixture.entries[0]!.do();
+    expect(layer.shapes).toHaveLength(0);
+  });
+
+  it('removes only the hit exterior and its holes from a multipart polygon', async () => {
+    const hole: Position[] = [
+      [2, 2],
+      [2, 8],
+      [8, 8],
+      [8, 2],
+      [2, 2],
+    ];
+    const other = square.map(([x, y]): Position => [x + 20, y]);
+    const otherHole = hole.map(([x, y]): Position => [x + 20, y]);
+    const fixture = await createFixture({
+      type: 'MultiPolygon',
+      coordinates: [
+        [square, hole],
+        [other, otherHole],
+      ],
+    });
+    const before = exported(fixture.dataset());
+    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const expected = shape.slice(2);
+
+    await expect(deletePart(fixture.ctx, { point: [1, 1] })).resolves.toMatchObject({ ok: true });
+    expect(fixture.dataset().layers[0]!.shapes![0]).toEqual(expected);
+    expect((exported(fixture.dataset()) as GeoJSON.Polygon).coordinates).toHaveLength(2);
+    fixture.entries[0]!.undo();
+    expect(exported(fixture.dataset())).toEqual(before);
+    fixture.entries[0]!.do();
+    expect(fixture.dataset().layers[0]!.shapes![0]).toEqual(expected);
+  });
+
   it('deletes a polygon island and a hole by hit point', async () => {
     const geometry: GeoJSON.MultiPolygon = {
       type: 'MultiPolygon',

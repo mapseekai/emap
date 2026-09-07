@@ -66,6 +66,7 @@ map.once('editmodechange', (e) => {
     | 'measure'
     | 'transform'
     | 'reshape'
+    | 'auto-complete'
     | 'ring'
     | 'part' = e.mode;
   void m;

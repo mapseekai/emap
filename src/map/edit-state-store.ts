@@ -14,6 +14,7 @@ export type EditMode =
   | 'measure'
   | 'transform'
   | 'reshape'
+  | 'auto-complete'
   | 'ring'
   | 'part';
 

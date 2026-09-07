@@ -438,7 +438,7 @@ describe('Emap handler registry (Phase 1)', () => {
 
   it('wires reshape, ring, and part editing handlers as mutually exclusive modes', () => {
     const map = new Emap({ container: container() });
-    const handlers = [map.reshapeFeature, map.ringEdit, map.partEdit];
+    const handlers = [map.reshapeFeature, map.ringEdit, map.partEdit, map.autoCompletePolygon];
     const contexts = handlers as unknown as Array<{
       _resolveSelectionContext: () => {
         key: string;
@@ -447,6 +447,7 @@ describe('Emap handler registry (Phase 1)', () => {
     }>;
 
     expect(map.reshapeFeature.name).toBe('reshapeFeature');
+    expect(map.autoCompletePolygon.name).toBe('autoCompletePolygon');
     expect(map.ringEdit.name).toBe('ringEdit');
     expect(map.partEdit.name).toBe('partEdit');
     expect(handlers.every((handler) => !handler.isEnabled())).toBe(true);
@@ -466,6 +467,15 @@ describe('Emap handler registry (Phase 1)', () => {
     map.partEdit.enable();
     expect(map.ringEdit.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('part');
+    map.autoCompletePolygon.enable();
+    expect(map.partEdit.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('auto-complete');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.reshapeFeature.enable();
+    expect(map.autoCompletePolygon.isEnabled()).toBe(false);
+    map.reshapeFeature.disable();
+    expect(map.dragPan.isEnabled()).toBe(true);
+    map.remove();
   });
 
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {

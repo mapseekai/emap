@@ -146,6 +146,7 @@ describe('EditOverlayRenderer', () => {
   });
   it.each([
     'reshape',
+    'auto-complete',
     'ring',
     'part',
   ] as const)('routes %s sketches through the draw overlay', (mode) => {

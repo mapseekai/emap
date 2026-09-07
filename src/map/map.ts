@@ -57,6 +57,7 @@ import {
   type ReshapeFeatureOptions,
 } from '../core/handlers/reshape-feature';
 import { RingEditHandler, type RingEditOptions } from '../core/handlers/ring-edit';
+import { AutoCompletePolygonHandler } from '../core/handlers/auto-complete-polygon';
 import { PartEditHandler, type PartEditOptions } from '../core/handlers/part-edit';
 import { MeasureHandler } from '../core/handlers/measure';
 import {
@@ -329,6 +330,7 @@ export class Emap extends EventDispatcher {
   private _drawFeature!: DrawFeatureHandler;
   private _splitFeature!: SplitFeatureHandler;
   private _reshapeFeature!: ReshapeFeatureHandler;
+  private _autoCompletePolygon!: AutoCompletePolygonHandler;
   private _ringEdit!: RingEditHandler;
   private _partEdit!: PartEditHandler;
   private _measure!: MeasureHandler;
@@ -559,6 +561,8 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._splitFeature);
     this._reshapeFeature = new ReshapeFeatureHandler(handlerHost);
     this._handlers.register(this._reshapeFeature);
+    this._autoCompletePolygon = new AutoCompletePolygonHandler(handlerHost);
+    this._handlers.register(this._autoCompletePolygon);
     this._ringEdit = new RingEditHandler(handlerHost);
     this._handlers.register(this._ringEdit);
     this._partEdit = new PartEditHandler(handlerHost);
@@ -817,6 +821,7 @@ export class Emap extends EventDispatcher {
       mode === 'draw' ||
       mode === 'split' ||
       mode === 'reshape' ||
+      mode === 'auto-complete' ||
       mode === 'ring' ||
       mode === 'part';
 
@@ -2006,6 +2011,10 @@ export class Emap extends EventDispatcher {
   /** The selected-feature reshape interaction handler (disabled by default). */
   get reshapeFeature(): Handler<ReshapeFeatureOptions> {
     return this._reshapeFeature;
+  }
+  /** Sketch a new polygon adjoining existing boundaries (disabled by default). */
+  get autoCompletePolygon(): Handler<ReshapeFeatureOptions> {
+    return this._autoCompletePolygon;
   }
   /** The selected polygon ring editing interaction handler (disabled by default). */
   get ringEdit(): Handler<RingEditOptions> {

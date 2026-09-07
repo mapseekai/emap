@@ -5,6 +5,7 @@ import { DrawFeatureControl } from './draw-feature-control';
 
 type AdvancedTool =
   | 'reshape'
+  | 'auto-complete'
   | 'ring-add'
   | 'ring-delete'
   | 'ring-fill'
@@ -13,6 +14,7 @@ type AdvancedTool =
 
 const ADVANCED_TOOL_TITLES: Record<AdvancedTool, string> = {
   reshape: 'Reshape Feature',
+  'auto-complete': 'Auto-Complete Polygon',
   'ring-add': 'Add Hole',
   'ring-delete': 'Delete Hole',
   'ring-fill': 'Fill Hole',
@@ -50,6 +52,10 @@ class AdvancedEditControl implements Control {
     this._button.setAttribute('aria-label', this._button.title);
     this._button.setAttribute('aria-pressed', 'false');
     this._button.textContent = this._button.title;
+    if (this._tool === 'auto-complete') {
+      this._button.innerHTML =
+        '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h9v15H3zM12 4l9 3v12h-9M15 11h5m-2.5-2.5v5"/></svg>';
+    }
     this._button.addEventListener('click', () => this._toggle());
     container.appendChild(this._button);
     map.on('editmodechange', this._onEditModeChange);
@@ -77,6 +83,10 @@ class AdvancedEditControl implements Control {
       map.reshapeFeature.enable();
       return;
     }
+    if (this._tool === 'auto-complete') {
+      map.autoCompletePolygon.enable();
+      return;
+    }
     const handler = this._tool.startsWith('ring') ? map.ringEdit : map.partEdit;
     if (handler.isEnabled()) handler.disable();
     handler.setOptions({ mode: this._mode() });
@@ -86,6 +96,10 @@ class AdvancedEditControl implements Control {
   private _disable(): void {
     const map = this._map;
     if (!map) return;
+    if (this._tool === 'auto-complete') {
+      map.autoCompletePolygon.disable();
+      return;
+    }
     if (this._tool === 'reshape') {
       map.reshapeFeature.disable();
       return;
@@ -97,6 +111,7 @@ class AdvancedEditControl implements Control {
     const map = this._map;
     if (!map) return false;
     if (this._tool === 'reshape') return map.reshapeFeature.isEnabled();
+    if (this._tool === 'auto-complete') return map.autoCompletePolygon.isEnabled();
     const handler = this._tool.startsWith('ring') ? map.ringEdit : map.partEdit;
     return handler.isEnabled() && handler.getOptions().mode === this._mode();
   }
@@ -108,7 +123,11 @@ class AdvancedEditControl implements Control {
 
   private _syncPressed(mode: string): void {
     const expectedMode =
-      this._tool === 'reshape' ? 'reshape' : this._tool.startsWith('ring') ? 'ring' : 'part';
+      this._tool === 'reshape' || this._tool === 'auto-complete'
+        ? this._tool
+        : this._tool.startsWith('ring')
+          ? 'ring'
+          : 'part';
     const active = mode === expectedMode && this._matchesActiveHandler();
     this._button?.classList.toggle('active', active);
     this._button?.setAttribute('aria-pressed', String(active));
@@ -166,6 +185,7 @@ export class EditToolbar implements Control {
           new AdvancedEditControl('ring-fill'),
           new AdvancedEditControl('part-add'),
           new AdvancedEditControl('part-delete'),
+          new AdvancedEditControl('auto-complete'),
         );
       }
     }

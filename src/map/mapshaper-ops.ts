@@ -19,6 +19,8 @@
 
 import type { EmapHostInternal } from './emap-host';
 import type { OpResult } from './op-result';
+import { autoCompletePolygon } from './ops/auto-complete-polygon';
+import type { AutoCompletePolygonOptions, AutoCompletePolygonResult } from './types';
 import type { OpContext } from './ops/_context';
 import {
   _runDatasetCommandParsed as _runDatasetCommandParsedShared,
@@ -279,6 +281,11 @@ export class MapshaperOps {
   }
   reshapeSelected(options: ReshapeSelectedOptions): Promise<OpResult<ReshapeSelectedResult>> {
     return reshapeSelected(this._ctx, options);
+  }
+  autoCompletePolygon(
+    options: AutoCompletePolygonOptions,
+  ): Promise<OpResult<AutoCompletePolygonResult>> {
+    return autoCompletePolygon(this._ctx, options);
   }
   addRing(options: AddRingOptions): Promise<OpResult<void>> {
     return addRing(this._ctx, options);

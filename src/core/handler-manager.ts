@@ -13,6 +13,7 @@ const PRIORITY = [
   'transformFeature',
   'splitFeature',
   'reshapeFeature',
+  'autoCompletePolygon',
   'ringEdit',
   'partEdit',
   'drawFeature',

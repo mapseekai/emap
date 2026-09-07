@@ -111,6 +111,35 @@ reject self-intersecting or invalid results (`geometry`). A prepared mutation
 made stale by a concurrent edit has shape
 `{ kind: 'stale-operation', sourceId, operation }`, without `field`.
 
+## Auto-complete polygon
+
+`autoCompletePolygon` uses the same sketch gestures as reshape. Start inside or on
+an existing polygon, draw the new boundary outside it, and return inside or to a
+boundary. Right-click to finish or press Escape to cancel. The sketch and existing
+boundaries enclose independent new polygon features. Existing geometry and
+attributes are preserved, and adjoining features share topology arcs. No selection
+is required; selecting reference features enables the same vertex and edge snapping
+as reshape.
+
+```ts
+map.autoCompletePolygon.setOptions({ snapThreshold: 12 });
+map.autoCompletePolygon.enable();
+
+const result = await map.ops.autoCompletePolygon({
+  line: [[8, 2], [14, 2], [14, 8], [8, 8]],
+});
+if (!result.ok) showError(result.error);
+else console.log(result.value.createdCount, result.value.features);
+```
+
+The handler enters `'auto-complete'` edit mode and is included in
+`EditToolbar({ advancedTools: true })`. New features are appended to the first
+polygon layer that encloses a new face with the sketch, in source and layer order.
+New attribute records are empty and the existing selection is preserved. A sketch
+can create multiple faces in one undoable operation. Invalid coordinates,
+self-intersections, or sketches that enclose no new face return `validation`
+without modifying data.
+
 ## Split
 
 `splitFeature` submits an interactive cutter to `map.ops.splitSelected()`.

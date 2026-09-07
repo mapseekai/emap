@@ -389,9 +389,15 @@ export async function deletePart(
           }
           const beforeSelection = ctx.host._selection.snapshot();
           const currentRefs = ctx.host._selection.getAll();
-          if (shape.length > 1) {
-            // Shape patch only — the part's arc stays as an orphan.
-            const afterShape = shape.filter((_, partIndex) => partIndex !== index);
+          const exterior = polygon
+            ? collectPolygonExteriors(shape, arcs, adapter).find(
+                (group) => group.exteriorIndex === index,
+              )
+            : undefined;
+          const removedIndexes = new Set([index, ...(exterior?.holeIndexes ?? [])]);
+          const afterShape = shape.filter((_, partIndex) => !removedIndexes.has(partIndex));
+          if (afterShape.length > 0) {
+            // Shape patch only — the removed exterior and hole arcs stay as orphans.
             return {
               value: undefined,
               affectedSourceIds: [sourceId],

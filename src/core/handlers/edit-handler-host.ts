@@ -13,6 +13,7 @@ export interface EditHandlerHost extends SelectionHandlerHost {
     MapshaperOps,
     | 'splitSelected'
     | 'reshapeSelected'
+    | 'autoCompletePolygon'
     | 'addRing'
     | 'deleteRing'
     | 'fillRing'

@@ -25,12 +25,14 @@
         </div>
         <div class="emap-example-row" role="group" aria-label="高级编辑工具">
           <button id="reshape" type="button" class="emap-example-primary-button">整形</button>
+          <button id="auto-complete" type="button">自动完成面</button>
           <button id="add-ring" type="button">挖洞</button>
           <button id="delete-ring" type="button">删洞</button>
           <button id="fill-ring" type="button">填洞</button>
           <button id="add-part" type="button">加部分</button>
           <button id="delete-part" type="button">删部分</button>
         </div>
+        <p class="emap-example-hint">自动完成面：从已有面内或边界起笔，在面外画出新边界，再回到已有面内或边界，右键完成。新面自动沿用已有边界，原面保留。Esc 取消；需要吸附时可先选中参考面。</p>
         <p id="status" class="emap-example-status">请选择一个线或面要素。</p>
       </section>
     </div>
@@ -51,6 +53,7 @@
 
     const fileInput = document.getElementById('file-input');
     const reshape = document.getElementById('reshape');
+    const autoComplete = document.getElementById('auto-complete');
     const addRing = document.getElementById('add-ring');
     const deleteRing = document.getElementById('delete-ring');
     const fillRing = document.getElementById('fill-ring');
@@ -60,6 +63,7 @@
     const ownedSourceIds = new Set();
     const tools = [
       { button: reshape, handler: map.reshapeFeature, mode: 'reshape' },
+      { button: autoComplete, handler: map.autoCompletePolygon, mode: 'auto-complete' },
       { button: addRing, handler: map.ringEdit, mode: 'ring', operation: 'add' },
       { button: deleteRing, handler: map.ringEdit, mode: 'ring', operation: 'delete' },
       { button: fillRing, handler: map.ringEdit, mode: 'ring', operation: 'fill' },

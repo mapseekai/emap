@@ -299,6 +299,8 @@ export { DrawFeatureHandler } from './core/handlers/draw-feature';
 export type { DrawFeatureOptions } from './core/handlers/draw-feature';
 export { SplitFeatureHandler } from './core/handlers/split-feature';
 export { ReshapeFeatureHandler } from './core/handlers/reshape-feature';
+export { AutoCompletePolygonHandler } from './core/handlers/auto-complete-polygon';
+export type { AutoCompletePolygonOptions, AutoCompletePolygonResult } from './map/types';
 export type { ReshapeFeatureOptions } from './core/handlers/reshape-feature';
 export { RingEditHandler } from './core/handlers/ring-edit';
 export type { RingEditOptions } from './core/handlers/ring-edit';

@@ -60,6 +60,7 @@ function fakeMap() {
     drawFeature,
     vertexEdit,
     reshapeFeature,
+    autoCompletePolygon: { ...reshapeFeature, enable: vi.fn(), disable: vi.fn() },
     ringEdit,
     partEdit,
     on: vi.fn(),
@@ -125,7 +126,9 @@ describe('EditToolbar', () => {
     const root = toolbar.onAdd(map as unknown as Emap);
     const buttons = root.querySelectorAll('button');
 
-    expect(buttons).toHaveLength(7);
+    expect(buttons).toHaveLength(8);
+    buttons[7]?.click();
+    expect(map.autoCompletePolygon.enable).toHaveBeenCalledTimes(1);
     buttons[1]?.click();
     expect(map.reshapeFeature.enable).toHaveBeenCalledTimes(1);
     buttons[2]?.click();

@@ -273,6 +273,16 @@ export interface ReshapeSelectedResult {
   reshapedCount: number;
 }
 
+/** Open sketch enclosing new faces against existing polygon boundaries. No selection is required. */
+export interface AutoCompletePolygonOptions {
+  line: [number, number][];
+}
+
+export interface AutoCompletePolygonResult {
+  createdCount: number;
+  features: FeatureRef[];
+}
+
 /** Options controlling a same-layer selected-feature merge. */
 export interface MergeSelectedOptions {
   /**

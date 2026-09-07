@@ -102,6 +102,30 @@ map.reshapeFeature.enable();
 整形任何要素时同样以 `line` 报错。面整形还会拒绝自交或无效的结果（`geometry`）。并发修改
 使预备 mutation 过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
 
+## 自动完成面
+
+`autoCompletePolygon` 沿用整形的画线操作，从已有面的内部或边界起笔，在面外绘制新边界，
+再回到已有面的内部或边界，右键完成；Esc 取消。系统使用草图和已有边界围成独立的新面，
+已有面的形状与属性保持不变，共边复用同一组拓扑弧。无需先选择；可先选中参考面以启用
+与整形相同的顶点、边吸附。
+
+```ts
+map.autoCompletePolygon.setOptions({ snapThreshold: 12 });
+map.autoCompletePolygon.enable();
+
+// 也可直接提交数据坐标中的草图。
+const result = await map.ops.autoCompletePolygon({
+  line: [[8, 2], [14, 2], [14, 8], [8, 8]],
+});
+if (!result.ok) showError(result.error);
+else console.log(result.value.createdCount, result.value.features);
+```
+
+工具进入 `'auto-complete'` 编辑模式，也包含在 `EditToolbar({ advancedTools: true })` 中。
+新要素追加到第一个能与草图围成新面的面图层（按数据源和图层顺序），属性记录为空，
+原有选择保留。一次草图围成多个新面时一起创建，作为一次撤销/重做操作。
+无法围合、仅穿过已有面内部、自交或坐标无效的草图返回 `validation`，不修改数据。
+
 ## 拆分
 
 `splitFeature` 把交互式 cutter 提交给 `map.ops.splitSelected()`。先在同一 source 和 layer

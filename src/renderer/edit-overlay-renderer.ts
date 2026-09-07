@@ -38,6 +38,7 @@ export class EditOverlayRenderer {
       (editMode === 'draw' ||
         editMode === 'split' ||
         editMode === 'reshape' ||
+        editMode === 'auto-complete' ||
         editMode === 'ring' ||
         editMode === 'part') &&
       drawState

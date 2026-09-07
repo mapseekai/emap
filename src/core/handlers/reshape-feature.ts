@@ -4,6 +4,8 @@ import type { ArcCollection, ArcVertexData, PathShape } from '../../types/mapsha
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
+import type { EditMode } from '../../map/edit-state-store';
+import type { OpResult } from '../../map/op-result';
 
 export interface ReshapeFeatureOptions {
   snapThreshold?: number;
@@ -22,7 +24,8 @@ type SelectionContext = {
  * Selection is not required: the line reshapes every feature it contacts.
  */
 export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
-  readonly name = 'reshapeFeature';
+  readonly name: string = 'reshapeFeature';
+  protected readonly _editMode: EditMode = 'reshape';
   private _enabled = false;
   private _opts: ReshapeFeatureOptions;
   private _generation = 0;
@@ -34,13 +37,13 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
 
   constructor(
-    private readonly _map: EditHandlerHost,
+    protected readonly _map: EditHandlerHost,
     options: ReshapeFeatureOptions = {},
   ) {
     this._opts = { ...options };
     this._session = this._createSession();
     this._map.on('editmodechange', (event: { mode: string }) => {
-      if (event.mode !== 'reshape' && this._enabled) this._quietDisable();
+      if (event.mode !== this._editMode && this._enabled) this._quietDisable();
     });
   }
 
@@ -48,7 +51,7 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     if (this._enabled) return;
     this._generation++;
     this._enabled = true;
-    this._map.setEditMode('reshape');
+    this._map.setEditMode(this._editMode);
     window.addEventListener('keydown', this._onKeyDownBound);
     this._manager?.refreshCursor();
   }
@@ -213,12 +216,16 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     return true;
   }
 
+  protected _execute(vertices: [number, number][]): Promise<OpResult<unknown>> {
+    return this._map.ops.reshapeSelected({ line: vertices });
+  }
+
   private async _submit(vertices: [number, number][]): Promise<void> {
     if (this._submissionGeneration === this._generation || vertices.length === 0) return;
     const generation = this._generation;
     this._submissionGeneration = generation;
     try {
-      const result = await this._map.ops.reshapeSelected({ line: vertices });
+      const result = await this._execute(vertices);
       if (generation === this._generation && !result.ok)
         this._map.fire('error', { error: result.error });
     } finally {
