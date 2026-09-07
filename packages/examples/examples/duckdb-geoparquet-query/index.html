@@ -176,23 +176,20 @@
         return geoParquetQuerySource;
       }
 
-      function createMapOpContext() {
-        return {
-          getSource(id) {
-            if (id === SOURCE_ID) {
-              return {
-                getBytes: () => geoParquetBytes,
-                getDataset: () => null,
-                getGeoParquetQuerySource: () => geoParquetQuerySource,
-              };
-            }
-            return contextSources.get(id);
-          },
-          setSourceDataset(id, dataset) {
-            contextSources.set(id, { getDataset: () => dataset });
-          },
-        };
-      }
+      const inputMapOpSource = {
+        getBytes: () => geoParquetBytes,
+        getDataset: () => null,
+        getGeoParquetQuerySource: () => geoParquetQuerySource,
+      };
+      const mapOpContext = {
+        getSource(id) {
+          if (id === SOURCE_ID) return hasGeoParquetInput() ? inputMapOpSource : undefined;
+          return contextSources.get(id);
+        },
+        setSourceDataset(id, dataset) {
+          contextSources.set(id, { getDataset: () => dataset });
+        },
+      };
 
       async function runGeoParquetQuery() {
         if (!hasGeoParquetInput()) {
@@ -211,7 +208,7 @@
           };
           let resultDataset;
           if (entrypointSelect.value === "mapop") {
-            const result = await duckDbGeoParquetQueryLayer(createMapOpContext(), {
+            const result = await duckDbGeoParquetQueryLayer(mapOpContext, {
               src: SOURCE_ID,
               ...opts,
               output: { sourceId: OUTPUT_ID },

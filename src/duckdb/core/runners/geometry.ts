@@ -2,19 +2,19 @@ import type { MapshaperDataset } from '../../../types/mapshaper-types';
 import {
   arrowResultToDataset,
   datasetToArrowInput,
-  requireDuckDbRuntime,
-  runDuckDbPipeline,
+  requireRuntime,
+  runPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import { buildUnaryGeometrySql } from '../sql/geometry';
 
-export interface DuckDbUnaryGeometryOptions {
+export interface UnaryGeometryRunnerOptions {
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
 }
 
-export interface DuckDbGeometryOperation {
+export interface GeometryOperation {
   id: string;
   duckDbFunction: string;
   args?: readonly number[];
@@ -23,15 +23,15 @@ export interface DuckDbGeometryOperation {
 /** Shared unary-geometry runner used by geometry and proximity tools. */
 export async function runUnaryGeometryTool(
   dataset: MapshaperDataset,
-  opts: DuckDbUnaryGeometryOptions,
-  operation: DuckDbGeometryOperation,
+  opts: UnaryGeometryRunnerOptions,
+  operation: GeometryOperation,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
+  const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const input = datasetToArrowInput(dataset, { layer: opts.layer, geometryColumn }, operation.id);
 
-  return runDuckDbPipeline({
+  return runPipeline({
     label: operation.id,
     runtime: rt,
     inputs: [{ table: input, prefix: 'emap_duckdb_geometry_input' }],

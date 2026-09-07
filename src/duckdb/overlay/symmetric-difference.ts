@@ -5,7 +5,15 @@ import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: SymmetricDifferenceOptions = { outputLayer: 'symmetric_difference' };
+ */
 export type SymmetricDifferenceOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await symmetricDifference(left, right, { outputLayer: 'symmetric_difference' });
+ */
 export function symmetricDifference(
   input: MapshaperDataset,
   overlay: MapshaperDataset,

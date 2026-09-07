@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { distanceRelation } from '../core/relation/operations';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: NearOptions = { outputDistanceColumn: 'distance_to_road' };
+ */
 export interface NearOptions {
   inputLayer?: string | number;
   referenceLayer?: string | number;
@@ -12,6 +16,10 @@ export interface NearOptions {
   outputDistanceColumn?: string;
   failOnGeographicCrs?: boolean;
 }
+/**
+ * @example
+ * const result = await near(buildings, roads, { outputDistanceColumn: 'distance_to_road' });
+ */
 export function near(
   input: MapshaperDataset,
   reference: MapshaperDataset,

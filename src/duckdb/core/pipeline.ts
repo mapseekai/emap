@@ -1,4 +1,5 @@
 import type { Table } from 'apache-arrow';
+import { resolveLayerInList } from '../../map/layer-registry';
 import { toArrowTable } from '../../arrow/dataset-to-table';
 import { fromArrowTable } from '../../arrow/table-to-dataset';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
@@ -8,7 +9,7 @@ import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
 
 const tableNameSequences = new Map<string, number>();
 
-export function nextDuckDbTableName(prefix: string): string {
+export function nextTableName(prefix: string): string {
   const next = (tableNameSequences.get(prefix) ?? 0) + 1;
   tableNameSequences.set(prefix, next);
   return `${prefix}_${next}`;
@@ -24,7 +25,7 @@ export function tableFieldNames(table: Table): string[] {
 
 export { resolveUniqueColumnName, resolveTableColumnName } from '../../arrow/dataset-to-table';
 
-export interface DuckDbPipelineMessages {
+export interface PipelineMessages {
   runtimeUnavailable: string;
   spatialUnavailable: string;
   inputConversion: string;
@@ -33,7 +34,7 @@ export interface DuckDbPipelineMessages {
   cleanupFailed: string;
 }
 
-export function duckDbPipelineMessages(label: string): DuckDbPipelineMessages {
+export function pipelineMessages(label: string): PipelineMessages {
   return {
     runtimeUnavailable: 'DuckDB runtime is not available',
     spatialUnavailable: 'DuckDB spatial extension is unavailable',
@@ -44,14 +45,14 @@ export function duckDbPipelineMessages(label: string): DuckDbPipelineMessages {
   };
 }
 
-export function requireDuckDbRuntime(
+export function requireRuntime(
   runtime: DuckDbRuntime | null,
-  messages?: Partial<DuckDbPipelineMessages>,
+  messages?: Partial<PipelineMessages>,
 ): DuckDbRuntime {
   if (!runtime) {
     throw new DuckDbOperationError(
       'runtime-unavailable',
-      messages?.runtimeUnavailable ?? duckDbPipelineMessages('').runtimeUnavailable,
+      messages?.runtimeUnavailable ?? pipelineMessages('').runtimeUnavailable,
     );
   }
   return runtime;
@@ -69,11 +70,9 @@ export function datasetToArrowInput(
       geometryColumn: opts.geometryColumn ?? 'geometry',
     });
   } catch (err) {
-    throw new DuckDbOperationError(
-      'conversion-failed',
-      duckDbPipelineMessages(label).inputConversion,
-      { cause: err },
-    );
+    throw new DuckDbOperationError('conversion-failed', pipelineMessages(label).inputConversion, {
+      cause: err,
+    });
   }
 }
 
@@ -90,29 +89,50 @@ export function arrowResultToDataset(
     });
     return inheritPrimaryDatasetCrs(converted, primaryDataset);
   } catch (err) {
-    throw new DuckDbOperationError(
-      'conversion-failed',
-      duckDbPipelineMessages(label).resultConversion,
-      { cause: err },
-    );
+    throw new DuckDbOperationError('conversion-failed', pipelineMessages(label).resultConversion, {
+      cause: err,
+    });
   }
 }
 
-export interface DuckDbPipelineInput {
+/** Restore the known input type only when a geometry-preserving result has no typed geometry. */
+export function preserveEmptyGeometryType(
+  result: MapshaperDataset,
+  input: MapshaperDataset,
+  opts: { layer?: string | number; outputLayer?: string },
+): MapshaperDataset {
+  const inputLayer =
+    typeof opts.layer === 'string'
+      ? resolveLayerInList(input.layers, opts.layer)
+      : input.layers[opts.layer ?? 0];
+  if (!inputLayer?.geometry_type) return result;
+  if (result.layers.length === 0) {
+    result.layers.push({ name: opts.outputLayer ?? 'layer', shapes: [] });
+  }
+  for (const layer of result.layers) {
+    if (!layer.geometry_type) {
+      layer.geometry_type = inputLayer.geometry_type;
+      layer.shapes = new Array(layer.data?.getRecords?.().length ?? 0).fill(null);
+    }
+  }
+  return result;
+}
+
+export interface PipelineInput {
   table: Table;
   prefix: string;
 }
 
-export async function runDuckDbPipeline<T>(operation: {
+export async function runPipeline<T>(operation: {
   label: string;
   runtime: DuckDbRuntime;
   requiresSpatial?: boolean;
-  inputs: readonly DuckDbPipelineInput[];
+  inputs: readonly PipelineInput[];
   buildSql: (tableNames: readonly string[]) => string;
   convertResult?: (result: Table) => T;
-  messages?: Partial<DuckDbPipelineMessages>;
+  messages?: Partial<PipelineMessages>;
 }): Promise<T> {
-  const messages = { ...duckDbPipelineMessages(operation.label), ...operation.messages };
+  const messages = { ...pipelineMessages(operation.label), ...operation.messages };
 
   if (operation.requiresSpatial !== false) {
     try {
@@ -130,7 +150,7 @@ export async function runDuckDbPipeline<T>(operation: {
   try {
     conn = await operation.runtime.connect();
     for (const input of operation.inputs) {
-      const name = nextDuckDbTableName(input.prefix);
+      const name = nextTableName(input.prefix);
       tableNames.push(name);
       await conn.insertArrowTable(input.table, { name });
     }

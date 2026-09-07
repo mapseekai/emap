@@ -11,6 +11,7 @@ import {
   reportViolations,
 } from './docs-check-utils.mjs';
 import { readFile } from 'node:fs/promises';
+import { collectApiLinkViolations } from './check-api-links.mjs';
 import { relative, resolve } from 'node:path';
 
 const root = parseRootArg();
@@ -73,6 +74,8 @@ for (const violation of collectModuleFillerViolations(reflections)) {
 for (const violation of await collectModulePageFillerViolations(root)) {
   violations.push(violation);
 }
+
+violations.push(...await collectApiLinkViolations(root, [...zhDocs.values(), ...enDocs.values()]));
 
 reportViolations(violations);
 

@@ -61,15 +61,9 @@ jobs:
           test "$RELEASE_TAG" = "v$VERSION"
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run format:check
-      - run: pnpm run typecheck
-      - run: pnpm run build
-      - run: pnpm run bundle:smoke
-      - run: pnpm run test:run
-      - run: pnpm run test:duckdb
-      - run: pnpm run docs:verify
-      - run: pnpm pack --dry-run
-      - run: pnpm run audit:prod
+      - run: pnpm run browser:install
+      - name: Verify this release checkout and its publishable artifacts
+        run: pnpm run release:verify
 
       - name: Publish package
         run: npm publish --access public --ignore-scripts

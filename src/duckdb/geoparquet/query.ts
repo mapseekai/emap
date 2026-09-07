@@ -16,13 +16,13 @@ export interface DuckDbGeoParquetQuerySource {
   close(): Promise<void>;
 }
 
-let duckDbGeoParquetQuerySequence = 0;
+let querySequence = 0;
 
-function nextDuckDbGeoParquetQueryNames(): { fileName: string; viewName: string } {
-  duckDbGeoParquetQuerySequence += 1;
+function nextQueryNames(): { fileName: string; viewName: string } {
+  querySequence += 1;
   return {
-    fileName: `emap_duckdb_geoparquet_${duckDbGeoParquetQuerySequence}.parquet`,
-    viewName: `emap_duckdb_geoparquet_input_${duckDbGeoParquetQuerySequence}`,
+    fileName: `emap_duckdb_geoparquet_${querySequence}.parquet`,
+    viewName: `emap_duckdb_geoparquet_input_${querySequence}`,
   };
 }
 
@@ -65,7 +65,7 @@ async function cleanupGeoParquetQuerySource(
   }
 }
 
-async function queryGeoParquetViewWithDuckDb(
+async function queryGeoParquetView(
   conn: Awaited<ReturnType<DuckDbRuntime['connect']>>,
   viewName: string,
   availableColumns: readonly string[],
@@ -131,7 +131,7 @@ export async function createDuckDbGeoParquetQuerySource(
   }
 
   const bytes = normalizeBytes(data);
-  const { fileName, viewName } = nextDuckDbGeoParquetQueryNames();
+  const { fileName, viewName } = nextQueryNames();
   let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
   let closed = false;
 
@@ -155,7 +155,7 @@ export async function createDuckDbGeoParquetQuerySource(
             'DuckDB GeoParquet query source is closed',
           );
         }
-        return queryGeoParquetViewWithDuckDb(conn!, viewName, availableColumns, opts);
+        return queryGeoParquetView(conn!, viewName, availableColumns, opts);
       },
       async close(): Promise<void> {
         if (closed) return;

@@ -6,7 +6,15 @@ import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import type { RelationOperationId } from '../core/relation/types';
 
+/**
+ * @example
+ * const predicate: SpatialJoinPredicate = 'intersects';
+ */
 export type SpatialJoinPredicate = Exclude<RelationOperationId, 'distance' | 'distanceWithin'>;
+/**
+ * @example
+ * const options: SpatialJoinOptions = { predicate: 'contains', joinType: 'left' };
+ */
 export interface SpatialJoinOptions extends ProcessingOptions {
   predicate?: SpatialJoinPredicate;
   joinType?: 'left' | 'inner';
@@ -24,6 +32,10 @@ const FUNCTIONS: Record<SpatialJoinPredicate, string> = {
   coveredBy: 'ST_CoveredBy',
   containsProperly: 'ST_ContainsProperly',
 };
+/**
+ * @example
+ * const result = await spatialJoin(polygons, points, { predicate: 'contains' });
+ */
 export function spatialJoin(
   input: MapshaperDataset,
   join: MapshaperDataset,

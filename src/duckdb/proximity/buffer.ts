@@ -6,6 +6,10 @@ import { runUnaryGeometryTool } from '../core/runners/geometry';
 import type { ProcessingOptions } from '../core/types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: BufferOptions = { distance: 10 };
+ */
 export interface BufferOptions extends ProcessingOptions {
   distance: number;
   failOnGeographicCrs?: boolean;
@@ -29,6 +33,10 @@ export function normalizeBufferOptions(
     );
   return { ...options, geometryColumn: options.geometryColumn ?? 'geometry', failOnGeographicCrs };
 }
+/**
+ * @example
+ * const result = await buffer(dataset, { distance: 10 });
+ */
 export async function buffer(
   input: MapshaperDataset,
   options: BufferOptions,

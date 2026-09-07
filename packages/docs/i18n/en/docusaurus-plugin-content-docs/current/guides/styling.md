@@ -5,7 +5,7 @@ title: Styling layers
 api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: unreleased
 ---
 
 # Styling layers
@@ -89,7 +89,7 @@ map.addLayer({
 
 | Property | Type | Description |
 |---|---|---|
-| `line-color` | `string` | Any Canvas-compatible color string; defaults to `#1e88e5` |
+| `line-color` | `string \| StyleExpression` | A Canvas-compatible color or supported attribute expression; defaults to `#1e88e5` |
 | `line-width` | `number` | Stroke width; defaults to `0.8`; use `0` to disable the stroke |
 | `line-dasharray` | `number[]` | Alternating dash and gap lengths such as `[8, 4]`; omit it or use an empty array for a solid line |
 | `line-dashstyle` | `solid \| dash \| dot \| dash-dot \| arrow-dot` | Named line style; `arrow-dot` replaces the dots in a dash-dot line with repeated directional arrows |
@@ -189,7 +189,7 @@ These methods schedule rendering. Do not mutate the object returned by
 
 ## Attribute-driven styling
 
-Since 0.9.0, fill, line, and circle layers support attribute-driven colors.
+In the current development version (not yet released), fill, line, and circle layers support attribute-driven colors.
 All paths are **explicit opt-ins** and never change the behavior of layers that
 do not declare them.
 
@@ -297,7 +297,7 @@ read `fill`, while line reads `stroke`.
 - [FillPaint](/mapseekai/emap/api/interfaces/emap.FillPaint.html)
 - [LinePaint](/mapseekai/emap/api/interfaces/emap.LinePaint.html)
 - [CirclePaint](/mapseekai/emap/api/interfaces/emap.CirclePaint.html)
-- [LayerSpecification](/mapseekai/emap/api/interfaces/emap.LayerSpecification.html)
+- [LayerSpecification](/mapseekai/emap/api/types/emap.LayerSpecification.html)
 
 ## Runnable examples
 

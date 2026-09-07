@@ -197,7 +197,7 @@ const PREDICATE_FUNCTIONS = [
   'ST_ContainsProperly',
 ] as const;
 
-type BuildSpatialAggregateJoinSql = (opts: {
+type BuildSpatialSummaryJoinSql = (opts: {
   targetTableName: string;
   joinTableName: string;
   targetGeometryColumn: string;
@@ -212,21 +212,20 @@ type BuildSpatialAggregateJoinSql = (opts: {
 }) => string;
 
 const buildSql = () =>
-  (duckDbSql as Record<string, unknown>)
-    .buildSpatialAggregateJoinSql as BuildSpatialAggregateJoinSql;
+  (duckDbSql as Record<string, unknown>).buildSpatialSummaryJoinSql as BuildSpatialSummaryJoinSql;
 
-describe('buildSpatialAggregateJoinSql', () => {
+describe('buildSpatialSummaryJoinSql', () => {
   it('exports the canonical summary-join helper from the DuckDB barrel', () => {
     expect(duckDb.spatialSummaryJoin).toBeTypeOf('function');
   });
 
   it('exports the builder', () => {
-    expect((duckDbSql as Record<string, unknown>).buildSpatialAggregateJoinSql).toBeTypeOf(
+    expect((duckDbSql as Record<string, unknown>).buildSpatialSummaryJoinSql).toBeTypeOf(
       'function',
     );
   });
 
-  it.each(PREDICATE_FUNCTIONS)('builds the %s aggregate join plan', (duckDbFunction) => {
+  it.each(PREDICATE_FUNCTIONS)('builds the %s summary join plan', (duckDbFunction) => {
     const sql = buildSql()({
       targetTableName: 'target',
       joinTableName: 'join',

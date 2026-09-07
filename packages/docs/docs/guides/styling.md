@@ -5,13 +5,13 @@ title: 样式图层
 api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: unreleased
 ---
 
 # 样式图层
 
 Emap 的样式模型直接对应 Canvas 绘制基元，只有 `fill`、`line` 和 `circle`
-三种图层类型。`fill-color` 支持下文列出的受限 `StyleExpression` 子集，但不追求
+三种图层类型。`fill-color`、`line-color` 和 `circle-color` 支持下文列出的受限 `StyleExpression` 子集，但不追求
 完整 MapLibre 样式表达式系统；数据计算和呈现仍保持分离。
 
 ## 图层结构
@@ -88,7 +88,7 @@ map.addLayer({
 
 | 属性 | 类型 | 说明 |
 |---|---|---|
-| `line-color` | `string` | Canvas 可识别的颜色字符串，默认为 `#1e88e5` |
+| `line-color` | `string \| StyleExpression` | Canvas 可识别的颜色字符串或受支持的属性表达式，默认为 `#1e88e5` |
 | `line-width` | `number` | 线宽，默认为 `0.8`；设置为 `0` 时不绘制描边 |
 | `line-dasharray` | `number[]` | 交替的实线和间隔长度，例如 `[8, 4]`；省略或传空数组时绘制实线 |
 | `line-dashstyle` | `solid \| dash \| dot \| dash-dot \| arrow-dot` | 命名线型；`arrow-dot` 用重复方向箭头替代点划线中的点 |
@@ -184,7 +184,7 @@ map.removeLayer('district-outline');
 
 ## 属性驱动样式
 
-自 0.9.0 起，fill / line / circle 图层都支持属性驱动颜色，均为**显式 opt-in**，
+当前开发版本（尚未发布）的 fill / line / circle 图层都支持属性驱动颜色，均为**显式 opt-in**，
 不改变未声明图层的任何行为。
 
 ### classifyFeatures：分级烘焙
@@ -284,7 +284,7 @@ fill / line / circle 图层都支持颜色表达式与烘焙字段 opt-in，见�
 - [FillPaint](/mapseekai/emap/api/interfaces/emap.FillPaint.html)
 - [LinePaint](/mapseekai/emap/api/interfaces/emap.LinePaint.html)
 - [CirclePaint](/mapseekai/emap/api/interfaces/emap.CirclePaint.html)
-- [LayerSpecification](/mapseekai/emap/api/interfaces/emap.LayerSpecification.html)
+- [LayerSpecification](/mapseekai/emap/api/types/emap.LayerSpecification.html)
 
 ## 可运行示例
 

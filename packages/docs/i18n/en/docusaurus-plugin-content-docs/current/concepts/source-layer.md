@@ -231,7 +231,7 @@ guard is type-level; JavaScript, `any`, and explicit assertions can bypass it.
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 - [ITopologySource](/mapseekai/emap/api/interfaces/emap.ITopologySource.html)
-- [LayerSpecification](/mapseekai/emap/api/interfaces/emap.LayerSpecification.html)
+- [LayerSpecification](/mapseekai/emap/api/types/emap.LayerSpecification.html)
 - [ExportOptions](/mapseekai/emap/api/interfaces/emap.ExportOptions.html)
 
 ## Runnable examples

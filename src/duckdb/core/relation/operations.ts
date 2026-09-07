@@ -1,7 +1,7 @@
 import type { MapshaperDataset } from '../../../types/mapshaper-types';
-import { isGeographicCrs } from '../../../geo/crs-resolver';
+import { assertProjectedCrs } from '../dataset-crs';
 import { DuckDbOperationError } from '../../errors';
-import { runRelationTool, type DuckDbRelationOperation } from '../runners/relation';
+import { runRelationTool, type RelationOperation } from '../runners/relation';
 import type { BinaryRelationOptions } from '../types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import {
@@ -50,11 +50,9 @@ function assertProjectedCrsForDistance(
   options: RelationOptions,
 ): void {
   if (options.failOnGeographicCrs === false) return;
-  if (!isGeographicCrs(inputDataset) && !isGeographicCrs(maskDataset)) return;
-  throw new DuckDbOperationError(
-    'validation',
+  assertProjectedCrs(
+    [inputDataset, maskDataset],
     'DuckDB distance relation operations require a projected CRS',
-    { field: 'crs' },
   );
 }
 
@@ -76,7 +74,7 @@ export function runTopologicalRelation(
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   const operationDefinition = RELATION_OPERATIONS[operationId];
-  const operation: DuckDbRelationOperation =
+  const operation: RelationOperation =
     mode === 'filter'
       ? { id: operationId, mode, duckDbFunction: operationDefinition.duckDbFunction }
       : {
@@ -97,7 +95,7 @@ export function runDistanceWithinRelation(
 ): Promise<MapshaperDataset> {
   const distance = requireDistance(options.distance);
   assertProjectedCrsForDistance(inputDataset, maskDataset, options);
-  const operation: DuckDbRelationOperation =
+  const operation: RelationOperation =
     mode === 'filter'
       ? { id: 'distanceWithin', mode, duckDbFunction: 'ST_Distance', distance }
       : {

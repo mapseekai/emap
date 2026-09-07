@@ -112,7 +112,7 @@ function validateFrontMatterValues(doc, localeName) {
       reason: `${localeName} stability ${stability} is not valid for ${id}`,
     });
   }
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(verifiedVersion)) {
+  if (verifiedVersion !== 'unreleased' && !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(verifiedVersion)) {
     violations.push({
       path: relativePath(root, doc.path),
       reason: `${localeName} verifiedVersion ${verifiedVersion} is not valid for ${id}`,

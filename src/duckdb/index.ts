@@ -1,18 +1,40 @@
 // Infrastructure
-export * from './errors';
-export * from './runtime';
-export * from './core/query-sql';
-export * from './geoparquet';
+export { DuckDbOperationError } from './errors';
+export type { DuckDbOperationErrorKind } from './errors';
+export {
+  setDuckDbRuntime,
+  getDuckDbRuntime,
+  closeDuckDbRuntime,
+  quoteSqlString,
+  createDuckDbRuntimeFromJsDelivr,
+} from './runtime';
+export type {
+  DuckDbConnection,
+  DuckDbRuntime,
+  DuckDbWasmModule,
+  DuckDbSpatialExtensionUrls,
+  CreateDuckDbRuntimeOptions,
+} from './runtime';
+export { validateDuckDbSelectSql } from './core/query-sql';
+export type {
+  ValidateDuckDbSelectSqlOptions,
+  ValidatedDuckDbSelectSql,
+  ValidatedDuckDbSelectSqlWithRowId,
+  ValidatedDuckDbSelectSqlWithoutRowId,
+} from './core/query-sql';
+export { createDuckDbGeoParquetQuerySource, queryGeoParquetWithDuckDb } from './geoparquet';
+export type { DuckDbGeoParquetQueryOptions, DuckDbGeoParquetQuerySource } from './geoparquet';
 
 // Agent/UI/workflow processing registry
-export * from './toolbox';
+export { duckDbToolbox } from './toolbox';
+export type { DuckDbToolId } from './toolbox';
 export type {
   DuckDbToolDefinition,
   DuckDbToolExecutionContext,
-  DuckDbToolInputSpec,
-  DuckDbToolParameterSpec,
-  DuckDbToolObjectPropertySpec,
-  DuckDbToolOutputSpec,
+  DuckDbToolInput,
+  DuckDbToolParameter,
+  DuckDbToolObjectProperty,
+  DuckDbToolOutput,
   DuckDbAgentMetadata,
   DuckDbToolCategory,
 } from './core/tool-definition';
@@ -87,29 +109,20 @@ export {
 } from './attributes';
 export type { AttributeOptions } from './attributes';
 
-// Advanced map/source adapters. New applications should prefer toolbox.execute()
+// Advanced map/source adapters. New applications should prefer duckDbToolbox.execute()
 // or the short dataset functions above.
 export {
   duckDbAttributeFilterLayer,
-  duckDbGeometryLayer,
-  duckDbRelationLayer,
   duckDbSpatialSummaryJoinLayer,
-  duckDbAttributeLayer,
   duckDbGeoParquetQueryLayer,
   duckDbOverlayLayer,
 } from './map-operations';
 export type {
   DuckDbMapOpSource,
   DuckDbMapOpContext,
-  DuckDbGeometryLayerOptions,
-  DuckDbAttributeLayerOptions,
-  DuckDbRelationLayerOptions,
   DuckDbSpatialSummaryJoinLayerOptions,
   DuckDbAttributeFilterLayerOptions,
   DuckDbGeoParquetQueryLayerOptions,
-  DuckDbGeometryLayerResult,
-  DuckDbAttributeLayerResult,
-  DuckDbRelationLayerResult,
   DuckDbSpatialSummaryJoinLayerResult,
   DuckDbAttributeFilterLayerResult,
   DuckDbGeoParquetQueryLayerResult,

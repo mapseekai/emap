@@ -185,17 +185,16 @@
         return runtimePromise;
       }
 
-      function createMapOpContext() {
-        return {
-          getSource(id) {
-            if (id === SOURCE_ID) return { getDataset: () => inputDataset };
-            return contextSources.get(id);
-          },
-          setSourceDataset(id, dataset) {
-            contextSources.set(id, { getDataset: () => dataset });
-          },
-        };
-      }
+      const inputMapOpSource = { getDataset: () => inputDataset };
+      const mapOpContext = {
+        getSource(id) {
+          if (id === SOURCE_ID) return inputDataset ? inputMapOpSource : undefined;
+          return contextSources.get(id);
+        },
+        setSourceDataset(id, dataset) {
+          contextSources.set(id, { getDataset: () => dataset });
+        },
+      };
 
       fileInput.addEventListener("change", async () => {
         const file = fileInput.files?.[0];
@@ -249,7 +248,7 @@
           };
           let resultDataset;
           if (entrypointSelect.value === "mapop") {
-            const result = await duckDbAttributeFilterLayer(createMapOpContext(), {
+            const result = await duckDbAttributeFilterLayer(mapOpContext, {
               src: SOURCE_ID,
               ...opts,
               output: { sourceId: OUTPUT_ID },

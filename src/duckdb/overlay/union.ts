@@ -5,7 +5,15 @@ import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: UnionOptions = { outputLayer: 'union' };
+ */
 export type UnionOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await union(left, right, { outputLayer: 'union' });
+ */
 export function union(
   input: MapshaperDataset,
   overlay: MapshaperDataset,

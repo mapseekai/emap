@@ -4,6 +4,20 @@ Use this checklist before publishing or handing off the documentation platform.
 It records the static outputs, required gates, and manual evidence expected for
 the docs, examples, and API surfaces.
 
+## Version and Commit
+
+Review and commit the intended worktree changes before creating a release tag. The tag must
+match `package.json` and point at the commit whose complete release gate passed. This checklist
+does not itself bump versions, create tags, or publish packages.
+
+Use `verifiedVersion: unreleased` for guides describing unreleased work. Before tagging,
+replace it with the actual version validated for that release and promote the matching
+`CHANGELOG.md` entries. A numeric future version must not stand in for an unpublished release.
+
+CI runs the complete gate in `Core quality and build` and retains `Minimum Node compatibility`.
+Update any repository rules that previously required the retired per-area jobs before merging.
+The publication workflow independently runs the complete gate on its checked-out release tag.
+
 ## Static Outputs
 
 - Documentation site: `packages/docs/build/`.
@@ -17,32 +31,35 @@ the docs, examples, and API surfaces.
 
 ## Required Gates
 
-Run the release verification chain from a clean checkout:
+Run the same verification used by CI, `prepublishOnly`, and the publication workflow:
 
 ```bash
-npm run format:check
-npm run typecheck
-npm run api:check-surface
-npm run test:run
-npm run build
-npm run bundle:smoke
-npm run test:duckdb
-npm run test:browser
-npm run examples:build
-npm run docs:build
-npm run docs:compose-examples
-npm run docs:check-i18n
-npm run docs:check-api
-npm run examples:check
-pnpm pack --dry-run
-npm run audit:prod
+pnpm install --frozen-lockfile
+pnpm run browser:install
+pnpm run release:verify
 ```
 
-`npm run docs:verify` must also pass because it chains `typecheck`,
+`release:verify` stops at the first failed gate and reuses one production build:
+
+| Stage | Gates |
+| --- | --- |
+| Source | `format:check`, `typecheck`, `api:check-surface` |
+| Package | `build`, `bundle:smoke`, `test:run`, `test:duckdb` |
+| Documentation | `examples:build`, `docs:build`, `docs:compose-examples` |
+| Documentation contracts | `docs:check-i18n`, `docs:check-api`, `examples:check` |
+| Real browsers | `browser:check`: Playwright plus Canvas pixel checks in Chrome, Firefox, and WebKit |
+| Distribution | `pnpm pack --dry-run`, `audit:prod` |
+
+For focused debugging, `test:browser` rebuilds examples before Playwright and `test:rendering`
+rebuilds the package before the pixel checks. The release gate uses `browser:check` instead,
+which requires the earlier build stages and forces all three rendering backends.
+`docs:check-api` checks generated API page and anchor targets in both documentation languages.
+
+For documentation-only work, `npm run docs:verify` chains `typecheck`,
 `api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
 `docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` generates
 the TypeDoc API reference before Docusaurus starts, so callers do not need a
-second `api:build` step.
+second `api:build` step. The complete release gate already includes these stages.
 
 `npm run audit:prod` fails closed when the registry cannot return a complete
 report. The only temporary exceptions are the exact advisory IDs and

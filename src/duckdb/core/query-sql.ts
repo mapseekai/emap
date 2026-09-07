@@ -1,6 +1,10 @@
 import { DuckDbOperationError } from '../errors';
 import { quoteIdentifier } from './pipeline';
 
+/**
+ * @example
+ * const options: ValidateDuckDbSelectSqlOptions = { availableColumns: ['name'], physicalTableName: 'input_table' };
+ */
 export interface ValidateDuckDbSelectSqlOptions {
   allowGeometryProjection?: boolean;
   availableColumns: readonly string[];
@@ -10,16 +14,28 @@ export interface ValidateDuckDbSelectSqlOptions {
   rowIdColumn?: string | null;
 }
 
+/**
+ * @example
+ * const validated: ValidatedDuckDbSelectSql = validateDuckDbSelectSql('SELECT name FROM input', options);
+ */
 export interface ValidatedDuckDbSelectSql {
   outputColumns: string[];
   rowIdColumn: string | null;
   sql: string;
 }
 
+/**
+ * @example
+ * const validated = validateDuckDbSelectSql('SELECT name FROM input', { ...options, rowIdColumn: '__emap_rowid' });
+ */
 export interface ValidatedDuckDbSelectSqlWithRowId extends ValidatedDuckDbSelectSql {
   rowIdColumn: string;
 }
 
+/**
+ * @example
+ * const validated = validateDuckDbSelectSql('SELECT name FROM input', { ...options, rowIdColumn: null });
+ */
 export interface ValidatedDuckDbSelectSqlWithoutRowId extends ValidatedDuckDbSelectSql {
   rowIdColumn: null;
 }
@@ -59,6 +75,10 @@ const UNSUPPORTED_KEYWORD_PATTERNS = [
   /\bread_parquet\s*\(/i,
 ];
 
+/**
+ * @example
+ * const query = validateDuckDbSelectSql('SELECT name FROM input', { availableColumns: ['name'], physicalTableName: 'input_table' });
+ */
 export function validateDuckDbSelectSql(
   sql: string,
   opts: ValidateDuckDbSelectSqlOptions & { rowIdColumn: null },

@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a unified browser-side DuckDB Processing Toolbox covering Overlay, Proximity, Aggregate, Join, Geometry, Transform, Selection, Data Management, and Attribute tools. `DUCKDB_TOOLBOX` is the canonical Agent/UI/workflow registry and all tools reuse the shared Arrow → DuckDB-Wasm → dataset pipeline.
-- Added the canonical short processing APIs, including `spatialRelation`, `spatialJoin`, and `spatialSummaryJoin`, with Agent-oriented metadata, semantic aliases, parameter schemas, and a unified `executeDuckDbTool()` entry point.
+- Added `release:verify` as the single complete gate for CI, local npm publication,
+  and release-tag publication, including the real-browser and Canvas pixel checks.
+  Generated API page and anchor links are now validated in both documentation languages.
+- Added regression coverage for null geometries, nearest-neighbor field collisions,
+  deterministic ordering, stale writeback, literal tool IDs, and required output destinations.
+- Added a unified browser-side DuckDB Processing Toolbox covering Overlay, Proximity, Aggregate, Join, Geometry, Transform, Selection, Data Management, and Attribute tools. `duckDbToolbox` is the canonical Agent/UI/workflow registry and all tools reuse the shared Arrow → DuckDB-Wasm → dataset pipeline.
+- Added the canonical short processing APIs, including `spatialRelation`, `spatialJoin`, and `spatialSummaryJoin`, with Agent-oriented metadata, semantic aliases, parameter schemas, and a unified `duckDbToolbox.execute()` entry point.
 - Added `map.ops.fillRing()` and the `fill` mode of `map.ringEdit` to turn an
   existing polygon hole into a new feature that reuses the hole's boundary
   arcs. The advanced edit toolbar now exposes a **Fill Hole** action, and the
@@ -34,6 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the DuckDB tool metadata types drop the `Spec` suffix:
+  `DuckDbToolInputSpec` → `DuckDbToolInput`, `DuckDbToolParameterSpec` →
+  `DuckDbToolParameter`, `DuckDbToolObjectPropertySpec` → `DuckDbToolObjectProperty`,
+  and `DuckDbToolOutputSpec` → `DuckDbToolOutput`.
+
+- **Breaking:** all four DuckDB map-adapter options now require `output.sourceId`.
+  `DuckDbMapOpContext.setSourceDataset` must commit synchronously and return `undefined`;
+  reuse a stable context/source collection so source versions and request generations can
+  be validated atomically before writeback. Stale results return `stale-operation`.
+- `DuckDbToolId` now preserves the literal union of actual tool IDs instead of widening
+  to `string`. `near` and `nearest` reject unknown CRS by default; `nearest` also rejects
+  geographic CRS and conflicting output column names.
+- Unreleased documentation uses the explicit `verifiedVersion: unreleased` marker rather
+  than claiming validation against a future version. See `docs/release-checklist.md` before tagging.
 - Ring and multipart operations (`addRing`, `deleteRing`, `addPart`,
   `deletePart`, and `fillRing`) now commit reversible in-place commands instead
   of replacing an entire dataset. Consecutive edits preserve dataset identity,
@@ -71,7 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **Breaking:** removed all legacy DuckDB executor/registry APIs and `xxxDatasetWithDuckDb` helper names from `@mapseekai/emap/duckdb`. Migrate directly to the final short APIs such as `attributeFilter`, `intersect`, `clip`, `repairGeometry`, `spatialJoin`, `spatialSummaryJoin`, and `spatialRelation`; map adapters use `duckDbAttributeFilterLayer` and `duckDbSpatialSummaryJoinLayer`. The old registry/executor implementation paths are no longer part of the runtime architecture.
+- Removed the unshipped, unused DuckDB IIFE build; the published DuckDB entry remains ESM-only.
+- **Breaking:** removed all legacy DuckDB executor/registry APIs and `xxxDatasetWithDuckDb` helper names from `@mapseekai/emap/duckdb`. Migrate directly to the final short APIs such as `attributeFilter`, `intersect`, `clip`, `repairGeometry`, `spatialJoin`, `spatialSummaryJoin`, and `spatialRelation`. Toolbox discovery/execution is now exposed only through `duckDbToolbox.*`; the duplicate `DUCKDB_TOOLBOX`, `listDuckDbTools`, `getDuckDbTool`, `requireDuckDbTool`, `searchDuckDbTools`, and `executeDuckDbTool` exports were removed. Unused map adapters `duckDbBufferLayer`, `duckDbGeometryLayer`, `duckDbRelationLayer`, and `duckDbAttributeLayer` were also removed; the actively used source/map adapters remain `duckDbAttributeFilterLayer`, `duckDbGeoParquetQueryLayer`, `duckDbOverlayLayer`, and `duckDbSpatialSummaryJoinLayer`. The old registry/executor implementation paths are no longer part of the runtime architecture.
 - Removed the obsolete public exports `quoteCliArg`, `isValidLayerName`,
   `HighlightFeatureRef`, and `LassoStyle`. Internal compatibility aliases,
   string-command runner paths, duplicated control contracts, and superseded arc
@@ -85,6 +105,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- DuckDB reprojection retains null-geometry records, attributes, and the geometry type
+  of all-null or empty inputs instead of silently filtering records out.
+- Nearest-neighbor analysis isolates internal row IDs from user fields, keeps input
+  order, resolves distance ties by reference row order, and returns null matches for
+  empty geometries or an empty reference layer without losing records.
+- DuckDB map adapters reject results after input/output replacement, edits, CRS or
+  byte/query-source changes, or a newer request to the same output. Independent outputs
+  remain concurrent; examples now reuse stable context and source objects.
+- Corrected eight stale API links, point/line styling type documentation, and the
+  documented GitNexus status command.
 - Transaction rollback now reverse-undoes captured in-place commands and reports
   undo failures, so mixed direct-edit and dataset-replacement transactions no
   longer leave partially applied edits behind.

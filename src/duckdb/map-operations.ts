@@ -1,14 +1,8 @@
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import { resolveDatasetCRSMetadata } from '../geo/crs-resolver';
 import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './errors';
-import { buffer, type BufferOptions } from './proximity';
-import type { AttributeOperationId, AttributeOptions } from './attributes';
-import { runNamedRelationOperation, type RelationOptions } from './core/relation/operations';
-import type { RelationOperationId } from './core/relation/types';
-import type { ProcessingOptions } from './core/types';
-import { difference, intersect, type OverlayOptions } from './overlay';
 import type { DuckDbRuntime } from './runtime';
-import { getDuckDbTool } from './toolbox';
 import { attributeFilter, type AttributeFilterOptions } from './selection/attribute-filter';
 import {
   type DuckDbGeoParquetQuerySource,
@@ -16,6 +10,7 @@ import {
   type DuckDbGeoParquetQueryOptions,
 } from './geoparquet';
 import { spatialSummaryJoin, type SpatialSummaryJoinOptions } from './join';
+import { difference, intersect, type OverlayOptions } from './overlay';
 
 export interface DuckDbMapOpSource {
   getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
@@ -23,75 +18,61 @@ export interface DuckDbMapOpSource {
   getGeoParquetQuerySource?(): DuckDbGeoParquetQuerySource | null | undefined;
 }
 
+/** Reuse one context per source collection so concurrent requests share a commit boundary. */
 export interface DuckDbMapOpContext {
+  /** Return stable source/dataset references until that source is replaced. */
   getSource(id: string): DuckDbMapOpSource | null | undefined;
-  setSourceDataset(id: string, dataset: MapshaperDataset): void | Promise<void>;
-}
-
-export interface DuckDbBufferLayerOptions extends BufferOptions {
-  src: string;
-  output?: { sourceId: string };
-  runtime?: DuckDbRuntime;
-}
-
-export interface DuckDbGeometryLayerOptions extends ProcessingOptions {
-  src: string;
-  operation: string;
-  output?: { sourceId: string };
-  runtime?: DuckDbRuntime;
-  tolerance?: number;
-  failOnGeographicCrs?: boolean;
-}
-
-export interface DuckDbAttributeLayerOptions extends AttributeOptions {
-  src: string;
-  operation: AttributeOperationId | string;
-  output?: { sourceId: string };
-  runtime?: DuckDbRuntime;
-}
-
-export interface DuckDbRelationLayerOptions extends RelationOptions {
-  src: string;
-  mask: string;
-  mode: 'filter' | 'attribute' | string;
-  operation: RelationOperationId | string;
-  output?: { sourceId: string };
-  runtime?: DuckDbRuntime;
+  /**
+   * Commit synchronously, without starting deferred writes. Async processing happens
+   * before this call; the version check and write must be in the same JS turn.
+   * `undefined` deliberately excludes async functions (unlike a `void` callback).
+   */
+  setSourceDataset(id: string, dataset: MapshaperDataset): undefined;
 }
 
 export interface DuckDbSpatialSummaryJoinLayerOptions extends SpatialSummaryJoinOptions {
   src: string;
   join: string;
-  output?: { sourceId: string };
+  output: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
 
 export interface DuckDbAttributeFilterLayerOptions extends AttributeFilterOptions {
   src: string;
-  output?: { sourceId: string };
+  output: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
 
 export interface DuckDbGeoParquetQueryLayerOptions extends DuckDbGeoParquetQueryOptions {
   src: string;
-  output?: { sourceId: string };
+  output: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
 
-interface DuckDbLayerSuccess {
+export interface DuckDbOverlayLayerOptions {
+  src: string;
+  mask: string;
+  operation: 'intersect' | 'difference' | string;
+  inputLayer?: string | number;
+  maskLayer?: string | number;
+  inputGeometryColumn?: string;
+  maskGeometryColumn?: string;
+  outputLayer?: string;
+  output: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
+interface LayerSuccess {
   sourceId: string;
   dataset: MapshaperDataset;
 }
 
-export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbSpatialSummaryJoinLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbAttributeFilterLayerResult = OpResult<DuckDbLayerSuccess>;
-export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbSpatialSummaryJoinLayerResult = OpResult<LayerSuccess>;
+export type DuckDbAttributeFilterLayerResult = OpResult<LayerSuccess>;
+export type DuckDbGeoParquetQueryLayerResult = OpResult<LayerSuccess>;
+export type DuckDbOverlayLayerResult = OpResult<LayerSuccess>;
 
-function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
+function errorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError) {
     return Err.duckdb(operation, err.kind, err.message, {
       ...(err.field === undefined ? {} : { field: err.field }),
@@ -128,34 +109,85 @@ function outputSourceId(output: { sourceId: string } | undefined): string | OpRe
   return sourceId;
 }
 
-async function runDuckDbLayerOp(
+// Weak ownership keeps completed contexts collectible; target-local tokens allow
+// independent outputs to execute concurrently while making the latest request win.
+const pendingOutputs = new WeakMap<DuckDbMapOpContext, Map<string, object>>();
+
+function captureSource(ctx: DuckDbMapOpContext, id: string) {
+  const source = ctx.getSource(id) ?? null;
+  const dataset = source?.getDataset() ?? null;
+  const editVersion = dataset?.editVersion ?? 0;
+  const attributeVersion = dataset?.attributeVersion ?? 0;
+  const crs = resolveDatasetCRSMetadata(dataset ?? undefined);
+  const bytes = source?.getBytes?.() ?? null;
+  const querySource = source?.getGeoParquetQuerySource?.() ?? null;
+  return {
+    id,
+    isCurrent: () =>
+      (ctx.getSource(id) ?? null) === source &&
+      (source?.getDataset() ?? null) === dataset &&
+      (dataset?.editVersion ?? 0) === editVersion &&
+      (dataset?.attributeVersion ?? 0) === attributeVersion &&
+      resolveDatasetCRSMetadata(dataset ?? undefined) === crs &&
+      (source?.getBytes?.() ?? null) === bytes &&
+      (source?.getGeoParquetQuerySource?.() ?? null) === querySource,
+  };
+}
+
+async function runSourceOp(
   ctx: DuckDbMapOpContext,
-  opts: { src: string; output?: { sourceId: string } },
+  inputs: readonly string[],
+  sourceId: string,
+  operation: string,
+  run: () => Promise<MapshaperDataset>,
+): Promise<OpResult<LayerSuccess>> {
+  let outputs = pendingOutputs.get(ctx);
+  if (!outputs) {
+    outputs = new Map();
+    pendingOutputs.set(ctx, outputs);
+  }
+  const token = {};
+  outputs.set(sourceId, token);
+  try {
+    const snapshots = [...new Set([...inputs, sourceId])].map((id) => captureSource(ctx, id));
+    const dataset = await run();
+    if (outputs.get(sourceId) !== token) return Err.staleOperation(sourceId, operation);
+    for (const snapshot of snapshots) {
+      if (!snapshot.isCurrent()) return Err.staleOperation(snapshot.id, operation);
+    }
+    // No await between validation and mutation: the setter is synchronous by contract.
+    ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return errorToOpResult(err, operation);
+  } finally {
+    if (outputs.get(sourceId) === token) outputs.delete(sourceId);
+    if (outputs.size === 0 && pendingOutputs.get(ctx) === outputs) pendingOutputs.delete(ctx);
+  }
+}
+
+async function runLayerOp(
+  ctx: DuckDbMapOpContext,
+  opts: { src: string; output: { sourceId: string } },
   errorOperation: string,
   run: (dataset: MapshaperDataset) => Promise<MapshaperDataset>,
-): Promise<OpResult<DuckDbLayerSuccess>> {
+): Promise<OpResult<LayerSuccess>> {
   const input = readInputDataset(ctx, opts.src);
   if (!input.ok) return input.result;
 
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
-  try {
-    const dataset = await run(input.dataset);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, errorOperation);
-  }
+  return runSourceOp(ctx, [opts.src], sourceId, errorOperation, () => run(input.dataset));
 }
 
-async function runDuckDbBinaryLayerOp(
+async function runBinaryLayerOp(
   ctx: DuckDbMapOpContext,
-  opts: { src: string; output?: { sourceId: string }; mask?: string; join?: string },
+  opts: { src: string; output: { sourceId: string }; mask?: string; join?: string },
   maskField: 'mask' | 'join',
   errorOperation: string,
   run: (inputDataset: MapshaperDataset, maskDataset: MapshaperDataset) => Promise<MapshaperDataset>,
-): Promise<OpResult<DuckDbLayerSuccess>> {
+): Promise<OpResult<LayerSuccess>> {
   const input = readInputDataset(ctx, opts.src);
   if (!input.ok) return input.result;
 
@@ -165,21 +197,8 @@ async function runDuckDbBinaryLayerOp(
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
-  try {
-    const dataset = await run(input.dataset, mask.dataset);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, errorOperation);
-  }
-}
-
-export function duckDbBufferLayer(
-  ctx: DuckDbMapOpContext,
-  opts: DuckDbBufferLayerOptions,
-): Promise<DuckDbBufferLayerResult> {
-  return runDuckDbLayerOp(ctx, opts, 'duckdb-buffer', (dataset) =>
-    buffer(dataset, opts, opts.runtime),
+  return runSourceOp(ctx, [opts.src, opts[maskField]!], sourceId, errorOperation, () =>
+    run(input.dataset, mask.dataset),
   );
 }
 
@@ -187,112 +206,8 @@ export function duckDbAttributeFilterLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbAttributeFilterLayerOptions,
 ): Promise<DuckDbAttributeFilterLayerResult> {
-  return runDuckDbLayerOp(ctx, opts, 'duckdb-attribute-filter', (dataset) =>
+  return runLayerOp(ctx, opts, 'duckdb-attribute-filter', (dataset) =>
     attributeFilter(dataset, opts, opts.runtime),
-  );
-}
-
-function attributeOptions(opts: DuckDbAttributeLayerOptions): AttributeOptions {
-  return {
-    layer: opts.layer,
-    outputLayer: opts.outputLayer,
-    geometryColumn: opts.geometryColumn,
-    outputColumn: opts.outputColumn,
-    failOnGeographicCrs: opts.failOnGeographicCrs,
-  };
-}
-
-function relationOptions(opts: DuckDbRelationLayerOptions): RelationOptions {
-  return {
-    inputLayer: opts.inputLayer,
-    maskLayer: opts.maskLayer,
-    outputLayer: opts.outputLayer,
-    inputGeometryColumn: opts.inputGeometryColumn,
-    maskGeometryColumn: opts.maskGeometryColumn,
-    outputColumn: opts.outputColumn,
-    distance: opts.distance,
-    failOnGeographicCrs: opts.failOnGeographicCrs,
-  };
-}
-
-function runGeometryOperation(
-  dataset: MapshaperDataset,
-  opts: DuckDbGeometryLayerOptions,
-): Promise<MapshaperDataset> {
-  const tool = getDuckDbTool(opts.operation);
-  if (!tool || (tool.category !== 'geometry' && tool.id !== 'repairGeometry')) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB geometry operation '${opts.operation}'`,
-      { field: 'operation' },
-    );
-  }
-  return tool.execute({
-    inputs: { input: dataset },
-    params: {
-      layer: opts.layer,
-      outputLayer: opts.outputLayer,
-      geometryColumn: opts.geometryColumn,
-      tolerance: opts.tolerance,
-      failOnGeographicCrs: opts.failOnGeographicCrs,
-    },
-    runtime: opts.runtime,
-  });
-}
-
-function runAttributeOperation(
-  dataset: MapshaperDataset,
-  opts: DuckDbAttributeLayerOptions,
-): Promise<MapshaperDataset> {
-  const tool = getDuckDbTool(opts.operation);
-  if (!tool || tool.category !== 'attributes') {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB attribute operation '${opts.operation}'`,
-      { field: 'operation' },
-    );
-  }
-  return tool.execute({
-    inputs: { input: dataset },
-    params: { ...attributeOptions(opts) },
-    runtime: opts.runtime,
-  });
-}
-
-export function runRelationOperation(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationLayerOptions,
-): Promise<MapshaperDataset> {
-  return runNamedRelationOperation(
-    opts.mode,
-    opts.operation,
-    inputDataset,
-    maskDataset,
-    relationOptions(opts),
-    opts.runtime,
-  );
-}
-
-export function duckDbGeometryLayer(
-  ctx: DuckDbMapOpContext,
-  opts: DuckDbGeometryLayerOptions,
-): Promise<DuckDbGeometryLayerResult> {
-  return runDuckDbLayerOp(ctx, opts, `duckdb-${opts.operation}`, (dataset) =>
-    runGeometryOperation(dataset, opts),
-  );
-}
-
-export function duckDbRelationLayer(
-  ctx: DuckDbMapOpContext,
-  opts: DuckDbRelationLayerOptions,
-): Promise<DuckDbRelationLayerResult> {
-  return runDuckDbBinaryLayerOp(
-    ctx,
-    opts,
-    'mask',
-    `duckdb-relation-${opts.operation}`,
-    (input, mask) => runRelationOperation(input, mask, opts),
   );
 }
 
@@ -300,17 +215,8 @@ export function duckDbSpatialSummaryJoinLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbSpatialSummaryJoinLayerOptions,
 ): Promise<DuckDbSpatialSummaryJoinLayerResult> {
-  return runDuckDbBinaryLayerOp(ctx, opts, 'join', 'duckdb-spatial-summary-join', (target, join) =>
+  return runBinaryLayerOp(ctx, opts, 'join', 'duckdb-spatial-summary-join', (target, join) =>
     spatialSummaryJoin(target, join, opts, opts.runtime),
-  );
-}
-
-export function duckDbAttributeLayer(
-  ctx: DuckDbMapOpContext,
-  opts: DuckDbAttributeLayerOptions,
-): Promise<DuckDbAttributeLayerResult> {
-  return runDuckDbLayerOp(ctx, opts, `duckdb-${opts.operation}`, (dataset) =>
-    runAttributeOperation(dataset, opts),
   );
 }
 
@@ -349,31 +255,12 @@ export async function duckDbGeoParquetQueryLayer(
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
-  try {
-    const dataset = input.querySource
-      ? await input.querySource.query(opts)
-      : await queryGeoParquetWithDuckDb(input.bytes, opts, opts.runtime);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, 'duckdb-geoparquet-query');
-  }
+  return runSourceOp(ctx, [opts.src], sourceId, 'duckdb-geoparquet-query', () =>
+    input.querySource
+      ? input.querySource.query(opts)
+      : queryGeoParquetWithDuckDb(input.bytes, opts, opts.runtime),
+  );
 }
-
-export interface DuckDbOverlayLayerOptions {
-  src: string;
-  mask: string;
-  operation: 'intersect' | 'difference' | string;
-  inputLayer?: string | number;
-  maskLayer?: string | number;
-  inputGeometryColumn?: string;
-  maskGeometryColumn?: string;
-  outputLayer?: string;
-  output?: { sourceId: string };
-  runtime?: DuckDbRuntime;
-}
-
-export type DuckDbOverlayLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function overlayOptions(opts: DuckDbOverlayLayerOptions): OverlayOptions {
   return {
@@ -407,11 +294,7 @@ export function duckDbOverlayLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbOverlayLayerOptions,
 ): Promise<DuckDbOverlayLayerResult> {
-  return runDuckDbBinaryLayerOp(
-    ctx,
-    opts,
-    'mask',
-    `duckdb-${opts.operation}-overlay`,
-    (input, mask) => runOverlayOperation(input, mask, opts),
+  return runBinaryLayerOp(ctx, opts, 'mask', `duckdb-${opts.operation}-overlay`, (input, mask) =>
+    runOverlayOperation(input, mask, opts),
   );
 }

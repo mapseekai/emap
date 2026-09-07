@@ -1,11 +1,19 @@
 import { tableToIPC, type Table } from 'apache-arrow';
 
+/**
+ * @example
+ * const connection: DuckDbConnection = await runtime.connect();
+ */
 export interface DuckDbConnection {
   insertArrowTable(table: Table, opts: { name: string }): Promise<void>;
   query(sql: string): Promise<Table>;
   close?(): Promise<void>;
 }
 
+/**
+ * @example
+ * const runtime: DuckDbRuntime = await createDuckDbRuntimeFromJsDelivr();
+ */
 export interface DuckDbRuntime {
   connect(): Promise<DuckDbConnection>;
   ensureSpatial(): Promise<void>;
@@ -14,9 +22,18 @@ export interface DuckDbRuntime {
   close?(): Promise<void>;
 }
 
+/**
+ * @example
+ * const duckdb: DuckDbWasmModule = await import('@duckdb/duckdb-wasm');
+ */
 export type DuckDbWasmModule = typeof import('@duckdb/duckdb-wasm');
 
-/** Self-hosted DuckDB spatial extension `.wasm` URLs, one per DuckDB-Wasm bundle platform. */
+/**
+ * Self-hosted DuckDB spatial extension `.wasm` URLs, one per DuckDB-Wasm bundle platform.
+ *
+ * @example
+ * const urls: DuckDbSpatialExtensionUrls = { eh: '/duckdb/spatial-eh.wasm' };
+ */
 export interface DuckDbSpatialExtensionUrls {
   /** Spatial extension URL for the `eh` (exception-handling) bundle. */
   eh?: string;
@@ -26,6 +43,10 @@ export interface DuckDbSpatialExtensionUrls {
   coi?: string;
 }
 
+/**
+ * @example
+ * const options: CreateDuckDbRuntimeOptions = { customExtensionRepository: '/duckdb/extensions' };
+ */
 export interface CreateDuckDbRuntimeOptions {
   duckdb?: DuckDbWasmModule;
   customExtensionRepository?: string;
@@ -61,15 +82,28 @@ const SPATIAL_EXTENSION_FILE = 'spatial.duckdb_extension.wasm';
 
 let injectedRuntime: DuckDbRuntime | null = null;
 
+/**
+ * @example
+ * setDuckDbRuntime(await createDuckDbRuntimeFromJsDelivr());
+ */
 export function setDuckDbRuntime(runtime: DuckDbRuntime | null): void {
   injectedRuntime = runtime;
 }
 
-/** Return the injected DuckDB runtime, or `null` when none has been configured. */
+/**
+ * Return the injected DuckDB runtime, or `null` when none has been configured.
+ *
+ * @example
+ * const runtime = getDuckDbRuntime();
+ */
 export function getDuckDbRuntime(): DuckDbRuntime | null {
   return injectedRuntime;
 }
 
+/**
+ * @example
+ * await closeDuckDbRuntime();
+ */
 export async function closeDuckDbRuntime(
   runtime: DuckDbRuntime | null = injectedRuntime,
 ): Promise<void> {
@@ -82,6 +116,10 @@ async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {
   return import('@duckdb/duckdb-wasm');
 }
 
+/**
+ * @example
+ * const literal = quoteSqlString("O'Reilly");
+ */
 export function quoteSqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
@@ -178,6 +216,10 @@ async function terminateDuckDbRuntime(db: DuckDbWasmDatabaseLike, worker: Worker
   }
 }
 
+/**
+ * @example
+ * const runtime = await createDuckDbRuntimeFromJsDelivr();
+ */
 export async function createDuckDbRuntimeFromJsDelivr(
   opts: CreateDuckDbRuntimeOptions = {},
 ): Promise<DuckDbRuntime> {

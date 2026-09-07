@@ -3,9 +3,9 @@ import { toArrowTable } from '../../arrow/dataset-to-table';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from '../core/dataset-crs';
 import { DuckDbOperationError } from '../errors';
-import { resolveUniqueColumnName, runDuckDbPipeline } from '../core/pipeline';
+import { resolveUniqueColumnName, runPipeline } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
-import { buildSpatialAggregateJoinSql } from './_spatial-summary-sql';
+import { buildSpatialSummaryJoinSql } from './_spatial-summary-sql';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import {
   aggregateRowsByTargetId,
@@ -33,6 +33,10 @@ export type {
   SpatialAggregation,
 } from './_spatial-summary-types';
 
+/**
+ * @example
+ * const result = await spatialSummaryJoin(polygons, points, { predicate: 'contains', aggregations: [{ operation: 'count', outputColumn: 'point_count' }] });
+ */
 export async function spatialSummaryJoin(
   targetDataset: MapshaperDataset,
   joinDataset: MapshaperDataset,
@@ -68,7 +72,7 @@ export async function spatialSummaryJoin(
   if (!runtime) {
     throw new DuckDbOperationError(
       'runtime-unavailable',
-      'DuckDB spatial aggregate join runtime is not available',
+      'DuckDB spatial summary join runtime is not available',
     );
   }
 
@@ -122,7 +126,7 @@ export async function spatialSummaryJoin(
     if (err instanceof DuckDbOperationError) throw err;
     throw new DuckDbOperationError(
       'conversion-failed',
-      'DuckDB spatial aggregate join input could not be converted to Arrow',
+      'DuckDB spatial summary join input could not be converted to Arrow',
       { cause: err },
     );
   }
@@ -139,18 +143,18 @@ export async function spatialSummaryJoin(
     );
   }
 
-  return runDuckDbPipeline({
-    label: 'spatial aggregate join',
+  return runPipeline({
+    label: 'spatial summary join',
     runtime,
     messages: {
-      spatialUnavailable: 'DuckDB spatial aggregate join spatial extension is unavailable',
+      spatialUnavailable: 'DuckDB spatial summary join spatial extension is unavailable',
     },
     inputs: [
       { table: targetTable!, prefix: 'emap_duckdb_spatial_aggregate_target' },
       { table: joinTable, prefix: 'emap_duckdb_spatial_aggregate_join' },
     ],
     buildSql: ([targetTableName, joinTableName]) =>
-      buildSpatialAggregateJoinSql({
+      buildSpatialSummaryJoinSql({
         targetTableName: targetTableName!,
         joinTableName: joinTableName!,
         targetGeometryColumn,
@@ -181,7 +185,7 @@ export async function spatialSummaryJoin(
       } catch (err) {
         throw new DuckDbOperationError(
           'conversion-failed',
-          'DuckDB spatial aggregate join result could not be converted to a dataset',
+          'DuckDB spatial summary join result could not be converted to a dataset',
           { cause: err },
         );
       }

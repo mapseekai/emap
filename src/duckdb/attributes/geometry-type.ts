@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
+/**
+ * @example
+ * const result = await geometryType(dataset, { outputColumn: 'geometry_type' });
+ */
 export function geometryType(
   input: MapshaperDataset,
   options: AttributeOptions = {},

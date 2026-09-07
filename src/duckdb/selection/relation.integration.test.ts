@@ -3,7 +3,7 @@ import { tableToIPC, type Table } from 'apache-arrow';
 import type * as DuckDBBundles from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, describe, expect, it } from 'vitest';
 import { datasetFromGeoJSON } from '../../arrow/test-utils';
-import type MapshaperDataset from '../../types/mapshaper-types';
+import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
 import {
   distanceRelation,
@@ -116,7 +116,7 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
   let spatialReady: Promise<void> | null = null;
 
   function wrapConnection(): DuckDbConnection {
-    const conn = db.connect() as BlockingDuckDbConnectionLike;
+    const conn = db.connect() as unknown as BlockingDuckDbConnectionLike;
     return {
       async insertArrowTable(table, opts) {
         conn.insertArrowFromIPCStream(tableToIPC(table), {

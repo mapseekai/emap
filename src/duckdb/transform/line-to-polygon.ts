@@ -4,6 +4,10 @@ import { aggregateSql, runSingleInputTool } from '../core/runners/processing';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import type { AggregateOptions } from '../aggregate/types';
+/**
+ * @example
+ * const result = await lineToPolygon(lines, { groupBy: ['zone'] });
+ */
 export function lineToPolygon(
   input: MapshaperDataset,
   options: AggregateOptions = {},

@@ -6,11 +6,7 @@ import { datasetFromGeoJSON } from '../../../arrow/test-utils';
 import { parseGeoMetadata } from '../../../arrow/geoparquet-metadata';
 import type MapshaperDataset from '../../../types/mapshaper-types';
 import { DuckDbOperationError } from '../../errors';
-import {
-  runRelationTool,
-  resolveRelationOutputColumn,
-  type DuckDbRelationOperation,
-} from './relation';
+import { runRelationTool, resolveRelationOutputColumn, type RelationOperation } from './relation';
 import type { DuckDbConnection, DuckDbRuntime } from '../../runtime';
 
 const INPUT_FC = {
@@ -63,13 +59,13 @@ const INTERSECTS_SPEC = {
   id: 'intersects',
   mode: 'filter',
   duckDbFunction: 'ST_Intersects',
-} as const satisfies DuckDbRelationOperation;
+} as const satisfies RelationOperation;
 
 const INTERSECTS_ATTRIBUTE_SPEC = {
   id: 'intersects',
   mode: 'attribute',
   duckDbFunction: 'ST_Intersects',
-} as const satisfies DuckDbRelationOperation;
+} as const satisfies RelationOperation;
 
 async function inputDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   const dataset = await datasetFromGeoJSON(INPUT_FC);

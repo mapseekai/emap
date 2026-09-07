@@ -5,6 +5,10 @@ import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import type { AggregateOptions } from './types';
 
+/**
+ * @example
+ * const result = await collect(dataset, { groupBy: ['category'] });
+ */
 export function collect(
   input: MapshaperDataset,
   options: AggregateOptions = {},

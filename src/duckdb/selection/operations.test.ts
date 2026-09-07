@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
-import { runRelationTool, type DuckDbRelationOperation } from '../core/runners/relation';
+import { runRelationTool, type RelationOperation } from '../core/runners/relation';
 import { DuckDbOperationError } from '../errors';
 import type { DuckDbRuntime } from '../runtime';
 import { getRelationOperation, runNamedRelationOperation } from '../core/relation/operations';
@@ -32,11 +32,11 @@ function dataset(crs = 'EPSG:3857'): MapshaperDataset {
   } as unknown as MapshaperDataset;
 }
 
-function lastRelationOperation(): DuckDbRelationOperation {
-  return runRelationToolMock.mock.calls.at(-1)?.[3] as DuckDbRelationOperation;
+function lastRelationOperation(): RelationOperation {
+  return runRelationToolMock.mock.calls.at(-1)?.[3] as RelationOperation;
 }
 
-function relationSql(operation: DuckDbRelationOperation): string {
+function relationSql(operation: RelationOperation): string {
   const baseSqlOptions = {
     inputTableName: 'input_table',
     maskTableName: 'mask_table',

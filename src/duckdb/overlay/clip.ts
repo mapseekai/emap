@@ -4,8 +4,16 @@ import type { DuckDbRuntime } from '../runtime';
 import { getDuckDbRuntime } from '../runtime';
 import { intersect, type IntersectOptions } from './intersect';
 
+/**
+ * @example
+ * const options: ClipOptions = { outputLayer: 'clipped' };
+ */
 export type ClipOptions = IntersectOptions;
 
+/**
+ * @example
+ * const result = await clip(input, mask, { outputLayer: 'clipped' });
+ */
 export function clip(
   input: MapshaperDataset,
   mask: MapshaperDataset,

@@ -5,10 +5,10 @@ import { DuckDbOperationError } from '../../errors';
 import {
   arrowResultToDataset,
   datasetToArrowInput,
-  duckDbPipelineMessages,
-  requireDuckDbRuntime,
+  pipelineMessages,
+  requireRuntime,
   resolveTableColumnName,
-  runDuckDbPipeline,
+  runPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import {
@@ -17,40 +17,39 @@ import {
   type RelationDuckDbFunction,
 } from '../sql/relation';
 
-export type DuckDbRelationMode = 'filter' | 'attribute';
-export type DuckDbRelationOutputKind = 'predicate' | 'distance';
+export type RelationMode = 'filter' | 'attribute';
+export type RelationOutputKind = 'predicate' | 'distance';
 
-interface DuckDbRelationOperationBase {
+interface RelationOperationBase {
   id: string;
 }
 
-export interface DuckDbRelationFilterPredicateOperation extends DuckDbRelationOperationBase {
+export interface RelationFilterPredicateOperation extends RelationOperationBase {
   mode: 'filter';
   duckDbFunction: RelationDuckDbFunction;
 }
 
-export interface DuckDbRelationFilterDistanceWithinOperation extends DuckDbRelationOperationBase {
+export interface RelationFilterDistanceWithinOperation extends RelationOperationBase {
   mode: 'filter';
   duckDbFunction: 'ST_Distance';
   distance: number;
 }
 
-export interface DuckDbRelationAttributePredicateOperation extends DuckDbRelationOperationBase {
+export interface RelationAttributePredicateOperation extends RelationOperationBase {
   mode: 'attribute';
   duckDbFunction: RelationDuckDbFunction;
   output?: 'predicate';
   outputColumn?: string;
 }
 
-export interface DuckDbRelationAttributeDistanceOperation extends DuckDbRelationOperationBase {
+export interface RelationAttributeDistanceOperation extends RelationOperationBase {
   mode: 'attribute';
   duckDbFunction: 'ST_Distance';
   output: 'distance';
   outputColumn?: string;
 }
 
-export interface DuckDbRelationAttributeDistanceWithinOperation
-  extends DuckDbRelationOperationBase {
+export interface RelationAttributeDistanceWithinOperation extends RelationOperationBase {
   mode: 'attribute';
   duckDbFunction: 'ST_Distance';
   output?: 'predicate';
@@ -58,14 +57,14 @@ export interface DuckDbRelationAttributeDistanceWithinOperation
   distance: number;
 }
 
-export type DuckDbRelationOperation =
-  | DuckDbRelationFilterPredicateOperation
-  | DuckDbRelationFilterDistanceWithinOperation
-  | DuckDbRelationAttributePredicateOperation
-  | DuckDbRelationAttributeDistanceOperation
-  | DuckDbRelationAttributeDistanceWithinOperation;
+export type RelationOperation =
+  | RelationFilterPredicateOperation
+  | RelationFilterDistanceWithinOperation
+  | RelationAttributePredicateOperation
+  | RelationAttributeDistanceOperation
+  | RelationAttributeDistanceWithinOperation;
 
-export interface DuckDbRelationOptions {
+export interface RelationRunnerOptions {
   inputLayer?: string | number;
   maskLayer?: string | number;
   outputLayer?: string;
@@ -79,8 +78,8 @@ export function resolveRelationOutputColumn(table: Table, requestedName: string)
 }
 
 function relationOutputColumn(
-  opts: DuckDbRelationOptions,
-  operation: DuckDbRelationOperation,
+  opts: RelationRunnerOptions,
+  operation: RelationOperation,
 ): string | undefined {
   if (operation.mode !== 'attribute') return undefined;
   const requestedOutputColumn =
@@ -98,11 +97,11 @@ function relationOutputColumn(
 export async function runRelationTool(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationOptions,
-  operation: DuckDbRelationOperation,
+  opts: RelationRunnerOptions,
+  operation: RelationOperation,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
+  const rt = requireRuntime(runtime);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
   const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
   const requestedOutputColumn = relationOutputColumn(opts, operation);
@@ -122,7 +121,7 @@ export async function runRelationTool(
   } catch (err) {
     throw new DuckDbOperationError(
       'conversion-failed',
-      duckDbPipelineMessages(operation.id).inputConversion,
+      pipelineMessages(operation.id).inputConversion,
       { cause: err },
     );
   }
@@ -132,7 +131,7 @@ export async function runRelationTool(
     operation.id,
   );
 
-  return runDuckDbPipeline({
+  return runPipeline({
     label: operation.id,
     runtime: rt,
     inputs: [

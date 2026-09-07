@@ -8,12 +8,16 @@ import { DuckDbOperationError } from '../errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { validateDuckDbSelectSql } from '../core/query-sql';
 import {
-  nextDuckDbTableName,
+  nextTableName,
   quoteIdentifier,
   resolveUniqueColumnName,
   tableFieldNames,
 } from '../core/pipeline';
 
+/**
+ * @example
+ * const options: AttributeFilterOptions = { sql: 'SELECT name FROM input WHERE population > 1000' };
+ */
 export interface AttributeFilterOptions {
   geometryColumn?: string;
   inputLayer?: string | number;
@@ -107,6 +111,10 @@ function rebuildShapes(
   return rowIds.map((rowId) => cloneShape(layer.shapes![rowId] ?? null));
 }
 
+/**
+ * @example
+ * const result = await attributeFilter(dataset, { sql: 'SELECT name FROM input WHERE population > 1000' });
+ */
 export async function attributeFilter(
   dataset: MapshaperDataset,
   opts: AttributeFilterOptions,
@@ -137,7 +145,7 @@ export async function attributeFilter(
     );
   }
 
-  const inputTableName = nextDuckDbTableName('emap_duckdb_query_input');
+  const inputTableName = nextTableName('emap_duckdb_query_input');
   const validated = validateDuckDbSelectSql(opts.sql, {
     availableColumns: tableFieldNames(input),
     geometryColumn,

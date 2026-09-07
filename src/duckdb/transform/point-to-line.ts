@@ -5,9 +5,17 @@ import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import type { AggregateOptions } from '../aggregate/types';
 
+/**
+ * @example
+ * const options: PointToLineOptions = { groupBy: ['route'], orderBy: 'sequence' };
+ */
 export interface PointToLineOptions extends AggregateOptions {
   orderBy?: string;
 }
+/**
+ * @example
+ * const result = await pointToLine(points, { groupBy: ['route'], orderBy: 'sequence' });
+ */
 export function pointToLine(
   input: MapshaperDataset,
   options: PointToLineOptions = {},

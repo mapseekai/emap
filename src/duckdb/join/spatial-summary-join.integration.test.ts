@@ -9,7 +9,7 @@ import { datasetFromGeoJSON } from '../../arrow/test-utils';
 import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
 import { spatialSummaryJoin, type SpatialSummaryJoinPredicate } from './spatial-summary-join';
-import { buildSpatialAggregateJoinSql } from './_spatial-summary-sql';
+import { buildSpatialSummaryJoinSql } from './_spatial-summary-sql';
 
 const describeDuckDbIntegration =
   process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
@@ -40,7 +40,7 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
   let spatialReady: Promise<void> | null = null;
 
   function wrapConnection(): DuckDbConnection {
-    const conn = db.connect() as BlockingDuckDbConnectionLike;
+    const conn = db.connect() as unknown as BlockingDuckDbConnectionLike;
     return {
       async insertArrowTable(table, opts) {
         conn.insertArrowFromIPCStream(tableToIPC(table), { name: opts.name, create: true });
@@ -420,7 +420,7 @@ describeDuckDbIntegration('DuckDB-Wasm spatial summary join integration', () => 
     expect(records(emptyJoinInner)).toEqual([]);
   }, 120_000);
 
-  it('uses DuckDB SPATIAL_JOIN for the generated aggregate join plan', async () => {
+  it('uses DuckDB SPATIAL_JOIN for the generated summary join plan', async () => {
     const duckDbRuntime = await getIntegrationRuntime();
     const target = datasetWithTargetRowIds(await fixtureDataset([square('A', 0, 0, 10, 10)]));
     const join = await fixtureDataset([point('join', [5, 5])]);
@@ -434,7 +434,7 @@ describeDuckDbIntegration('DuckDB-Wasm spatial summary join integration', () => 
     try {
       await conn.insertArrowTable(targetTable, { name: targetTableName });
       await conn.insertArrowTable(joinTable, { name: joinTableName });
-      const sql = buildSpatialAggregateJoinSql({
+      const sql = buildSpatialSummaryJoinSql({
         targetTableName,
         joinTableName,
         targetGeometryColumn: 'geometry',
@@ -451,7 +451,7 @@ describeDuckDbIntegration('DuckDB-Wasm spatial summary join integration', () => 
     } finally {
       await conn.query(`DROP TABLE IF EXISTS "${targetTableName}"`);
       await conn.query(`DROP TABLE IF EXISTS "${joinTableName}"`);
-      await conn.close();
+      await conn.close?.();
     }
   }, 60_000);
 });

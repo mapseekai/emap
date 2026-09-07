@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
+/**
+ * @example
+ * const result = await length(lines, { outputColumn: 'length_m' });
+ */
 export function length(
   input: MapshaperDataset,
   options: AttributeOptions = {},

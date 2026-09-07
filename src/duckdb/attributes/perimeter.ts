@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
+/**
+ * @example
+ * const result = await perimeter(polygons, { outputColumn: 'perimeter_m' });
+ */
 export function perimeter(
   input: MapshaperDataset,
   options: AttributeOptions = {},

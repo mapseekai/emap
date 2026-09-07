@@ -46,6 +46,52 @@ async function requestPreview(handler: PreviewHandler, url: string, method = 'GE
 }
 
 describe('release documentation checklist', () => {
+  it('uses the same complete gate for CI, local publishing, and release publishing', async () => {
+    const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8'));
+    const release = manifest.scripts['release:verify'];
+    expect(manifest.scripts.prepublishOnly).toBe('npm run release:verify');
+    for (const gate of [
+      'format:check',
+      'typecheck',
+      'api:check-surface',
+      'build',
+      'bundle:smoke',
+      'test:run',
+      'test:duckdb',
+      'examples:build',
+      'docs:build',
+      'docs:compose-examples',
+      'docs:check-i18n',
+      'docs:check-api',
+      'examples:check',
+      'browser:check',
+      'audit:prod',
+    ]) {
+      expect(release.split(' && ')).toContain(`npm run ${gate}`);
+    }
+    expect(release).toContain('pnpm pack --dry-run');
+    expect(manifest.scripts['browser:check']).toBe(
+      'playwright test && node scripts/check-audit-rendering.mjs --all-browsers',
+    );
+    const steps = release.split(' && ');
+    expect(steps.indexOf('npm run build')).toBeLessThan(steps.indexOf('npm run test:run'));
+    expect(steps.indexOf('npm run examples:build')).toBeLessThan(
+      steps.indexOf('npm run browser:check'),
+    );
+    for (const workflow of ['ci.yml', 'publish-npm.yml']) {
+      const yaml = await readFile(resolve(process.cwd(), '.github/workflows', workflow), 'utf8');
+      expect(yaml).toContain('run: pnpm run release:verify');
+      expect(yaml.indexOf('run: pnpm run browser:install')).toBeLessThan(
+        yaml.indexOf('run: pnpm run release:verify'),
+      );
+      if (workflow === 'publish-npm.yml') {
+        expect(yaml.indexOf('run: pnpm run release:verify')).toBeLessThan(
+          yaml.indexOf('run: npm publish'),
+        );
+      }
+    }
+  });
+
   it('lists every required release verification gate', async () => {
     const checklist = await readFile(resolve(process.cwd(), 'docs/release-checklist.md'), 'utf8');
     const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8')) as {

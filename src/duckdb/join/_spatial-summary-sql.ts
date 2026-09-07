@@ -12,25 +12,25 @@ export type SpatialSummaryJoinDuckDbFunction =
   | 'ST_CoveredBy'
   | 'ST_ContainsProperly';
 
-type SpatialAggregateSqlOperation = 'count' | 'sum' | 'avg' | 'min' | 'max';
+type SpatialSummarySqlOperation = 'count' | 'sum' | 'avg' | 'min' | 'max';
 
-interface BuildSpatialAggregateJoinAggregation {
-  operation: SpatialAggregateSqlOperation;
+interface BuildSpatialSummaryJoinAggregation {
+  operation: SpatialSummarySqlOperation;
   field?: string;
   outputColumn: string;
 }
 
-export interface BuildSpatialAggregateJoinSqlOptions {
+export interface BuildSpatialSummaryJoinSqlOptions {
   targetTableName: string;
   joinTableName: string;
   targetGeometryColumn: string;
   joinGeometryColumn: string;
   targetRowIdColumn: string;
   duckDbFunction: SpatialSummaryJoinDuckDbFunction;
-  aggregations: readonly BuildSpatialAggregateJoinAggregation[];
+  aggregations: readonly BuildSpatialSummaryJoinAggregation[];
 }
 
-const SPATIAL_AGGREGATE_JOIN_FUNCTIONS = new Set<SpatialSummaryJoinDuckDbFunction>([
+const SPATIAL_SUMMARY_JOIN_FUNCTIONS = new Set<SpatialSummaryJoinDuckDbFunction>([
   'ST_Intersects',
   'ST_Contains',
   'ST_Within',
@@ -43,7 +43,7 @@ const SPATIAL_AGGREGATE_JOIN_FUNCTIONS = new Set<SpatialSummaryJoinDuckDbFunctio
   'ST_ContainsProperly',
 ]);
 
-const SPATIAL_AGGREGATE_SQL_FUNCTIONS: Record<SpatialAggregateSqlOperation, string> = {
+const SPATIAL_SUMMARY_SQL_FUNCTIONS: Record<SpatialSummarySqlOperation, string> = {
   count: 'COUNT',
   sum: 'SUM',
   avg: 'AVG',
@@ -51,14 +51,14 @@ const SPATIAL_AGGREGATE_SQL_FUNCTIONS: Record<SpatialAggregateSqlOperation, stri
   max: 'MAX',
 };
 
-export function buildSpatialAggregateJoinSql(opts: BuildSpatialAggregateJoinSqlOptions): string {
-  if (!SPATIAL_AGGREGATE_JOIN_FUNCTIONS.has(opts.duckDbFunction)) {
+export function buildSpatialSummaryJoinSql(opts: BuildSpatialSummaryJoinSqlOptions): string {
+  if (!SPATIAL_SUMMARY_JOIN_FUNCTIONS.has(opts.duckDbFunction)) {
     throw new Error(
-      `Unsupported spatial aggregate join function: ${JSON.stringify(opts.duckDbFunction)}`,
+      `Unsupported spatial summary join function: ${JSON.stringify(opts.duckDbFunction)}`,
     );
   }
   if (opts.aggregations.length === 0) {
-    throw new Error('At least one spatial aggregate is required');
+    throw new Error('At least one spatial summary aggregation is required');
   }
 
   const targetTableName = quoteIdentifier(opts.targetTableName);
@@ -68,22 +68,22 @@ export function buildSpatialAggregateJoinSql(opts: BuildSpatialAggregateJoinSqlO
   const targetRowIdColumn = quoteIdentifier(opts.targetRowIdColumn);
   const aggregations = opts.aggregations.map((aggregation) => {
     if (
-      !Object.prototype.hasOwnProperty.call(SPATIAL_AGGREGATE_SQL_FUNCTIONS, aggregation.operation)
+      !Object.prototype.hasOwnProperty.call(SPATIAL_SUMMARY_SQL_FUNCTIONS, aggregation.operation)
     ) {
       throw new Error(
-        `Unsupported spatial aggregate operation: ${JSON.stringify(aggregation.operation)}`,
+        `Unsupported spatial summary operation: ${JSON.stringify(aggregation.operation)}`,
       );
     }
     if (aggregation.operation === 'count') {
       if (aggregation.field !== undefined) {
-        throw new Error('Count spatial aggregate must not specify a field');
+        throw new Error('Count spatial summary aggregation must not specify a field');
       }
       return `COUNT(*) AS ${quoteIdentifier(aggregation.outputColumn)}`;
     }
     if (aggregation.field === undefined) {
-      throw new Error(`${aggregation.operation} spatial aggregate requires a field`);
+      throw new Error(`${aggregation.operation} spatial summary aggregation requires a field`);
     }
-    return `${SPATIAL_AGGREGATE_SQL_FUNCTIONS[aggregation.operation]}(j.${quoteIdentifier(
+    return `${SPATIAL_SUMMARY_SQL_FUNCTIONS[aggregation.operation]}(j.${quoteIdentifier(
       aggregation.field,
     )}) AS ${quoteIdentifier(aggregation.outputColumn)}`;
   });

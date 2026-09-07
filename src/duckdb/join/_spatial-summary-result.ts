@@ -50,7 +50,7 @@ export function aggregateRowsByTargetId(
   ];
   for (const name of expectedColumns) {
     if (!resultTable.schema.fields.some((field) => field.name === name)) {
-      throw new Error(`DuckDB spatial aggregate join result is missing column ${name}`);
+      throw new Error(`DuckDB spatial summary join result is missing column ${name}`);
     }
   }
 
@@ -70,10 +70,10 @@ export function aggregateRowsByTargetId(
       rowId < 0 ||
       rowId >= targetRowCount
     ) {
-      throw new Error(`DuckDB spatial aggregate join result has invalid row id at row ${index}`);
+      throw new Error(`DuckDB spatial summary join result has invalid row id at row ${index}`);
     }
     if (rows.has(rowId)) {
-      throw new Error(`DuckDB spatial aggregate join result has duplicate row id ${rowId}`);
+      throw new Error(`DuckDB spatial summary join result has duplicate row id ${rowId}`);
     }
     const values: Record<string, unknown> = {};
     for (const aggregation of aggregations) {

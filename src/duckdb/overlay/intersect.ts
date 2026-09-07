@@ -5,8 +5,16 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { OVERLAY_OPERATIONS } from './_shared';
 import type { OverlayOptions } from './types';
 
+/**
+ * @example
+ * const options: IntersectOptions = { outputLayer: 'intersection' };
+ */
 export type IntersectOptions = OverlayOptions;
 
+/**
+ * @example
+ * const result = await intersect(input, mask, { outputLayer: 'intersection' });
+ */
 export function intersect(
   input: MapshaperDataset,
   mask: MapshaperDataset,

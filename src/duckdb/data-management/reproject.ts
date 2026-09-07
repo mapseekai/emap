@@ -3,13 +3,21 @@ import { resolveDatasetCRSMetadata, setDatasetCrsMetadata } from '../../geo/crs-
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { processingValidation, runSingleInputTool, sqlString } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
-import { quoteIdentifier } from '../core/pipeline';
+import { preserveEmptyGeometryType, quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+/**
+ * @example
+ * const options: ReprojectOptions = { sourceCrs: 'EPSG:4326', targetCrs: 'EPSG:3857' };
+ */
 export interface ReprojectOptions extends ProcessingOptions {
   sourceCrs?: string;
   targetCrs: string;
   alwaysXY?: boolean;
 }
+/**
+ * @example
+ * const result = await reproject(dataset, { sourceCrs: 'EPSG:4326', targetCrs: 'EPSG:3857' });
+ */
 export async function reproject(
   input: MapshaperDataset,
   options: ReprojectOptions,
@@ -26,10 +34,11 @@ export async function reproject(
     (tableName, geometryColumn) => {
       const table = quoteIdentifier(tableName);
       const geom = quoteIdentifier(geometryColumn);
-      return `SELECT\n  * EXCLUDE (${geom}),\n  ST_AsWKB(ST_Transform(${geom}, ${sqlString(sourceCrs)}, ${sqlString(options.targetCrs)}, ${options.alwaysXY === false ? 'false' : 'true'})) AS ${geom}\nFROM ${table}\nWHERE ${geom} IS NOT NULL`;
+      return `SELECT\n  * EXCLUDE (${geom}),\n  ST_AsWKB(ST_Transform(${geom}, ${sqlString(sourceCrs)}, ${sqlString(options.targetCrs)}, ${options.alwaysXY === false ? 'false' : 'true'})) AS ${geom}\nFROM ${table}`;
     },
     runtime,
   );
+  preserveEmptyGeometryType(result, input, options);
   setDatasetCrsMetadata(result, options.targetCrs);
   return result;
 }

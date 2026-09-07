@@ -5,7 +5,7 @@
 // per-op validation, snake_case option-bag assembly, then one
 // `runDatasetCommandParsed` call. Only the variable parts differ per op.
 // This factory owns the skeleton once; each migrated op declares its
-// variables as a {@link LayerOpSpec}.
+// variables as a {@link LayerOpDefinition}.
 //
 // Hook execution order (error precedence is load-bearing — tests assert
 // exact Err kinds/fields):
@@ -34,7 +34,7 @@ import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { OpContext } from './_context';
 
-export interface LayerOpSpec<O extends { source: string; target?: string }> {
+export interface LayerOpDefinition<O extends { source: string; target?: string }> {
   /** Exported op function name, echoed in expression-policy errors. */
   name: string;
   /** mapshaper command head (feeds heads → COMMAND_EFFECTS in _runner). */
@@ -74,10 +74,10 @@ export interface LayerOpSpec<O extends { source: string; target?: string }> {
 }
 
 export function defineLayerOp<O extends { source: string; target?: string }>(
-  spec: LayerOpSpec<O>,
+  def: LayerOpDefinition<O>,
 ): (ctx: OpContext, opts: O) => Promise<OpResult> {
   return async (ctx, opts) => {
-    const early = spec.preResolve?.(opts);
+    const early = def.preResolve?.(opts);
     if (early) return early;
 
     const source = ctx.host._sources.get(opts.source);
@@ -86,33 +86,33 @@ export function defineLayerOp<O extends { source: string; target?: string }>(
     if (!dataset) return Err.notFound('source', opts.source);
 
     let layer: MapshaperLayer | undefined;
-    if (spec.target !== 'optional' || opts.target !== undefined) {
+    if (def.target !== 'optional' || opts.target !== undefined) {
       layer = resolveLayerInList(dataset.layers, opts.target!) ?? undefined;
       if (!layer) return Err.notFound('layer', opts.target!);
     }
-    if (layer && spec.geometry && layer.geometry_type !== spec.geometry) {
+    if (layer && def.geometry && layer.geometry_type !== def.geometry) {
       return Err.validation(
         'target',
-        `expected ${spec.geometry} layer, got ${layer.geometry_type ?? 'unknown'}`,
+        `expected ${def.geometry} layer, got ${layer.geometry_type ?? 'unknown'}`,
       );
     }
 
-    const preGate = spec.preGate?.(opts, layer, dataset);
+    const preGate = def.preGate?.(opts, layer, dataset);
     if (preGate) return preGate;
 
-    const expressions = spec.expressions?.(opts);
-    if (expressions && !ctx.host._allowExpressionEvaluation(expressions, spec.name)) {
-      return Err.expressionDisabled(spec.name);
+    const expressions = def.expressions?.(opts);
+    if (expressions && !ctx.host._allowExpressionEvaluation(expressions, def.name)) {
+      return Err.expressionDisabled(def.name);
     }
 
-    const invalid = spec.validate?.(opts, layer, dataset);
+    const invalid = def.validate?.(opts, layer, dataset);
     if (invalid) return invalid;
 
     const commands: ParsedCommand[] = [];
     if (opts.target !== undefined) {
       commands.push({ name: 'target', options: { target: opts.target } });
     }
-    commands.push({ name: spec.command, options: spec.options(opts, layer) });
-    return ctx.runDatasetCommandParsed(opts.source, commands, spec.label(opts));
+    commands.push({ name: def.command, options: def.options(opts, layer) });
+    return ctx.runDatasetCommandParsed(opts.source, commands, def.label(opts));
   };
 }

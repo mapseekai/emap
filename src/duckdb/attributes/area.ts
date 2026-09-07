@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
+/**
+ * @example
+ * const result = await area(polygons, { outputColumn: 'area_m2' });
+ */
 export function area(
   input: MapshaperDataset,
   options: AttributeOptions = {},

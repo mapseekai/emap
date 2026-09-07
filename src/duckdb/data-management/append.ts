@@ -2,6 +2,10 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { merge, type MergeOptions } from './merge';
+/**
+ * @example
+ * const result = await append(target, incoming);
+ */
 export function append(
   target: MapshaperDataset,
   incoming: MapshaperDataset,

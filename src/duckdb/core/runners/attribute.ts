@@ -4,21 +4,21 @@ import { DuckDbOperationError } from '../../errors';
 import {
   arrowResultToDataset,
   datasetToArrowInput,
-  requireDuckDbRuntime,
+  requireRuntime,
   resolveTableColumnName,
-  runDuckDbPipeline,
+  runPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import { buildAttributeSql } from '../sql/attribute';
 
-export interface DuckDbAttributeOptions {
+export interface AttributeRunnerOptions {
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
   outputColumn?: string;
 }
 
-export interface DuckDbAttributeOperation {
+export interface AttributeOperation {
   id: string;
   duckDbFunction: string;
   buildExpression?: (geometryColumn: string) => string;
@@ -31,11 +31,11 @@ export function resolveAttributeOutputColumn(table: Table, requestedName: string
 /** Shared scalar-attribute runner used by all attribute calculation tools. */
 export async function runAttributeTool(
   dataset: MapshaperDataset,
-  opts: DuckDbAttributeOptions,
-  operation: DuckDbAttributeOperation,
+  opts: AttributeRunnerOptions,
+  operation: AttributeOperation,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
+  const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const requestedOutputColumn = opts.outputColumn ?? `duckdb_${operation.id}`;
   const trimmedOutputColumn = requestedOutputColumn.trim();
@@ -48,7 +48,7 @@ export async function runAttributeTool(
   const input = datasetToArrowInput(dataset, { layer: opts.layer, geometryColumn }, operation.id);
   const outputColumn = resolveAttributeOutputColumn(input, trimmedOutputColumn);
 
-  return runDuckDbPipeline({
+  return runPipeline({
     label: operation.id,
     runtime: rt,
     inputs: [{ table: input, prefix: 'emap_duckdb_attribute_input' }],

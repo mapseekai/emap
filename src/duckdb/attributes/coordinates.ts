@@ -4,6 +4,10 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
 
+/**
+ * @example
+ * const result = await x(points, { outputColumn: 'x_coord' });
+ */
 export function x(
   input: MapshaperDataset,
   options: AttributeOptions = {},
@@ -11,6 +15,10 @@ export function x(
 ) {
   return runAttribute('x', input, options, runtime);
 }
+/**
+ * @example
+ * const result = await y(points, { outputColumn: 'y_coord' });
+ */
 export function y(
   input: MapshaperDataset,
   options: AttributeOptions = {},
@@ -18,6 +26,10 @@ export function y(
 ) {
   return runAttribute('y', input, options, runtime);
 }
+/**
+ * @example
+ * const result = await centroidX(polygons, { outputColumn: 'centroid_x' });
+ */
 export function centroidX(
   input: MapshaperDataset,
   options: AttributeOptions = {},
@@ -25,6 +37,10 @@ export function centroidX(
 ) {
   return runAttribute('centroidX', input, options, runtime);
 }
+/**
+ * @example
+ * const result = await centroidY(polygons, { outputColumn: 'centroid_y' });
+ */
 export function centroidY(
   input: MapshaperDataset,
   options: AttributeOptions = {},

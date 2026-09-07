@@ -1,3 +1,7 @@
+/**
+ * @example
+ * const kind: DuckDbOperationErrorKind = 'validation';
+ */
 export type DuckDbOperationErrorKind =
   | 'validation'
   | 'runtime-unavailable'
@@ -5,6 +9,10 @@ export type DuckDbOperationErrorKind =
   | 'query-failed'
   | 'conversion-failed';
 
+/**
+ * @example
+ * throw new DuckDbOperationError('validation', 'Distance must be positive', { field: 'distance' });
+ */
 export class DuckDbOperationError extends Error {
   readonly kind: DuckDbOperationErrorKind;
   readonly field?: string;

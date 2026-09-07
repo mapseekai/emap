@@ -8,7 +8,9 @@ import { chromium, firefox, webkit } from '@playwright/test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = resolve(root, 'dist');
 await readFile(resolve(dist, 'emap.mjs'));
-const names = (process.env.EMAP_AUDIT_BROWSERS ?? 'chrome').split(',').map((s) => s.trim());
+const names = process.argv.includes('--all-browsers')
+  ? ['chrome', 'firefox', 'webkit']
+  : (process.env.EMAP_AUDIT_BROWSERS ?? 'chrome').split(',').map((s) => s.trim());
 const engines = { chrome: chromium, chromium, firefox, webkit };
 for (const name of names) if (!Object.hasOwn(engines, name)) throw new Error(`Unknown browser: ${name}`);
 const server = createServer(async (req, res) => {

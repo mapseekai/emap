@@ -1,5 +1,6 @@
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import {
+  isGeographicCrs,
   normalizeProjectCrsMetadata,
   resolveDatasetCRS,
   resolveDatasetCRSMetadata,
@@ -7,6 +8,14 @@ import {
   setDatasetCrsMetadata,
 } from '../../geo/crs-resolver';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
+import { DuckDbOperationError } from '../errors';
+
+/** Distance operations must not infer a display CRS for unreferenced coordinates. */
+export function assertProjectedCrs(datasets: readonly MapshaperDataset[], message: string): void {
+  if (datasets.some((dataset) => !resolveDatasetCRSMetadata(dataset) || isGeographicCrs(dataset))) {
+    throw new DuckDbOperationError('validation', message, { field: 'crs' });
+  }
+}
 
 /**
  * Return `secondary` in the primary input's CRS without mutating either caller-owned dataset.

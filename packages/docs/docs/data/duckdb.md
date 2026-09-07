@@ -2,9 +2,10 @@
 id: duckdb
 slug: /data/duckdb
 title: DuckDB Processing Toolbox
+api: ["AggregateOptions","append","area","attributeFilter","AttributeFilterOptions","attributeJoin","AttributeJoinOptions","AttributeOptions","boundary","buffer","BufferOptions","centroid","centroidX","centroidY","clip","ClipOptions","closeDuckDbRuntime","collect","convexHull","createDuckDbGeoParquetQuerySource","createDuckDbRuntimeFromJsDelivr","CreateDuckDbRuntimeOptions","densify","DensifyOptions","difference","DifferenceOptions","dissolve","DuckDbAgentMetadata","duckDbAttributeFilterLayer","DuckDbAttributeFilterLayerOptions","DuckDbAttributeFilterLayerResult","DuckDbConnection","duckDbGeoParquetQueryLayer","DuckDbGeoParquetQueryLayerOptions","DuckDbGeoParquetQueryLayerResult","DuckDbGeoParquetQueryOptions","DuckDbGeoParquetQuerySource","DuckDbMapOpContext","DuckDbMapOpSource","DuckDbOperationError","DuckDbOperationErrorKind","duckDbOverlayLayer","DuckDbOverlayLayerOptions","DuckDbOverlayLayerResult","DuckDbRuntime","DuckDbSpatialExtensionUrls","duckDbSpatialSummaryJoinLayer","DuckDbSpatialSummaryJoinLayerOptions","DuckDbSpatialSummaryJoinLayerResult","duckDbToolbox","DuckDbToolCategory","DuckDbToolDefinition","DuckDbToolExecutionContext","DuckDbToolId","DuckDbToolInput","DuckDbToolObjectProperty","DuckDbToolOutput","DuckDbToolParameter","DuckDbWasmModule","envelope","extractVertices","GeometryOptions","geometryType","getDuckDbRuntime","intersect","IntersectOptions","isEmpty","isSimple","isValid","length","lineToPolygon","merge","MergeOptions","multipartToSinglepart","near","nearest","NearestOptions","NearOptions","perimeter","pointToLine","PointToLineOptions","polygonToLine","queryGeoParquetWithDuckDb","quoteSqlString","repairGeometry","RepairGeometryOptions","reproject","ReprojectOptions","setDuckDbRuntime","simplify","SimplifyOptions","simplifyPreserveTopology","SpatialAggregation","spatialFilter","SpatialFilterOptions","SpatialFilterPredicate","spatialJoin","SpatialJoinOptions","SpatialJoinPredicate","spatialRelation","SpatialRelationOptions","spatialSummaryJoin","SpatialSummaryJoinOptions","SpatialSummaryJoinPredicate","SpatialSummaryJoinType","SpatialSummaryOperation","symmetricDifference","SymmetricDifferenceOptions","union","UnionOptions","ValidatedDuckDbSelectSql","ValidatedDuckDbSelectSqlWithoutRowId","ValidatedDuckDbSelectSqlWithRowId","validateDuckDbSelectSql","ValidateDuckDbSelectSqlOptions","x","y"]
 examples: ["duckdb-buffer","duckdb-geoparquet-query","duckdb-overlay","duckdb-spatial-aggregate-join","duckdb-query"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: unreleased
 ---
 
 # DuckDB Processing Toolbox
@@ -77,7 +78,9 @@ const distances = await near(buildings, roads);
 const nearestRoad = await nearest(buildings, roads, { nearestIdField: 'road_id' });
 ```
 
-距离类工具默认要求 projected CRS。
+距离类工具默认要求 projected CRS。`near` 和 `nearest` 默认同时拒绝未知 CRS；请先声明正确坐标系或重投影，不要把坐标单位直接解释为米。
+
+`nearest` 保留输入行顺序。等距候选按参考图层原始行号稳定选择；空几何不匹配任意候选，最近 ID 和距离均为 `null`。内部行号不会覆盖同名业务字段。输出 ID、距离字段名必须互不重复，且不能与输入字段冲突（按 DuckDB 的大小写不敏感规则检查）；冲突时请显式指定其他输出字段名。
 
 ### Aggregate
 
@@ -147,7 +150,7 @@ const projected = await reproject(dataset, { targetCrs: 'EPSG:3857' });
 const repaired = await repairGeometry(dataset);
 ```
 
-所有 Processing API 都返回新 Dataset，不原地修改调用方输入。
+所有 Processing API 都返回新 Dataset，不原地修改调用方输入。`reproject` 保留空几何记录及属性，不把重投影隐式变成空几何清理；全部空几何或空输入也保留原图层几何类型。
 
 ## Agent / Workflow 接口
 
@@ -165,12 +168,9 @@ const repaired = await repairGeometry(dataset);
 Agent 可以直接做工具发现和执行：
 
 ```ts
-import {
-  duckDbToolbox,
-  searchDuckDbTools,
-} from '@mapseekai/emap/duckdb';
+import { duckDbToolbox } from '@mapseekai/emap/duckdb';
 
-const candidates = searchDuckDbTools('count points in polygon');
+const candidates = duckDbToolbox.search('count points in polygon');
 // candidates[0].id === 'spatialSummaryJoin'
 
 const result = await duckDbToolbox.execute('buffer', {
@@ -180,7 +180,41 @@ const result = await duckDbToolbox.execute('buffer', {
 });
 ```
 
-Alias 也可以解析，例如 `intersection` → `intersect`、`makeValid` → `repairGeometry`。
+`duckDbToolbox` 是 Agent / UI / Workflow 的唯一 Toolbox 公共入口，统一提供 `tools`、`list`、`get`、`require`、`search` 和 `execute`。Alias 也可以解析，例如 `intersection` → `intersect`、`makeValid` → `repairGeometry`。
+
+## Source / Map 适配与安全写回
+
+四个公开 `duckDb*Layer` 适配函数都要求显式填写 `output.sourceId`。同一源集合必须复用一个 `DuckDbMapOpContext`，`getSource()` 返回稳定对象，不能在每次调用时重新包装数据源。
+
+```ts
+import {
+  duckDbAttributeFilterLayer,
+  type DuckDbMapOpContext,
+  type DuckDbMapOpSource,
+} from '@mapseekai/emap/duckdb';
+
+const sources = new Map<string, DuckDbMapOpSource>();
+sources.set('input', { getDataset: () => dataset });
+const context: DuckDbMapOpContext = {
+  getSource: (id) => sources.get(id),
+  setSourceDataset(id, result) {
+    sources.set(id, { getDataset: () => result });
+  },
+};
+
+const result = await duckDbAttributeFilterLayer(context, {
+  src: 'input',
+  sql: 'SELECT * FROM input',
+  output: { sourceId: 'result' },
+});
+if (!result.ok && result.error.kind === 'stale-operation') {
+  // 输入、输出或任务代次已变化；旧结果没有被写回。
+}
+```
+
+计算可以异步，但 `setSourceDataset()` 必须同步完成写入，返回 `undefined`，不能是 `async` 函数或安排延迟写入。宿主需要的异步显示、加载工作应与这一步提交分开。
+
+提交前会检查输入与输出源身份、Dataset 引用、`editVersion`、`attributeVersion`、CRS，以及可选字节和 GeoParquet 查询源引用。同一输出目标采用最新请求优先，不同输出目标仍可并发。通过外部代码修改 Dataset 时必须维护版本计数；替换字节或查询源时应提供新的稳定引用。
 
 ## 内部架构
 
@@ -225,5 +259,12 @@ const result = await queryGeoParquetWithDuckDb(bytes, {
 - `spatialAggregateJoinDatasetWithDuckDb` / `spatialSummaryJoinDatasetWithDuckDb` → `spatialSummaryJoin`
 - `makeValidDatasetWithDuckDb` / `repairGeometryDatasetWithDuckDb` → `repairGeometry`
 - 其他 `xxxDatasetWithDuckDb` 同样简化为 `xxx`
+- `DUCKDB_TOOLBOX`、`listDuckDbTools`、`getDuckDbTool`、`requireDuckDbTool`、`searchDuckDbTools`、`executeDuckDbTool` 不再单独导出，统一使用 `duckDbToolbox.*`
+- 删除无实际消费者的 `duckDbBufferLayer`、`duckDbGeometryLayer`、`duckDbRelationLayer`、`duckDbAttributeLayer`；保留真正用于 source/map 适配的 `duckDbAttributeFilterLayer`、`duckDbGeoParquetQueryLayer`、`duckDbOverlayLayer`、`duckDbSpatialSummaryJoinLayer`
+- `DuckDbToolInputSpec`、`DuckDbToolParameterSpec`、`DuckDbToolObjectPropertySpec`、`DuckDbToolOutputSpec` 去掉 `Spec` 后缀，更名为 `DuckDbToolInput`、`DuckDbToolParameter`、`DuckDbToolObjectProperty`、`DuckDbToolOutput`
+
+- `DuckDbToolId` 现在是实际工具 ID 的字面量联合类型，不再接受任意字符串。
+- 四个 LayerOptions 的 `output` 从可选改为必填；`DuckDbMapOpContext.setSourceDataset` 从可异步改为同步提交契约。调用方须按上文迁移，避免旧结果覆盖新数据。
+- DuckDB 只提供已发布的 ESM 子入口 `@mapseekai/emap/duckdb`，不生成未发布的 IIFE 文件。
 
 完整变更记录见项目根目录 `CHANGELOG.md`。

@@ -152,8 +152,8 @@ function renderFillLayer(
   dataset?: MapshaperDataset,
 ): void {
   const fillPaint = layer.paint;
-  const fillSpec = fillPaint?.['fill-color'];
-  const fillColor = typeof fillSpec === 'string' ? fillSpec : EMAP_THEME_COLORS.muted;
+  const fillColorValue = fillPaint?.['fill-color'];
+  const fillColor = typeof fillColorValue === 'string' ? fillColorValue : EMAP_THEME_COLORS.muted;
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
   // Near full extent every part is visible anyway, so per-part bbox culling

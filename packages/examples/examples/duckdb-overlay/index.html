@@ -189,18 +189,18 @@
         return runtimePromise;
       }
 
-      function createMapOpContext() {
-        return {
-          getSource(id) {
-            if (id === INPUT_SOURCE_ID) return { getDataset: () => inputDataset };
-            if (id === MASK_SOURCE_ID) return { getDataset: () => maskDataset };
-            return contextSources.get(id);
-          },
-          setSourceDataset(id, dataset) {
-            contextSources.set(id, { getDataset: () => dataset });
-          },
-        };
-      }
+      const inputMapOpSource = { getDataset: () => inputDataset };
+      const maskMapOpSource = { getDataset: () => maskDataset };
+      const mapOpContext = {
+        getSource(id) {
+          if (id === INPUT_SOURCE_ID) return inputDataset ? inputMapOpSource : undefined;
+          if (id === MASK_SOURCE_ID) return maskDataset ? maskMapOpSource : undefined;
+          return contextSources.get(id);
+        },
+        setSourceDataset(id, dataset) {
+          contextSources.set(id, { getDataset: () => dataset });
+        },
+      };
 
       async function loadDatasetFromFile(file, sourceId, prefix, colors) {
         const source = new TopologySource(sourceId);
@@ -286,7 +286,7 @@
           };
           let resultDataset;
           if (entrypointSelect.value === "mapop") {
-            const result = await duckDbOverlayLayer(createMapOpContext(), {
+            const result = await duckDbOverlayLayer(mapOpContext, {
               src: INPUT_SOURCE_ID,
               mask: MASK_SOURCE_ID,
               operation: operation === "intersect" ? "intersection" : operation,

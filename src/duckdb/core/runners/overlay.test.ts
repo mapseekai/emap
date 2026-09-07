@@ -4,7 +4,7 @@ import { toArrowTable } from '../../../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../../arrow/test-utils';
 import { parseGeoMetadata } from '../../../arrow/geoparquet-metadata';
 import type { MapshaperDataset } from '../../../types/mapshaper-types';
-import { runOverlayTool, type DuckDbOverlayOperation } from './overlay';
+import { runOverlayTool, type OverlayOperation } from './overlay';
 import type { DuckDbConnection, DuckDbRuntime } from '../../runtime';
 import { buildOverlaySql } from '../sql/overlay';
 
@@ -60,7 +60,7 @@ const EMPTY_MASK_FC = {
 const INTERSECTION_SPEC = {
   id: 'intersection',
   duckDbFunction: 'ST_Intersection',
-} as const satisfies DuckDbOverlayOperation;
+} as const satisfies OverlayOperation;
 
 async function inputDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   const dataset = await datasetFromGeoJSON(INPUT_FC);

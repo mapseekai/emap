@@ -5,7 +5,15 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { OVERLAY_OPERATIONS } from './_shared';
 import type { OverlayOptions } from './types';
 
+/**
+ * @example
+ * const options: DifferenceOptions = { outputLayer: 'difference' };
+ */
 export type DifferenceOptions = OverlayOptions;
+/**
+ * @example
+ * const result = await difference(input, mask, { outputLayer: 'difference' });
+ */
 export function difference(
   input: MapshaperDataset,
   mask: MapshaperDataset,

@@ -13,6 +13,10 @@ export type AttributeOperationId =
   | 'centroidX'
   | 'centroidY';
 
+/**
+ * @example
+ * const options: AttributeOptions = { outputColumn: 'metric' };
+ */
 export interface AttributeOptions extends AttributeProcessingOptions {
   failOnGeographicCrs?: boolean;
 }

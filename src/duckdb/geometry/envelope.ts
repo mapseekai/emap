@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runUnary } from './_shared';
 import type { GeometryOptions } from './types';
+/**
+ * @example
+ * const result = await envelope(dataset, { outputLayer: 'envelopes' });
+ */
 export function envelope(
   input: MapshaperDataset,
   options: GeometryOptions = {},

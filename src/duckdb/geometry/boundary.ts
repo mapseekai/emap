@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runUnary } from './_shared';
 import type { GeometryOptions } from './types';
+/**
+ * @example
+ * const result = await boundary(polygons, { outputLayer: 'boundaries' });
+ */
 export function boundary(
   input: MapshaperDataset,
   options: GeometryOptions = {},

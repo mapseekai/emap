@@ -3,7 +3,15 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { runUnaryGeometryTool } from '../core/runners/geometry';
 import type { ProcessingOptions } from '../core/types';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+/**
+ * @example
+ * const options: RepairGeometryOptions = { outputLayer: 'repaired' };
+ */
 export type RepairGeometryOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await repairGeometry(polygons, { outputLayer: 'repaired' });
+ */
 export function repairGeometry(
   input: MapshaperDataset,
   options: RepairGeometryOptions = {},

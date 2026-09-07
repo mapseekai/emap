@@ -1,3 +1,4 @@
+import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../../../types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from '../dataset-crs';
 import { DuckDbOperationError } from '../../errors';
@@ -5,12 +6,12 @@ import {
   arrowResultToDataset,
   datasetToArrowInput,
   quoteIdentifier,
-  requireDuckDbRuntime,
-  runDuckDbPipeline,
+  requireRuntime,
+  runPipeline,
 } from '../pipeline';
 import type { DuckDbRuntime } from '../../runtime';
 
-export interface DuckDbProcessingGeometryOptions {
+export interface ProcessingGeometryOptions {
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
@@ -42,14 +43,14 @@ export function sqlString(value: string): string {
 export async function runSingleInputTool(
   dataset: MapshaperDataset,
   label: string,
-  opts: DuckDbProcessingGeometryOptions,
+  opts: ProcessingGeometryOptions,
   buildSql: (tableName: string, geometryColumn: string) => string,
   runtime: DuckDbRuntime | null,
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
+  const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const input = datasetToArrowInput(dataset, opts, label);
-  return runDuckDbPipeline({
+  return runPipeline({
     label,
     runtime: rt,
     inputs: [{ table: input, prefix: `emap_duckdb_${label}_input` }],
@@ -63,24 +64,30 @@ export async function runTwoInputTool(
   primary: MapshaperDataset,
   secondary: MapshaperDataset,
   label: string,
-  opts: DuckDbProcessingGeometryOptions,
-  buildSql: (primaryTable: string, secondaryTable: string, geometryColumn: string) => string,
+  opts: ProcessingGeometryOptions,
+  buildSql: (
+    primaryTable: string,
+    secondaryTable: string,
+    geometryColumn: string,
+    inputs: readonly [Table, Table],
+  ) => string,
   runtime: DuckDbRuntime | null,
   alignCrs = false,
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
+  const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const secondaryInput = alignCrs ? await alignSecondaryDatasetCrs(primary, secondary) : secondary;
   const left = datasetToArrowInput(primary, opts, label);
   const right = datasetToArrowInput(secondaryInput, { geometryColumn }, label);
-  return runDuckDbPipeline({
+  return runPipeline({
     label,
     runtime: rt,
     inputs: [
       { table: left, prefix: `emap_duckdb_${label}_left` },
       { table: right, prefix: `emap_duckdb_${label}_right` },
     ],
-    buildSql: ([leftName, rightName]) => buildSql(leftName!, rightName!, geometryColumn),
+    buildSql: ([leftName, rightName]) =>
+      buildSql(leftName!, rightName!, geometryColumn, [left, right]),
     convertResult: (result) =>
       arrowResultToDataset(result, { layerName: opts.outputLayer, geometryColumn }, primary, label),
   });

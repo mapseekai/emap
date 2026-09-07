@@ -1,11 +1,11 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { isGeographicCrs } from '../../geo/crs-resolver';
 import { DuckDbOperationError } from '../errors';
-import { runAttributeTool, type DuckDbAttributeOperation } from '../core/runners/attribute';
+import { runAttributeTool, type AttributeOperation } from '../core/runners/attribute';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import type { AttributeOperationId, AttributeOptions } from './types';
 
-export interface AttributeOperationDefinition extends DuckDbAttributeOperation {
+export interface AttributeOperationDefinition extends AttributeOperation {
   defaultOutputColumn: string;
   rejectGeographicCrs: boolean;
 }

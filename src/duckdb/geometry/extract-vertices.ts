@@ -6,6 +6,10 @@ import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { dumpSql } from './_dump';
 export type ExtractVerticesOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await extractVertices(lines);
+ */
 export function extractVertices(
   input: MapshaperDataset,
   options: ExtractVerticesOptions = {},

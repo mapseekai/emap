@@ -7,6 +7,10 @@ import { finitePositive, processingValidation } from '../core/runners/processing
 import type { ProcessingOptions } from '../core/types';
 import type { DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: DensifyOptions = { maxSegmentLength: 5 };
+ */
 export interface DensifyOptions extends ProcessingOptions {
   maxSegmentLength: number;
 }
@@ -39,6 +43,10 @@ function densifyArc(
   }
   return { xx: new Float64Array(outX), yy: new Float64Array(outY) };
 }
+/**
+ * @example
+ * const result = await densify(lines, { maxSegmentLength: 5 });
+ */
 export async function densify(
   input: MapshaperDataset,
   options: DensifyOptions,

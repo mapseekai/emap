@@ -328,24 +328,6 @@ export default [
     plugins: commonPlugins(),
   },
 
-  // IIFE bundle for script-tag users (global `emapDuckDb`).
-  {
-    input: 'src/duckdb/index.ts',
-    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
-    onwarn: quietKnownCircularWarnings,
-    output: {
-      file: 'dist/emap-duckdb.js',
-      format: 'iife',
-      name: 'emapDuckDb',
-      sourcemap: shouldWriteSourcemap,
-      globals: {
-        '@duckdb/duckdb-wasm': 'duckdb',
-        'apache-arrow': 'Arrow',
-      },
-    },
-    plugins: commonPlugins(),
-  },
-
   // Worker bundle. Same external/global treatment, plus a banner that
   // pulls the vendor file in via importScripts at boot — workers don't
   // share the page's <script> globals, so the worker has to re-load

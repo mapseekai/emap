@@ -2,8 +2,8 @@ import type {
   DuckDbToolCategory,
   DuckDbToolDefinition,
   DuckDbToolExecutionContext,
-  DuckDbToolObjectPropertySpec,
-  DuckDbToolParameterSpec,
+  DuckDbToolObjectProperty,
+  DuckDbToolParameter,
 } from './core/tool-definition';
 import { DuckDbOperationError } from './errors';
 import {
@@ -44,7 +44,7 @@ import {
   centroidYTool,
 } from './attributes';
 
-export const DUCKDB_TOOLBOX = [
+const TOOLS = [
   clipTool,
   intersectTool,
   differenceTool,
@@ -90,35 +90,39 @@ export const DUCKDB_TOOLBOX = [
   centroidYTool,
 ] as const satisfies readonly DuckDbToolDefinition[];
 
-export type DuckDbToolId = (typeof DUCKDB_TOOLBOX)[number]['id'];
+/**
+ * @example
+ * const id: DuckDbToolId = 'buffer';
+ */
+export type DuckDbToolId = (typeof TOOLS)[number]['id'];
 
 const TOOL_BY_ID = new Map<string, DuckDbToolDefinition>();
-for (const tool of DUCKDB_TOOLBOX as readonly DuckDbToolDefinition[]) {
+for (const tool of TOOLS as readonly DuckDbToolDefinition[]) {
   TOOL_BY_ID.set(tool.id, tool);
   for (const alias of tool.aliases ?? []) TOOL_BY_ID.set(alias, tool);
 }
 
-export function listDuckDbTools(category?: DuckDbToolCategory): readonly DuckDbToolDefinition[] {
-  return category ? DUCKDB_TOOLBOX.filter((tool) => tool.category === category) : DUCKDB_TOOLBOX;
+function listTools(category?: DuckDbToolCategory): readonly DuckDbToolDefinition[] {
+  return category ? TOOLS.filter((tool) => tool.category === category) : TOOLS;
 }
 
-export function getDuckDbTool(idOrAlias: string): DuckDbToolDefinition | undefined {
+function getTool(idOrAlias: string): DuckDbToolDefinition | undefined {
   return TOOL_BY_ID.get(idOrAlias);
 }
 
-export function requireDuckDbTool(idOrAlias: string): DuckDbToolDefinition {
-  const tool = getDuckDbTool(idOrAlias);
+function requireTool(idOrAlias: string): DuckDbToolDefinition {
+  const tool = getTool(idOrAlias);
   if (!tool) throw new Error(`Unknown DuckDB processing tool '${idOrAlias}'`);
   return tool;
 }
 
 /** Lightweight semantic discovery for Agent/UI callers. */
-export function searchDuckDbTools(
+function searchTools(
   query: string,
   category?: DuckDbToolCategory,
 ): readonly DuckDbToolDefinition[] {
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const tools = listDuckDbTools(category);
+  const tools = listTools(category);
   if (terms.length === 0) return tools;
   return tools
     .map((tool) => {
@@ -150,62 +154,67 @@ function validateObjectProperty(
   toolId: string,
   field: string,
   value: unknown,
-  spec: DuckDbToolObjectPropertySpec,
+  property: DuckDbToolObjectProperty,
 ): void {
   if (value === undefined) {
-    if (spec.required) throw validationError(toolId, field, `${field} is required`);
+    if (property.required) throw validationError(toolId, field, `${field} is required`);
     return;
   }
-  if (spec.type === 'string' && typeof value !== 'string') {
+  if (property.type === 'string' && typeof value !== 'string') {
     throw validationError(toolId, field, `${field} must be a string`);
   }
-  if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
+  if (property.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
     throw validationError(toolId, field, `${field} must be a finite number`);
   }
-  if (spec.type === 'boolean' && typeof value !== 'boolean') {
+  if (property.type === 'boolean' && typeof value !== 'boolean') {
     throw validationError(toolId, field, `${field} must be a boolean`);
   }
-  if (spec.type === 'enum' && (typeof value !== 'string' || !spec.enumValues?.includes(value))) {
+  if (
+    property.type === 'enum' &&
+    (typeof value !== 'string' || !property.enumValues?.includes(value))
+  ) {
     throw validationError(
       toolId,
       field,
-      `${field} must be one of ${spec.enumValues?.join(', ') ?? ''}`,
+      `${field} must be one of ${property.enumValues?.join(', ') ?? ''}`,
     );
   }
 }
 
-function validateParameter(toolId: string, value: unknown, spec: DuckDbToolParameterSpec): void {
-  const field = spec.name;
+function validateParameter(toolId: string, value: unknown, parameter: DuckDbToolParameter): void {
+  const field = parameter.name;
   if (value === undefined) {
-    if (spec.required) throw validationError(toolId, field, `${field} is required`);
+    if (parameter.required) throw validationError(toolId, field, `${field} is required`);
     return;
   }
-  switch (spec.type) {
+  switch (parameter.type) {
     case 'string':
-      if (typeof value !== 'string')
+      if (typeof value !== 'string') {
         throw validationError(toolId, field, `${field} must be a string`);
+      }
       break;
     case 'number':
       if (typeof value !== 'number' || !Number.isFinite(value)) {
         throw validationError(toolId, field, `${field} must be a finite number`);
       }
-      if (spec.minimum !== undefined && value < spec.minimum) {
-        throw validationError(toolId, field, `${field} must be >= ${spec.minimum}`);
+      if (parameter.minimum !== undefined && value < parameter.minimum) {
+        throw validationError(toolId, field, `${field} must be >= ${parameter.minimum}`);
       }
-      if (spec.exclusiveMinimum !== undefined && value <= spec.exclusiveMinimum) {
-        throw validationError(toolId, field, `${field} must be > ${spec.exclusiveMinimum}`);
+      if (parameter.exclusiveMinimum !== undefined && value <= parameter.exclusiveMinimum) {
+        throw validationError(toolId, field, `${field} must be > ${parameter.exclusiveMinimum}`);
       }
       break;
     case 'boolean':
-      if (typeof value !== 'boolean')
+      if (typeof value !== 'boolean') {
         throw validationError(toolId, field, `${field} must be a boolean`);
+      }
       break;
     case 'enum':
-      if (typeof value !== 'string' || !spec.enumValues?.includes(value)) {
+      if (typeof value !== 'string' || !parameter.enumValues?.includes(value)) {
         throw validationError(
           toolId,
           field,
-          `${field} must be one of ${spec.enumValues?.join(', ') ?? ''}`,
+          `${field} must be one of ${parameter.enumValues?.join(', ') ?? ''}`,
         );
       }
       break;
@@ -213,11 +222,11 @@ function validateParameter(toolId: string, value: unknown, spec: DuckDbToolParam
       if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
         throw validationError(toolId, field, `${field} must be an array of strings`);
       }
-      if (spec.minItems !== undefined && value.length < spec.minItems) {
+      if (parameter.minItems !== undefined && value.length < parameter.minItems) {
         throw validationError(
           toolId,
           field,
-          `${field} must contain at least ${spec.minItems} item(s)`,
+          `${field} must contain at least ${parameter.minItems} item(s)`,
         );
       }
       break;
@@ -225,11 +234,11 @@ function validateParameter(toolId: string, value: unknown, spec: DuckDbToolParam
       if (!Array.isArray(value)) {
         throw validationError(toolId, field, `${field} must be an array of objects`);
       }
-      if (spec.minItems !== undefined && value.length < spec.minItems) {
+      if (parameter.minItems !== undefined && value.length < parameter.minItems) {
         throw validationError(
           toolId,
           field,
-          `${field} must contain at least ${spec.minItems} item(s)`,
+          `${field} must contain at least ${parameter.minItems} item(s)`,
         );
       }
       value.forEach((entry, index) => {
@@ -241,7 +250,7 @@ function validateParameter(toolId: string, value: unknown, spec: DuckDbToolParam
           );
         }
         const record = entry as Record<string, unknown>;
-        const properties = spec.itemProperties ?? [];
+        const properties = parameter.itemProperties ?? [];
         const knownProperties = new Set(properties.map((property) => property.name));
         for (const name of Object.keys(record)) {
           if (!knownProperties.has(name)) {
@@ -277,8 +286,9 @@ function normalizeToolContext(
   const params: Record<string, unknown> = { ...(context.params ?? {}) };
   const known = new Set(tool.parameters.map((parameter) => parameter.name));
   for (const name of Object.keys(params)) {
-    if (!known.has(name))
+    if (!known.has(name)) {
       throw validationError(tool.id, name, `parameter '${name}' is not supported`);
+    }
   }
   for (const parameter of tool.parameters) {
     if (params[parameter.name] === undefined && parameter.default !== undefined) {
@@ -289,16 +299,26 @@ function normalizeToolContext(
   return { ...context, params };
 }
 
-export async function executeDuckDbTool(idOrAlias: string, context: DuckDbToolExecutionContext) {
-  const tool = requireDuckDbTool(idOrAlias);
+async function executeTool(idOrAlias: string, context: DuckDbToolExecutionContext) {
+  const tool = requireTool(idOrAlias);
   return tool.execute(normalizeToolContext(tool, context));
 }
 
+/**
+ * Canonical Agent/UI/workflow entry point for DuckDB processing tools.
+ *
+ * @example
+ * const candidates = duckDbToolbox.search('count points polygon');
+ * const result = await duckDbToolbox.execute('buffer', {
+ *   inputs: { input: dataset },
+ *   params: { distance: 10 },
+ * });
+ */
 export const duckDbToolbox = {
-  tools: DUCKDB_TOOLBOX,
-  list: listDuckDbTools,
-  get: getDuckDbTool,
-  require: requireDuckDbTool,
-  search: searchDuckDbTools,
-  execute: executeDuckDbTool,
+  tools: TOOLS,
+  list: listTools,
+  get: getTool,
+  require: requireTool,
+  search: searchTools,
+  execute: executeTool,
 } as const;

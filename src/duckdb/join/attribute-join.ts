@@ -5,11 +5,19 @@ import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 
+/**
+ * @example
+ * const options: AttributeJoinOptions = { leftKey: 'id', rightKey: 'id', joinType: 'left' };
+ */
 export interface AttributeJoinOptions extends ProcessingOptions {
   leftKey: string;
   rightKey: string;
   joinType?: 'left' | 'inner';
 }
+/**
+ * @example
+ * const result = await attributeJoin(parcels, table, { leftKey: 'id', rightKey: 'id' });
+ */
 export function attributeJoin(
   input: MapshaperDataset,
   join: MapshaperDataset,

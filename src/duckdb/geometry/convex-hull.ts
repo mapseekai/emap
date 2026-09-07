@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runUnary } from './_shared';
 import type { GeometryOptions } from './types';
+/**
+ * @example
+ * const result = await convexHull(dataset, { outputLayer: 'hulls' });
+ */
 export function convexHull(
   input: MapshaperDataset,
   options: GeometryOptions = {},

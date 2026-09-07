@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { tableToIPC, type Table } from 'apache-arrow';
 import type * as DuckDBBundles from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -60,11 +61,12 @@ async function datasetFromFeatureCollection(
 }
 
 async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
+  const require = createRequire(import.meta.url);
   const duckdb = await import('@duckdb/duckdb-wasm/blocking');
   const bundles = {
     mvp: {
       mainModule: require.resolve('@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm'),
-      mainWorker: null,
+      mainWorker: '',
     },
   } satisfies DuckDBBundles.DuckDBBundles;
   const db = await duckdb.createDuckDB(bundles, new duckdb.ConsoleLogger(), duckdb.NODE_RUNTIME);

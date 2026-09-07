@@ -6,6 +6,10 @@ import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { dumpSql } from './_dump';
 export type MultipartToSinglepartOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await multipartToSinglepart(dataset);
+ */
 export function multipartToSinglepart(
   input: MapshaperDataset,
   options: MultipartToSinglepartOptions = {},

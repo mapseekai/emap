@@ -4,6 +4,10 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
 
+/**
+ * @example
+ * const result = await isValid(dataset, { outputColumn: 'is_valid' });
+ */
 export function isValid(
   input: MapshaperDataset,
   options: AttributeOptions = {},
@@ -11,6 +15,10 @@ export function isValid(
 ) {
   return runAttribute('isValid', input, options, runtime);
 }
+/**
+ * @example
+ * const result = await isEmpty(dataset, { outputColumn: 'is_empty' });
+ */
 export function isEmpty(
   input: MapshaperDataset,
   options: AttributeOptions = {},
@@ -18,6 +26,10 @@ export function isEmpty(
 ) {
   return runAttribute('isEmpty', input, options, runtime);
 }
+/**
+ * @example
+ * const result = await isSimple(dataset, { outputColumn: 'is_simple' });
+ */
 export function isSimple(
   input: MapshaperDataset,
   options: AttributeOptions = {},

@@ -10,6 +10,7 @@ import {
   collect,
   densify,
   dissolve,
+  duckDbToolbox,
   extractVertices,
   lineToPolygon,
   merge,
@@ -103,7 +104,7 @@ afterAll(async () => {
 });
 
 async function dataset(fc: unknown, crs = 'EPSG:3857'): Promise<MapshaperDataset> {
-  const result = await datasetFromGeoJSON(fc, { crs });
+  const result = await datasetFromGeoJSON(fc);
   result.info = { ...result.info, crs_string: crs };
   return result;
 }
@@ -316,6 +317,138 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
     expect(records).toHaveLength(2);
     expect(records[0]?.nearest_id).toBeDefined();
     expect(records[0]?.nearest_distance).toBeDefined();
+  });
+
+  it.each([
+    'mixed',
+    'all-null',
+    'empty',
+  ] as const)('reproject preserves %s geometry rows and attributes', async (mode) => {
+    const rt = await getRuntime();
+    const input = await dataset(POINTS);
+    const layer = input.layers[0]!;
+    if (mode === 'mixed') layer.shapes![1] = null;
+    if (mode === 'all-null') layer.shapes = layer.shapes!.map(() => null);
+    if (mode === 'empty') {
+      layer.shapes = [];
+      layer.data!.getRecords().splice(0);
+    }
+    const before = structuredClone(layer.data!.getRecords());
+    const result = await reproject(input, { targetCrs: 'EPSG:4326' }, rt);
+    expect(result.layers[0]?.data?.getRecords() ?? []).toEqual(before);
+    expect(result.layers[0]?.shapes ?? []).toHaveLength(layer.shapes!.length);
+    expect(result.info?.crs_string).toBe('EPSG:4326');
+    expect(result.layers[0]?.geometry_type).toBe('point');
+    expect(input.info?.crs_string).toBe('EPSG:3857');
+    if (mode === 'mixed') expect(result.layers[0]?.shapes?.[1]).toBeNull();
+    if (mode === 'all-null') expect(result.layers[0]?.shapes).toEqual([null, null, null]);
+  });
+
+  it.each([
+    'direct',
+    'toolbox',
+  ] as const)('nearest rejects geographic and unknown CRS through the %s entry point', async (entry) => {
+    const rt = await getRuntime();
+    for (const crs of ['EPSG:4326', 'EPSG:4490', undefined]) {
+      const input = await dataset(POINTS);
+      const reference = await dataset(POINTS);
+      input.info = crs ? { crs_string: crs } : {};
+      const run = () =>
+        entry === 'direct'
+          ? nearest(input, reference, {}, rt)
+          : duckDbToolbox.execute('nearest', { inputs: { input, reference }, runtime: rt });
+      await expect(Promise.resolve().then(run)).rejects.toMatchObject({
+        kind: 'validation',
+        field: 'crs',
+      });
+    }
+  });
+
+  it('nearest isolates generated IDs from user fields and breaks distance ties by row order', async () => {
+    const rt = await getRuntime();
+    const input = await dataset(POINTS);
+    const reference = await dataset(POINTS);
+    reference.layers[0]!.data!.getRecords().forEach((record, index) => {
+      record.__nearest_rowid = 777 + index;
+      record.__NEAREST_ROWID_1 = 888 + index;
+    });
+    const result = await nearest(input, reference, {}, rt);
+    expect(result.layers[0]?.data?.getRecords().map((record) => record.nearest_id)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(result.layers[0]?.data?.getRecords().map((record) => record.nearest_distance)).toEqual([
+      0, 0, 0,
+    ]);
+    reference.layers[0]!.shapes![1] = reference.layers[0]!.shapes![0];
+    const tied = await nearest(input, reference, {}, rt);
+    expect(tied.layers[0]?.data?.getRecords()[0]?.nearest_id).toBe(0);
+  });
+
+  it('nearest rejects colliding output columns instead of overwriting input attributes', async () => {
+    const rt = await getRuntime();
+    const input = await dataset(POINTS);
+    const reference = await dataset(POINTS);
+    input.layers[0]!.data!.getRecords()[0]!.NEAREST_ID = 123;
+    await expect(
+      Promise.resolve().then(() => nearest(input, reference, {}, rt)),
+    ).rejects.toMatchObject({
+      kind: 'validation',
+      field: 'outputNearestIdColumn',
+    });
+    await expect(
+      Promise.resolve().then(() =>
+        nearest(
+          input,
+          reference,
+          {
+            outputNearestIdColumn: 'distance',
+            outputDistanceColumn: 'DISTANCE',
+          },
+          rt,
+        ),
+      ),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'outputDistanceColumn' });
+  });
+
+  it('nearest leaves null geometry unmatched rather than assigning an arbitrary feature', async () => {
+    const rt = await getRuntime();
+    const input = await dataset(POINTS);
+    const reference = await dataset(POINTS);
+    input.layers[0]!.shapes![1] = null;
+    const result = await nearest(input, reference, {}, rt);
+    expect(result.layers[0]?.data?.getRecords()[1]).toMatchObject({
+      id: 2,
+      nearest_id: null,
+      nearest_distance: null,
+    });
+  });
+
+  it.each([
+    'all-null-input',
+    'empty-reference',
+    'null-reference',
+  ] as const)('nearest handles %s without losing records or geometry type', async (mode) => {
+    const rt = await getRuntime();
+    const input = await dataset(POINTS);
+    const reference = await dataset(POINTS);
+    if (mode === 'all-null-input') input.layers[0]!.shapes = [null, null, null];
+    if (mode === 'null-reference') reference.layers[0]!.shapes = [null, null, null];
+    if (mode === 'empty-reference') {
+      reference.layers[0]!.shapes = [];
+      reference.layers[0]!.data!.getRecords().splice(0);
+    }
+    const result = await nearest(input, reference, {}, rt);
+    expect(result.layers[0]?.geometry_type).toBe('point');
+    expect(result.layers[0]?.shapes).toHaveLength(3);
+    expect(
+      result.layers[0]?.data
+        ?.getRecords()
+        .map((record) => [record.id, record.nearest_id, record.nearest_distance]),
+    ).toEqual([
+      [1, null, null],
+      [2, null, null],
+      [3, null, null],
+    ]);
   });
 
   it('runs merge and reproject', async () => {

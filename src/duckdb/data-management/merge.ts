@@ -4,7 +4,15 @@ import { runTwoInputTool } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+/**
+ * @example
+ * const options: MergeOptions = { outputLayer: 'merged' };
+ */
 export type MergeOptions = ProcessingOptions;
+/**
+ * @example
+ * const result = await merge(left, right, { outputLayer: 'merged' });
+ */
 export function merge(
   input: MapshaperDataset,
   incoming: MapshaperDataset,

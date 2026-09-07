@@ -4,11 +4,19 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 import { runNamedRelationOperation, type RelationOptions } from '../core/relation/operations';
 import type { RelationOperationId } from '../core/relation/types';
 
+/**
+ * @example
+ * const options: SpatialRelationOptions = { predicate: 'distanceWithin', distance: 100, mode: 'filter' };
+ */
 export interface SpatialRelationOptions extends RelationOptions {
   predicate: RelationOperationId;
   mode?: 'filter' | 'attribute';
 }
 
+/**
+ * @example
+ * const result = await spatialRelation(points, roads, { predicate: 'distanceWithin', distance: 100 });
+ */
 export function spatialRelation(
   input: MapshaperDataset,
   reference: MapshaperDataset,

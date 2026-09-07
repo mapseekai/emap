@@ -4,6 +4,10 @@ import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-typ
 import { DuckDbOperationError } from '../errors';
 import type { SpatialSummaryJoinDuckDbFunction } from './_spatial-summary-sql';
 
+/**
+ * @example
+ * const predicate: SpatialSummaryJoinPredicate = 'intersects';
+ */
 export type SpatialSummaryJoinPredicate =
   | 'intersects'
   | 'contains'
@@ -15,8 +19,20 @@ export type SpatialSummaryJoinPredicate =
   | 'covers'
   | 'coveredBy'
   | 'containsProperly';
+/**
+ * @example
+ * const joinType: SpatialSummaryJoinType = 'left';
+ */
 export type SpatialSummaryJoinType = 'left' | 'inner';
+/**
+ * @example
+ * const operation: SpatialSummaryOperation = 'sum';
+ */
 export type SpatialSummaryOperation = 'count' | 'sum' | 'avg' | 'min' | 'max';
+/**
+ * @example
+ * const aggregation: SpatialAggregation = { operation: 'sum', field: 'sales', outputColumn: 'sales_sum' };
+ */
 export type SpatialAggregation =
   | { operation: 'count'; outputColumn: string; field?: never }
   | {
@@ -25,6 +41,10 @@ export type SpatialAggregation =
       outputColumn: string;
     };
 
+/**
+ * @example
+ * const options: SpatialSummaryJoinOptions = { predicate: 'contains', aggregations: [{ operation: 'count', outputColumn: 'point_count' }] };
+ */
 export interface SpatialSummaryJoinOptions {
   predicate: SpatialSummaryJoinPredicate;
   aggregations: readonly SpatialAggregation[];
@@ -61,7 +81,7 @@ export interface ResolvedLayer {
 }
 
 export function spatialSummaryValidation(message: string, field?: string): DuckDbOperationError {
-  return new DuckDbOperationError('validation', `DuckDB spatial aggregate join ${message}`, {
+  return new DuckDbOperationError('validation', `DuckDB spatial summary join ${message}`, {
     field,
   });
 }

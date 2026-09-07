@@ -3,6 +3,10 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import type { GeometryOptions } from '../geometry/types';
 import { boundary } from '../geometry/boundary';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+/**
+ * @example
+ * const result = await polygonToLine(polygons);
+ */
 export function polygonToLine(
   input: MapshaperDataset,
   options: GeometryOptions = {},

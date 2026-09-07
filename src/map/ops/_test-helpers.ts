@@ -9,7 +9,7 @@ import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { MapshaperLayer, MapshaperDataset } from '../../types/mapshaper-types';
 
-export interface StubLayerSpec {
+export interface StubLayer {
   name: string;
   geometry_type?: string;
 }
@@ -19,7 +19,7 @@ export interface StubCtxResult {
   calls: Array<{ sourceId: string; cmds: ParsedCommand[]; label: string }>;
 }
 
-export function makeStubCtx(layers: StubLayerSpec[] = [{ name: 'parks' }]): StubCtxResult {
+export function makeStubCtx(layers: StubLayer[] = [{ name: 'parks' }]): StubCtxResult {
   const layerObjs: MapshaperLayer[] = layers.map(
     (l) =>
       ({

@@ -5,14 +5,14 @@ import { DuckDbOperationError } from '../../errors';
 import {
   arrowResultToDataset,
   datasetToArrowInput,
-  duckDbPipelineMessages,
-  requireDuckDbRuntime,
-  runDuckDbPipeline,
+  pipelineMessages,
+  requireRuntime,
+  runPipeline,
 } from '../pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from '../sql/overlay';
 
-export interface DuckDbOverlayOptions {
+export interface OverlayRunnerOptions {
   inputLayer?: string | number;
   maskLayer?: string | number;
   outputLayer?: string;
@@ -20,7 +20,7 @@ export interface DuckDbOverlayOptions {
   maskGeometryColumn?: string;
 }
 
-export interface DuckDbOverlayOperation {
+export interface OverlayOperation {
   id: string;
   duckDbFunction: OverlayDuckDbFunction;
 }
@@ -39,7 +39,7 @@ function getSelectedLayer(
 function datasetWithEmptyMaskGeometry(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbOverlayOptions,
+  opts: OverlayRunnerOptions,
 ): MapshaperDataset | null {
   const inputLayer = getSelectedLayer(inputDataset, opts.inputLayer);
   const maskLayer = getSelectedLayer(maskDataset, opts.maskLayer);
@@ -61,12 +61,12 @@ function datasetWithEmptyMaskGeometry(
 export async function runOverlayTool(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbOverlayOptions,
-  operation: DuckDbOverlayOperation,
+  opts: OverlayRunnerOptions,
+  operation: OverlayOperation,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const rt = requireDuckDbRuntime(runtime);
-  const messages = duckDbPipelineMessages(operation.id);
+  const rt = requireRuntime(runtime);
+  const messages = pipelineMessages(operation.id);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
   const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
 
@@ -98,7 +98,7 @@ export async function runOverlayTool(
     throw new DuckDbOperationError('conversion-failed', messages.inputConversion, { cause: err });
   }
 
-  return runDuckDbPipeline({
+  return runPipeline({
     label: operation.id,
     runtime: rt,
     inputs: [

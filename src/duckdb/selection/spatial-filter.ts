@@ -5,10 +5,22 @@ import type { RelationOptions } from '../core/relation/operations';
 import type { RelationOperationId } from '../core/relation/types';
 import { spatialRelation } from './spatial-relation';
 
+/**
+ * @example
+ * const predicate: SpatialFilterPredicate = 'intersects';
+ */
 export type SpatialFilterPredicate = Exclude<RelationOperationId, 'distance'>;
+/**
+ * @example
+ * const options: SpatialFilterOptions = { predicate: 'within' };
+ */
 export interface SpatialFilterOptions extends RelationOptions {
   predicate: SpatialFilterPredicate;
 }
+/**
+ * @example
+ * const result = await spatialFilter(parcels, boundary, { predicate: 'within' });
+ */
 export function spatialFilter(
   input: MapshaperDataset,
   reference: MapshaperDataset,

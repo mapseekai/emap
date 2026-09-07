@@ -7,6 +7,23 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = process.cwd();
 
 describe('documentation quality checkers', () => {
+  it.each([
+    ['unreleased', 0],
+    ['0.9.0', 0],
+    ['latest', 1],
+  ] as const)('validates the explicit documentation version %s', async (verifiedVersion, status) => {
+    const root = await fixtureRoot();
+    for (const path of [
+      'packages/docs/docs/intro.md',
+      'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md',
+    ]) {
+      await writeDoc(root, path, { title: 'Intro', verifiedVersion });
+    }
+    await writeCatalog(root, { docs: [], api: [], fixtures: [] });
+    const result = runChecker('scripts/check-docs-i18n.mjs', root);
+    expect(result.status, outputOf(result)).toBe(status);
+  });
+
   it('fails when an English mirror document is missing', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {

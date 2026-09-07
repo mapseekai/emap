@@ -73,17 +73,17 @@ export class StyleResolver {
       dataset: MapshaperDataset;
       layer: MapshaperLayer;
     },
-    colorSpec: string | StyleExpression | undefined,
+    colorValue: string | StyleExpression | undefined,
     bakedField: 'fill' | 'stroke',
   ): StyleResolution | null {
     // 逐键回退第 1 级：显式标量 paint 优先。已声明静态颜色的图层永远
     // 走静态 painter 路径，styleSource 不得劫持（spec §4.2）。
-    if (typeof colorSpec === 'string') return null;
-    const expr = isStyleExpression(colorSpec) ? colorSpec : null;
+    if (typeof colorValue === 'string') return null;
+    const expr = isStyleExpression(colorValue) ? colorValue : null;
     const baked = expr === null && args.styleSource === 'mapshaper';
     if (expr === null && !baked) return null;
 
-    const fingerprint = `${bakedField}|${JSON.stringify(colorSpec ?? null)}|${args.styleSource ?? ''}`;
+    const fingerprint = `${bakedField}|${JSON.stringify(colorValue ?? null)}|${args.styleSource ?? ''}`;
     const hit = this._cache.get(args.layerId);
     const attrVersion = args.dataset.attributeVersion ?? 0;
     if (
