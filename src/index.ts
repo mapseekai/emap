@@ -250,6 +250,7 @@ export {
   inferFromPrj,
   normalizeCrsString,
   resolveDatasetCRS,
+  setDatasetCrsMetadata,
 } from './geo/crs-resolver';
 
 // ===========================================================================

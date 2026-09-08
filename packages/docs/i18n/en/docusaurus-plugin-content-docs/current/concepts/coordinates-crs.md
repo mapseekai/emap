@@ -2,10 +2,10 @@
 id: coordinates-crs
 slug: /concepts/coordinates-crs
 title: Coordinates and CRS
-api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","Viewport"]
+api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","setDatasetCrsMetadata","Viewport"]
 examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.2
 ---
 
 # Coordinates and CRS
@@ -30,6 +30,8 @@ console.log(map.getCRS());
 ```
 
 An empty map can establish a CRS with `map.setCRS('EPSG:3857')`. The first registered source establishes the active CRS when the map has no preset CRS. Later sources normalize to the map CRS before registration.
+
+Before attaching an externally constructed dataset to a map, write explicit CRS metadata with `setDatasetCrsMetadata(dataset, crs)`: the given `crs` replaces any embedded prj/wkt1 hints, and `undefined` clears them.
 
 ## Reproject a map or export a layer
 
@@ -97,6 +99,7 @@ When one camera call supplies both `scale` and `zoom`, `scale` takes precedence.
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [Bounds](/mapseekai/emap/api/classes/emap.Bounds.html)
 - [resolveDatasetCRS](/mapseekai/emap/api/functions/emap.resolveDatasetCRS.html)
+- [setDatasetCrsMetadata](/mapseekai/emap/api/functions/emap.setDatasetCrsMetadata.html)
 
 ## Runnable examples
 

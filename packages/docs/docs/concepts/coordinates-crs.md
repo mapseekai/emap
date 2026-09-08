@@ -2,10 +2,10 @@
 id: coordinates-crs
 slug: /concepts/coordinates-crs
 title: 坐标与 CRS
-api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","Viewport"]
+api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","setDatasetCrsMetadata","Viewport"]
 examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.2
 ---
 
 # 坐标与 CRS
@@ -30,6 +30,8 @@ console.log(map.getCRS());
 ```
 
 空地图可用 `map.setCRS('EPSG:3857')` 预设 CRS。第一个注册的 source 会在地图尚未预设 CRS 时建立活动 CRS。后续 source 在注册前会归一到地图 CRS。
+
+将外部构造的 dataset 挂到地图前，可用 `setDatasetCrsMetadata(dataset, crs)` 显式写入 CRS 元数据：给定的 `crs` 会替换 dataset 内嵌的 prj/wkt1 提示，传入 `undefined` 则清除。
 
 ## 重投影地图或导出图层
 
@@ -97,6 +99,7 @@ map.jumpTo({
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [Bounds](/mapseekai/emap/api/classes/emap.Bounds.html)
 - [resolveDatasetCRS](/mapseekai/emap/api/functions/emap.resolveDatasetCRS.html)
+- [setDatasetCrsMetadata](/mapseekai/emap/api/functions/emap.setDatasetCrsMetadata.html)
 
 ## 可运行示例
 

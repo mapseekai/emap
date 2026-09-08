@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-09
+
+### Fixed
+
+- The public entry now re-exports `setDatasetCrsMetadata`, which was declared in
+  `dist/geo/crs-resolver.d.ts` but unreachable from `@mapseekai/emap`. Consumers
+  no longer need to mirror the helper to set explicit CRS metadata on detached
+  datasets before map attach. The coordinates/CRS guide documents the function
+  in both languages.
+
+### Security
+
+- Upgraded `maplibre-gl` to `^6.4.1` to patch a critical XSS sanitizer bypass in
+  `DOM.sanitize()` (advisory 1193680). New high-severity `js-yaml` and `svgo`
+  advisories reachable only through the Docusaurus documentation toolchain were
+  reviewed and added to the dated audit allowlist.
+
 ## [0.9.1] - 2026-09-08
 
 ### Added
@@ -1011,7 +1028,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/mapseekai/emap/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mapseekai/emap/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/mapseekai/emap/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mapseekai/emap/compare/v0.8.0...v0.8.1
