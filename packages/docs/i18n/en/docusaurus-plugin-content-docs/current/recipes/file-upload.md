@@ -2,45 +2,45 @@
 id: file-upload
 slug: /recipes/file-upload
 title: File upload
-api: ["TopologySource.fromBytes"]
-examples: ["flatgeobuf-viewer","geoparquet-viewer","getting-started/points"]
+api: ["TopologySource.fromBytes","TopologySource","TopologySourceFromBytesOptions"]
+examples: ["flatgeobuf-viewer", "geoparquet-viewer", "getting-started/points"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # File upload
 
-Use `TopologySource.fromBytes` for browser file inputs. Keep the original filename so mapshaper can choose the importer and preserve format-specific sidecar behavior.
+Use `TopologySource.fromBytes` to import a browser `File`. The filename extension selects the importer; once loading succeeds, add the returned source to an `Emap`.
 
-## Behavior notes
+## Upload with ZIP extraction limits
 
-Catch load errors, display a retryable message, and add the source/layer only after the promise resolves.
-
-Before loading a FlatGeobuf `.fgb` upload, the application must register its
-local `flatgeobuf` format plugin. This is not a core or
-`@mapseekai/emap/arrow` package entry. Follow the
-`installFlatGeobufFormat(emap)` setup in [Data formats](../data/formats.md);
-`emap` is the module namespace, not an `Emap` map instance. Register first,
-then call `fromBytes`; see the
-[FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
-
-## API
-
-- [src.TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/emap.TopologySourceFromBytesOptions.html)
-
-## Runnable examples
-
-- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
-- [flatgeobuf-viewer](/mapseekai/emap/examples/flatgeobuf-viewer/)
-- [getting-started/points](/mapseekai/emap/examples/getting-started/points/)
-
-## Minimal snippet
+Set `zipLimits` for ZIP uploads to cap compressed input, extracted bytes, entry count, and compression ratio. `fromBytes` rejects when import fails, so handle the error at the application boundary and keep the map usable.
 
 ```ts
 const file = input.files?.[0]
-if (!file) throw new Error("Choose a file")
+if (!file) return
+
 const source = await TopologySource.fromBytes("upload", await file.arrayBuffer(), {
   filename: file.name,
+  zipLimits: {
+    maxCompressedBytes: 50 * 1024 * 1024,
+    maxBytes: 200 * 1024 * 1024,
+    maxEntries: 1_000,
+    maxRatio: 100,
+  },
 })
+await map.addSource(source.id, source)
 ```
+
+Keep the selected filename in `filename`. Core import supports GeoJSON, TopoJSON, Shapefile ZIP, KML, MSX, and other registered formats. `@mapseekai/emap/arrow` supplies GeoParquet and GeoArrow support; FlatGeobuf requires the application to register its format plugin.
+
+## API
+
+- `TopologySource`
+- `TopologySourceFromBytesOptions`
+
+## Runnable examples
+
+- [GeoParquet viewer](/mapseekai/emap/examples/geoparquet-viewer/)
+- [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/)
+- [Getting started: points](/mapseekai/emap/examples/getting-started/points/)

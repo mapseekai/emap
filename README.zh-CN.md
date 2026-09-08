@@ -6,19 +6,18 @@
 
 [English](README.md)
 
-`@mapseekai/emap` 是面向浏览器的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。它以 mapshaper 数据结构为基础，使用 Canvas2D 绘制可编辑业务图层，并可按需同步 MapLibre 底图和在线叠加服务。
+`@mapseekai/emap` 是运行在浏览器中的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。数据以 mapshaper 拓扑结构保存，业务图层使用 Canvas2D 渲染，不依赖任何后端地图服务。
 
-> 项目尚未达到 1.0，接口仍在快速演进。用于生产关键编辑流程时，应锁定版本并在升级前完成回归验证。
+## emap 支持什么
 
-## 主要能力
-
-- 加载 GeoJSON、TopoJSON、Shapefile ZIP、KML、MSX 快照，以及可选的 GeoArrow、GeoParquet。
-- 使用 Canvas2D 渲染点、线、面，支持视域裁剪、简化级别和属性驱动分桶填色。
-- 支持选择、绘制、平移、旋转、缩放、拆分、合并、整形、节点、洞和多部件编辑。
-- 通过可撤销命令实现撤销、重做、事务、校验和选择状态恢复。
-- 将数据集操作卸载到 Web Worker，并在提交前检查异步结果是否过期。
-- 通过受限且类型化的接口运行可选 DuckDB-Wasm SQL 与空间分析。
-- 使用可选 MapLibre 服务管理底图、瓦片和在线叠加图层。
+- **数据格式**：内置 GeoJSON、TopoJSON、Shapefile ZIP、KML 和 MSX 快照；通过可选的 `@mapseekai/emap/arrow` 入口支持 GeoArrow 与 GeoParquet。
+- **图层**：`fill`、`line`、`circle` 三种图层，Canvas2D 渲染，支持视域裁剪、随简化级别切换的显示弧段和属性驱动的分桶填色。
+- **编辑**：选择、绘制、平移、旋转、缩放、拆分、合并、整形、多边形自动闭合，以及顶点、环、洞和多部件编辑。
+- **历史**：所有修改都是可撤销命令，支持撤销、重做、事务、校验和选择状态恢复。
+- **数据集操作**：`map.ops` 提供裁剪、擦除、融合、缓冲区、过滤、简化、分级、关联、投影、修复和环/部件操作（完整清单见 API 参考中的 `MapshaperOps`）。
+- **执行**：数据集操作可卸载到 Web Worker，并在提交前校验结果是否过期。
+- **分析**：通过受限且类型化的 `@mapseekai/emap/duckdb` 入口运行可选的 DuckDB-Wasm SQL 与空间分析。
+- **底图**：可选 MapLibre 服务管理栅格/矢量底图和在线叠加图层；可编辑 Canvas 图层始终由 emap 管理。
 
 ## 安装
 
@@ -26,12 +25,14 @@
 pnpm add @mapseekai/emap
 ```
 
+导入核心模块与样式表：
+
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 ```
 
-TypeScript 建议使用浏览器打包器解析方式：
+emap 面向现代浏览器，TypeScript 使用打包器解析方式：
 
 ```json
 {
@@ -85,15 +86,15 @@ map.addLayer({
 map.setExtent(source.getExtent());
 ```
 
-宿主页面销毁时同步释放地图：
+宿主页面销毁时释放地图实例：
 
 ```ts
 map.remove();
 ```
 
-## 本地数据与 ZIP 边界
+## 加载本地数据
 
-浏览器文件通过 `TopologySource.fromBytes()` 加载：
+浏览器中选择的文件通过 `TopologySource.fromBytes()` 加载：
 
 ```ts
 const file = input.files?.[0];
@@ -110,9 +111,9 @@ const source = await TopologySource.fromBytes('upload', await file.arrayBuffer()
 });
 ```
 
-ZIP 内置默认限制为压缩输入最大 2 GiB、解压后内容总量最大 2 GiB；上面的示例针对公网上传主动设置了更严格的限制。ZIP 中存在重复 basename 时会明确报错，不会再静默拼接不同目录下的 Shapefile 与 sidecar。
+ZIP 导入默认允许最大 2 GiB 压缩输入和 2 GiB 解压后总内容；面向公网上传时通过 `zipLimits` 收紧。压缩包内出现重复 basename 时会明确报错。
 
-## 编辑、历史与事务
+## 编辑与历史
 
 交互 Handler 管理手势状态，EditCommand 负责可逆的数据修改：
 
@@ -149,11 +150,11 @@ export async function cleanAndSimplify(map: Emap, source: string, target: string
 }
 ```
 
-操作返回 `OpResult`，需要检查 `ok`，不能仅依赖 `try/catch`。这里的 `source` 是已注册的数据源 ID，`target` 是数据源内的数据图层名称或 ID。
+操作返回 `OpResult`，需要检查 `ok`，不能仅依赖 `try/catch`。`source` 是已注册的数据源 ID，`target` 是数据源内的数据图层名称或 ID。
 
-事务期间禁用撤销／重做，并拒绝清空历史或替换外部输入。外部数据替换会清理旧历史以及该数据源的选择和高亮；正常命令的撤销／重做不会触发这类重置。
+事务开启期间，撤销／重做、清空历史和替换外部输入都会被拒绝。外部替换数据集会清理该数据源的历史、选择和高亮；命令的撤销／重做不会。
 
-传递给 mapshaper 的字符串表达式默认关闭。只有配置和数据完全可信时，才设置 `expressionPolicy: 'trusted'`。
+传递给 mapshaper 的字符串表达式默认关闭。仅当配置和数据完全由应用控制时，才设置 `expressionPolicy: 'trusted'`。
 
 ## 属性驱动填色
 
@@ -177,11 +178,11 @@ map.addLayer({
 });
 ```
 
-`fill-color` 也支持文档中定义的受限表达式子集。表达式不使用 `eval`，并按照数据集属性版本缓存。
+`fill-color` 支持样式指南中定义的受限表达式子集。表达式不使用 `eval` 校验，并按数据集属性版本缓存。
 
 ## Worker 卸载
 
-将 Worker 和 vendor 文件部署到页面可访问路径：
+将 Worker 和 vendor 文件部署到页面可访问路径，然后启用 Worker 路由：
 
 ```ts
 const map = new Emap({
@@ -199,29 +200,29 @@ const map = new Emap({
 @mapseekai/emap/dist/mapshaper-vendor.mjs
 ```
 
-主线程在提交 Worker 结果前会检查 Source 身份、几何版本和属性版本，避免旧结果覆盖新编辑。
+主线程在提交 Worker 结果前校验 Source 身份、几何版本和属性版本，过期结果不会覆盖新编辑。
 
 ## 可选 Arrow 与 GeoParquet
 
-先安装 Arrow 子路径使用的可选 peer；只有 GeoParquet 导入或导出才需要安装 `parquet-wasm`：
+安装 Arrow 子路径使用的 peer；仅 GeoParquet 导入或导出需要 `parquet-wasm`：
 
 ```bash
 pnpm add apache-arrow
 pnpm add parquet-wasm # 仅 GeoParquet
 ```
 
-导入 Arrow 子路径会注册 GeoArrow、GeoParquet 格式：
+导入 Arrow 子路径即注册 GeoArrow 与 GeoParquet 格式：
 
 ```ts
 import '@mapseekai/emap/arrow';
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 ```
 
-只有实际使用 GeoParquet 时才会加载 `parquet-wasm`。
+`parquet-wasm` 在首次使用 GeoParquet 时才加载；不导入该入口的应用不会执行格式模块。
 
 ## 可选 DuckDB-Wasm
 
-导入 DuckDB 子路径前先安装可选运行时 peer：
+导入 DuckDB 子路径前安装运行时 peer：
 
 ```bash
 pnpm add @duckdb/duckdb-wasm apache-arrow
@@ -242,7 +243,7 @@ const result = await attributeFilter(source.getDataset()!, {
 });
 ```
 
-属性筛选接口只接受受限的单条 `SELECT`。DuckDB Processing Toolbox 同时提供 Overlay、Proximity、Aggregate、Join、Geometry、Transform、Selection 和 Data Management 八类工具。距离类操作在需要平面单位时默认拒绝地理坐标系，避免把角度误当作长度。
+属性筛选接口只接受受限的单条 `SELECT`。DuckDB 处理工具箱提供 Overlay、Proximity、Aggregate、Join、Geometry、Transform、Selection 和 Data Management 八类操作。距离类操作默认拒绝地理坐标系，结果不会以角度为单位。
 
 ## 可选 MapLibre 服务
 
@@ -265,7 +266,7 @@ const map = new Emap({
 });
 ```
 
-该集成负责 MapLibre source/layer 资源所有权、请求版本、失败回滚和视图同步；可编辑 Canvas 图层仍由 emap 管理。
+该集成负责 MapLibre source/layer 注册、请求版本取消、失败回滚和视图同步。
 
 ## 文档
 
@@ -281,7 +282,7 @@ const map = new Emap({
 
 ## 架构
 
-公共 `Emap` 类是统一门面，内部按照状态所有权和失败语义划分：
+公共 `Emap` 类是统一门面，内部按状态所有权和失败语义划分：
 
 ```text
 DOM 指针输入
@@ -298,25 +299,25 @@ DOM 指针输入
 
 - `src/source/`：导入导出、ZIP 限制、CRS 元数据和 DisplayArcs 生命周期。
 - `src/adapter/mapshaper-adapter.ts`：业务代码访问 `mapshaper.internal.*` 的统一边界。
-- `src/map/ops/`：可独立测试的数据和选择操作。
-- `src/edit/commands/`：可撤销的原地修改。
-- `src/renderer/`：Canvas 绘制与编辑覆盖层。
+- `src/map/ops/`：可独立测试的数据集与选择操作。
+- `src/edit/commands/`：可逆的实时数据修改。
+- `src/renderer/`：Canvas 绘制与编辑叠加层。
 - `src/core/handlers/`：浏览器交互状态。
-- `src/arrow/`、`src/duckdb/`：可选数据与分析入口。
-- `src/map/maplibre-service-manager.ts`：可选在线服务资源和异步回滚。
+- `src/arrow/` 与 `src/duckdb/`：可选数据与分析入口。
+- `src/map/maplibre-service-manager.ts`：在线服务资源与异步回滚。
 
-几何修改与属性修改分别使用单调版本计数器；所有异步操作提交前都必须比较这两个版本。
+几何编辑和属性编辑使用各自独立的单调版本计数器。Worker 与异步操作在提交前同时比较两者。
 
 ## 开发
 
-开发环境：
+环境要求：
 
 ```text
-Node.js 24
+Node.js 22.18–24
 pnpm 11.15.1
 ```
 
-主要门禁：
+安装并运行主要检查：
 
 ```bash
 pnpm install --frozen-lockfile
@@ -331,20 +332,22 @@ pnpm run audit:prod
 pnpm pack --dry-run
 ```
 
-本地启动：
+本地启动示例或文档站：
 
 ```bash
 pnpm run examples:dev
 pnpm run docs:dev
 ```
 
-`packages/docs/static/api/` 是按需生成的 TypeDoc 产物，不进入 Git。`api:build`、`docs:build` 和 `docs:verify` 会自动生成。
+`packages/docs/static/api/` 下由 TypeDoc 生成的文件被有意忽略，`api:build`、`docs:build` 和 `docs:verify` 会重新生成。
 
-修改 mapshaper 操作时，应同步更新 `src/map/ops/_runner.ts` 中的 effect 分类，并验证历史、选择、Worker 和 stale-operation 行为。完整协作规则见 [AGENTS.md](AGENTS.md)。
+DuckDB 集成套件通过 `pnpm run test:duckdb` 运行，该命令对 `src/duckdb` 全目录设置 `DUCKDB_WASM_INTEGRATION=1`。
+
+修改 mapshaper 支持的操作前，先更新它在 `src/map/ops/_runner.ts` 中的效果分类，并验证历史、选择、Worker 和过期操作行为。仓库规则见 [AGENTS.md](AGENTS.md)。
 
 ## 安全
 
-漏洞报告方式见 [SECURITY.md](SECURITY.md)。不要为不可信配置开启 mapshaper 表达式；接收公网文件时应设置保守的数据源和 ZIP 上限。
+按 [SECURITY.md](SECURITY.md) 报告漏洞。对不可信配置保持 mapshaper 表达式关闭；接受公网上传时使用保守的数据源大小限制。
 
 ## 许可证
 

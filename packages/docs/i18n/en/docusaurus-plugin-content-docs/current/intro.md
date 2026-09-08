@@ -2,126 +2,40 @@
 id: intro
 slug: /
 title: Emap Introduction
-api: []
-examples: []
+api: ["Emap","LayerSpecification","TopologySource"]
+examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Emap
 
-Emap is a browser-only TypeScript map rendering and editing engine. It keeps
-topology in mapshaper data structures, renders through HTML5 Canvas 2D, and
-connects data loading, layer styling, interaction, edit history, and spatial
-processing behind one frontend API.
+Emap is a browser-focused TypeScript library for map rendering, editing, and spatial data processing. It renders with Canvas 2D and manages data sources as mapshaper topology datasets. An application can load data, draw layers, edit features, run analysis operations, and export results in the frontend.
 
-Emap does not require a backend map service. Data may come from a URL, a file
-selected by the user, or in-memory bytes; import, inspection, editing, and
-export can all happen in the browser.
+Emap serves applications that combine viewing, interaction, and processing for data that fits in the browser, including GIS data viewers, business editors, and data-processing tools. The application owns its toolbar, property panel, and status UI; Emap supplies the map, data, and interaction capabilities.
 
-## When to use Emap
-
-- Build a GIS data viewer for GeoJSON, TopoJSON, KML, or Shapefile ZIP files.
-- Build a browser editor with feature selection, attribute changes, transforms,
-  vertex editing, split, reshape, ring, and part editing, undo, and redo.
-- Run simplify, buffer, clip, dissolve, projection, and topology repair
-  workflows on the client.
-- Use the engine and handlers under an application-specific toolbar, property
-  panel, and status UI.
-- Prototype a complete data workflow without deploying a backend GIS service.
-
-Emap is not a replacement for tiled basemaps, 3D scenes, or server-side queries
-over datasets that cannot fit in a browser. Its focus is topology data that can
-be loaded and edited as a complete client-side dataset.
-
-## Core building blocks
-
-| Building block | Responsibility |
-|---|---|
-| `Emap` | Owns the canvas, camera, sources, render layers, interactions, controls, and history |
-| `TopologySource` | Imports files or bytes and stores a mapshaper topology dataset |
-| `LayerSpecification` | Selects a source layer and describes `fill`, `line`, or `circle` rendering |
-| `map.ops` | Runs typed data operations with error results and history integration |
-| Handler | Implements navigation, selection, drawing, topology editing, measurement, and transforms |
-| Control | Provides an optional DOM surface for a built-in capability |
-
-A typical application follows this sequence:
-
-1. Create a map container with an explicit size.
-2. Construct `Emap`.
-3. Load data through `TopologySource`.
-4. Register the source and add render layers when custom styling is needed.
-5. Set the initial camera from the data extent.
-6. Listen for events and synchronize selection, properties, status, and errors
-   with application UI.
-7. Modify data through edit commands or `map.ops`, not by mutating the dataset
-   directly.
-
-## Main capabilities
+## Supported capabilities
 
 ### Data input and output
 
-- The core package supports GeoJSON, TopoJSON, KML (import-only), Shapefile ZIP,
-  and mapshaper snapshots.
-- `@mapseekai/emap/arrow` adds GeoParquet and GeoArrow; `@mapseekai/emap/duckdb`
-  adds optional DuckDB-Wasm queries and spatial processing.
-- FlatGeobuf import and export are available after an application installs
-  `flatgeobuf` and registers a local format plugin; see [Data formats](./data/formats.md).
+The core package imports and exports GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper snapshots, and imports KML. `TopologySource` loads data from a URL, file bytes, or application memory and exports results as a `Blob`.
 
-### Rendering and camera
+Import `@mapseekai/emap/arrow` to read and write GeoArrow and GeoParquet. FlatGeobuf input and output are available after the application installs `flatgeobuf` and registers a local format plugin.
 
-- Render polygon, line, and point data through `fill`, `line`, and `circle`
-  layers.
-- Use `jumpTo`, `easeTo`, `flyTo`, `fitBounds`, `panTo`, and `zoomTo`.
-- Reuse shared arcs and source-managed simplification levels while rendering
-  topology.
+### Layers, interaction, and editing
 
-### Interaction and editing
+`Emap` manages the canvas, camera, sources, render layers, events, and history. Use `LayerSpecification` to add `fill`, `line`, and `circle` layers for polygon, line, and point data.
 
-- Click, box, and lasso selection; pan, zoom, drawing, vertex, split, reshape,
-  ring, and part editing handlers.
-- Feature translation, rotation, scaling, and length or area measurement.
-- More than 40 `map.ops` data operations, with one history for editing commands
-  and transactions.
-- Public feature, camera, history, validation, and worker events.
+The library provides pan, zoom, click, box, and lasso selection; drawing; vertex, split, reshape, ring, and part editing. Edit commands and data operations enter the history, which an application can expose through undo and redo UI.
 
-## Package entries and static assets
+### Analysis and data processing
 
-```ts
-import { Emap, TopologySource } from '@mapseekai/emap';
-import '@mapseekai/emap/style.css';
+`map.ops` provides simplify, buffer, clip, erase, dissolve, union, projection, topology repair, attribute processing, and layer-management operations. Import `@mapseekai/emap/duckdb` and install DuckDB-Wasm to use DuckDB query and spatial-processing capabilities.
 
-// Optional entries do not affect applications that only import the core package
-import '@mapseekai/emap/arrow';
-const duckdb = await import('@mapseekai/emap/duckdb');
-```
+## Start here
 
-Arrow and DuckDB are `package.json` export subpaths. Configure a modern
-TypeScript resolver before importing them; see
-[Installation](./getting-started/installation.md) for browser-bundler, native
-Node ESM, and legacy-resolver requirements.
-
-
-Worker deployments must also serve `emap-worker.js` and
-`mapshaper-vendor.js`. See the [Web Worker guide](./guides/worker.md) for the
-deployment layout.
-
-## Recommended reading order
-
-1. [Installation](./getting-started/installation.md): build the first runnable
-   map.
-2. [Concepts overview](./concepts/overview.md): understand maps, sources, and
-   layers.
-3. [Styling](./guides/styling.md): control how points, lines, and polygons are
-   drawn.
-4. [Selection](./guides/selection.md) and [Editing](./guides/editing.md): add
-   interactions.
-5. [Data operations](./data/operations.md): process topology and attributes.
-6. [Error handling](./recipes/error-handling.md): present failures safely.
-
-## Project status
-
-These docs describe `@mapseekai/emap` 0.8.1. The project is still evolving
-quickly and is best suited to prototypes, demos, research tools, and controlled
-internal applications. Review the migration notes and API reference when
-upgrading.
+1. Read [Installation](./getting-started/installation.md) to install the package, import its stylesheet, and configure optional modules.
+2. Read [Concepts overview](./concepts/overview.md) to understand the relationship between maps, sources, and render layers.
+3. Read [Data formats](./data/formats.md) and [Styling](./guides/styling.md) to load data and define its presentation.
+4. Read [Selection](./guides/selection.md), [Editing](./guides/editing.md), and [Data operations](./data/operations.md) to add interaction and processing workflows.
+5. Open the [runnable examples](/mapseekai/emap/examples/) for complete implementations.

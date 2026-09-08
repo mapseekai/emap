@@ -183,6 +183,22 @@ d('shipped bundles are self-contained', () => {
     await expect(waitForLoad(src, { filename: 't.geojson', content })).resolves.toBeUndefined();
   }, 30_000);
 
+  it('loads KML through the shipped browser ESM bundle', async () => {
+    const { TopologySource } = await loadEmap();
+    const kml =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' +
+      '<Placemark><name>box</name><Polygon><outerBoundaryIs><LinearRing>' +
+      '<coordinates>0,0 1,0 1,1 0,1 0,0</coordinates>' +
+      '</LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>';
+    const content = Uint8Array.from(Buffer.from(kml, 'utf8'));
+    const src = new TopologySource('t-kml');
+    await expect(waitForLoad(src, { filename: 't.kml', content })).resolves.toBeUndefined();
+    expect(src.getLayers().map((l: { geometry_type: string | null }) => l.geometry_type)).toEqual([
+      'polygon',
+    ]);
+  }, 30_000);
+
   it('reprojects GeoJSON through the shipped browser ESM bundle', async () => {
     const { TopologySource } = await loadEmap();
     const geojson =

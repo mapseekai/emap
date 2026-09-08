@@ -3,68 +3,45 @@ id: coordinates-crs
 slug: /concepts/coordinates-crs
 title: Coordinates and CRS
 api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","Viewport"]
-examples: ["crs-switch","project"]
+examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Coordinates and CRS
 
-Emap works with three coordinate spaces:
+Emap distinguishes dataset/map coordinates, Canvas pixels, and CRS identifiers. Geometry, camera centers, and spatial operations use dataset/map coordinates; hit testing and screen overlays use Canvas-local pixels; a CRS defines the location and units represented by coordinate values.
 
-| Space | Example | Purpose |
-|---|---|---|
-| Dataset/map | `[120, 30]` or `[13358338, 3503549]` | Geometry, camera center, operations |
-| Canvas pixels | `[320, 180]` | Hit testing, controls, screen overlays |
-| CRS identifier | `EPSG:4326`, `EPSG:3857` | Meaning of dataset coordinates |
+| Space | Example | Used for |
+| --- | --- | --- |
+| Dataset/map coordinates | `[120, 30]`, `[13358338, 3503549]` | Geometry, extent, camera, operations |
+| Canvas pixels | `[320, 180]` | Pointer input, hit testing, screen UI |
+| CRS identifier | `EPSG:4326`, `EPSG:3857` | Interpreting coordinates and units |
 
-Do not treat canvas pixels as longitude/latitude or assume every dataset is
-WGS84.
+Canvas pixels are not longitude/latitude, and dataset coordinates are not necessarily WGS84.
 
-## CRS detection
+## Read and establish a CRS
 
-`TopologySource.getCRS()` resolves metadata in this order:
-
-1. `crs_string`
-2. `.prj` / WKT
-3. mapshaper's parsed CRS
-4. `EPSG:4326` fallback
+`source.getCRS()` and `map.getCRS()` return CRS strings. `resolveDatasetCRS(dataset)` resolves a CRS from dataset metadata and returns `DEFAULT_CRS` (`EPSG:4326`) when no metadata is recognized. That fallback does not establish that the original coordinates are longitude/latitude; applications should obtain a CRS for data of unknown origin.
 
 ```ts
 console.log(source.getCRS());
 console.log(map.getCRS());
 ```
 
-A fallback does not prove the data is geographic. Let users confirm or override
-the CRS for files of unknown origin.
+An empty map can establish a CRS with `map.setCRS('EPSG:3857')`. The first registered source establishes the active CRS when the map has no preset CRS. Later sources normalize to the map CRS before registration.
 
-## Set a map CRS or reproject
+## Reproject a map or export a layer
 
-An empty map can establish its CRS with `setCRS`:
-
-```ts
-map.setCRS('EPSG:3857');
-```
-
-Emap maintains one active CRS for all loaded data:
-
-- Without a preset CRS, the first loaded source establishes the map CRS.
-- `await map.addSource(...)` reprojects a loaded source before registration when its CRS differs.
-- A later `setData(...)` on a registered source performs the same normalization before commit and before its `data` event.
-- `map.ops`, DuckDB helpers, editing, and export read datasets in the active map CRS.
-
-After a source is registered, `setCRS` rejects a display-only interpretation
-change. Transform every registered source instead:
+Change the CRS of a map with registered sources through `map.reproject(...)`:
 
 ```ts
 await map.reproject('EPSG:3857');
 ```
 
-`reproject` atomically converts every source, updates CRS metadata, clears
-spatial indexes, fits the new extent, and fires `crschange` and `data`. If any
-source conversion fails, no source is committed.
+This converts every registered source to the target CRS and updates CRS metadata, spatial indexes, and the view. If any source conversion fails, no source is committed. Registered data cannot use `setCRS` to change interpretation only; `setCRS` is for a map without sources.
 
-To project one layer for local saving without changing the current map:
+Use `projectLayer` to export one layer in another CRS without changing the map:
 
 ```ts
 const result = await map.ops.projectLayer({
@@ -73,13 +50,14 @@ const result = await map.ops.projectLayer({
   crs: 'EPSG:3857',
   output: { format: 'geojson', filename: 'districts-3857.geojson' },
 });
+
+if (result.ok) {
+  const { blob, filename } = result.value;
+  console.log(blob, filename);
+}
 ```
 
-On success, `result.value` contains `blob`, `filename`, and `format`; save the
-Blob with a download link or the File System Access API. This operation runs on
-an isolated copy and never changes the current map's sources, CRS, or viewport,
-or loads the result back into the map. Use `map.reproject()` for map-wide CRS
-changes.
+`projectLayer` processes an isolated copy and returns an export file without changing the map source, active CRS, or viewport.
 
 ## Map and screen coordinates
 
@@ -88,40 +66,22 @@ const [screenX, screenY] = map.project(120, 30);
 const [mapX, mapY] = map.unproject(screenX, screenY);
 ```
 
-`project(x, y)` applies the current viewport transform. It does not reproject
-between EPSG systems.
+`project` and `unproject` apply the viewport transform only; they do not convert EPSG coordinates. `queryFeatures` uses Canvas-local pixels, so browser event coordinates must first be converted to container-local pixels.
 
-## Bounds
+## Extent, distance, and units
+
+`Bounds` represents an extent in dataset/map coordinates. Check it before moving the camera after loading:
 
 ```ts
 const extent = source.getExtent();
-
-if (extent.hasBounds()) {
-  map.fitBounds(extent, {
-    padding: 32,
-    duration: 0,
-  });
-}
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 ```
 
-An empty layer may have empty bounds; check before moving the camera.
-
-## Distance and area units
-
-Operation distance, tolerance, and area thresholds normally use dataset units:
-
-- A projected CRS may use metres or feet.
-- `EPSG:4326` uses degrees, not metres.
-- Buffer radius, simplify tolerance, and snap interval are not implicitly
-  metres.
-
-Prefer reprojecting geographic data into an appropriate local projected CRS
-before distance work. Some DuckDB helpers reject geographic CRS by default.
+Buffer radii, simplify tolerances, snap intervals, and area thresholds use dataset coordinate units. A projected CRS can use metres or feet; `EPSG:4326` uses degrees. Perform distance or area work in a projected CRS suitable for the area rather than treating longitude/latitude values as metres.
 
 ## Camera zoom and scale
 
-`zoom` is a WebMercator convenience. For another CRS, prefer bounds or
-CRS-independent `scale`:
+`zoom` is a Web Mercator convenience. For another CRS, use `fitBounds` or CRS-independent `scale`:
 
 ```ts
 map.jumpTo({
@@ -130,24 +90,16 @@ map.jumpTo({
 });
 ```
 
-`scale` wins when both it and `zoom` are supplied.
-
-## Troubleshooting
-
-- If reprojected data is misplaced, verify the original CRS before conversion.
-- A buffer over longitude/latitude uses degrees unless data is reprojected.
-- `queryFeatures` expects canvas-local pixels, not page coordinates.
+When one camera call supplies both `scale` and `zoom`, `scale` takes precedence.
 
 ## API
 
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [Bounds](/mapseekai/emap/api/classes/emap.Bounds.html)
-- [Projection](/mapseekai/emap/api/classes/emap.Projection.html)
 - [resolveDatasetCRS](/mapseekai/emap/api/functions/emap.resolveDatasetCRS.html)
-- [ProjectOptions](/mapseekai/emap/api/interfaces/emap.ProjectOptions.html)
 
 ## Runnable examples
 
-- [Project](/mapseekai/emap/examples/project/)
 - [CRS switch](/mapseekai/emap/examples/crs-switch/)
+- [Project](/mapseekai/emap/examples/project/)
 - [DuckDB buffer](/mapseekai/emap/examples/duckdb-buffer/)

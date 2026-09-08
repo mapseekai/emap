@@ -2,207 +2,70 @@
 id: selection
 slug: /guides/selection
 title: 选择
-api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
+api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions","FeatureQuery"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 选择
 
-选择项使用 `{ source, layer, id }` 标识，其中 `source` 是地图 source ID，
-`layer` 是 dataset 中的 source layer 名称，`id` 是该 source layer 内的要素索引。
-选择状态独立于渲染图层样式。
+Emap 用 `{ source, layer, id }` 标识已选要素。`source` 是地图 source ID，`layer` 是 source 内的图层名，`id` 是该图层中的要素索引。
 
-## 使用 API 选择
+## 使用选择 API
 
-替换当前选择：
+`select()` 默认替换选择；`add` 添加，`toggle` 切换成员。查询结果可直接传给 `select()`。
 
 ```ts
-map.select([
-  {
-    source: 'main',
-    layer: 'districts',
-    id: 3,
-  },
-]);
-```
+map.select([{ source: 'parcels', layer: 'lots', id: 42 }]);
 
-默认 mode 是 `'replace'`。还支持：
+const hits = map.queryFeatures([240, 160], { layers: ['parcel-fill'] });
+map.select(hits, { mode: 'add' });
 
-```ts
-map.select(features, { mode: 'add' });
-map.select(features, { mode: 'toggle' });
-```
-
-| mode | 行为 |
-|---|---|
-| `replace` | 用传入要素替换整个选择 |
-| `add` | 保留已有选择并加入新要素 |
-| `toggle` | 已选中的移除，未选中的加入 |
-
-移除指定要素或清空：
-
-```ts
-map.deselect([{ source: 'main', layer: 'districts', id: 3 }]);
+map.deselect([{ source: 'parcels', layer: 'lots', id: 42 }]);
 map.clearSelection();
-```
-
-读取和判断：
-
-```ts
 const selected = map.getSelection();
-const active = map.isSelected({
-  source: 'main',
-  layer: 'districts',
-  id: 3,
-});
 ```
 
-## 从查询结果建立选择
+`queryFeatures()` 的 `layers` 过滤器使用渲染图层 ID；选择引用和要素事件过滤器使用 source layer 名称。
 
-`queryFeatures` 返回的对象与 `FeatureRef` 结构兼容，可以直接传给 `select`：
+## 启用点击、框选或套索
 
-```ts
-const hits = map.queryFeatures([240, 180], {
-  layers: ['district-fill'],
-});
-
-map.select(hits);
-```
-
-## 监听变化
-
-```ts
-map.on('selectionchange', ({ selected, added, removed }) => {
-  updateSelectionCount(selected.length);
-  updatePropertyPanel(selected);
-  console.log({ added, removed });
-});
-```
-
-只有集合实际改变时才触发事件。对已选择要素重复执行 `add` 不会产生无意义通知。
-
-## 点击选择
-
-点击选择 Handler 默认关闭。下面的示例还覆盖了默认修饰键映射：
+这些 Handler 默认关闭。用 `setOptions()` 限制可选渲染图层或设置修饰键，然后启用：
 
 ```ts
 map.clickSelect.setOptions({
-  layers: ['district-fill'],
-  modifiers: { replace: 'none', add: 'ctrl', toggle: 'alt' },
+  layers: ['parcel-fill'],
+  modifiers: { replace: 'none', add: 'shift', toggle: 'shift+alt' },
 });
 map.clickSelect.enable();
-```
 
-检查和关闭：
-
-```ts
-if (map.clickSelect.isEnabled()) {
-  map.clickSelect.disable();
-}
-```
-
-应用工具栏应直接切换 Handler，不要额外注册一套 Canvas click 逻辑。
-
-## 点击、拉框与套索选择
-
-默认修饰键如下：
-
-| Handler | 无修饰键 | Shift | Shift+Alt |
-|---|---|---|---|
-| `clickSelect`、`boxSelect` | `replace` | `add` | `toggle` |
-| `lassoSelect` | — | `replace`（拖拽） | `toggle` |
-
-对 `lassoSelect`，Shift 会激活套索，因此 Shift+Ctrl/Cmd 拖拽为 `add`。各选择 Handler
-的 `modifiers` 映射都可配置；上面的示例把点击选择的 `add` 改为 Ctrl/Cmd，把
-`toggle` 改为 Alt。
-
-拉框和套索互斥。切换到拉框前必须先禁用套索：
-
-```ts
-map.lassoSelect.disable();
+map.boxSelect.setOptions({ layers: ['parcel-fill'], dragActivator: 'shift' });
 map.boxSelect.enable();
 ```
 
-也可以使用内置控件：
+`boxSelect` 和 `lassoSelect` 都消费拖拽手势，不能同时启用。切换前先关闭已启用的 Handler：
 
 ```ts
-map.addControl(new BoxSelectControl(), 'top-left');
-map.addControl(new LassoSelectControl(), 'top-left');
+map.boxSelect.disable();
+map.lassoSelect.setOptions({ layers: ['parcel-fill'], includeIntersecting: true });
+map.lassoSelect.enable();
 ```
 
-拉框、套索、绘制和编辑都是有手势所有权的模式。应用在切换工具时应只保留当前模式
-需要的 Handler，避免同一指针动作表达多个意图。
+## 监听选择变化
 
-## 删除选择
-
-```ts
-const deleted = map.deleteSelected();
-
-if (deleted) {
-  console.log('已删除，且可以撤销');
-}
-```
-
-删除的所有要素组成一次历史记录；一次撤销会恢复整批要素。成功后选择自动清空。
-选择为空时返回 `false`，不会增加历史项。
-
-## 合并已选要素
-
-同一 source、同一 source layer 中至少选择两个要素后，可以把它们合并为一个要素：
+选择集合实际变化时，`selectionchange` 提供完整选择、添加项和移除项：
 
 ```ts
-const selected = map.getSelection();
-const result = await map.ops.mergeSelected({
-  attributeSource: selected[1],
+map.on('selectionchange', ({ selected, added, removed }) => {
+  const selectionUpdate = { selected, added, removed };
 });
-
-if (!result.ok) {
-  console.error(result.error);
-}
 ```
 
-多边形会执行真正的几何并集：相邻或重叠部分的内部边被删除；互不相连的多边形
-形成一个 multipart 要素。`attributeSource` 必须是当前选择中的要素，其完整属性
-记录会用于合并结果；省略时使用第一个所选要素。成功后选择自动清空，并生成一条
-可撤销、可重做的历史记录。
-
-## 选择与数据操作
-
-数据操作可能改变要素数量、拓扑、属性或 CRS。Emap 根据 operation effect 决定选择
-是保留、重映射还是清空。所有批量操作都应通过 `map.ops`，否则选择引用可能指向
-错误的 feature ID。
-
-## 常见问题
-
-### 事件过滤没有命中
-
-要素事件 filter 的 `layers` 使用 source layer 名称；`queryFeatures` 的 `layers`
-使用渲染图层 ID。先确认当前 API 需要哪一种。
-
-### 删除后仍使用旧 ID
-
-feature ID 是 source layer 内的索引，删除或 shape-count 操作可能改变后续 ID。
-数据变化后使用事件或新的查询结果刷新应用缓存。
-
-### 工具切换后仍在选择
-
-切换模式时显式调用旧 Handler 的 `disable()`。是否清空已有选择取决于业务意图，
-不要把禁用工具和清空结果隐式绑定。
-
-## API
-
-- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
-- [Selection](/mapseekai/emap/api/classes/emap.Selection.html)
-- [FeatureRef](/mapseekai/emap/api/interfaces/emap.FeatureRef.html)
-- [MergeSelectedOptions](/mapseekai/emap/api/interfaces/emap.MergeSelectedOptions.html)
-- [BoxSelectControl](/mapseekai/emap/api/classes/emap.BoxSelectControl.html)
-- [LassoSelectControl](/mapseekai/emap/api/classes/emap.LassoSelectControl.html)
+批量数据操作应通过 `map.ops` 执行，使地图能更新选择、空间索引和渲染。
 
 ## 可运行示例
 
 - [要素选择](/mapseekai/emap/examples/feature-selection/)
-- [拉框选择](/mapseekai/emap/examples/box-select/)
+- [框选](/mapseekai/emap/examples/box-select/)
 - [套索选择](/mapseekai/emap/examples/lasso-select/)
-- [合并已选要素](/mapseekai/emap/examples/merge-selected/)

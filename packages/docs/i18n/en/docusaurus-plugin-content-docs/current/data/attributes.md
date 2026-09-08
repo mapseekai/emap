@@ -2,47 +2,39 @@
 id: attributes
 slug: /data/attributes
 title: Attributes
-api: ["Emap"]
-examples: ["attribute-editing","attribute-expressions","data-engineering","feature-attributes","filter-features","join","split-layer"]
+api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions"]
+examples: ["attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Attributes
 
-A mapshaper layer may contain a data table. Shape and record indexes correspond,
-so `FeatureRef.id` locates both geometry and its property record.
+Emap stores each layer's attributes in a data table. A feature ID locates both its geometry and property record; use `map.features` to read and `map.attributes` or `map.ops` to modify them.
 
 ## Read properties
 
-From a screen query:
+`queryFeatures()` queries by screen coordinate, while `map.features.get()` queries by source, layer, and ID:
 
 ```ts
 const hits = map.queryFeatures([240, 180], {
   layers: ['district-fill'],
 });
 
-const first = hits[0];
-if (first) {
-  console.log(first.properties);
-}
-```
-
-From a reference:
-
-```ts
 const feature = map.features.get({
   source: 'main',
   layer: 'districts',
   id: 3,
 });
 
-console.log(feature?.properties);
+console.log(hits[0]?.properties, feature?.properties);
 ```
 
-Feature accessors are read views. Mutate through `map.attributes`.
+A `Feature` is a read view. Do not mutate `feature.properties` or source-dataset records directly; those changes bypass Emap's history, selection, and rendering updates.
 
-## Change one feature
+## Change feature properties
+
+`map.attributes.setFeatureProperty()` changes one field, and `setFeatureProperties()` writes several fields as one history entry. Assigning `undefined` to a field deletes it.
 
 ```ts
 const result = map.attributes.setFeatureProperty(
@@ -51,27 +43,19 @@ const result = map.attributes.setFeatureProperty(
   'New name',
 );
 
-if (!result.ok) {
-  console.error(result.error);
-}
-```
+if (!result.ok) console.error(result.error);
 
-Set several properties in one history entry:
-
-```ts
 map.attributes.setFeatureProperties(
   { source: 'main', layer: 'districts', id: 3 },
-  {
-    name: 'New name',
-    population: 120000,
-  },
+  { name: 'New name', population: 120000 },
 );
 ```
 
-An `undefined` value deletes that key. A complete no-op returns a validation
-error and does not create history.
+A complete no-op returns a validation error and creates no history entry.
 
-## Field operations
+## Manage fields
+
+Field operations target a source-layer name and are undoable. Rename does not overwrite an existing destination field.
 
 ```ts
 map.attributes.addField({
@@ -95,10 +79,9 @@ map.attributes.removeField({
 });
 ```
 
-`target` is a source-layer name. These operations are undoable. Rename refuses
-to overwrite an existing destination field.
+## Expressions, filtering, and joins
 
-## Bulk expressions
+Expression, `where`, and `calc` options on `map.ops` obey `expressionPolicy`. Its default is `'disabled'`; set `'trusted'` only for expressions controlled by the application.
 
 ```ts
 const map = new Emap({
@@ -106,28 +89,22 @@ const map = new Emap({
   expressionPolicy: 'trusted',
 });
 
-const result = await map.ops.applyExpression({
+await map.ops.applyExpression({
   source: 'main',
   target: 'districts',
   expression: 'POP_DENS = POP / AREA',
 });
-```
 
-Mapshaper expressions execute JavaScript-like logic. The default policy is
-`'disabled'`. Only enable `'trusted'` for application-owned expressions, never
-for direct user or remote input.
-
-Filter, sort, split, and `where` / `calc` options follow the same policy.
-
-## Fields and joins
-
-```ts
 await map.ops.filterFields({
   source: 'main',
   target: 'districts',
   fields: ['name', 'population'],
 });
+```
 
+Use `joinTable()` to join an external table to a layer by key fields. Key type and formatting must match on both sides: string `"001"` and number `1` are distinct keys.
+
+```ts
 await map.ops.joinTable({
   source: 'main',
   target: 'districts',
@@ -136,18 +113,7 @@ await map.ops.joinTable({
 });
 ```
 
-Normalize join key types and formatting; string `"001"` and number `1` are not
-the same key.
-
-## Selection and troubleshooting
-
-Attribute-only operations normally preserve feature IDs and selection.
-Shape-count operations may shift record indexes; refresh cached references after
-those changes.
-
-- A geometry-only layer may have no data table.
-- Do not mutate `feature.properties` or `layer.data.getRecords()` directly.
-- An `expression-disabled` result is the expected safe default.
+Attribute operations normally preserve feature IDs and selection. Operations that change feature count can shift record indexes; re-query results or handle `selectionchange` to refresh cached references.
 
 ## API
 

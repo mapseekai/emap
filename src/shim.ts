@@ -3,6 +3,7 @@ import mproj from 'mproj';
 import Flatbush from 'flatbush';
 import KDBush from 'kdbush';
 import * as geographiclib from 'geographiclib-geodesic';
+import * as togeojson from '@tmcw/togeojson';
 
 // mapshaper's polyfill resolution is `typeof window == 'object' && window.modules`
 // (mapshaper.js around line 142), and `runningInBrowser()` is
@@ -25,3 +26,6 @@ modules['mproj'] = mproj;
 modules['flatbush'] = Flatbush;
 modules['kdbush'] = KDBush;
 modules['geographiclib-geodesic'] = geographiclib;
+// KML import (`importKML`) requires '@tmcw/togeojson' at runtime; the browser
+// DOMParser is native, so '@xmldom/xmldom' is never reached.
+modules['@tmcw/togeojson'] = togeojson;

@@ -2,34 +2,35 @@
 id: undo-redo
 slug: /recipes/undo-redo
 title: Undo and redo
-api: ["Emap"]
-examples: ["attribute-editing","undo-redo"]
+api: ["Emap", "HistoryControl", "HistoryControlOptions"]
+examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Undo and redo
 
-History records command commits, transactions, and editing sessions. Use `HistoryControl` or keyboard shortcuts to expose undo/redo to users.
+`Emap` maintains history for edit commands, data operations, and transactions. Add `HistoryControl` for buttons, then bind keyboard shortcuts on the map container.
 
-## Behavior notes
-
-Dataset-replace operations should run through `Emap.ops` so history snapshots and selection preservation are updated together.
-
-## API
-
-- [src.HistoryControl](/mapseekai/emap/api/classes/emap.HistoryControl.html)
-- [src.EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
-
-## Runnable examples
-
-- [undo-redo](/mapseekai/emap/examples/undo-redo/)
-- [transaction](/mapseekai/emap/examples/transaction/)
-- [attribute-editing](/mapseekai/emap/examples/attribute-editing/)
-
-## Minimal snippet
+## Add buttons and shortcuts
 
 ```ts
 map.addControl(new HistoryControl(), "top-right")
-map.undo()
+map.bindHistoryShortcuts()
 ```
+
+`HistoryControl` updates its undo and redo buttons from `historychange`. `bindHistoryShortcuts()` binds Ctrl/Cmd+Z for undo and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y for redo. Custom UI can use `map.canUndo()`, `map.canRedo()`, `map.undo()`, and `map.redo()`.
+
+A transaction combines its edits into one history entry: undo after commit restores the whole transaction, while rollback restores data from before the transaction began.
+
+## API
+
+- `Emap`
+- `HistoryControl`
+- `HistoryControlOptions`
+
+## Runnable examples
+
+- [Undo and redo](/mapseekai/emap/examples/undo-redo/)
+- [Transactions](/mapseekai/emap/examples/transaction/)
+- [Attribute editing](/mapseekai/emap/examples/attribute-editing/)

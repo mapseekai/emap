@@ -2,34 +2,44 @@
 id: error-handling
 slug: /recipes/error-handling
 title: 错误处理
-api: ["Emap"]
-examples: ["duckdb-buffer","duckdb-query"]
+api: ["Emap", "OpResult", "OpError"]
+examples: ["check-geometry", "duckdb-buffer", "duckdb-query"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 错误处理
 
-加载器会在导入错误时 reject，operations 返回 `OpResult`，DuckDB 辅助函数可能抛出带 `kind` 的 `DuckDbOperationError`。
+`Emap` 的数据操作返回 `OpResult`：成功结果含有 `ok: true`，失败结果含有 `ok: false` 和可判别的 `OpError`。使用 `ok` 分支处理失败，不把失败当作成功结果继续使用。
 
-## 行为说明
-
-错误应在应用边界处理：保持地图可用，展示重试说明，不要把失败输出提交到历史。
-
-## API
-
-- [src.OpError](/mapseekai/emap/api/types/emap.OpError.html)
-- [src_duckdb.DuckDbOperationError](/mapseekai/emap/api/classes/duckdb.DuckDbOperationError.html)
-
-## 可运行示例
-
-- [check-geometry](/mapseekai/emap/examples/check-geometry/)
-- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
-- [duckdb-buffer](/mapseekai/emap/examples/duckdb-buffer/)
-
-## 最小片段
+## 处理操作结果
 
 ```ts
 const result = await map.ops.checkGeometry({ source: "main" })
-if (!result.ok) setStatus(result.error.kind)
+if (!result.ok) {
+  switch (result.error.kind) {
+    case "not-found":
+      console.error(`Missing ${result.error.what}: ${result.error.id}`)
+      break
+    case "validation":
+      console.error(result.error.reason)
+      break
+    default:
+      console.error(result.error.kind)
+  }
+}
 ```
+
+成功时，`checkGeometry` 的 `value` 是几何检查报告。将加载器的 rejected promise 和 DuckDB 抛出的 `DuckDbOperationError` 放在应用边界的 `try`/`catch` 中。只有成功的结果才更新图层、历史记录或界面状态。
+
+## API
+
+- `Emap`
+- `OpResult`
+- `OpError`
+
+## 可运行示例
+
+- [几何检查](/mapseekai/emap/examples/check-geometry/)
+- [DuckDB 缓冲区](/mapseekai/emap/examples/duckdb-buffer/)
+- [DuckDB 查询](/mapseekai/emap/examples/duckdb-query/)

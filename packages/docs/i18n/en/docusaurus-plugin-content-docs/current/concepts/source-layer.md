@@ -3,86 +3,36 @@ id: source-layer
 slug: /concepts/source-layer
 title: Sources and layers
 api: ["CirclePaint","DatasetFormatPlugin","Emap","ExportedFormatFile","ExportFormat","ExportOptions","FillPaint","ITopologySource","LayerLayout","LayerPaint","LayerSpecification","LayerType","LinePaint","ReadySourceLoadPlan","registerFormat","ReplaceableTopologySource","resolvePointStyle","resolveStrokeStyle","SourceLoadAnswers","SourceLoadDiagnostic","SourceLoadDiagnosticCode","SourceLoadDraft","SourceLoadError","SourceLoadRequest","SourceLoadRequirement","SourceLoadSummary","SourcePreflightResult","TopologySource","TopologySource.fromBytes","TopologySource.fromUrl","TopologySourceData","TopologySourceFromBytesOptions","TopologySourceInput","TopologySourceOptions","ZipExtractionLimits"]
-examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers","rename-layer","split-layer"]
+examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Sources and layers
 
-Emap separates data ownership from data presentation:
+Emap separates geospatial data from presentation configuration. `TopologySource` holds an imported mapshaper dataset; the dataset's source layers hold geometry and attributes; a render layer is the `LayerSpecification` passed to `map.addLayer`, which declares how one source layer is drawn.
 
-- `TopologySource` stores an imported mapshaper dataset.
-- Source layers inside the dataset store geometry and attribute records.
-- `LayerSpecification` references a source layer and describes canvas
-  rendering.
+## Import a source
 
-This separation lets one geometry layer appear with several styles and keeps
-data operations independent from application presentation.
-
-## Create a source
-
-### From a URL
+A `TopologySource` imports URLs, in-memory bytes, and file-picker data:
 
 ```ts
-const source = await TopologySource.fromUrl(
-  'roads',
-  '/data/roads.geojson',
-);
-```
+import { TopologySource } from '@mapseekai/emap';
 
-### From bytes
+const roads = await TopologySource.fromUrl('roads', '/data/roads.geojson');
 
-```ts
 const bytes = await file.arrayBuffer();
-const source = await TopologySource.fromBytes('upload', bytes, {
+const upload = await TopologySource.fromBytes('upload', bytes, {
   filename: file.name,
 });
 ```
 
-### Preflight and confirm
+The `filename` passed to `fromBytes` identifies the input format, so uploads should retain their original filename. You can also create a source and call `await source.setData(...)`. A source must finish its first import before it is passed to `map.addSource(...)`.
 
-```ts
-const source = new TopologySource('live');
-await source.setData({
-  filename: 'districts.geojson',
-  content,
-});
-
-let result = await map.preflightSource({ id: 'live', source });
-if (result.status === 'needs-input') {
-  result = await map.preflightSource(result.draft, {
-    sourceCrs: selectedCrs,
-  });
-}
-if (result.status === 'ready') {
-  await map.confirmSource(result.plan);
-}
-```
-
-`preflightSource()` parses and checks data outside the map. It does not
-register the source or change the map CRS. An explicit `sourceCrs` takes
-precedence over dataset CRS metadata. If both are missing, or the explicit
-value is invalid, the result is `needs-input`; collect the CRS described by
-`requirements` and run preflight again with the same `draft`. A `rejected`
-result means the input cannot be loaded, and only a `ready` plan can be passed
-to `confirmSource()`.
-
-For non-interactive loading, call
-`await map.addSource('live', source, { sourceCrs: 'EPSG:3857' })`; it uses the
-same preflight and confirmation path. An empty source cannot be registered, so
-finish `setData()` first. Dynamic `setData()` calls remain supported after
-registration and normalize to the map CRS. A registered
-`TopologySource.reproject()` cannot change CRS independently; use
-`map.reproject()`.
-
-## Do not mix up the IDs
-
-Suppose an uploaded dataset has a source layer named `districts`:
+## Four IDs
 
 ```ts
 await map.addSource('main', source);
-
 map.addLayer({
   id: 'district-fill',
   type: 'fill',
@@ -91,153 +41,66 @@ map.addLayer({
 });
 ```
 
-This code contains distinct identifiers:
+| ID | Example | Scope |
+| --- | --- | --- |
+| Source object ID | `source.id` | `TopologySource` |
+| Map source ID | `main` | `Emap` source registry |
+| source-layer name | `districts` | A layer inside the dataset |
+| Render layer ID | `district-fill` | `Emap` draw order, events, and visibility |
 
-| Identifier | Value | Scope |
-|---|---|---|
-| `TopologySource` name | Passed to its constructor | Source object |
-| Map source ID | `main` | `Emap`; used by layers and operations |
-| Source-layer name | `districts` | mapshaper dataset |
-| Render-layer ID | `district-fill` | `Emap`; used by order, events, and filters |
+The map source ID must match the `source` used by render layers and `map.ops`. A single-source-layer dataset can omit `source-layer`; a multi-layer dataset should specify it explicitly.
 
-An application may use the same value for the first two to reduce cognitive
-load, but they still belong to different levels.
+## Declare how data draws
 
-## Select a source layer
-
-A single-layer dataset can usually omit `source-layer`; Emap selects the first
-layer compatible with the render type:
-
-```ts
-map.addLayer({
-  id: 'road-line',
-  type: 'line',
-  source: 'roads',
-});
-```
-
-Specify it for a multi-layer dataset:
-
-```ts
-map.addLayer({
-  id: 'primary-roads',
-  type: 'line',
-  source: 'transport',
-  'source-layer': 'primary',
-});
-```
-
-An explicit name also prevents a file that changes layer order from rendering
-the wrong content.
-
-## Render types
-
-`LayerSpecification.type` has three values:
-
-| Type | Typical geometry | Main paint properties |
-|---|---|---|
-| `fill` | polygon | `fill-color`, `fill-opacity` |
-| `line` | polyline or polygon boundary | `line-color`, `line-width` |
-| `circle` | point | `circle-color`, `circle-radius` |
-
-Example:
-
-```ts
-map.addLayer({
-  id: 'cities',
-  type: 'circle',
-  source: 'main',
-  'source-layer': 'cities',
-  paint: {
-    'circle-color': '#ef4444',
-    'circle-radius': 5,
-  },
-});
-```
-
-The render type must be compatible with source geometry. Point data cannot be
-displayed with `fill`; use a `line` layer for polygon outlines.
-
-## One source layer, several presentations
+`LayerSpecification.type` supports `fill`, `line`, and `circle`. They draw polygons, lines or polygon boundaries, and points respectively.
 
 ```ts
 map.addLayer({
   id: 'parcel-fill',
   type: 'fill',
   source: 'parcels',
-  paint: {
-    'fill-color': '#bbf7d0',
-    'fill-opacity': 0.6,
-  },
+  'source-layer': 'parcels',
+  paint: { 'fill-color': '#bbf7d0', 'fill-opacity': 0.6 },
 });
 
 map.addLayer({
   id: 'parcel-outline',
   type: 'line',
   source: 'parcels',
-  paint: {
-    'line-color': '#166534',
-    'line-width': 1,
-  },
+  'source-layer': 'parcels',
+  paint: { 'line-color': '#166534', 'line-width': 1 },
 });
 ```
 
-Later layers draw above earlier layers, so the outline remains visible above
-the fill. Selection and feature events can filter on either render layer, while
-both reference the same source geometry.
+Several render layers can reference one source layer. Later layers draw above earlier ones, so this outline remains above the fill. Use `circle` for points, `line` for lines and polygon boundaries, and `fill` for polygon interiors.
 
-## Data operations target sources
+## Confirm CRS while loading
 
-`map.ops` locates data through a map source ID and optional source-layer name,
-not a render-layer ID:
+`map.addSource` preflights a source. When an application needs to ask for a CRS, use `preflightSource` to receive a draft and requirements, then retry with answers; only a ready plan can go to `confirmSource`.
 
 ```ts
-const result = await map.ops.simplifyLayer({
-  source: 'parcels',
-  percentage: 0.25,
-});
-
-if (!result.ok) {
-  console.error(result.error);
+let result = await map.preflightSource({ id: 'main', source });
+if (result.status === 'needs-input') {
+  result = await map.preflightSource(result.draft, { sourceCrs: 'EPSG:3857' });
 }
+if (result.status === 'ready') await map.confirmSource(result.plan);
 ```
 
-After a successful operation, render layers that reference the source redraw
-from the updated dataset.
+An explicit `sourceCrs` identifies the CRS of the imported coordinates. Once registered, the source's data stays aligned with the map's active CRS.
 
-## Troubleshooting
+## Export and format plugins
 
-### The source loaded but is not visible
-
-- Confirm the map has called `addSource`.
-- Confirm a render layer `source` matches the map source ID.
-- For multi-layer files, check `source-layer` spelling and case.
-- Confirm the render `type` is compatible with geometry.
-- Set the camera from the source extent.
-
-### The filename extension was lost
-
-Always preserve the original `filename` when loading bytes or an upload. The
-parser needs the extension to select an importer.
-
-### A direct dataset change is not reflected
-
-`getDataset()`, `getLayers()`, and `getArcs()` return zero-copy, deeply
-read-only TypeScript views. Apply changes through edit commands, edit sessions,
-or `map.ops` so render caches, selection, and history update together. The
-guard is type-level; JavaScript, `any`, and explicit assertions can bypass it.
+`source.export({ format: 'geojson' })` returns a browser `Blob`. GeoJSON, TopoJSON, Shapefile, MSX, GeoParquet, GeoArrow, and FlatGeobuf are supported; GeoParquet and GeoArrow require importing `@mapseekai/emap/arrow`, while FlatGeobuf requires a format plugin registered through `registerFormat`.
 
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
-- [ITopologySource](/mapseekai/emap/api/interfaces/emap.ITopologySource.html)
 - [LayerSpecification](/mapseekai/emap/api/types/emap.LayerSpecification.html)
 - [ExportOptions](/mapseekai/emap/api/interfaces/emap.ExportOptions.html)
 
 ## Runnable examples
 
 - [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Line layers](/mapseekai/emap/examples/getting-started/lines/)
 - [Point layers](/mapseekai/emap/examples/getting-started/points/)
 - [Merge layers](/mapseekai/emap/examples/merge-layers/)
-- [Rename a layer](/mapseekai/emap/examples/rename-layer/)
-- [Split a layer](/mapseekai/emap/examples/split-layer/)

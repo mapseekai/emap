@@ -2,33 +2,39 @@
 id: status-control
 slug: /recipes/status-control
 title: Status control
-api: ["Emap"]
-examples: ["duckdb-geoparquet-query","duckdb-query"]
+api: ["Emap", "StatusControl", "StatusOptions"]
+examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Status control
 
-Use a status area for async load, unsupported optional dependencies, worker progress, and operation errors.
+`StatusControl` displays the pointer coordinate and map CRS on the map. It listens to `mousemove` and `crschange`, and updates the pointer readout once per animation frame.
 
-## Behavior notes
+## Add the status control
 
-Status UI should distinguish loading, success, warning, and error states; keep the underlying operation error available for logs or diagnostics.
+```ts
+map.addControl(
+  new StatusControl({
+    showMousePos: true,
+    showEPSG: true,
+    alignment: "right",
+  }),
+  "bottom-left",
+)
+```
+
+`showMousePos` controls the coordinate readout, `showEPSG` controls the CRS readout, and `alignment` controls content alignment. Put application loading, progress, and error messages in application UI; `StatusControl` is dedicated to coordinates and CRS.
 
 ## API
 
-- [src.StatusControl](/mapseekai/emap/api/classes/emap.StatusControl.html)
-- [src.StatusOptions](/mapseekai/emap/api/interfaces/emap.StatusOptions.html)
+- `Emap`
+- `StatusControl`
+- `StatusOptions`
 
 ## Runnable examples
 
-- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
-- [web-worker](/mapseekai/emap/examples/web-worker/)
-- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
-
-## Minimal snippet
-
-```ts
-map.addControl(new StatusControl({ showMousePos: true, showEPSG: true }), "bottom-left")
-```
+- [DuckDB GeoParquet query](/mapseekai/emap/examples/duckdb-geoparquet-query/)
+- [DuckDB query](/mapseekai/emap/examples/duckdb-query/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

@@ -3,152 +3,106 @@ id: duckdb
 slug: /data/duckdb
 title: DuckDB Processing Toolbox
 api: ["AggregateOptions","append","area","attributeFilter","AttributeFilterOptions","attributeJoin","AttributeJoinOptions","AttributeOptions","boundary","buffer","BufferOptions","centroid","centroidX","centroidY","clip","ClipOptions","closeDuckDbRuntime","collect","convexHull","createDuckDbGeoParquetQuerySource","createDuckDbRuntimeFromJsDelivr","CreateDuckDbRuntimeOptions","densify","DensifyOptions","difference","DifferenceOptions","dissolve","DuckDbAgentMetadata","duckDbAttributeFilterLayer","DuckDbAttributeFilterLayerOptions","DuckDbAttributeFilterLayerResult","DuckDbConnection","duckDbGeoParquetQueryLayer","DuckDbGeoParquetQueryLayerOptions","DuckDbGeoParquetQueryLayerResult","DuckDbGeoParquetQueryOptions","DuckDbGeoParquetQuerySource","DuckDbMapOpContext","DuckDbMapOpSource","DuckDbOperationError","DuckDbOperationErrorKind","duckDbOverlayLayer","DuckDbOverlayLayerOptions","DuckDbOverlayLayerResult","DuckDbRuntime","DuckDbSpatialExtensionUrls","duckDbSpatialSummaryJoinLayer","DuckDbSpatialSummaryJoinLayerOptions","DuckDbSpatialSummaryJoinLayerResult","duckDbToolbox","DuckDbToolCategory","DuckDbToolDefinition","DuckDbToolExecutionContext","DuckDbToolId","DuckDbToolInput","DuckDbToolObjectProperty","DuckDbToolOutput","DuckDbToolParameter","DuckDbWasmModule","envelope","extractVertices","GeometryOptions","geometryType","getDuckDbRuntime","intersect","IntersectOptions","isEmpty","isSimple","isValid","length","lineToPolygon","merge","MergeOptions","multipartToSinglepart","near","nearest","NearestOptions","NearOptions","perimeter","pointToLine","PointToLineOptions","polygonToLine","queryGeoParquetWithDuckDb","quoteSqlString","repairGeometry","RepairGeometryOptions","reproject","ReprojectOptions","setDuckDbRuntime","simplify","SimplifyOptions","simplifyPreserveTopology","SpatialAggregation","spatialFilter","SpatialFilterOptions","SpatialFilterPredicate","spatialJoin","SpatialJoinOptions","SpatialJoinPredicate","spatialRelation","SpatialRelationOptions","spatialSummaryJoin","SpatialSummaryJoinOptions","SpatialSummaryJoinPredicate","SpatialSummaryJoinType","SpatialSummaryOperation","symmetricDifference","SymmetricDifferenceOptions","union","UnionOptions","ValidatedDuckDbSelectSql","ValidatedDuckDbSelectSqlWithoutRowId","ValidatedDuckDbSelectSqlWithRowId","validateDuckDbSelectSql","ValidateDuckDbSelectSqlOptions","x","y"]
-examples: ["duckdb-buffer","duckdb-geoparquet-query","duckdb-overlay","duckdb-spatial-aggregate-join","duckdb-query"]
+examples: ["duckdb-buffer","duckdb-geoparquet-query","duckdb-overlay","duckdb-query","duckdb-spatial-aggregate-join"]
 stability: stable
 verifiedVersion: 0.9.0
 ---
 
 # DuckDB Processing Toolbox
 
-`@mapseekai/emap/duckdb` provides a browser-side DuckDB-Wasm GIS processing toolbox. Processing code is organized by GIS category rather than by registry/executor layers. Every tool owns both its execution function and a `DuckDbToolDefinition` that UI, workflow and Agent callers can consume.
+`@mapseekai/emap/duckdb` is an optional browser-side DuckDB-Wasm GIS entry point. It provides GeoParquet queries, standalone Dataset processing functions, and `duckDbToolbox` for UI, workflow, or agent use. Processing functions return new datasets and do not mutate their input datasets.
 
-## Setup
+## Install and set up the runtime
+
+Install the optional dependency containing DuckDB-Wasm and import the subpath. Create a runtime, then call `setDuckDbRuntime()` to make it available to processing functions.
 
 ```ts
-import { createDuckDbRuntimeFromJsDelivr, setDuckDbRuntime } from '@mapseekai/emap/duckdb';
+import {
+  createDuckDbRuntimeFromJsDelivr,
+  setDuckDbRuntime,
+  closeDuckDbRuntime,
+} from '@mapseekai/emap/duckdb';
+
 const runtime = await createDuckDbRuntimeFromJsDelivr();
 setDuckDbRuntime(runtime);
+
+// When the application closes DuckDB:
+await closeDuckDbRuntime();
 ```
 
-## Short canonical API
+## GIS processing
+
+Processing functions use short GIS names and compose directly:
 
 ```ts
-import { buffer, clip, dissolve, spatialJoin, reproject } from '@mapseekai/emap/duckdb';
-const buffered = await buffer(dataset, { distance: 20 });
-const clipped = await clip(buffered, mask);
-const dissolved = await dissolve(clipped, { groupBy: ['type'] });
-const joined = await spatialJoin(dissolved, poi, { predicate: 'intersects' });
-const wgs84 = await reproject(joined, { targetCrs: 'EPSG:4326' });
+import { buffer, clip, dissolve, spatialJoin } from '@mapseekai/emap/duckdb';
+
+const buffered = await buffer(roads, { distance: 20 });
+const clipped = await clip(buffered, boundary);
+const districts = await dissolve(clipped, { groupBy: ['district'] });
+const joined = await spatialJoin(districts, points, {
+  predicate: 'contains',
+});
 ```
-
-Public processing functions now use GIS tool names directly instead of `xxxDatasetWithDuckDb` names.
-
-## Categories
 
 | Category | Tools |
 | --- | --- |
-| Overlay | `clip` / `intersect` / `difference` / `union` / `symmetricDifference` |
-| Proximity | `buffer` / `near` / `nearest` |
-| Aggregate | `dissolve` / `collect` |
-| Join | `attributeJoin` / `spatialJoin` / `spatialSummaryJoin` |
-| Geometry | `centroid` / `envelope` / `convexHull` / `boundary` / `simplify` / `simplifyPreserveTopology` / `densify` / `multipartToSinglepart` / `extractVertices` |
-| Transform | `pointToLine` / `lineToPolygon` / `polygonToLine` |
-| Selection | `attributeFilter` / `spatialFilter` / `spatialRelation` |
-| Data Management | `merge` / `append` / `reproject` / `repairGeometry` |
-| Attributes | `area` / `length` / `perimeter` / `geometryType` / `isValid` / `isEmpty` / `isSimple` / `x` / `y` / `centroidX` / `centroidY` |
+| Overlay | `clip`, `intersect`, `union`, `difference`, `symmetricDifference` |
+| Proximity | `buffer`, `near`, `nearest` |
+| Aggregate | `dissolve`, `collect` |
+| Join | `attributeJoin`, `spatialJoin`, `spatialSummaryJoin` |
+| Geometry | `centroid`, `envelope`, `convexHull`, `boundary`, `simplify`, `simplifyPreserveTopology`, `densify`, `multipartToSinglepart`, `extractVertices` |
+| Transform | `pointToLine`, `lineToPolygon`, `polygonToLine` |
+| Selection | `attributeFilter`, `spatialFilter`, `spatialRelation` |
+| Data management | `merge`, `append`, `reproject`, `repairGeometry` |
+| Attributes | `area`, `length`, `perimeter`, `geometryType`, `isValid`, `isEmpty`, `isSimple`, `x`, `y`, `centroidX`, `centroidY` |
 
-### Agent / workflow discovery
+Distance tools use Dataset coordinate units. `near` and `nearest` require a known projected CRS by default. `spatialJoin` creates a one-to-many spatial join; `spatialSummaryJoin` supplies count, sum, avg, min, and max aggregation.
 
-Each tool definition contains input slots, geometry constraints, parameter schema, CRS/unit requirements, output semantics, cost guidance and Agent-oriented metadata (`summary`, `whenToUse`, `avoidWhen`, `keywords`, `examples`).
+## Toolbox
+
+`duckDbToolbox` exposes `tools`, `list()`, `get()`, `require()`, `search()`, and `execute()`. Use it to build UI, workflows, and agents from tool IDs or search terms:
 
 ```ts
 import { duckDbToolbox } from '@mapseekai/emap/duckdb';
 
 const candidates = duckDbToolbox.search('count points in polygon');
-// candidates[0].id === 'spatialSummaryJoin'
-
 const result = await duckDbToolbox.execute('buffer', {
-  inputs: { input: dataset },
+  inputs: { input: roads },
   params: { distance: 50 },
   runtime,
 });
 ```
 
-`duckDbToolbox` is the single public Toolbox entry point for Agent/UI/workflow callers, exposing `tools`, `list`, `get`, `require`, `search`, and `execute`. Aliases are resolved too, for example `intersection` → `intersect` and `makeValid` → `repairGeometry`.
+Each tool definition describes its input geometry, parameters, CRS/unit requirements, output semantics, cost, and agent metadata.
 
-## Notes
+## GeoParquet queries
 
-- `spatialJoin` is a normal one-to-many spatial join; `spatialSummaryJoin` performs count/sum/avg/min/max aggregation.
-- Distance tools default to projected CRS requirements. `near` and `nearest` also reject unknown CRS by default. Distances use dataset coordinate units, which are not necessarily meters.
-- `nearest` preserves input row order, breaks equal-distance ties by reference row order, and leaves null/empty geometries unmatched with null ID and distance. Generated row IDs cannot collide with business attributes. Output ID/distance names must be distinct from one another and from input fields, using case-insensitive comparison; choose different output names on conflict.
-- `densify` uses the emap/Mapshaper ArcCollection implementation because the current DuckDB-Wasm Spatial runtime does not expose a usable `ST_Segmentize`.
-- `union` and `symmetricDifference` currently use coverage geometry semantics, not full QGIS-style dual-attribute overlay semantics.
-- Processing functions return new datasets and do not mutate caller-owned inputs. `reproject` retains null-geometry records and attributes, and preserves the input geometry type for all-null or empty inputs.
-- GeoParquet query access remains outside the Processing Toolbox.
-
-## Source / map adapters and safe writeback
-
-All four public `duckDb*Layer` adapters require an explicit `output.sourceId`. Reuse one `DuckDbMapOpContext` for a source collection. `getSource()` must return stable source objects, not freshly created wrappers on every call.
+`queryGeoParquetWithDuckDb()` queries GeoParquet bytes. Its SQL is a restricted single `SELECT` against the `input` table: select provided columns and use supported filtering, ordering, and limiting clauses. `validateDuckDbSelectSql()` validates the same query contract before execution.
 
 ```ts
-import {
-  duckDbAttributeFilterLayer,
-  type DuckDbMapOpContext,
-  type DuckDbMapOpSource,
-} from '@mapseekai/emap/duckdb';
+import { queryGeoParquetWithDuckDb } from '@mapseekai/emap/duckdb';
 
-const sources = new Map<string, DuckDbMapOpSource>();
-sources.set('input', { getDataset: () => dataset });
-const context: DuckDbMapOpContext = {
-  getSource: (id) => sources.get(id),
-  setSourceDataset(id, result) {
-    sources.set(id, { getDataset: () => result });
-  },
-};
-
-const result = await duckDbAttributeFilterLayer(context, {
-  src: 'input',
-  sql: 'SELECT * FROM input',
-  output: { sourceId: 'result' },
+const result = await queryGeoParquetWithDuckDb(bytes, {
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
 });
-if (!result.ok && result.error.kind === 'stale-operation') {
-  // Inputs, output, or request generation changed; the old result was not committed.
-}
 ```
 
-Computation is asynchronous, but `setSourceDataset()` must complete synchronously and return `undefined`. It cannot be an `async` function or schedule a deferred write. Keep asynchronous display/loading work separate from this commit.
+Query access is GeoParquet data access, not part of the Processing Toolbox.
 
-Before committing, the adapter checks input/output source identity, dataset identity, `editVersion`, `attributeVersion`, CRS, and optional byte/query-source references. The latest request wins for a shared output, while independent outputs can run concurrently. External dataset mutations must maintain version counters; byte or query-source replacement must expose new stable references.
+## API
 
-## Internal layout
+- [createDuckDbRuntimeFromJsDelivr](/mapseekai/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
+- [setDuckDbRuntime](/mapseekai/emap/api/functions/duckdb.setDuckDbRuntime.html)
+- [closeDuckDbRuntime](/mapseekai/emap/api/functions/duckdb.closeDuckDbRuntime.html)
+- [validateDuckDbSelectSql](/mapseekai/emap/api/functions/duckdb.validateDuckDbSelectSql.html)
+- [queryGeoParquetWithDuckDb](/mapseekai/emap/api/functions/duckdb.queryGeoParquetWithDuckDb.html)
+- [duckDbToolbox](/mapseekai/emap/api/variables/duckdb.duckDbToolbox.html)
 
-```text
-src/duckdb/
-├── core/
-├── overlay/
-├── proximity/
-├── aggregate/
-├── join/
-├── geometry/
-├── transform/
-├── selection/
-├── data-management/
-├── attributes/
-├── geoparquet/
-├── toolbox.ts
-└── index.ts
-```
+## Runnable examples
 
-Category `index.ts` files are re-export-only. Validation, SQL, execution functions and ToolDefinitions live with the corresponding tool files. Shared pipeline/runners and Agent definition contracts live under `core/`.
-
-The legacy root `*-registry.ts`, `*-executor.ts` and `processing-toolbox.ts` compatibility forwarders were removed; the category files under `src/duckdb/` are the only implementation.
-
-## Breaking changes
-
-The old long processing names were removed from the public DuckDB entry point. Examples:
-
-- `bufferDatasetWithDuckDb` → `buffer`
-- `intersectionDatasetWithDuckDb` / `intersectDatasetWithDuckDb` → `intersect`
-- `queryDatasetWithDuckDb` / `attributeFilterDatasetWithDuckDb` → `attributeFilter`
-- `spatialAggregateJoinDatasetWithDuckDb` / `spatialSummaryJoinDatasetWithDuckDb` → `spatialSummaryJoin`
-- `makeValidDatasetWithDuckDb` / `repairGeometryDatasetWithDuckDb` → `repairGeometry`
-- other `xxxDatasetWithDuckDb` helpers follow the same `xxx` simplification
-- `DUCKDB_TOOLBOX`, `listDuckDbTools`, `getDuckDbTool`, `requireDuckDbTool`, `searchDuckDbTools`, and `executeDuckDbTool` are no longer exported separately; use `duckDbToolbox.*`
-- removed the unused `duckDbBufferLayer`, `duckDbGeometryLayer`, `duckDbRelationLayer`, and `duckDbAttributeLayer` adapters; the source/map adapters with real consumers remain `duckDbAttributeFilterLayer`, `duckDbGeoParquetQueryLayer`, `duckDbOverlayLayer`, and `duckDbSpatialSummaryJoinLayer`
-- `DuckDbToolInputSpec`, `DuckDbToolParameterSpec`, `DuckDbToolObjectPropertySpec`, and `DuckDbToolOutputSpec` drop the `Spec` suffix: `DuckDbToolInput`, `DuckDbToolParameter`, `DuckDbToolObjectProperty`, `DuckDbToolOutput`
-
-- `DuckDbToolId` is now a literal union of actual tool IDs, not an arbitrary string.
-- All four LayerOptions require `output`, and `DuckDbMapOpContext.setSourceDataset` is now a synchronous commit contract. Migrate callers as shown above.
-- The DuckDB distribution uses only the ESM subpath `@mapseekai/emap/duckdb`; the unshipped IIFE is no longer built.
-
-See the root `CHANGELOG.md` for the full migration note.
+- [DuckDB buffer](/mapseekai/emap/examples/duckdb-buffer/)
+- [DuckDB GeoParquet query](/mapseekai/emap/examples/duckdb-geoparquet-query/)
+- [DuckDB overlay](/mapseekai/emap/examples/duckdb-overlay/)
+- [DuckDB query](/mapseekai/emap/examples/duckdb-query/)
+- [DuckDB spatial aggregate join](/mapseekai/emap/examples/duckdb-spatial-aggregate-join/)

@@ -508,6 +508,51 @@ describe('TopologySource.setData', () => {
     expect(source.getDataset()).toBe(previous);
     expect(dataEvents).not.toHaveBeenCalled();
   });
+
+  it('passes direct text formats to the importer as strings', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings: vi.fn(),
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+
+    await source.setData({
+      filename: 'data.kml',
+      content: new TextEncoder().encode('<kml/>'),
+    });
+
+    expect(typeof runImport.mock.calls[0][1]['data.kml']).toBe('string');
+  });
+
+  it('passes array-input KML to the importer as a string', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings: vi.fn(),
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+
+    await source.setData([{ filename: 'a.kml', content: new TextEncoder().encode('<kml/>') }]);
+
+    expect(typeof runImport.mock.calls[0][1]['a.kml']).toBe('string');
+  });
+  it('imports KML bytes with polygon Placemarks (real mapshaper)', async () => {
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Placemark><name>box</name><Polygon><outerBoundaryIs><LinearRing>
+<coordinates>0,0 1,0 1,1 0,1 0,0</coordinates>
+</LinearRing></outerBoundaryIs></Polygon></Placemark>
+</Document></kml>`;
+    const source = new TopologySource('kml');
+
+    await source.setData({ filename: 'data.kml', content: new TextEncoder().encode(kml) });
+
+    const layers = source.getLayers();
+    expect(layers.map((layer) => layer.geometry_type)).toEqual(['polygon']);
+    expect(layers[0].shapes?.length).toBe(1);
+    expect(source.getExtent().width).toBeGreaterThan(0);
+  });
 });
 
 describe('TopologySource.reproject', () => {
