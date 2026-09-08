@@ -110,7 +110,6 @@ export class SketchSession {
       if (this._overlayPublished) {
         this._overlayPublished = false;
         this._host.clearEditDrawState();
-        this._host.render();
       }
       return;
     }
@@ -123,6 +122,5 @@ export class SketchSession {
       geometryType: 'polyline',
       drawColor: this._opts.drawColor ?? EMAP_THEME_COLORS.primary,
     });
-    this._host.render();
   }
 }

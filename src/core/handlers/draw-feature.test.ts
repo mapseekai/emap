@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DrawFeatureHandler, projectPointOnSegment } from './draw-feature';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
+import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -42,6 +43,32 @@ function createMockMap(sources?: Record<string, unknown>) {
 }
 
 describe('DrawFeatureHandler draw-state defaults', () => {
+  it('skips distant arc vertices and segments when snapping on a large source', () => {
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      { xx: [0, 100], yy: [0, 0] },
+      { xx: Array.from({ length: 10000 }, (_, i) => 1000 + i), yy: Array(10000).fill(1000) },
+    ]);
+    const data = arcs.getVertexData!();
+    let distantReads = 0;
+    const xx = new Proxy(data.xx, {
+      get(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key) && Number(key) >= 2) distantReads++;
+        return Reflect.get(target, key, target);
+      },
+    });
+    vi.spyOn(arcs, 'getVertexData').mockReturnValue({ ...data, xx });
+    const visitArc = vi.spyOn(arcs, 'forEachArcSegment');
+    const map = createMockMap({ src1: { getArcs: () => arcs } });
+    const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
+
+    expect(callPrivate(handler, '_findSnapTarget', 50, 3)).toEqual({
+      coord: [50, 0],
+      kind: 'edge',
+    });
+    expect(distantReads).toBe(0);
+    expect(visitArc.mock.calls.map(([id]) => id)).toEqual([0]);
+  });
+
   it('uses the primary theme color when no draw color is supplied', () => {
     const map = createMockMap();
     const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
@@ -275,7 +302,7 @@ describe('DrawFeatureHandler', () => {
           snapKind: null,
         }),
       );
-      expect(map.render).toHaveBeenCalledTimes(1);
+      expect(map.render).not.toHaveBeenCalled();
     });
 
     // -----------------------------------------------------------------------

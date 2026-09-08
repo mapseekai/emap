@@ -48,7 +48,7 @@ describe('SketchSession', () => {
       geometryType: 'polyline',
       drawColor: EMAP_THEME_COLORS.primary,
     });
-    expect(host.render).toHaveBeenCalled();
+    expect(host.render).not.toHaveBeenCalled();
   });
 
   it('clears an incomplete sketch and prevents the native context menu', () => {

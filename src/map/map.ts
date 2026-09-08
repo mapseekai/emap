@@ -278,7 +278,10 @@ export class Emap extends EventDispatcher {
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
   private _painter: EditPainter;
+  private _overlayPainter: EditPainter;
   private _editOverlay: EditOverlayRenderer;
+  private _overlayPainted = false;
+  private _overlayPending = false;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
   private _scaleCalculator?: ScaleCalculator;
@@ -437,7 +440,8 @@ export class Emap extends EventDispatcher {
       this._syncEditModeDragPan(change.current.mode);
       this.fire('editmodechange', { mode: change.current.mode });
     }
-    this._scheduleRender();
+    if (change.modeChanged || change.current.mode === 'vertex') this._scheduleRender();
+    else this._scheduleOverlayRender();
   });
 
   /**
@@ -509,7 +513,15 @@ export class Emap extends EventDispatcher {
 
     this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
-    this._editOverlay = new EditOverlayRenderer(this._painter);
+    const overlayCanvas = document.createElement('canvas');
+    overlayCanvas.style.position = 'absolute';
+    overlayCanvas.style.top = '0';
+    overlayCanvas.style.left = '0';
+    overlayCanvas.style.pointerEvents = 'none';
+    this._canvasContainer.appendChild(overlayCanvas);
+    this._overlayPainter = new CanvasPainter(overlayCanvas);
+    this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
+    this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
     this._scheduler = new RenderScheduler({
       fullRedraw: () => this._renderFull(),
       requestRedraw: () => this._scheduleRender('redraw', undefined, true),
@@ -985,6 +997,7 @@ export class Emap extends EventDispatcher {
     const height = this._container.clientHeight;
     this._viewport.updateSize(width, height);
     this._painter.resize(width, height);
+    this._overlayPainter.resize(width, height);
   }
 
   /**
@@ -2172,6 +2185,14 @@ export class Emap extends EventDispatcher {
     }
   }
 
+  private _scheduleOverlayRender(): void {
+    if (this._removed) return;
+    this._overlayPending = true;
+    if (this._rafId === 0) {
+      this._rafId = requestAnimationFrame(() => this._doRender());
+    }
+  }
+
   private _doRender(): void {
     this._rafId = 0;
     if (this._pendingRender > 0) {
@@ -2183,6 +2204,7 @@ export class Emap extends EventDispatcher {
       this._pendingRedrawIsSettle = false;
       this.render(req);
     }
+    if (this._overlayPending) this._renderEditOverlay();
   }
 
   public render(req?: RenderRequest): void {
@@ -2211,6 +2233,20 @@ export class Emap extends EventDispatcher {
     const pixelSize = 1 / Math.abs(transform.mx);
     this._renderLayers(pixelSize, lineScale);
     this._renderHighlight(transform, lineScale);
+    this._renderEditOverlay();
+  }
+
+  private _renderEditOverlay(): void {
+    this._overlayPending = false;
+    const hasOverlay = !!(
+      this._editState.vertex ||
+      this._editState.draw ||
+      this._editState.measurement
+    );
+    if (!hasOverlay && !this._overlayPainted) return;
+    this._overlayPainter.setTransform(this._viewport.transform);
+    this._overlayPainter.clear();
+    this._overlayPainted = hasOverlay;
     const vertexState = this._editState.vertex;
     const vertexArcFilter =
       this._editState.mode === 'vertex' && vertexState
@@ -2236,6 +2272,8 @@ export class Emap extends EventDispatcher {
   private _applyFastTransform(delta: AffineDelta): void {
     this._canvas.style.transformOrigin = 'top left';
     this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+    // Keep preview strokes, handles and labels at their actual screen size.
+    this._renderEditOverlay();
   }
 
   private _clearFastTransform(): void {

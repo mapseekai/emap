@@ -144,7 +144,6 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   private _onMapMove(): void {
     if (this._vertices.length > 0) {
       this._updateDrawState();
-      this._map.render();
     }
   }
 
@@ -160,7 +159,6 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
 
     if (this._vertices.length > 0 || this._snapCoord || hadSnap) {
       this._updateDrawState();
-      this._map.render();
     }
   }
 
@@ -188,7 +186,6 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
 
     this._vertices.push(coord);
     this._updateDrawState();
-    this._map.render();
   }
 
   private _onDblClick(e: MouseEvent): void {
@@ -253,27 +250,43 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       if (!vd) continue;
       const xx = vd.xx;
       const yy = vd.yy;
+      // Reject whole arcs before touching their vertices. The bounds are
+      // maintained with the live topology, so edits need no extra snap cache.
+      const arcIds: number[] = [];
+      const bounds = vd.bb;
+      for (let arcId = 0; arcId < vd.nn.length; arcId++) {
+        const offset = arcId * 4;
+        if (
+          bounds &&
+          (bounds[offset + 2] < wMinX ||
+            bounds[offset] > wMaxX ||
+            bounds[offset + 3] < wMinY ||
+            bounds[offset + 1] > wMaxY)
+        )
+          continue;
+        arcIds.push(arcId);
+      }
 
       if (snapToVertex) {
-        for (let i = 0; i < xx.length; i++) {
-          const x = xx[i];
-          const y = yy[i];
-          if (x < wMinX || x > wMaxX || y < wMinY || y > wMaxY) continue;
-          const projected = map.project(x, y);
-          const dist = Math.hypot(projected[0] - px, projected[1] - py);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestCoord = [x, y];
-            bestKind = 'vertex';
+        for (const arcId of arcIds) {
+          const end = vd.ii[arcId] + vd.nn[arcId];
+          for (let i = vd.ii[arcId]; i < end; i++) {
+            const x = xx[i];
+            const y = yy[i];
+            if (x < wMinX || x > wMaxX || y < wMinY || y > wMaxY) continue;
+            const projected = map.project(x, y);
+            const dist = Math.hypot(projected[0] - px, projected[1] - py);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestCoord = [x, y];
+              bestKind = 'vertex';
+            }
           }
         }
       }
 
-      if (snapToEdge && arcs.forEachSegment) {
-        // Walk every arc segment. forEachSegment yields adjacent vertex
-        // index pairs (i, j) within an arc — never crosses arc boundaries,
-        // so we don't accidentally treat unrelated arcs as connected.
-        arcs.forEachSegment((i: number, j: number, arcXx: Float64Array, arcYy: Float64Array) => {
+      if (snapToEdge) {
+        const visitSegment = (i: number, j: number, arcXx: Float64Array, arcYy: Float64Array) => {
           const ax = arcXx[i],
             ay = arcYy[i];
           const bx = arcXx[j],
@@ -293,7 +306,12 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
             bestCoord = map.unproject(r.point[0], r.point[1]);
             bestKind = 'edge';
           }
-        });
+        };
+        if (arcs.forEachArcSegment) {
+          for (const arcId of arcIds) arcs.forEachArcSegment(arcId, visitSegment);
+        } else {
+          arcs.forEachSegment?.(visitSegment);
+        }
       }
     }
 

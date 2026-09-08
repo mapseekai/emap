@@ -397,6 +397,7 @@ describe('Emap rendering', () => {
       getArcFilter,
     });
     setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
+    setPrivate(map, '_overlayPainter', { setTransform: vi.fn(), clear: vi.fn() });
     setPrivate(map, '_editOverlay', { render: renderOverlay });
     setPrivate(map, '_editState', {
       mode: 'vertex',

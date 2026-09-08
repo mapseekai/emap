@@ -246,7 +246,6 @@ export class MeasureHandler implements Handler<MeasureOptions> {
       this._lengthMeters = null;
       this._areaSquareMeters = null;
       this._map.clearEditMeasurementState();
-      this._map.render();
       return;
     }
 
@@ -303,7 +302,6 @@ export class MeasureHandler implements Handler<MeasureOptions> {
       drawColor: this._opts.drawColor ?? EMAP_THEME_COLORS.primary,
     };
     this._map.setEditMeasurementState(state);
-    this._map.render();
   }
 
   private _measure(
