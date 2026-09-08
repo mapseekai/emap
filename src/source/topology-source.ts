@@ -365,7 +365,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             }
             primaryFiles.push(...primaries);
           } else {
-            inputFiles[entry.filename] = entry.content;
+            // KML goes through DOMParser and needs a string, not bytes.
+            inputFiles[entry.filename] = /\.kml$/i.test(entry.filename)
+              ? strFromU8(entry.content)
+              : entry.content;
             primaryFiles.push(entry.filename);
           }
         }
@@ -419,7 +422,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
           }
           primaryFiles.push(...primaries);
         } else {
-          inputFiles[input.filename] = input.content;
+          // Match the ZIP path: hand KML to mapshaper as a string; its
+          // importer passes content straight to DOMParser.
+          inputFiles[input.filename] = /\.kml$/i.test(input.filename)
+            ? strFromU8(input.content)
+            : input.content;
           primaryFiles.push(input.filename);
         }
       }
