@@ -73,6 +73,40 @@ function area(dataset: MapshaperDataset, id: number): number {
 }
 
 describe('autoCompletePolygon', () => {
+  it('cuts only nearby geometry and keeps distant features and live dataset identity', async () => {
+    const far = Array.from({ length: 500 }, (_, i) => [
+      square.map(([x, y]) => [x + 1000 + i * 20, y + 1000]),
+    ]);
+    const f = await fixture([[square], ...far]);
+    const original = f.source.getDataset();
+    const distantShape = original.layers[0]!.shapes![500];
+    const copy = vi.spyOn(adapter, 'copyDataset');
+    const cut = adapter.addIntersectionCuts.bind(adapter);
+    const vertexCounts: number[] = [];
+    const cuts = vi.spyOn(adapter, 'addIntersectionCuts').mockImplementation((dataset, options) => {
+      vertexCounts.push(dataset.arcs!.getPointCount!());
+      cut(dataset, options);
+    });
+    try {
+      const result = await f.ops.autoCompletePolygon({ line: sketch });
+      expect(result).toMatchObject({ ok: true, value: { createdCount: 1 } });
+      expect(vertexCounts.length).toBeGreaterThan(0);
+      expect(Math.max(...vertexCounts)).toBeLessThan(30);
+      expect(copy).not.toHaveBeenCalled();
+      expect(f.source.getDataset()).toBe(original);
+      expect(original.layers[0]!.shapes![500]).toBe(distantShape);
+      expect(area(original, 501)).toBeCloseTo(24);
+      f.entries[0]!.undo();
+      expect(original.layers[0]!.shapes).toHaveLength(501);
+      expect(original.layers[0]!.shapes![500]).toBe(distantShape);
+      f.entries[0]!.do();
+      expect(area(original, 501)).toBeCloseTo(24);
+    } finally {
+      copy.mockRestore();
+      cuts.mockRestore();
+    }
+  });
+
   it('creates an adjoining feature sharing arcs, preserves originals, and supports undo/redo', async () => {
     expect(autoCompletePolygon).toBeTypeOf('function');
     const f = await fixture();
@@ -103,6 +137,105 @@ describe('autoCompletePolygon', () => {
     f.entries[0]!.do();
     expect(f.source.getDataset()).toBe(after);
     expect(after.layers[0]!.shapes).toHaveLength(2);
+  });
+
+  it('retains islands outside the sketch bounds when closing a concave boundary', async () => {
+    const u = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [8, 10],
+      [8, 2],
+      [2, 2],
+      [2, 10],
+      [0, 10],
+      [0, 0],
+    ];
+    const island = [
+      [4, 4],
+      [5, 4],
+      [5, 5],
+      [4, 5],
+      [4, 4],
+    ];
+    const f = await fixture([[u], [island]]);
+    await expect(
+      f.ops.autoCompletePolygon({
+        line: [
+          [1, 9],
+          [9, 9],
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { createdCount: 1 },
+    });
+    expect(area(f.source.getDataset(), 2)).toBeCloseTo(41);
+  });
+
+  it('can close a boundary connected beyond the immediately contacted features', async () => {
+    const rect = (x0: number, y0: number, x1: number, y1: number) => [
+      [
+        [x0, y0],
+        [x1, y0],
+        [x1, y1],
+        [x0, y1],
+        [x0, y0],
+      ],
+    ];
+    const f = await fixture([
+      rect(0, 0, 10, 2),
+      rect(0, 2, 2, 8),
+      rect(0, 8, 2, 10),
+      rect(8, 2, 10, 8),
+      rect(8, 8, 10, 10),
+    ]);
+    await expect(
+      f.ops.autoCompletePolygon({
+        line: [
+          [1, 9],
+          [9, 9],
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { createdCount: 1 },
+    });
+    expect(area(f.source.getDataset(), 5)).toBeCloseTo(42);
+  });
+
+  it('does not return a partial result when another face uses more distant boundaries', async () => {
+    const rect = (x0: number, y0: number, x1: number, y1: number) => [
+      [
+        [x0, y0],
+        [x1, y0],
+        [x1, y1],
+        [x0, y1],
+        [x0, y0],
+      ],
+    ];
+    const f = await fixture([
+      rect(-4, 8, -2, 10),
+      rect(0, 0, 10, 2),
+      rect(0, 2, 2, 8),
+      rect(0, 8, 2, 10),
+      rect(8, 2, 10, 8),
+      rect(8, 8, 10, 10),
+    ]);
+    await expect(
+      f.ops.autoCompletePolygon({
+        line: [
+          [-3, 8.5],
+          [-1, 8.5],
+          [-1, 9.5],
+          [-3, 9.5],
+          [-3, 11],
+          [1, 11],
+          [1, 9],
+          [9, 9],
+        ],
+      }),
+    ).resolves.toMatchObject({ ok: true, value: { createdCount: 2 } });
   });
 
   it('completes against curved boundaries and more than one existing feature', async () => {
