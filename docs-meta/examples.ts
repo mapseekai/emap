@@ -60,7 +60,6 @@ const docsPerformance = '/docs/recipes/performance';
 const docsErrorHandling = '/docs/recipes/error-handling';
 const docsErrors = '/docs/reference/errors';
 const docsCompatibility = '/docs/reference/compatibility';
-const docsMigration = '/docs/reference/migration';
 
 const task6Fixture = 'fixtures/task-6-polygons.geojson';
 const task6CsvFixture = 'fixtures/task-6-join.csv';
@@ -87,6 +86,11 @@ const exampleDescriptions = {
     zh: '加载 TopoJSON 文件，并保留共享拓扑以供地图渲染。',
     en: 'Loads a TopoJSON file while preserving shared topology for map rendering.',
   },
+  'getting-started/kml-viewer': {
+    zh: '加载 KML 文件，面要素 Placemark 会以 WGS84 坐标导入并渲染。',
+    en: 'Loads a KML file and imports polygon Placemarks as WGS84 geometry.',
+  },
+
   'getting-started/points': {
     zh: '加载面或线要素，并按几何中心、顶点、端点或插值采样等方式转换为点图层。',
     en: 'Loads polygon or line features and converts them into points using centroids, vertices, endpoints, or interpolated samples.',
@@ -551,6 +555,16 @@ export const examples: readonly ExampleDefinition[] = [
     [],
   ),
   recipe(
+    'getting-started/kml-viewer',
+    'map-data',
+    'KML 查看器',
+    'KML viewer',
+    [docsFormats, docsFileUpload],
+    'TopologySource',
+    ['kml', 'formats'],
+    ['fixtures/example-kml.kml'],
+  ),
+  recipe(
     'flatgeobuf-viewer',
     'map-data',
     'FlatGeobuf 查看器',
@@ -681,7 +695,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('lasso-select', 'style-interaction', '拉框 / 套索选择切换', 'Box and lasso select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'lasso-select', 'history'], [task6Fixture]),
   recipe('attribute-editing', 'data-editing', '属性编辑', 'Attribute editing', [docsAttributes, docsEditing, docsUndoRedo], 'Emap', ['attributes', 'history'], [task6Fixture]),
   recipe('undo-redo', 'data-editing', '撤销 / 重做', 'Undo and redo', [docsUndoRedo, docsEditing], 'Emap', ['editing', 'history'], [task6Fixture]),
-  recipe('attribute-expressions', 'data-editing', '属性表达式批量更新', 'Attribute expressions', [docsAttributes, docsMigration], 'Emap', ['expressions', 'attributes', 'history'], [task6Fixture]),
+  recipe('attribute-expressions', 'data-editing', '属性表达式批量更新', 'Attribute expressions', [docsAttributes, docsOperations], 'Emap', ['expressions', 'attributes', 'history'], [task6Fixture]),
   recipe('filter-features', 'data-editing', '要素过滤', 'Filter features', [docsAttributes, docsOperations], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
   recipe('data-engineering', 'data-editing', '数据工程批次', 'Data engineering batch', [docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
   recipe('merge-selected', 'data-editing', '合并选中要素', 'Merge selected features', [docsSelection, docsOperations], 'Emap', ['selection', 'layer-ops', 'history'], [task6Fixture]),
