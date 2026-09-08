@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-08
+
+### Added
+
+- Added a getting-started KML viewer example with a bundled fixture.
+
+### Changed
+
+- Refreshed the README and bilingual documentation around the current API and
+  consolidated colocated tests, including DuckDB integration-test discovery.
+
+### Fixed
+
+- Direct KML input is decoded correctly, and the browser bundle now registers
+  `@tmcw/togeojson` for KML conversion.
+
+- Measurement and drawing previews now use a separate Canvas overlay with
+  animation-frame coalescing, avoiding full layer redraws on every pointer move
+  and preserving fast navigation while measuring, drawing, reshaping, or
+  auto-completing polygons.
+- New-feature snapping rejects distant arcs by their bounding boxes before
+  inspecting vertices and segments, reducing cursor latency on large datasets.
+- Auto-complete polygon submission now plans against a local mini-dataset and
+  commits an undoable in-place geometry patch instead of cloning and rebuilding
+  the entire dataset. Shared boundaries, attributes, selection, and undo/redo
+  are preserved; ambiguous or distant boundary closures fall back to complete
+  geometry planning to avoid missing faces.
+
 ## [0.9.0] - 2026-09-07
 
 ### Added
@@ -983,7 +1011,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/mapseekai/emap/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/mapseekai/emap/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mapseekai/emap/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mapseekai/emap/compare/v0.7.2...v0.8.0
