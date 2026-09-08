@@ -2,47 +2,39 @@
 id: attributes
 slug: /data/attributes
 title: 属性
-api: ["Emap"]
-examples: ["attribute-editing","attribute-expressions","data-engineering","feature-attributes","filter-features","join","split-layer"]
+api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions"]
+examples: ["attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 属性
 
-每个 mapshaper layer 可以包含一张 data table。shape 索引与 record 索引对应，因此
-`FeatureRef.id` 同时定位几何和属性记录。
+Emap 将每个 layer 的属性保存在 data table 中。要素 ID 同时定位 geometry 和对应属性记录；使用 `map.features` 读取，使用 `map.attributes` 或 `map.ops` 修改。
 
-## 读取要素属性
+## 读取属性
 
-从屏幕查询：
+`queryFeatures()` 按屏幕坐标查询，`map.features.get()` 按 source、layer 和 ID 查询：
 
 ```ts
 const hits = map.queryFeatures([240, 180], {
   layers: ['district-fill'],
 });
 
-const first = hits[0];
-if (first) {
-  console.log(first.properties);
-}
-```
-
-按引用读取：
-
-```ts
 const feature = map.features.get({
   source: 'main',
   layer: 'districts',
   id: 3,
 });
 
-console.log(feature?.properties);
+console.log(hits[0]?.properties, feature?.properties);
 ```
 
-Feature accessor 返回读取视图。修改属性应使用 `map.attributes`。
+`Feature` 是读取视图。不要直接改写 `feature.properties` 或 source dataset 的 records；这些修改不会经过 Emap 的历史、选择和渲染更新流程。
 
-## 修改单个要素
+## 修改要素属性
+
+`map.attributes.setFeatureProperty()` 修改一个字段，`setFeatureProperties()` 将多个字段写成一次历史记录。为字段赋值 `undefined` 会删除它。
 
 ```ts
 const result = map.attributes.setFeatureProperty(
@@ -51,27 +43,19 @@ const result = map.attributes.setFeatureProperty(
   '新名称',
 );
 
-if (!result.ok) {
-  console.error(result.error);
-}
-```
+if (!result.ok) console.error(result.error);
 
-一次更新多个字段会形成一条历史记录：
-
-```ts
 map.attributes.setFeatureProperties(
   { source: 'main', layer: 'districts', id: 3 },
-  {
-    name: '新名称',
-    population: 120000,
-  },
+  { name: '新名称', population: 120000 },
 );
 ```
 
-值设为 `undefined` 表示删除该 key。请求值与现有记录完全相同时返回 validation
-错误，不会添加空历史项。
+相同的完整属性值会返回 validation 错误，不创建空的历史项。
 
-## 字段操作
+## 管理字段
+
+字段操作针对 source layer 名称，并可撤销。重命名不会覆盖已有目标字段。
 
 ```ts
 map.attributes.addField({
@@ -95,10 +79,9 @@ map.attributes.removeField({
 });
 ```
 
-`target` 是 source layer 名称。字段新增、重命名和删除都可撤销。重命名不会覆盖
-已经存在的目标字段。
+## 表达式、筛选和连接
 
-## 批量表达式
+`map.ops` 的表达式、`where` 和 `calc` 选项遵守 `expressionPolicy`。默认值为 `'disabled'`；只对由应用控制的表达式设置 `'trusted'`。
 
 ```ts
 const map = new Emap({
@@ -106,36 +89,23 @@ const map = new Emap({
   expressionPolicy: 'trusted',
 });
 
-const result = await map.ops.applyExpression({
+await map.ops.applyExpression({
   source: 'main',
   target: 'districts',
   expression: 'POP_DENS = POP / AREA',
 });
-```
 
-mapshaper expression 可以执行 JavaScript 风格逻辑。默认 policy 是 `'disabled'`。
-只有表达式由可信应用代码提供时才启用 `'trusted'`；不要直接执行用户输入或远程配置。
-
-受 policy 控制的接口还包括 filter、sort、split，以及 `where` / `calc` 选项。
-
-## 过滤字段
-
-```ts
-const result = await map.ops.filterFields({
+await map.ops.filterFields({
   source: 'main',
   target: 'districts',
   fields: ['name', 'population'],
 });
 ```
 
-这是 dataset operation，可能替换当前 layer data。处理结果通过 `OpResult` 返回。
-
-## 连接外部表
-
-`joinTable` 使用 key 字段把应用内表数据连接到 source layer：
+用 `joinTable()` 按键字段把外部表连接到 layer。两侧键的类型和格式必须一致，例如字符串 `"001"` 与数字 `1` 是不同的键。
 
 ```ts
-const result = await map.ops.joinTable({
+await map.ops.joinTable({
   source: 'main',
   target: 'districts',
   keys: ['code', 'code'],
@@ -143,29 +113,7 @@ const result = await map.ops.joinTable({
 });
 ```
 
-连接前确保 key 类型和格式一致，例如不要把字符串 `"001"` 与数字 `1` 当成同一值。
-
-## 属性与选择
-
-`attribute-only` operation 可以保留 feature ID，因此 Emap 会尽量保留当前选择。
-shape-count operation 可能改变记录索引，应用应在操作后从 `selectionchange` 或新查询
-刷新缓存。
-
-## 常见问题
-
-### layer 没有 data table
-
-纯几何 layer 可能没有属性表。需要字段操作前先确认导入数据包含 records。
-
-### 修改没有进入撤销记录
-
-不要直接修改 `feature.properties` 或 `layer.data.getRecords()`；使用
-`map.attributes` 或 `map.ops`。
-
-### 表达式返回 expression-disabled
-
-这是默认安全行为。确认表达式由可信代码生成后，再设置
-`expressionPolicy: 'trusted'`。
+属性操作通常保留 feature ID 和选择；改变要素数量的操作可能改变记录索引。处理结果后重新查询或响应 `selectionchange` 来更新缓存引用。
 
 ## API
 

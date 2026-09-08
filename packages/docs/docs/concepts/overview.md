@@ -2,27 +2,23 @@
 id: overview
 slug: /concepts/overview
 title: 核心概念
-api: []
-examples: []
+api: ["Emap","TopologySource","LayerSpecification"]
+examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 核心概念
 
-Emap 的运行模型围绕 `Emap`、`TopologySource`、source layer 和渲染图层展开。
-先理解它们的职责边界，可以避免数据已经加载却无法显示、图层 ID 混用或直接修改
-dataset 导致历史和缓存失效等问题。
+`@mapseekai/emap` 是浏览器中的 Canvas 地图与地理数据编辑库。应用创建一个 `Emap`，导入 `TopologySource`，再用渲染图层声明数据如何显示。数据、显示和交互分别由不同对象管理。
 
 ## 对象关系
 
 ```text
 浏览器容器
 └─ Emap
-   ├─ Camera / Viewport
-   ├─ Controls 与 Handlers
-   ├─ History 与 Selection
-   ├─ TopologySource "main"
+   ├─ 相机、Canvas、事件、选择和编辑历史
+   ├─ source "main" → TopologySource
    │  └─ mapshaper dataset
    │     ├─ source layer "districts"
    │     └─ source layer "roads"
@@ -32,73 +28,23 @@ dataset 导致历史和缓存失效等问题。
       └─ "road-line" → main / roads
 ```
 
-## 地图实例
+## 四个层级
 
-`Emap` 绑定一个浏览器容器，负责：
+| 层级 | 负责什么 | 常用入口 |
+| --- | --- | --- |
+| `Emap` | 容器、相机、图层顺序、交互和地图状态 | `new Emap(...)` |
+| source | 导入后的 dataset 及其 CRS、范围和拓扑 | `TopologySource` |
+| source layer | dataset 内的一组几何和属性 | `source-layer` |
+| render layer | 绘制类型、样式和显示顺序 | `map.addLayer(...)` |
 
-- 创建和更新 Canvas。
-- 保存相机与视口状态。
-- 注册数据源并维护渲染图层顺序。
-- 调度选择、编辑、拖拽和缩放处理器。
-- 管理控件、历史、验证和 Worker 路由。
-- 通过 `on`、`off`、`once` 和 `fire` 分发引擎事件。
+一个 source layer 可以供多个 render layer 使用。例如，用 `fill` 绘制行政区填充，再用 `line` 绘制同一组行政区边界；两者读取相同几何。
 
-一个容器对应一个地图实例。应用界面应通过公开 API 和事件与地图同步，而不是直接
-修改 Canvas 或 viewport 内部状态。
-
-## 数据源
-
-`TopologySource` 是导入数据与地图之间的边界。它接收 URL、文件或内存字节，
-将输入转换为 mapshaper dataset，并提供：
-
-- 数据范围。
-- dataset 中的 source layers。
-- 用于渲染的拓扑弧和简化层级。
-- 导出与格式插件入口。
-
-数据源的 ID 是地图级引用，例如 `main`、`roads` 或 `upload`。调用
-`map.addSource('main', source)` 后，渲染图层和操作都使用这个 ID 定位数据。
-
-## Source layer 与渲染图层
-
-这两个“图层”具有不同职责：
-
-| 类型 | 来源 | 保存什么 | 示例 |
-|---|---|---|---|
-| source layer | 导入的数据集 | 几何和属性记录 | `districts` |
-| 渲染图层 | 应用配置 | 绘制类型、顺序和 paint | `district-fill` |
-
-一个 source layer 可以被多个渲染图层引用。例如同一组行政区面可以先绘制填充，
-再绘制边界线。多图层数据集通过 `source-layer` 指定要使用的 source layer。
-
-## 数据范围与相机
-
-数据坐标不会自动决定用户当前看到的位置。数据加载后通常执行：
+## 从数据到可交互地图
 
 ```ts
-const extent = source.getExtent();
-if (extent.hasBounds()) {
-  map.fitBounds(extent, { padding: 32, duration: 0 });
-}
-```
+import { Emap, TopologySource } from '@mapseekai/emap';
 
-`setExtent` 适合直接设置初始范围；`fitBounds` 还可以设置 padding 和动画。
-如果数据为空，应先检查范围，再移动相机。
-
-## 查询、选择与编辑
-
-- **查询**回答“某个屏幕位置有哪些要素”，不一定改变地图状态。
-- **选择**保存 source、source layer 和 feature ID 的引用，并触发
-  `selectionchange`。
-- **编辑**通过命令或 edit session 修改数据，并同步历史、缓存和渲染失效。
-- **数据操作**通过 `map.ops` 替换或更新 dataset，并返回 `OpResult`。
-
-不要直接修改 `source.getDataset()` 返回的对象。直接修改不会自动建立撤销快照，
-也可能让空间索引、简化显示和选择状态与实际数据不一致。
-
-## 一次完整的数据流
-
-```ts
+const map = new Emap({ container: 'map' });
 const source = await TopologySource.fromUrl('main', '/data/roads.geojson');
 
 await map.addSource('main', source);
@@ -106,37 +52,27 @@ map.addLayer({
   id: 'roads',
   type: 'line',
   source: 'main',
-  paint: {
-    'line-color': '#334155',
-    'line-width': 2,
-  },
+  paint: { 'line-color': '#334155', 'line-width': 2 },
 });
 
-map.setExtent(source.getExtent());
-
-map.on(
-  'feature:click',
-  { layers: ['roads'] },
-  (event) => {
-    console.log(event.ref);
-  },
-);
+const extent = source.getExtent();
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 ```
 
-执行顺序是：输入数据 → 构建 topology → 注册 source → 配置渲染图层 →
-设置相机 → 通过事件响应交互。
+`main` 是地图中的 source ID。render layer 的 `source` 和数据操作的 `source` 都使用它。多图层 dataset 还通过 `source-layer` 指定其中的 source layer。
 
-## 应该从哪里修改状态
+## 状态应由谁修改
 
-| 需求 | 使用的入口 |
-|---|---|
-| 改变视图 | `jumpTo`、`fitBounds`、`flyTo`、`panBy` 等相机 API |
-| 改变显示 | 添加、移除或更新渲染图层 |
-| 改变选择 | 地图选择 API 或选择 Handler |
-| 改变单个要素 | 编辑命令、编辑会话或内置编辑 Handler |
-| 批量处理数据 | `map.ops.*` |
-| 批量合并用户动作 | Transaction |
-| 响应内部变化 | `map.on(...)` |
+| 目标 | 使用的 API |
+| --- | --- |
+| 改变视图 | `jumpTo`、`fitBounds`、`flyTo`、`panTo` |
+| 改变显示 | `addLayer`、`removeLayer`、`setLayerVisibility` |
+| 读取屏幕位置的要素 | `queryFeatures` |
+| 改变选择 | `map.selection` 或选择 Handler |
+| 编辑要素 | 编辑命令、编辑会话或编辑 Handler |
+| 处理整个数据集 | `map.ops` |
+| 响应地图变化 | `on`、`once`、`off` |
 
-后续分别阅读 [Emap 地图实例](./emap.md)、[数据源与图层](./source-layer.md)、
-[拓扑模型](./topology.md) 和[坐标与 CRS](./coordinates-crs.md)。
+不要直接修改 `source.getDataset()` 返回的数据。它是实时 dataset 的零复制只读 TypeScript 视图；通过地图的编辑和操作入口变更数据，渲染、选择、空间索引和历史会同步更新。
+
+继续阅读 [Emap 地图实例](./emap.md)、[数据源与图层](./source-layer.md)、[拓扑模型](./topology.md) 和 [坐标与 CRS](./coordinates-crs.md)。

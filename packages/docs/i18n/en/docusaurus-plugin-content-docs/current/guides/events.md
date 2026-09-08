@@ -5,162 +5,61 @@ title: Events
 api: ["CameraEvent","Emap","EmapEventMap","EventDispatcher","EventListener","FeatureEvent","FeatureEventFilter"]
 examples: ["feature-attributes","interaction-handlers"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Events
 
-Emap uses `EventDispatcher` at the engine layer. Applications use `map.on`,
-`map.once`, and `map.off` for camera, data, selection, history, validation,
-pointer, and feature changes without subscribing to internal canvas events.
+Use `map.on()` to subscribe, `map.once()` for one subscription, and `map.off()` with the same listener to remove it. Emap supplies typed payloads for camera, data, layer, selection, history, validation, pointer, and feature events.
 
-## Basic subscription
+## Subscribe and remove
 
 ```ts
-const onMoveEnd = (event: {
-  center: [number, number];
-  zoom: number;
-}) => {
-  console.log(event.center, event.zoom);
+const onMoveEnd = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
+  const view = { center, zoom };
 };
 
 map.on('moveend', onMoveEnd);
+map.once('data', () => map.getSelection());
 map.off('moveend', onMoveEnd);
 ```
 
-`off` requires the same function reference that was registered. For one
-delivery:
+## Common map events
 
-```ts
-map.once('data', (event) => {
-  console.log(event.sourceId, event.reason);
-});
-```
-
-## Public map events
-
-| Event | Payload | Typical use |
-|---|---|---|
-| `movestart` | `CameraEvent` | Camera movement started |
-| `move` | `Partial<CameraEvent>` | Movement in progress; fields may be absent |
-| `moveend` | `CameraEvent` | Camera movement completed |
-| `zoomstart` | `CameraEvent` | Zoom started |
-| `zoom` | `CameraEvent` | Zoom in progress |
-| `zoomend` | `CameraEvent` | Zoom completed |
-| `resize` | no application fields | Container dimensions updated |
-| `crschange` | no application fields | Map CRS changed |
-| `data` | `sourceId`, `reason` | Load, replace, edit, or reproject |
-| `editmodechange` | `mode` | Edit mode changed |
-| `error` | `error` | Map-level asynchronous failure |
-| `historychange` | history snapshot fields | Undo/redo state changed |
-| `selectionchange` | `selected`, `added`, `removed` | Selection actually changed |
-| `validationfailed` | `results`, `label` | An after-commit validator failed |
-| `mousemove` | pointer screen/map data | Coordinate display or custom hover |
-
-`move` may come from a complete camera lifecycle or a bare viewport pan, so its
-camera fields are optional. Use `moveend` for a stable final center and zoom.
-
-## Feature events
-
-Public feature events are `feature:click`, `feature:hover`, `feature:enter`, and
-`feature:leave`.
-
-Listen to every visible layer:
-
-```ts
-map.on('feature:click', (event) => {
-  console.log(event.ref);
-  console.log(event.feature.properties);
-});
-```
-
-Or filter by map source ID and source-layer name:
-
-```ts
-map.on(
-  'feature:click',
-  {
-    source: 'main',
-    layers: ['districts'],
-  },
-  (event) => {
-    console.log(event.ref.id);
-  },
-);
-```
-
-`layers` filters `FeatureRef.layer`, which is a source-layer name inside the
-dataset, not a render-layer ID.
-
-`FeatureEvent` contains:
-
-| Field | Meaning |
+| Event | Use |
 |---|---|
-| `feature` | Feature accessor for properties and geometry |
-| `ref` | `{ source, layer, id }` |
-| `point` | Pixel coordinates inside the canvas container |
-| `lngLat` | Current map coordinates |
-| `modifiers` | Shift, Ctrl, Alt, and Meta state |
-| `originalEvent` | Original browser event |
+| `movestart`, `move`, `moveend` | Synchronize camera position |
+| `zoomstart`, `zoom`, `zoomend` | Synchronize zoom UI |
+| `data`, `crschange`, `resize` | Respond to data and viewport lifecycle |
+| `layerchange` | Update a layer list |
+| `selectionchange` | Update a selection summary |
+| `historychange` | Enable or disable undo/redo buttons |
+| `editmodechange` | Synchronize editing-tool state |
+| `validationfailed`, `error`, `warning` | Present operation and style diagnostics |
 
-## Selection and camera events
+A `CameraEvent` from a programmatic camera call has `originalEvent` set to `null`.
 
-`selectionchange` only fires when the set changes:
+## Subscribe to feature events
+
+Feature events accept an optional filter. `layers` uses source-layer names:
 
 ```ts
-map.on('selectionchange', ({ selected, added, removed }) => {
-  updateSelectionCount(selected.length);
-  updatePropertyPanel(selected);
-  console.log({ added, removed });
+map.on('feature:click', { layers: ['lots'] }, (event) => {
+  map.select([event.ref]);
+});
+
+map.on('feature:hover', (event) => {
+  map.setHighlightedFeatures([event.ref]);
 });
 ```
 
-For a programmatic camera call, `CameraEvent.originalEvent` is `null`:
+The available events are `feature:click`, `feature:hover`, `feature:enter`, and `feature:leave`. `mousemove` supplies pointer events without hit-test filtering.
 
-```ts
-map.on('moveend', (event) => {
-  if (event.originalEvent === null) {
-    console.log('Triggered by application code');
-  }
-});
-```
+## Handle high-frequency events
 
-## Application events
-
-Applications can augment `EmapEventMap`:
-
-```ts
-declare module '@mapseekai/emap' {
-  interface EmapEventMap {
-    'panel:open': { panelId: string };
-  }
-}
-
-map.on('panel:open', ({ panelId }) => {
-  console.log(panelId);
-});
-
-map.fire('panel:open', { panelId: 'properties' });
-```
-
-Internal worker-pool `workerjob*` signals are not public `map.on` events. Drive
-progress UI from the operation Promise, `OpResult`, and application state.
-
-## High-frequency listeners
-
-`move`, `zoom`, `mousemove`, and `feature:hover` may fire frequently. Do not
-import data or run topology operations in those listeners. Coalesce DOM updates
-with `requestAnimationFrame` when needed.
-
-## API
-
-- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
-- [CameraEvent](/mapseekai/emap/api/interfaces/emap.CameraEvent.html)
-- [FeatureEvent](/mapseekai/emap/api/interfaces/emap.FeatureEvent.html)
+`move`, `zoom`, `mousemove`, and `feature:hover` can fire frequently. Coalesce DOM updates in a listener with `requestAnimationFrame`, and run data imports and topology operations from explicit user actions.
 
 ## Runnable examples
 
 - [Feature attributes](/mapseekai/emap/examples/feature-attributes/)
 - [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
-- [Feature selection](/mapseekai/emap/examples/feature-selection/)

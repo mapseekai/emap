@@ -2,41 +2,45 @@
 id: formats
 slug: /data/formats
 title: Data formats
-api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter"]
-examples: ["duckdb-geoparquet-query","export-formats","flatgeobuf-viewer","geoparquet-viewer"]
+api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter","TopologySource","ExportOptions"]
+examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Data formats
 
-Emap separates core formats from optional formats so a GeoJSON-only
-application does not pay for Arrow, Parquet, or WASM.
+Emap loads, stores, and exports geographic data in the browser through `TopologySource`. Core formats ship with `@mapseekai/emap`; GeoParquet, GeoArrow, and FlatGeobuf are enabled when an application needs them.
 
-## Support matrix
+## Supported formats
 
-| Format | Extensions | Import | Export | Entry |
-|---|---|---|---|---|
-| GeoJSON | `.json`, `.geojson` | yes | yes | core |
+| Format | File extensions | Import | Export | Requirement |
+| --- | --- | --- | --- | --- |
+| GeoJSON | `.geojson`, `.json` | yes | yes | core |
 | TopoJSON | `.topojson`, `.json` | yes | yes | core |
-| Shapefile ZIP | `.zip` | yes | yes, as ZIP | core |
+| Shapefile ZIP | `.zip` | yes | yes, ZIP Blob | core |
 | KML | `.kml` | yes | no | core |
 | mapshaper snapshot | `.msx` | yes | yes | core |
 | GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@mapseekai/emap/arrow` |
-| FlatGeobuf | `.fgb` | after registration | after registration | application-local plugin (`flatgeobuf`); not core or `@mapseekai/emap/arrow` |
+| FlatGeobuf | `.fgb` | after registration | after registration | application-local plugin |
+
+GeoJSON, TopoJSON, and KML use `EPSG:4326` when their data has no CRS metadata. KML is import-only.
 
 ## Load URLs and bytes
 
+`TopologySource.fromUrl()` loads from a URL; the URL path or response Content-Type identifies its format.
+
 ```ts
+import { TopologySource } from '@mapseekai/emap';
+
 const source = await TopologySource.fromUrl(
   'districts',
   '/data/districts.geojson',
 );
 ```
 
-The URL path or response Content-Type provides the format. When a generic
-Content-Type hides the real extension, use the bytes API with a filename:
+For uploaded files, pass the original filename to `fromBytes()`. Its extension selects the importer.
 
 ```ts
 const bytes = new Uint8Array(await file.arrayBuffer());
@@ -45,9 +49,7 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 });
 ```
 
-The filename selects the importer. Do not rename every upload to `data.bin`.
-
-An existing source can be reloaded:
+`setData()` reloads a source from a URL, file, or file array. It completes after the dataset is populated and its `data` event fires. A later load supersedes an unresolved one.
 
 ```ts
 await source.setData({
@@ -56,119 +58,26 @@ await source.setData({
 });
 ```
 
-`setData` resolves after the dataset is populated and the `data` event fires.
-A newer load supersedes an older in-flight load.
+Pass a complete ZIP for a Shapefile. It needs `.shp`; matching `.dbf`, `.shx`, and `.prj` files supply attributes, indexes, and CRS. `TopologySource` applies ZIP limits for compressed input, expanded size, entry count, and compression ratio; configure application thresholds with `zipLimits`.
 
-## Shapefile ZIP
+## GeoParquet and GeoArrow
 
-A ZIP needs `.shp` and normally includes `.dbf`, `.shx`, and `.prj`. Emap
-enforces entry-count, expanded-size, and compression-ratio limits. Pass the
-complete ZIP rather than only the `.shp` bytes.
-
-## Enable GeoParquet and GeoArrow
-
-Before parquet/arrow import or export:
+Import the optional entry point before importing, exporting, or interoperating with Arrow Tables:
 
 ```ts
 import '@mapseekai/emap/arrow';
 ```
 
-`@mapseekai/emap/arrow` is a `package.json` export subpath. Configure a modern
-TypeScript resolver before importing it; see
-[Installation](../getting-started/installation.md) for browser-bundler, native
-Node ESM, and legacy-resolver requirements.
-
-
-This side-effect import registers format plugins. GeoArrow does not need WASM.
-GeoParquet lazily imports `parquet-wasm` on first use. Bundlers such as Vite and
-webpack 5 normally emit the WASM asset automatically.
-
-Set an explicit WASM location:
+This registers GeoParquet and GeoArrow formats. GeoParquet loads `parquet-wasm` on first use; an application may instead supply a WASM URL or an initialized module:
 
 ```ts
-import { initParquetWasm } from '@mapseekai/emap/arrow';
+import { initParquetWasm, setParquetWasm } from '@mapseekai/emap/arrow';
 
-await initParquetWasm({
-  wasmInput: '/assets/parquet_wasm_bg.wasm',
-});
-```
-
-Or inject an already initialized module:
-
-```ts
-import { setParquetWasm } from '@mapseekai/emap/arrow';
-
+await initParquetWasm({ wasmInput: '/assets/parquet_wasm_bg.wasm' });
 setParquetWasm(parquetModule);
 ```
 
-`initParquetWasm({ module })` is not a current signature. Use `wasmInput`, or
-inject through `setParquetWasm(module)`.
-
-## Enable FlatGeobuf
-
-FlatGeobuf is not a core format and is not part of `@mapseekai/emap/arrow`.
-Install its separate dependency:
-
-```bash
-pnpm add flatgeobuf
-```
-
-Adapt or copy
-[`installFlatGeobufFormat`](https://github.com/mapseekai/emap/blob/master/packages/examples/src/flatgeobuf-format.ts)
-into an application-local module, then import and call it before the first
-`.fgb` import or export:
-
-```ts
-import * as emap from '@mapseekai/emap';
-import { installFlatGeobufFormat } from './flatgeobuf-format';
-
-installFlatGeobufFormat(emap);
-```
-
-Pass the `@mapseekai/emap` module namespace: the helper calls the module-level
-`registerFormat` and `getDefaultMapshaperAdapter` APIs, so an `Emap` instance is
-not valid. There is no `@mapseekai/emap/flatgeobuf` export. The current example
-helper buffers the whole file and has no streaming or range reads. It reads an
-EPSG code from the FlatGeobuf header; on export, it writes that code only when
-the dataset CRS is an `EPSG:<number>` identifier.
-
-After registration, load with an `.fgb` filename and export with:
-
-```ts
-const blob = await source.export({ format: 'flatgeobuf' });
-```
-
-See the complete integration in the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
-
-## Arrow table interoperability
-
-```ts
-import {
-  fromArrowTable,
-  setArrowTable,
-  toArrowTableFromSource,
-} from '@mapseekai/emap/arrow';
-
-await setArrowTable(source, duckdbResultTable);
-const table = toArrowTableFromSource(source);
-const dataset = fromArrowTable(table);
-```
-
-This path converts coordinate buffers directly without a GeoJSON intermediate.
-
-## Export
-
-`TopologySource.export` always returns one `Blob`:
-
-```ts
-const blob = await source.export({
-  format: 'geojson',
-});
-```
-
-Shapefile sidecars are packed into one ZIP Blob.
-
-GeoParquet:
+`TopologySource.export()` returns a `Blob`. GeoParquet uses WKB encoding by default and GeoArrow uses native coordinate encoding; both export one layer per call.
 
 ```ts
 const blob = await source.export({
@@ -178,13 +87,16 @@ const blob = await source.export({
 });
 ```
 
-GeoParquet defaults to WKB for DuckDB, GeoPandas, and GDAL interoperability.
-GeoArrow defaults to native coordinate encoding. Both optional formats export
-one layer at a time.
+## FlatGeobuf
 
-## Browser download
+An application installs `flatgeobuf` and registers a format plugin with the module-level `registerFormat()`. The plugin supplies import, export, and the `.fgb` extension; after registration, use `fromBytes()` or `export({ format: 'flatgeobuf' })`. See the complete integration in the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
+
+## Export and download
+
+Export core formats directly:
 
 ```ts
+const blob = await source.export({ format: 'geojson' });
 const url = URL.createObjectURL(blob);
 const link = document.createElement('a');
 link.href = url;
@@ -193,28 +105,20 @@ link.click();
 URL.revokeObjectURL(url);
 ```
 
-## Troubleshooting
-
-- A “requires Arrow module” error means the side-effect import did not run.
-- For a Parquet WASM 404, let the bundler emit it or pass the final URL through
-  `wasmInput`.
-- If Shapefile attributes or CRS are missing, verify matching `.dbf` and `.prj`
-  files exist in the ZIP.
+Shapefile `.shp`, `.shx`, `.dbf`, and optional `.prj` files are packed into one ZIP Blob. Exports always use full-detail geometry.
 
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 - [ExportOptions](/mapseekai/emap/api/interfaces/emap.ExportOptions.html)
-- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
-- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
-- [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
 - [registerFormat](/mapseekai/emap/api/functions/emap.registerFormat.html)
 - [DatasetFormatPlugin](/mapseekai/emap/api/interfaces/emap.DatasetFormatPlugin.html)
-- [ExportedFormatFile](/mapseekai/emap/api/interfaces/emap.ExportedFormatFile.html)
+- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
 
 ## Runnable examples
 
-- [DuckDB GeoParquet query](/mapseekai/emap/examples/duckdb-geoparquet-query/)
 - [Export formats](/mapseekai/emap/examples/export-formats/)
 - [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet viewer](/mapseekai/emap/examples/geoparquet-viewer/)
+- [KML viewer](/mapseekai/emap/examples/getting-started/kml-viewer/)

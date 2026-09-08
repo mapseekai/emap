@@ -2,7 +2,7 @@
 id: editing
 slug: /guides/editing
 title: 编辑
-api: ["AffineMatrix","AppendedArc","AutoCompletePolygonHandler","AutoCompletePolygonOptions","AutoCompletePolygonResult","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureAppendCommand","FeatureAppendCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","FillRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
+api: ["AffineMatrix","AppendedArc","AutoCompletePolygonHandler","AutoCompletePolygonOptions","AutoCompletePolygonResult","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureAppendCommand","FeatureAppendCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","FillRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions","DrawFeatureHandler","VertexEditHandler","SplitFeatureHandler","TransformFeatureHandler"]
 examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
 stability: stable
 verifiedVersion: 0.9.0
@@ -10,361 +10,83 @@ verifiedVersion: 0.9.0
 
 # 编辑
 
-Emap 的编辑由命令驱动。命令保存恢复数据所需的状态，因此数据修改、撤销/重做、
-渲染缓存和选择变化可以保持一致。
+Emap 将交互编辑和可撤销命令连接到同一份地图状态。先配置 Handler，再启用它；结束工具时调用 `disable()`。
 
-## 编辑入口
+## 启用编辑工具
 
-| 需求 | 推荐入口 |
-|---|---|
-| 修改单个属性 | 属性编辑 API 或 `FeaturePropertyChangeCommand` |
-| 移动要素 | `transformFeature` Handler 或 translate edit session |
-| 旋转、缩放要素 | `transformFeature` Handler 或 affine edit session |
-| 编辑顶点 | `vertexEdit` Handler / `VertexEditControl` |
-| 绘制新要素 | `drawFeature` Handler / `DrawFeatureControl` |
-| 删除选择 | `map.deleteSelected()` |
-| 批量拓扑处理 | `map.ops.*` |
-| 合并多个步骤 | Transaction |
-
-不要直接修改 `source.getDataset()`。绕过命令系统会跳过撤销快照、缓存失效和选择维护。
-
-### `DatasetReplaceCommand` 的信任边界
-
-`DatasetReplaceCommand` 是供高级历史集成使用的可信低层 escape hatch。它不会归一化
-CRS 元数据、重投影坐标，也不会校验 source 是否属于某个地图。地图内的批量修改应优先
-使用 `map.ops.*`，整图 CRS 变更使用 `map.reproject()`。只有在 `before`、`after` 已经与
-所属地图 CRS 对齐，或 source 完全 detached 时，才应直接构造该命令。
-
-## 编辑模式
-
-公开模式包括：
-
-- `'none'`
-- `'vertex'`
-- `'draw'`
-- `'transform'`
+所有编辑 Handler 默认关闭。绘制工具需要目标 source 和几何类型：
 
 ```ts
-map.setEditMode('vertex');
-console.log(map.getEditMode());
-```
-
-模式变化会触发 `editmodechange`：
-
-```ts
-map.on('editmodechange', ({ mode }) => {
-  updateActiveTool(mode);
-});
-```
-
-离开 `vertex` 或 `draw` 模式时，对应的临时编辑状态会自动清理。
-
-## 使用内置编辑控件
-
-```ts
-map.addControl(new EditToolbar(), 'top-left');
-map.addControl(new VertexEditControl(), 'top-left');
-map.addControl(new DrawFeatureControl(), 'top-left');
-```
-
-控件只提供 UI 和模式切换，真实指针处理仍由地图 Handler 完成。已有业务工具栏时，
-可以直接启用 `map.vertexEdit`、`map.drawFeature` 或 `map.transformFeature`。
-
-## 整形
-
-`reshapeFeature` 让用户画一条替换路径片段的线；它把完成的草图提交给
-`map.ops.reshapeSelected()`。与 QGIS 一致，无需先选择：整形线会作用于它接触到的
-每一个线和面要素（面需要线进入并离开边界，线需要至少两个接触点）。
-
-整形直接在当前 dataset 中增量写入可逆命令，不会为每次操作复制 dataset。每次完成的整形
-都是独立历史项，可用多级撤销和重做恢复。
-
-```ts
-const result = await map.ops.reshapeSelected({
-  line: [
-    [116.38, 39.90],
-    [116.40, 39.91],
-  ],
-});
-
-if (!result.ok) showError(result.error);
-else console.log(result.value.reshapedCount);
-
-map.reshapeFeature.setOptions({ snapThreshold: 12 });
-map.reshapeFeature.enable();
-```
-
-左键依次放置替换线的顶点，右键在至少两个顶点后完成，Esc 放弃当前草图。
-`reshapeFeature` 进入 `'reshape'` 编辑模式；启用另一编辑模式会使它退出。
-
-`map.ops.reshapeSelected()` 返回 `OpResult`。校验失败（`kind: 'validation'`）的错误形状为
-`{ kind, field, reason }`：草图至少要有两个有限坐标且不能只重复同一点（`line`）；没有
-整形任何要素时同样以 `line` 报错。面整形还会拒绝自交或无效的结果（`geometry`）。并发修改
-使预备 mutation 过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
-
-## 自动完成面
-
-`autoCompletePolygon` 沿用整形的画线操作，从已有面的内部或边界起笔，在面外绘制新边界，
-再回到已有面的内部或边界，右键完成；Esc 取消。系统使用草图和已有边界围成独立的新面，
-已有面的形状与属性保持不变，共边复用同一组拓扑弧。无需先选择；可先选中参考面以启用
-与整形相同的顶点、边吸附。
-
-```ts
-map.autoCompletePolygon.setOptions({ snapThreshold: 12 });
-map.autoCompletePolygon.enable();
-
-// 也可直接提交数据坐标中的草图。
-const result = await map.ops.autoCompletePolygon({
-  line: [[8, 2], [14, 2], [14, 8], [8, 8]],
-});
-if (!result.ok) showError(result.error);
-else console.log(result.value.createdCount, result.value.features);
-```
-
-工具进入 `'auto-complete'` 编辑模式，也包含在 `EditToolbar({ advancedTools: true })` 中。
-新要素追加到第一个能与草图围成新面的面图层（按数据源和图层顺序），属性记录为空，
-原有选择保留。一次草图围成多个新面时一起创建，作为一次撤销/重做操作。
-无法围合、仅穿过已有面内部、自交或坐标无效的草图返回 `validation`，不修改数据。
-
-## 拆分
-
-`splitFeature` 把交互式 cutter 提交给 `map.ops.splitSelected()`。先在同一 source 和 layer
-中选择要素：线要素可用点或折线 cutter，面要素使用折线 cutter。拆分后保留原要素并追加
-其余结果，属性会随各个结果复制，选择会更新为拆分结果。
-
-```ts
-const result = await map.ops.splitSelected({
-  cutter: { type: 'point', coordinates: [116.39, 39.90] },
-});
-
-if (!result.ok) showError(result.error);
-else console.log(result.value.resultFeatures);
-
-map.splitFeature.setOptions({ cutterType: 'polyline', snapThreshold: 12 });
-map.splitFeature.enable();
-```
-
-点 cutter 在线内部单击完成；折线 cutter 左键放置顶点、右键完成，Esc 放弃草图。
-`splitFeature` 进入 `'split'` 编辑模式。
-
-整形和拆分在活跃编辑会话中采用 append-only 的 arc 存储；撤销时才截回追加的尾部。因此，
-中间或孤立 arc 可能暂时保留在 live dataset 中。导出会压缩一个副本，不会改变 live
-历史或状态。
-
-## 顶点批量操作
-
-`vertexEdit` 支持框选、整体拖动和批量删除拓扑节点：
-
-```ts
-map.vertexEdit.setOptions({
-  layers: ['roads'],
+map.drawFeature.setOptions({
+  source: 'parcels',
+  sourceLayer: 'lots',
+  type: 'polygon',
   snapThreshold: 12,
   snapToVertex: true,
   snapToEdge: true,
-  polygonFillColor: '#6ea8fe', // 面要素悬停填充色
 });
+map.drawFeature.enable();
+```
+
+常用工具如下：
+
+| Handler | 用途 | 启用前条件 |
+|---|---|---|
+| `drawFeature` | 绘制 point、polyline 或 polygon | `source` 和 `type` |
+| `vertexEdit` | 选择、拖动和删除拓扑顶点 | 可编辑图层 |
+| `splitFeature` | 用点或折线切割已选要素 | 同一 source layer 中的有效选择 |
+| `reshapeFeature` | 用草图替换路径片段 | 与草图相交的路径 |
+| `autoCompletePolygon` | 沿现有边界绘制相邻面 | 起点和终点接触已有面 |
+| `ringEdit` | 添加或删除 polygon 内环 | 选中的面 |
+| `partEdit` | 添加或删除线或面的 part | 符合工具模式的选择 |
+| `transformFeature` | 拖动、旋转或缩放已选要素 | 选中的要素 |
+
+例如，切换到顶点编辑后，在切换工具前关闭它：
+
+```ts
+map.vertexEdit.setOptions({ layers: ['parcel-fill'] });
 map.vertexEdit.enable();
+
+// 切换到其他工具前
+map.vertexEdit.disable();
 ```
 
-在未悬停顶点处拖拽以框选顶点；按住 Shift 拖拽可把框选结果追加到现有选择。拖动任一
-已选顶点会整体移动选中的节点。按 Delete 或 Backspace 批量删除；Esc 清除框选。未框选
-时，右键顶点可执行单点删除（共享节点可先拆分）。`vertexEdit` 使用 `'vertex'` 编辑
-模式，不能与其他编辑模式同时工作。
+`boxSelect` 和 `lassoSelect` 不能同时启用；编辑工具也应在启用另一个需要相同手势的工具前关闭。
 
-批量删除仍遵守拓扑删除校验：不能删除会令路径或环退化的节点；共享节点按一个拓扑单元
-处理，并且不合法的删除不会提交部分修改。
+## 撤销、重做和快捷键
 
-## 挖洞和删洞
-
-`ringEdit` 为面要素添加或删除内环（洞），底层 API 是
-`map.ops.addRing()` 和 `map.ops.deleteRing()`；`map.ops.fillRing()` 则在洞内新增一个
-共享该边界的面要素，同时保留原要素上的洞。与 QGIS 一致，这三种操作都无需先选择：
-洞会加到包含草图的面要素上，删洞或填洞时点击洞内任一点即可定位目标洞。
+编辑命令进入历史记录。用返回值决定是否更新应用 UI：
 
 ```ts
-const added = await map.ops.addRing({
-  ring: [
-    [116.39, 39.90],
-    [116.40, 39.90],
-    [116.40, 39.91],
-    [116.39, 39.90],
-  ],
-});
+if (map.canUndo()) map.undo();
+if (map.canRedo()) map.redo();
 
-const removed = await map.ops.deleteRing({ point: [116.395, 39.905] });
-const filled = await map.ops.fillRing({ point: [116.395, 39.905] });
-
-map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
-map.ringEdit.enable();
+const unbind = map.bindHistoryShortcuts();
+// 组件卸载时调用 unbind()
 ```
 
-`mode: 'add'` 时左键画洞、右键完成、Esc 取消；`mode: 'delete'` 时点击洞内任一点删除
-该洞。它使用 `'ring'` 编辑模式，切换到其他编辑模式会自动退出。
+`undo()` 和 `redo()` 在没有可执行项时返回 `false`。`historychange` 事件提供按钮状态同步所需的信息。
 
-`map.ops.addRing()`、`map.ops.deleteRing()` 和 `map.ops.fillRing()` 的校验失败
-（`kind: 'validation'`）形状为
-`{ kind, field, reason }`，`field` 为 `ring`：洞必须闭合并围成面积，不能自交、接触或
-穿过面边界，且必须严格位于某个面外环内；没有任何面包含草图或点击未落在洞内也会被拒绝。
-预备 mutation 因并发修改过期时为 `{ kind: 'stale-operation', sourceId, operation }`，
-没有 `field`。
+## 将多个操作作为一个动作
 
-## 加和删部分
-
-`partEdit` 为线或面要素添加或删除独立 part，底层 API 是
-`map.ops.addPart()` 和 `map.ops.deletePart()`。加 part 需要先选中恰好一个目标要素；
-删 part 与 QGIS 一致无需选择——点击哪个 part 就删哪个，要素只剩一个 part 时整个要素
-会被删除。
-
-```ts
-const added = await map.ops.addPart({
-  coordinates: [
-    [116.41, 39.90],
-    [116.42, 39.91],
-  ],
-});
-
-const removed = await map.ops.deletePart({
-  point: [116.415, 39.905],
-  tolerance: 0.0001,
-});
-
-map.partEdit.setOptions({ mode: 'delete', snapThreshold: 12 });
-map.partEdit.enable();
-```
-
-`mode: 'add'` 要求恰好选择一个路径要素：左键画新 part、右键完成、Esc 取消；面 part
-自动闭合，线 part 至少需要两个顶点。`mode: 'delete'` 时点击目标 part；对线要素，
-handler 会用 `snapThreshold` 换算为 `tolerance`。它使用 `'part'` 编辑模式，切换到其他
-编辑模式会自动退出。
-
-`map.ops.addPart()` 和 `map.ops.deletePart()` 的校验失败（`kind: 'validation'`）形状为
-`{ kind, field, reason }`，`field` 为 `selection` 或 `part`：新 part 不能自交或接触、相交
-已有几何；面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。删除时
-面要素点击必须落在某个 part 内，线要素必须在 `tolerance` 范围内。预备 mutation 因并发
-修改过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
-
-## 撤销与重做
-
-```ts
-if (map.canUndo()) {
-  map.undo();
-}
-
-if (map.canRedo()) {
-  map.redo();
-}
-```
-
-`undo()` 和 `redo()` 在没有可用历史项时返回 `false`，成功时返回 `true`。
-
-加入历史控件：
-
-```ts
-map.addControl(new HistoryControl(), 'top-right');
-```
-
-绑定键盘快捷键：
-
-```ts
-const unbindHistory = map.bindHistoryShortcuts();
-
-// 页面销毁或需要接管快捷键时
-unbindHistory();
-```
-
-默认支持 Ctrl/Cmd+Z 撤销，以及 Ctrl/Cmd+Shift+Z 或 Ctrl+Y 重做。
-
-## 事务
-
-多个操作需要作为一个用户动作提交时使用 transaction。事务不支持嵌套：
+`beginTransaction()` 暂存期间产生的操作和命令。`commit(label)` 将它们合并为一个历史项；失败时调用 `rollback()` 恢复数据和选择。事务不能嵌套。
 
 ```ts
 const tx = map.beginTransaction();
-
-const simplified = await map.ops.simplifyLayer({
-  source: 'main',
-  percentage: 0.4,
-});
-
-if (!simplified.ok) {
+const clipped = await map.ops.clipLayer({ source: 'parcels', target: 'lots', mask: 'boundary' });
+if (!clipped.ok) {
   tx.rollback();
-  showError(simplified.error);
 } else {
-  const cleaned = await map.ops.cleanLayer({
-    source: 'main',
-  });
-
-  if (!cleaned.ok) {
-    tx.rollback();
-    showError(cleaned.error);
-  } else {
-    const committed = await tx.commit('简化并清理');
-    if (!committed.ok) {
-      showError(committed.error);
-    }
-  }
+  await tx.commit('裁剪地块');
 }
 ```
 
-`commit(label)` 把已执行的子命令压成一条历史记录。`rollback()` 恢复首次修改前的
-dataset 和选择。事务提交或回滚后不能再次使用。
+## 自定义可撤销编辑
 
-## 自定义命令
-
-需要内置 API 没有覆盖的可撤销编辑时，实现 `EditCommand`。命令的 `do()` 用于 redo，
-`undo()` 用于恢复旧状态，可选 `label` 会显示在历史快照中。
-
-调用 `map.pushCommand(command)` 前，调用方必须已经执行修改；`pushCommand` 只把命令加入
-历史，不会调用 `command.do()`。命令必须在创建时捕获完整 memento，不能在 undo 时
-依赖后来变化的实时 dataset。
-
-## 数据集替换与历史屏障
-
-简化、投影、裁剪等操作可能整体替换 dataset。它们应通过 `map.ops` 执行，让历史知道
-哪些较早命令已经不能安全地作用于新 dataset。不要自行替换 source 内部引用。
-
-## 验证
-
-after-commit validator 可以在编辑提交后检查拓扑或业务约束。失败会触发
-`validationfailed`，但不会自动撤销：
-
-```ts
-map.on('validationfailed', ({ results, label }) => {
-  showValidationResults(label, results);
-});
-```
-
-应用需要决定是提示用户、允许继续，还是主动撤销。
-
-## 常见问题
-
-### 一次拖拽产生多条历史
-
-连续指针更新应由 edit session 累积，在手势结束时提交一次，而不是每个 pointermove
-都 push 一条命令。
-
-### 事务失败后历史状态异常
-
-任一步返回失败时立即 `rollback()`，不要继续执行后续 operation。提交和回滚都是终态。
-
-### UI 模式与地图模式不同步
-
-以 `getEditMode()` 和 `editmodechange` 为状态源，不要只维护按钮自己的布尔值。
-
-## API
-
-- [EditCommand](/mapseekai/emap/api/interfaces/emap.EditCommand.html)
-- [EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
-- [Transaction](/mapseekai/emap/api/classes/emap.Transaction.html)
-- [EditToolbar](/mapseekai/emap/api/classes/emap.EditToolbar.html)
+当公开的地图操作不覆盖业务编辑时，实现 `EditCommand`，先完成数据修改，再通过 `map.pushCommand(command)` 记录可重做的命令。`do()` 执行重做，`undo()` 恢复修改前的数据。
 
 ## 可运行示例
 
-- [综合编辑](/mapseekai/emap/examples/china-editing/)
 - [顶点编辑](/mapseekai/emap/examples/vertex-editing/)
-- [整形、批量顶点、洞和 part 编辑](/mapseekai/emap/examples/reshape-ring-part/)
-- [拆分要素](/mapseekai/emap/examples/split-features/)
-- [要素平移](/mapseekai/emap/examples/feature-translate/)
-- [旋转与缩放](/mapseekai/emap/examples/feature-rotate-scale/)
-- [事务](/mapseekai/emap/examples/transaction/)
 - [撤销与重做](/mapseekai/emap/examples/undo-redo/)
+- [事务](/mapseekai/emap/examples/transaction/)

@@ -2,136 +2,69 @@
 id: emap
 slug: /concepts/emap
 title: Emap map instance
-api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup"]
-examples: ["getting-started/geojson-viewer"]
+api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup","MapOptions","TopologySource"]
+examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Emap map instance
 
-`Emap` coordinates one map container. It owns the canvas, camera, registered
-sources, render-layer order, controls, interaction handlers, selection,
-history, and worker routing. Applications normally create one instance and
-interact with it through public methods and events.
+`Emap` is the application's map facade. One instance binds to one browser container and manages the Canvas, camera, registered sources, render layers, selection, edit history, interaction handlers, and map events. Applications change map state through this instance rather than operating on the Canvas or dataset directly.
 
-## Construct a map
+## Create a map
 
 ```ts
 import { Emap } from '@mapseekai/emap';
 
 const map = new Emap({
   container: 'map',
+  interactive: true,
 });
 ```
 
-`container` may be a container ID. The element must already exist and have a
-non-zero size.
+`container` is an element ID or `HTMLElement`; the element must already exist and have a non-zero size. Data processing can route through a Worker with `useWorker: true` or `useWorker: 'auto'`; `workerUrl` sets the Worker script URL and `workerThreshold` is the vertex-count threshold for `'auto'`.
 
-Common options:
+`expressionPolicy` accepts `'disabled'` or `'trusted'`. Use `'trusted'` only for expressions supplied by the application; user input and remote content should remain `'disabled'`.
 
-| Option | Default | Purpose |
-|---|---|---|
-| `interactive` | `true` | Enables default browser interaction |
-| `useWorker` | `false` | `true` forces routing; `'auto'` chooses by workload |
-| `workerThreshold` | `50000` | Data-size threshold considered by `'auto'` |
-| `workerUrl` | `emap-worker.js` | Public URL of the worker script |
-| `expressionPolicy` | `'disabled'` | Controls mapshaper expression execution |
-
-Only use `expressionPolicy: 'trusted'` for expressions provided by trusted
-application code. Do not execute user or remote input as a trusted expression.
-
-## Register a source
+## Add data and presentation
 
 ```ts
+import { TopologySource } from '@mapseekai/emap';
+
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson');
-
 await map.addSource('main', source);
-map.setExtent(source.getExtent());
-```
 
-A `TopologySource` must have initial data before `map.addSource`: complete its
-initial `setData(...)` or load first. Alternatively, use `preflightSource` /
-`confirmSource` to validate and initialize the source before registration. A
-registered, populated source still supports later `setData(...)` calls; the map
-normalizes the new data to the map CRS.
-
-The map-level source ID must match the `source` used by render layers and
-`map.ops`.
-
-## Add render layers
-
-```ts
 map.addLayer({
-  id: 'district-fill',
+  id: 'districts',
   type: 'fill',
   source: 'main',
-  paint: {
-    'fill-color': '#60a5fa',
-    'fill-opacity': 0.7,
-  },
+  paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.7 },
 });
 
-map.addLayer({
-  id: 'district-line',
-  type: 'line',
-  source: 'main',
-  paint: {
-    'line-color': '#1e3a8a',
-    'line-width': 1,
-  },
-});
+const extent = source.getExtent();
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 ```
 
-A render-layer ID must be unique and stable. Selection filters, feature events,
-and application state commonly retain that ID.
+`addSource` registers a source under a map source ID; `addLayer` uses that ID to reference data. When the source contains multiple source layers, add `source-layer` to the layer specification. Layers draw in insertion order, with later layers above earlier ones.
 
-## Controls and interaction handlers
-
-Controls provide DOM UI; handlers implement the interaction. When using a
-built-in control, give its lifecycle to the map through `addControl`:
-
-```ts
-map.addControl(new NavigationControl(), 'top-left');
-map.addControl(new HistoryControl(), 'top-right');
-```
-
-An application with its own toolbar can enable or disable map handlers directly
-instead of duplicating pointer interaction logic.
-
-## Listen for map state
-
-`Emap` provides event dispatch. Known event names infer their payload:
+## Read and react to map state
 
 ```ts
 map.on('moveend', (event) => {
   console.log(event.center, event.zoom);
 });
 
-map.on(
-  'feature:click',
-  { layers: ['district-fill'] },
-  (event) => {
-    console.log(event.ref);
-  },
-);
-
-map.on('historychange', (event) => {
-  console.log(event);
+map.on('feature:click', { layers: ['districts'] }, (event) => {
+  console.log(event.ref);
 });
 ```
 
-Use `on` for a persistent listener, `once` for one delivery, and `off` with the
-same listener when it is no longer needed.
+`on` keeps listening, `once` receives one event, and `off` removes the same listener. `queryFeatures` queries features at Canvas-local pixels or within an extent; `map.selection` stores selection state.
 
-## Modify data
+## Edit and process data
 
-Choose an entry point according to the scope of the change:
-
-- Selection and highlighting only change interaction state.
-- Feature transforms, vertex edits, and attribute edits use edit commands.
-- Buffer, dissolve, projection, and simplify use `map.ops`.
-- Use a transaction when several commands must become one undo step.
+Selection and highlighting change interaction state only. Edit features with edit commands, edit sessions, or built-in handlers; process datasets in bulk with `map.ops`. These entry points update rendering, spatial indexes, selection, and history.
 
 ```ts
 const result = await map.ops.simplifyLayer({
@@ -139,31 +72,23 @@ const result = await map.ops.simplifyLayer({
   percentage: 0.25,
 });
 
-if (!result.ok) {
-  console.error(result.error);
-}
+if (!result.ok) console.error(result.error);
 ```
 
-Do not bypass these entry points by mutating `source.getDataset()`. The map uses
-command effect classification to update selection, spatial indexes, history,
-and render caches.
+Use `jumpTo`, `easeTo`, `flyTo`, `fitBounds`, `panTo`, and `zoomTo` to change the camera. Use `project` and `unproject` to convert between map coordinates and Canvas pixels; neither method reprojects CRS coordinates.
 
-## Camera and screen coordinates
+## Lifecycle
 
-Use `jumpTo`, `easeTo`, `flyTo`, `fitBounds`, `panTo`, and `zoomTo` to change
-the view. Use `project` and `unproject` to convert between map coordinates and
-canvas pixels. Do not mutate the viewport or maintain a second matrix in
-application code.
+When the application unmounts the map container, call `map.remove()`. It stops interaction, removes the Canvas and controls, and releases resources held by the map.
 
 ## API
 
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 
 ## Runnable examples
 
 - [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
 - [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
 - [Undo and redo](/mapseekai/emap/examples/undo-redo/)
-- [Web Worker](/mapseekai/emap/examples/web-worker/)

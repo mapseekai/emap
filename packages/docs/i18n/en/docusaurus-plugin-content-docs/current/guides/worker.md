@@ -2,168 +2,70 @@
 id: worker
 slug: /guides/worker
 title: Web Worker
-api: ["Emap"]
+api: ["Emap","MapOptions","MapshaperWorkerPool","MapshaperWorkerPoolOptions"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Web Worker
 
-Worker routing moves heavier dataset-replace operations off the main thread. It
-can reduce UI stalls during long work, but dataset serialization means it is
-not faster for every task.
+Emap can run dataset-replace operations in a Web Worker so the main thread remains responsive during long processing. A worker serializes input and output datasets, which suits heavier work and concurrent work over independent sources.
 
-## Routing modes
+## Configure routing
 
-| `useWorker` | Behavior |
-|---|---|
-| `false` | Default; run every operation on the main thread |
-| `true` | Route every eligible dataset-replace operation |
-| `'auto'` | Choose from vertex count, command cost, and routing rules |
-
-Start with `'auto'`:
+Set `useWorker` when creating the map:
 
 ```ts
 const map = new Emap({
   container: 'map',
   useWorker: 'auto',
-  workerThreshold: 50000,
+  workerThreshold: 50_000,
   workerUrl: '/assets/emap-worker.js',
+  workerPoolSize: 2,
 });
 ```
 
-`workerThreshold` defaults to `50000` arc vertices. A boolean `useWorker`
-ignores the threshold.
+| `useWorker` | Behavior |
+|---|---|
+| `false` | Run operations on the main thread |
+| `true` | Run dataset-replace operations through a worker |
+| `'auto'` | Route from source vertex count and `workerThreshold` |
 
-## Eligible work
+Bulk dataset-replace operations can run in a worker; selection-level edits such as vertex commands and translating selected features run on the main thread.
 
-Good worker candidates include buffer, clean, clip, erase, dissolve, union,
-mosaic, simplify, and project operations.
+## Publish worker assets
 
-Selection, feature translation, rotation, and vertex editing stay on the main
-thread because their cost is normally lower than pack, postMessage, and unpack
-overhead. `useWorker` does not move rendering or browser pointer events into a
-worker.
-
-## Deploy static files
-
-Copy these package files:
+An application must publish these files from the installed package and point `workerUrl` at the first one:
 
 ```text
 node_modules/@mapseekai/emap/dist/emap-worker.js
 node_modules/@mapseekai/emap/dist/mapshaper-vendor.js
 ```
 
-Into a public layout such as:
+Keep both files in the same public directory, for example:
 
 ```text
-public/
-└─ assets/
-   ├─ emap-worker.js
-   └─ mapshaper-vendor.js
+public/assets/emap-worker.js
+public/assets/mapshaper-vendor.js
 ```
 
-The default worker runs:
+The worker loads `mapshaper-vendor.js` from its own directory. The static server must return JavaScript for both URLs, not an application HTML fallback.
 
-```js
-importScripts('mapshaper-vendor.js');
-```
+## Use your own worker pool
 
-Keep the files together. A relative `workerUrl` resolves against
-`document.baseURI`; verify the final public URL when deploying under a
-subpath.
-
-## Worker pool
-
-The default pool size is `1`. Increase it only for concurrent work over
-independent sources:
+Pass a pool when independent sources need concurrent operations:
 
 ```ts
-const map = new Emap({
-  container: 'map',
-  useWorker: 'auto',
-  workerPoolSize: Math.max(1, navigator.hardwareConcurrency - 1),
+const workerPool = new MapshaperWorkerPool({
   workerUrl: '/assets/emap-worker.js',
+  poolSize: 2,
 });
+
+const map = new Emap({ container: 'map', useWorker: true, workerPool });
 ```
 
-Every worker loads a mapshaper instance. More parallelism also means more
-memory. Workers spawn lazily, but CPU count alone is not a reason to use the
-maximum.
-
-Advanced applications may pass a prebuilt `MapshaperWorkerPool` to one map
-through `workerPool`. The map adopts that pool exclusively and cancels and
-destroys it from `map.remove()`; do not pass one pool to multiple maps. The
-pool owns URL and size configuration. With `useWorker: false`, `workerPool` is
-ignored and remains caller-owned.
-
-## Custom routing
-
-`workerRouting` can override an `'auto'` decision:
-
-```ts
-const map = new Emap({
-  container: 'map',
-  useWorker: 'auto',
-  workerRouting: ({ heads, recordCount, defaultDecision }) =>
-    heads.includes('classify') ? recordCount >= 20_000 : defaultDecision,
-});
-```
-
-This example uses a 20,000-record threshold for attribute classification and
-keeps the default decision for every other command. The callback also receives
-vertex count and the configured threshold. Override it only after measuring
-representative application data.
-
-## Operation state and cancellation
-
-Worker and main-thread operations share the same Promise and `OpResult`:
-
-```ts
-setBusy(true);
-
-try {
-  const result = await map.ops.simplifyLayer({
-    source: 'main',
-    percentage: 0.25,
-  });
-
-  if (!result.ok) {
-    showError(result.error);
-  }
-} finally {
-  setBusy(false);
-}
-```
-
-Internal worker-pool `workerjob*` signals are not public `map.on` events.
-Manage progress around the operation Promise.
-
-Cancel queued or running jobs with:
-
-```ts
-map.cancelWorkerJobs();
-```
-
-Cancellation is useful when leaving a page, replacing sources, or honoring an
-explicit user action. The current Promise still needs failure handling.
-
-## Troubleshooting
-
-- For a worker 404, open `workerUrl` directly and confirm the server returns
-  JavaScript rather than the application HTML fallback.
-- For a vendor 404, place `mapshaper-vendor.js` beside the worker.
-- If small data became slower, use `'auto'` and tune `workerThreshold` from
-  measurements.
-- If memory is high, reduce `workerPoolSize`; each slot owns an independent
-  mapshaper instance and may retain packed input/output during processing.
-
-## API
-
-- [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
-- [MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
-- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/emap.MapshaperWorkerPoolOptions.html)
+The map exclusively manages a supplied `workerPool` and destroys it during `map.remove()`. Do not pass one pool to multiple maps.
 
 ## Runnable examples
 

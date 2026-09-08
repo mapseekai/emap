@@ -2,19 +2,19 @@
 id: operations
 slug: /data/operations
 title: Data operations
-api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureHandler","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions"]
-examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-features","split-layer","union"]
+api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureHandler","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions","OpResult","OpError","ClassifyFeaturesOptions"]
+examples: ["buffer","clip-erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Data operations
 
-`map.ops` wraps mapshaper processing as typed operations. It resolves sources
-and layers, executes commands, records history, updates selection and caches,
-and returns failures through `OpResult`.
+`map.ops` is Emap's mapshaper data-processing interface. Each method resolves sources and layers, runs its operation, updates history and selection, and returns a `Promise<OpResult>`.
 
-## Call model
+## Calls and errors
+
+Operations use typed options. `source` is a source ID and `target` is a source-layer name or target expression. Operations that support an output layer may also accept `name` or `noReplace`; use the corresponding option type for its exact contract.
 
 ```ts
 const result = await map.ops.bufferLayer({
@@ -28,64 +28,27 @@ if (!result.ok) {
 }
 ```
 
-`BufferOptions` uses `radius`, not `distance`. Units come from the dataset CRS.
-
-Common option concepts include:
-
-| Field | Meaning |
-|---|---|
-| `source` | Map source ID |
-| `target` | Source-layer name or target expression |
-| `name` | New output-layer name for operations that support it |
-| `noReplace` | Keep input and create output where supported |
-
-Consult the specific interface; operations do not all accept the same fields.
-
-## OpResult
+`BufferOptions` uses `radius`, with units from the dataset CRS. Successful results are in `result.value`; failed results are `OpError` values discriminated by `kind`.
 
 ```ts
-const result = await map.ops.checkGeometry({
-  source: 'main',
-});
-
-if (result.ok) {
-  console.log(result.value);
-} else {
-  switch (result.error.kind) {
-    case 'not-found':
-      console.error(result.error.what, result.error.id);
-      break;
-    case 'validation':
-      console.error(result.error.field, result.error.reason);
-      break;
-    default:
-      console.error(result.error);
-  }
+const result = await map.ops.checkGeometry({ source: 'main' });
+if (!result.ok && result.error.kind === 'validation') {
+  console.error(result.error.field, result.error.reason);
 }
 ```
 
-`OpError` is a discriminated union and has no universal `message` property.
-Narrow through `kind`.
+## `map.ops` catalog
 
-## MapshaperOps methods
+| Category | Methods |
+| --- | --- |
+| Overlay, topology, and geometry | `clipLayer`, `eraseLayer`, `dissolveLayer`, `bufferLayer`, `simplifyLayer`, `projectLayer`, `affineLayer`, `cleanLayer`, `snapLayer`, `mosaicLayer`, `unionLayers`, `divideLayer` |
+| Feature geometry | `filterIslands`, `filterSlivers`, `filterGeom`, `explodeLayer`, `innerlinesLayer`, `pointsLayer`, `linesLayer`, `polygonsLayer`, `intersectionPointsLayer` |
+| Layer management | `renameLayer`, `mergeLayers`, `splitLayer`, `dropLayer` |
+| Attributes and filtering | `applyExpression`, `filterFeatures`, `sortFeatures`, `uniqueFeatures`, `filterFields`, `renameFields`, `classifyFeatures`, `joinTable`, `dataFill` |
+| Topology inspection | `rebuildTopology`, `checkGeometry` |
+| Selection and editing | `mergeSelected`, `splitSelected`, `reshapeSelected`, `autoCompletePolygon`, `addRing`, `deleteRing`, `fillRing`, `addPart`, `deletePart` |
 
-The public `map.ops` methods are grouped below. Refer to the API reference for
-their detailed signatures and options.
-
-- Geometry and topology: `clipLayer`, `eraseLayer`, `dissolveLayer`,
-  `bufferLayer`, `simplifyLayer`, `projectLayer`, `affineLayer`, `cleanLayer`,
-  `snapLayer`, `mosaicLayer`, `unionLayers`, `divideLayer`
-- Feature geometry: `filterIslands`, `filterSlivers`, `filterGeom`,
-  `explodeLayer`, `innerlinesLayer`, `pointsLayer`, `linesLayer`,
-  `polygonsLayer`, `intersectionPointsLayer`
-- Layers: `renameLayer`, `mergeLayers`, `splitLayer`, `dropLayer`
-- Attributes and filtering: `applyExpression`, `filterFeatures`, `sortFeatures`,
-  `uniqueFeatures`, `filterFields`, `renameFields`, `joinTable`, `dataFill`
-- Topology maintenance: `rebuildTopology`, `checkGeometry`
-- Selection and editing: `mergeSelected`, `splitSelected`, `reshapeSelected`,
-  `addRing`, `deleteRing`, `addPart`, `deletePart`
-
-## Common geometry operations
+## Common operations
 
 ```ts
 await map.ops.simplifyLayer({
@@ -101,12 +64,22 @@ await map.ops.clipLayer({
   mask: 'boundary',
 });
 
+await map.ops.eraseLayer({
+  source: 'main',
+  target: 'parcels',
+  mask: 'restricted',
+});
+
 await map.ops.dissolveLayer({
   source: 'main',
   target: 'districts',
   field: 'province',
 });
+```
 
+`projectLayer()` creates a detached export file and does not modify the map. Download its returned `blob` and `filename`; use `map.reproject()` to change the map-wide CRS.
+
+```ts
 const result = await map.ops.projectLayer({
   source: 'main',
   target: 'districts',
@@ -115,69 +88,13 @@ const result = await map.ops.projectLayer({
 });
 ```
 
-`projectLayer` returns a detached file Blob and never mutates or reloads the
-current map. Save `result.value.blob` using `result.value.filename`; use
-`map.reproject()` for map-wide CRS changes.
+Expressions, `where`, and `calc` obey the map's `expressionPolicy`. `joinTable()` joins external table data through `keys` and `data`; `classifyFeatures()` returns classification output.
 
-## Layer and attribute operations
+## Selection operations and history
 
-```ts
-await map.ops.renameLayer({
-  source: 'main',
-  target: 'old_name',
-  name: 'new_name',
-});
+`mergeSelected()`, `splitSelected()`, `reshapeSelected()`, and the ring/part methods operate on Emap's selection. `splitSelected()` requires a selection from one source and layer: a point cutter splits lines, and a polyline cutter splits lines or polygons. Each successful operation creates one history entry.
 
-await map.ops.filterFields({
-  source: 'main',
-  target: 'districts',
-  fields: ['name', 'code'],
-});
-```
-
-Operations containing expressions, `where`, or `calc` are controlled by the
-expression policy.
-
-## Split selected features
-
-Use `map.select()` to choose line or polygon features from one source and layer,
-then provide a coordinate cutter:
-
-```ts
-map.select([{ source: 'main', layer: 'roads', id: 4 }]);
-const result = await map.ops.splitSelected({
-  cutter: { type: 'point', coordinates: [121.5, 31.2] },
-});
-
-map.splitFeature.setOptions({ cutterType: 'polyline' });
-map.splitFeature.enable();
-```
-
-A point cutter must lie in the interior of a selected line; selected lines also
-accept polyline cutters. Selected polygons accept polyline cutters only.
-Right-click completes the interactive polyline cutter.
-The selection must belong to one source and layer. On success, the largest
-area or length result keeps the original feature ID and the other pieces are
-appended as new features; every result duplicates the original attributes. The
-selection is replaced by the final split results, and the complete split is one
-atomic history entry that one undo restores.
-
-## Operation effects
-
-| Effect | Typical change | Selection behavior |
-|---|---|---|
-| `shape-count` | Add, delete, or split shapes | Feature IDs may change |
-| `topology-only` | Coordinates or arcs change | Preserve identity when possible |
-| `attribute-only` | Records or fields change | Usually preserve selection |
-| `crs-only` | Coordinate system changes | Preserve identity, rebuild indexes |
-
-The engine owns this classification. Do not bypass the runner with direct
-mapshaper calls or dataset mutation.
-
-## History, transactions, and workers
-
-A successful operation creates history. Group operations with a non-nested
-transaction:
+Use `map.beginTransaction()` to group operations into one undo step:
 
 ```ts
 const tx = map.beginTransaction();
@@ -186,36 +103,32 @@ const simplified = await map.ops.simplifyLayer({
   percentage: 0.4,
 });
 
-if (!simplified.ok) {
-  tx.rollback();
+if (simplified.ok) {
+  await tx.commit('Simplify data');
 } else {
-  const committed = await tx.commit('Simplify data');
-  if (!committed.ok) console.error(committed.error);
+  tx.rollback();
 }
 ```
 
-Dataset-replace operations can route through `useWorker: 'auto'` without
-changing their call shape or result.
-
-## Troubleshooting
-
-- Emap accepts typed options, not arbitrary mapshaper CLI strings. Buffer uses
-  `radius`; project uses `crs`.
-- Check `name`, `target`, and `noReplace` for output-layer behavior.
-- Run shape-count changes through `map.ops` so selection is cleared or remapped.
+Operations that change feature count clear or remap selection. Attribute and CRS operations preserve feature identity when possible. Run processing through `map.ops` to keep history, caches, and selection synchronized.
 
 ## API
 
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [OpResult](/mapseekai/emap/api/types/emap.OpResult.html)
 - [OpError](/mapseekai/emap/api/types/emap.OpError.html)
 - [BufferOptions](/mapseekai/emap/api/interfaces/emap.BufferOptions.html)
 - [SimplifyOptions](/mapseekai/emap/api/interfaces/emap.SimplifyOptions.html)
 - [ProjectOptions](/mapseekai/emap/api/interfaces/emap.ProjectOptions.html)
+- [ClassifyFeaturesOptions](/mapseekai/emap/api/interfaces/emap.ClassifyFeaturesOptions.html)
 
 ## Runnable examples
 
 - [Buffer](/mapseekai/emap/examples/buffer/)
 - [Clip and erase](/mapseekai/emap/examples/clip-erase/)
 - [Dissolve](/mapseekai/emap/examples/dissolve/)
+- [Filter features](/mapseekai/emap/examples/filter-features/)
+- [Merge selected features](/mapseekai/emap/examples/merge-selected/)
 - [Simplify](/mapseekai/emap/examples/simplify/)
+- [Split features](/mapseekai/emap/examples/split-features/)
 - [Union](/mapseekai/emap/examples/union/)

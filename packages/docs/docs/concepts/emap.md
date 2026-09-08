@@ -2,128 +2,69 @@
 id: emap
 slug: /concepts/emap
 title: Emap 地图实例
-api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup"]
-examples: ["getting-started/geojson-viewer"]
+api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup","MapOptions","TopologySource"]
+examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Emap 地图实例
 
-`Emap` 是一个地图容器的协调器。它管理 Canvas、相机、已注册数据源、渲染图层顺序、
-控件、交互处理器、选择、历史记录和 Worker 路由。应用通常只需要创建一个实例，
-然后通过公开方法和事件与它交互。
+`Emap` 是应用的地图 facade。一个实例绑定一个浏览器容器，统一管理 Canvas、相机、已注册 source、render layer、选择、编辑历史、交互 Handler 和地图事件。应用通过实例的方法修改地图状态，而不是直接操作 Canvas 或 dataset。
 
-## 创建实例
+## 创建地图
 
 ```ts
 import { Emap } from '@mapseekai/emap';
 
 const map = new Emap({
   container: 'map',
+  interactive: true,
 });
 ```
 
-`container` 可以是容器 ID。容器必须已存在并具有非零尺寸。
+`container` 可以是元素 ID 或 `HTMLElement`；元素必须已经存在且尺寸非零。`interactive` 控制默认浏览器交互。数据处理可用 `useWorker: true` 或 `useWorker: 'auto'` 路由到 Worker；`workerUrl` 指定 Worker 脚本 URL，`workerThreshold` 是 `'auto'` 模式使用的顶点数阈值。
 
-常用选项：
+`expressionPolicy` 的值为 `'disabled'` 或 `'trusted'`。只有应用自身提供的表达式才能使用 `'trusted'`；用户输入和远程内容应保持 `'disabled'`。
 
-| 选项 | 默认值 | 用途 |
-|---|---|---|
-| `interactive` | `true` | 是否启用默认浏览器交互 |
-| `useWorker` | `false` | `true` 强制路由，`'auto'` 按工作量决定 |
-| `workerThreshold` | `50000` | `'auto'` 模式下参与判断的数据规模阈值 |
-| `workerUrl` | `emap-worker.js` | Worker 脚本的公开 URL |
-| `expressionPolicy` | `'disabled'` | 是否允许执行 mapshaper 表达式 |
-
-只有在表达式来自可信代码时才使用 `expressionPolicy: 'trusted'`。用户输入或远程内容
-不应直接作为可信表达式执行。
-
-## 注册数据源
+## 添加数据和显示
 
 ```ts
+import { TopologySource } from '@mapseekai/emap';
+
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson');
-
 await map.addSource('main', source);
-map.setExtent(source.getExtent());
-```
 
-`TopologySource` 必须先拥有初始数据，才能调用 `map.addSource`：先完成 `setData(...)`
-或加载流程。也可以先用 `preflightSource` / `confirmSource` 完成校验和初始化，再注册 source。
-已注册的已填充 source 仍支持后续 `setData(...)`；地图会把新数据归一化到地图 CRS。
-
-地图级 source ID 必须与渲染图层和 `map.ops` 中使用的 `source` 一致。
-
-## 添加渲染图层
-
-```ts
 map.addLayer({
-  id: 'district-fill',
+  id: 'districts',
   type: 'fill',
   source: 'main',
-  paint: {
-    'fill-color': '#60a5fa',
-    'fill-opacity': 0.7,
-  },
+  paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.7 },
 });
 
-map.addLayer({
-  id: 'district-line',
-  type: 'line',
-  source: 'main',
-  paint: {
-    'line-color': '#1e3a8a',
-    'line-width': 1,
-  },
-});
+const extent = source.getExtent();
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 ```
 
-渲染图层 ID 在地图中必须唯一且稳定。选择过滤器、要素事件和应用状态通常会保存该 ID。
+`addSource` 将 source 注册为地图 source ID；`addLayer` 使用该 ID 引用数据。source 内有多个 source layer 时，在 layer 配置中加入 `'source-layer'`。图层按添加顺序绘制，后添加的图层位于上方。
 
-## 控件与交互处理器
-
-控件提供 DOM 界面，Handler 实现真实交互。使用内置控件时，通过 `addControl`
-把生命周期交给地图：
-
-```ts
-map.addControl(new NavigationControl(), 'top-left');
-map.addControl(new HistoryControl(), 'top-right');
-```
-
-如果应用已经有自己的工具栏，可以直接启用或禁用地图 Handler，而不必复制指针交互逻辑。
-
-## 监听地图状态
-
-`Emap` 继承事件分发能力。已知事件名会推断 payload：
+## 读取和响应地图状态
 
 ```ts
 map.on('moveend', (event) => {
   console.log(event.center, event.zoom);
 });
 
-map.on(
-  'feature:click',
-  { layers: ['district-fill'] },
-  (event) => {
-    console.log(event.ref);
-  },
-);
-
-map.on('historychange', (event) => {
-  console.log(event);
+map.on('feature:click', { layers: ['districts'] }, (event) => {
+  console.log(event.ref);
 });
 ```
 
-持续监听使用 `on`，单次监听使用 `once`，不再需要时使用同一 listener 调用 `off`。
+`on` 持续监听，`once` 只接收一次事件，`off` 使用同一个 listener 取消监听。`queryFeatures` 查询 Canvas 本地像素位置或范围内的要素；选择状态由 `map.selection` 保存。
 
-## 修改数据
+## 编辑与数据操作
 
-根据变化规模选择入口：
-
-- 选择和高亮只改变交互状态，不改写 dataset。
-- 要素移动、顶点编辑和属性编辑通过编辑命令进入历史。
-- 缓冲区、融合、投影、简化等批量操作通过 `map.ops` 执行。
-- 多个命令需要形成一次撤销操作时使用 transaction。
+选择和高亮只改变交互状态。要素编辑应使用编辑命令、编辑会话或内置 Handler；批量处理使用 `map.ops`。这些入口会更新渲染、空间索引、选择和历史。
 
 ```ts
 const result = await map.ops.simplifyLayer({
@@ -131,29 +72,23 @@ const result = await map.ops.simplifyLayer({
   percentage: 0.25,
 });
 
-if (!result.ok) {
-  console.error(result.error);
-}
+if (!result.ok) console.error(result.error);
 ```
 
-不要绕过这些入口直接改写 `source.getDataset()`。地图依赖命令效果分类来更新选择、
-空间索引、历史和渲染缓存。
+使用 `jumpTo`、`easeTo`、`flyTo`、`fitBounds`、`panTo` 和 `zoomTo` 修改相机。使用 `project` 和 `unproject` 在地图坐标与 Canvas 像素之间转换；这两个方法不执行 CRS 重投影。
 
-## 相机与屏幕坐标
+## 生命周期
 
-通过 `jumpTo`、`easeTo`、`flyTo`、`fitBounds`、`panTo` 和 `zoomTo` 改变视图。
-通过 `project` 与 `unproject` 在地图坐标和 Canvas 像素之间转换。不要直接修改
-viewport，也不要在应用代码中维护另一套矩阵。
+当应用卸载地图容器时，调用 `map.remove()`。它停止交互、移除 Canvas 和控件，并释放地图持有的资源。
 
 ## API
 
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 
 ## 可运行示例
 
 - [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
 - [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
 - [撤销与重做](/mapseekai/emap/examples/undo-redo/)
-- [Web Worker](/mapseekai/emap/examples/web-worker/)

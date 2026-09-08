@@ -2,103 +2,40 @@
 id: intro
 slug: /
 title: Emap 简介
-api: []
-examples: []
+api: ["Emap","LayerSpecification","TopologySource"]
+examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Emap
 
-Emap 是一个运行在浏览器中的 TypeScript 地图渲染与编辑引擎。它以 mapshaper
-数据结构保存拓扑，使用 HTML5 Canvas 2D 渲染地图，并把数据加载、图层样式、交互、
-编辑历史和空间数据处理组织在同一个前端 API 中。
+Emap 是面向浏览器的 TypeScript 地图渲染、编辑和空间数据处理库。它使用 Canvas 2D 渲染，并以 mapshaper topology dataset 管理数据源。应用可以在前端加载数据、显示图层、编辑要素、运行分析操作并导出结果。
 
-Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文件或内存中的二进制内容，
-导入、查看、编辑和导出都可以在浏览器里完成。
+Emap 适合需要把可完整载入浏览器的数据查看、交互和处理整合到自定义界面的应用，例如 GIS 数据查看器、业务编辑器和数据处理工具。应用负责自己的工具栏、属性面板和状态界面；Emap 提供地图、数据和交互能力。
 
-## 适合哪些场景
-
-- GIS 数据查看器：显示 GeoJSON、TopoJSON、KML、Shapefile ZIP 等本地或远程数据。
-- 浏览器编辑器：选择要素、修改属性、移动或缩放要素、编辑顶点，以及拆分、重塑和
-  环/部件编辑，并支持撤销与重做。
-- 数据处理工具：在前端执行简化、缓冲区、裁剪、融合、投影和拓扑修复等操作。
-- 业务地图组件：只使用引擎和交互处理器，自行构建工具栏、属性面板和状态区域。
-- 原型与内部工具：在不部署后端 GIS 服务的情况下快速验证处理流程。
-
-如果应用主要需要瓦片底图、三维场景或服务端海量数据查询，Emap 不是这些能力的替代品。
-它更关注可完整加载到浏览器中的拓扑数据及其编辑流程。
-
-## 核心组成
-
-| 组成 | 作用 |
-|---|---|
-| `Emap` | 管理 Canvas、相机、数据源、渲染图层、交互、控件和历史记录 |
-| `TopologySource` | 导入文件或字节数据，并保存 mapshaper topology dataset |
-| `LayerSpecification` | 选择 source layer，声明 `fill`、`line` 或 `circle` 渲染方式 |
-| `map.ops` | 执行带类型、错误结果和历史记录的数据操作 |
-| Handler | 实现导航、选择、绘制、拓扑编辑、测量和要素变换 |
-| Control | 为内置能力提供可选的 DOM 界面 |
-
-一个典型流程如下：
-
-1. 创建有明确尺寸的地图容器。
-2. 创建 `Emap`。
-3. 用 `TopologySource` 加载数据。
-4. 注册数据源，并根据需要添加渲染图层。
-5. 使用数据范围设置初始相机。
-6. 监听事件，将选择、属性、状态和错误同步到应用界面。
-7. 通过编辑命令或 `map.ops` 修改数据，避免直接改写 dataset。
-
-## 主要能力
+## 支持的能力
 
 ### 数据输入与输出
 
-- 核心包支持 GeoJSON、TopoJSON、KML（仅导入）、Shapefile ZIP 和 mapshaper snapshot。
-- `@mapseekai/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持；`@mapseekai/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
-- FlatGeobuf 可由应用安装 `flatgeobuf` 并注册本地格式插件后导入和导出，详见[数据格式](./data/formats.md)。
+核心包可导入和导出 GeoJSON、TopoJSON、Shapefile ZIP 和 mapshaper snapshot，并可导入 KML。`TopologySource` 从 URL、文件字节或应用内存加载数据，并将结果导出为 `Blob`。
 
-### 渲染与相机
+导入 `@mapseekai/emap/arrow` 后，应用还可读写 GeoArrow 和 GeoParquet。FlatGeobuf 由应用安装 `flatgeobuf` 并注册本地格式插件后读写。
 
-- 使用 `fill`、`line` 和 `circle` 图层渲染面、线和点。
-- 支持 `jumpTo`、`easeTo`、`flyTo`、`fitBounds`、`panTo` 和 `zoomTo`。
-- 共享弧和简化层级由数据源统一管理，适合拓扑数据的重复绘制。
+### 图层、交互和编辑
 
-### 交互与编辑
+`Emap` 管理 Canvas、相机、数据源、渲染图层、事件和历史记录。使用 `LayerSpecification` 添加 `fill`、`line` 和 `circle` 图层，分别绘制面、线和点数据。
 
-- 内置点击、拉框和套索选择，以及平移、缩放、绘制、顶点、拆分、重塑、环和部件编辑处理器。
-- 支持要素平移、旋转、缩放与长度或面积测量。
-- `map.ops` 提供 40 多项数据操作；编辑命令进入同一历史记录，可通过事务合并成一次用户操作。
-- 公开要素点击、悬停、相机、历史、验证和 Worker 状态事件。
+库提供平移、缩放、点击、拉框和套索选择，以及绘制、顶点、拆分、整形、环和部件编辑。编辑命令和数据操作记录在历史中，应用可提供撤销和重做界面。
 
-## 包入口与静态资源
+### 分析与数据处理
 
-```ts
-import { Emap, TopologySource } from '@mapseekai/emap';
-import '@mapseekai/emap/style.css';
+`map.ops` 提供简化、缓冲区、裁剪、擦除、融合、联合、投影、拓扑修复、属性处理和图层管理等操作。导入 `@mapseekai/emap/duckdb` 并安装 DuckDB-Wasm 后，应用还可使用 DuckDB 的查询和空间处理能力。
 
-// 按需使用，不会进入只使用核心包的应用代码
-import '@mapseekai/emap/arrow';
-const duckdb = await import('@mapseekai/emap/duckdb');
-```
+## 从这里开始
 
-`arrow` 和 `duckdb` 都是 `package.json` 的 `exports` 子路径；Vite 等浏览器打包器
-以及原生 Node ESM 的 TypeScript 设置，请参见[安装中的模块解析配置](./getting-started/installation.md#typescript-模块解析)。
-
-
-启用 Worker 时，宿主应用还需要提供 `emap-worker.js` 和
-`mapshaper-vendor.js`。具体部署方式见 [Web Worker 指南](./guides/worker.md)。
-
-## 建议阅读顺序
-
-1. [安装](./getting-started/installation.md)：完成第一张可运行地图。
-2. [核心概念](./concepts/overview.md)：理解地图、数据源和图层的关系。
-3. [样式图层](./guides/styling.md)：控制点、线、面的显示方式。
-4. [选择](./guides/selection.md) 与 [编辑](./guides/editing.md)：加入交互能力。
-5. [数据操作](./data/operations.md)：执行拓扑和属性处理。
-6. [错误处理](./recipes/error-handling.md)：把失败安全地呈现给用户。
-
-## 项目状态
-
-当前文档对应 `@mapseekai/emap` 0.8.1。项目仍在快速演进，适合原型、演示、
-研究工具和受控的内部应用；升级版本时应同时查看迁移说明和 API 参考。
+1. 阅读[安装](./getting-started/installation.md)，安装包、导入样式并配置可选模块。
+2. 阅读[核心概念](./concepts/overview.md)，了解地图、数据源和渲染图层的关系。
+3. 阅读[数据格式](./data/formats.md)和[样式图层](./guides/styling.md)，加载数据并定义显示方式。
+4. 阅读[选择](./guides/selection.md)、[编辑](./guides/editing.md)和[数据操作](./data/operations.md)，为应用加入交互与处理流程。
+5. 打开[可运行示例](/mapseekai/emap/examples/)，查看完整实现。

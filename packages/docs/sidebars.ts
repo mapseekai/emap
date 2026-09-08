@@ -56,7 +56,6 @@ const sidebars: SidebarsConfig = {
         'reference/events',
         'reference/errors',
         'reference/compatibility',
-        'reference/migration',
         'reference/faq',
       ],
     },

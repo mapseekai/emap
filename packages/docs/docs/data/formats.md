@@ -2,43 +2,45 @@
 id: formats
 slug: /data/formats
 title: 数据格式
-api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter"]
-examples: ["duckdb-geoparquet-query","export-formats","flatgeobuf-viewer","geoparquet-viewer"]
+api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter","TopologySource","ExportOptions"]
+examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 数据格式
 
-Emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承担 Arrow、Parquet
-和 WASM 依赖。
+Emap 使用 `TopologySource` 在浏览器中加载、保存和导出地理数据。核心格式随 `@mapseekai/emap` 提供；GeoParquet、GeoArrow 和 FlatGeobuf 按需启用。
 
-## 支持矩阵
+## 支持的格式
 
-| 格式 | 常见扩展名 | 导入 | 导出 | 入口 |
-|---|---|---|---|---|
-| GeoJSON | `.json`、`.geojson` | 是 | 是 | core |
+| 格式 | 文件扩展名 | 导入 | 导出 | 要求 |
+| --- | --- | --- | --- | --- |
+| GeoJSON | `.geojson`、`.json` | 是 | 是 | core |
 | TopoJSON | `.topojson`、`.json` | 是 | 是 | core |
-| Shapefile ZIP | `.zip` | 是 | 是，输出 ZIP | core |
+| Shapefile ZIP | `.zip` | 是 | 是，ZIP Blob | core |
 | KML | `.kml` | 是 | 否 | core |
 | mapshaper snapshot | `.msx` | 是 | 是 | core |
 | GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@mapseekai/emap/arrow` |
-| FlatGeobuf | `.fgb` | 注册后 | 注册后 | 应用本地插件（`flatgeobuf`），不属于 core 或 `@mapseekai/emap/arrow` |
+| FlatGeobuf | `.fgb` | 注册后 | 注册后 | 应用本地插件 |
 
-## 从 URL 加载
+GeoJSON、TopoJSON 和 KML 在数据未携带坐标系元数据时使用 `EPSG:4326`。KML 只能导入。
+
+## 加载 URL 或 bytes
+
+`TopologySource.fromUrl()` 从 URL 加载数据；文件路径或响应的 Content-Type 用于识别格式。
 
 ```ts
+import { TopologySource } from '@mapseekai/emap';
+
 const source = await TopologySource.fromUrl(
   'districts',
   '/data/districts.geojson',
 );
 ```
 
-URL 路径或响应 Content-Type 用于推断格式。通用
-`application/octet-stream` 无法表达真实扩展名时，优先使用保留文件名的 bytes API。
-
-## 从 bytes 加载
+上传文件时，把原始文件名传给 `fromBytes()`。扩展名选择导入器。
 
 ```ts
 const bytes = new Uint8Array(await file.arrayBuffer());
@@ -47,9 +49,7 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 });
 ```
 
-`filename` 决定导入器。不要把所有上传内容统一命名为 `data.bin`。
-
-也可以复用 source：
+`setData()` 用新的 URL、文件或文件数组重新加载 source；它在 dataset 填充并触发 `data` 事件后完成。后发起的加载取代尚未完成的加载。
 
 ```ts
 await source.setData({
@@ -58,117 +58,26 @@ await source.setData({
 });
 ```
 
-`setData` 在 dataset 已填充且 `data` 事件发出后 resolve。较晚开始的新加载会取代旧加载。
+Shapefile 应传入完整 ZIP。ZIP 至少包含 `.shp`，属性、索引和坐标系通常分别来自同名的 `.dbf`、`.shx` 和 `.prj`。`TopologySource` 对压缩输入、解压总量、条目数和压缩比应用 ZIP 限制；通过 `zipLimits` 调整应用的阈值。
 
-## Shapefile ZIP
+## GeoParquet 与 GeoArrow
 
-ZIP 中至少应包含 `.shp`，通常还包括：
-
-- `.dbf`：属性
-- `.shx`：索引
-- `.prj`：CRS
-
-Emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏览器解压异常归档。
-上传时保留完整 ZIP，不要只把 `.shp` 内容传给 `fromBytes`。
-
-## 启用 GeoParquet 和 GeoArrow
-
-在任何 parquet/arrow `setData` 或 export 之前导入：
+在导入、导出或 Arrow Table 互操作前导入可选子入口：
 
 ```ts
 import '@mapseekai/emap/arrow';
 ```
 
-`arrow` 是 `package.json` 的 `exports` 子路径；Vite 等浏览器打包器以及原生 Node ESM
-的 TypeScript 设置，请参见[安装中的模块解析配置](../getting-started/installation.md#typescript-模块解析)。
-
-
-该导入注册格式插件。GeoArrow 不需要 WASM；GeoParquet 第一次使用时会懒加载
-`parquet-wasm`。Vite 和 webpack 5 等能输出 WASM asset 的 bundler 通常无需额外配置。
-
-显式指定 WASM 地址：
+该导入注册 GeoParquet 和 GeoArrow 格式。GeoParquet 首次使用时加载 `parquet-wasm`；也可以提供 WASM URL 或已初始化模块：
 
 ```ts
-import { initParquetWasm } from '@mapseekai/emap/arrow';
+import { initParquetWasm, setParquetWasm } from '@mapseekai/emap/arrow';
 
-await initParquetWasm({
-  wasmInput: '/assets/parquet_wasm_bg.wasm',
-});
-```
-
-如果应用已经初始化模块：
-
-```ts
-import { setParquetWasm } from '@mapseekai/emap/arrow';
-
+await initParquetWasm({ wasmInput: '/assets/parquet_wasm_bg.wasm' });
 setParquetWasm(parquetModule);
 ```
 
-旧示例中的 `initParquetWasm({ module })` 不符合当前签名；选项名是 `wasmInput`，
-或使用 `setParquetWasm(module)` 注入。
-
-## 启用 FlatGeobuf
-
-FlatGeobuf 不是 core 格式，也不是 `@mapseekai/emap/arrow` 的一部分。先安装单独的依赖：
-
-```bash
-pnpm add flatgeobuf
-```
-
-将示例中的
-[`installFlatGeobufFormat`](https://github.com/mapseekai/emap/blob/master/packages/examples/src/flatgeobuf-format.ts)
-适配或复制到应用本地模块，再在首次 `.fgb` 导入或导出之前导入并调用它：
-
-```ts
-import * as emap from '@mapseekai/emap';
-import { installFlatGeobufFormat } from './flatgeobuf-format';
-
-installFlatGeobufFormat(emap);
-```
-
-这里传入的是 `@mapseekai/emap` 模块命名空间，因为 helper 会调用模块级的
-`registerFormat` 和 `getDefaultMapshaperAdapter`；不要传入 `new Emap(...)` 实例。
-不存在 `@mapseekai/emap/flatgeobuf` 导出。当前示例 helper 会缓冲整个文件，不支持流式
-或范围读取。它从 FlatGeobuf header 读取 EPSG code；导出时仅当 dataset CRS 是
-`EPSG:<数字>` 时才把该 code 写入 header。
-
-注册后可按 `.fgb` 文件名加载，并导出：
-
-```ts
-const blob = await source.export({ format: 'flatgeobuf' });
-```
-
-完整集成见 [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。
-
-## Arrow Table 互操作
-
-```ts
-import {
-  fromArrowTable,
-  setArrowTable,
-  toArrowTableFromSource,
-} from '@mapseekai/emap/arrow';
-
-await setArrowTable(source, duckdbResultTable);
-const table = toArrowTableFromSource(source);
-const dataset = fromArrowTable(table);
-```
-
-这条路径直接转换坐标 buffers，不需要先序列化成 GeoJSON。
-
-## 导出
-
-`TopologySource.export` 始终返回一个 `Blob`：
-
-```ts
-const blob = await source.export({
-  format: 'geojson',
-});
-```
-
-Shapefile 的多文件结果会打包成一个 ZIP Blob。
-
-GeoParquet：
+`TopologySource.export()` 返回一个 `Blob`。GeoParquet 默认使用 WKB 编码，GeoArrow 默认使用 native 坐标编码；两者每次导出一个 layer。
 
 ```ts
 const blob = await source.export({
@@ -178,12 +87,16 @@ const blob = await source.export({
 });
 ```
 
-GeoParquet 默认 WKB，适合 DuckDB、GeoPandas 和 GDAL。GeoArrow 默认 native
-coordinate encoding。两种可选格式一次导出一个 layer，`layer` 可用名称或索引。
+## FlatGeobuf
 
-## 下载 Blob
+FlatGeobuf 由应用安装 `flatgeobuf`，并使用模块级 `registerFormat()` 注册格式插件。插件提供导入器、导出器和 `.fgb` 扩展名；注册完成后使用 `fromBytes()` 或 `export({ format: 'flatgeobuf' })`。完整集成可参考 [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。
+
+## 导出和下载
+
+核心格式直接导出：
 
 ```ts
+const blob = await source.export({ format: 'geojson' });
 const url = URL.createObjectURL(blob);
 const link = document.createElement('a');
 link.href = url;
@@ -192,35 +105,20 @@ link.click();
 URL.revokeObjectURL(url);
 ```
 
-## 常见问题
-
-### 提示需要 Arrow module
-
-确保 `import '@mapseekai/emap/arrow'` 在第一次调用前执行，并确认 bundler 没有把
-该 side-effect import 移除。
-
-### Parquet WASM 404
-
-让 bundler 管理默认 WASM asset，或通过 `wasmInput` 传入最终公开 URL。
-
-### Shapefile 没有属性或 CRS
-
-确认 ZIP 同时包含匹配 basename 的 `.dbf` 和 `.prj`。
+Shapefile 的 `.shp`、`.shx`、`.dbf` 和可选 `.prj` 文件会打包到一个 ZIP Blob。导出始终使用完整精度的几何。
 
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 - [ExportOptions](/mapseekai/emap/api/interfaces/emap.ExportOptions.html)
-- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
-- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
-- [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
 - [registerFormat](/mapseekai/emap/api/functions/emap.registerFormat.html)
 - [DatasetFormatPlugin](/mapseekai/emap/api/interfaces/emap.DatasetFormatPlugin.html)
-- [ExportedFormatFile](/mapseekai/emap/api/interfaces/emap.ExportedFormatFile.html)
+- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
 
 ## 可运行示例
 
-- [DuckDB GeoParquet 查询](/mapseekai/emap/examples/duckdb-geoparquet-query/)
 - [导出格式](/mapseekai/emap/examples/export-formats/)
 - [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet 查看器](/mapseekai/emap/examples/geoparquet-viewer/)
+- [KML 查看器](/mapseekai/emap/examples/getting-started/kml-viewer/)

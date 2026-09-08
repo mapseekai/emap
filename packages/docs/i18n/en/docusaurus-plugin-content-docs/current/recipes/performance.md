@@ -2,37 +2,42 @@
 id: performance
 slug: /recipes/performance
 title: Performance
-api: ["Emap"]
-examples: ["simplify","simplify-control","web-worker"]
+api: ["Emap", "MapOptions", "SimplifyOptions"]
+examples: ["simplify", "simplify-control", "web-worker"]
 stability: stable
 verifiedVersion: 0.9.0
 ---
 
 # Performance
 
-Keep render work small: use layer visibility, simplification, worker routing, and stable paint objects instead of reloading data on every interaction.
+Focus performance work in three places: route large data operations to a worker, simplify geometry that does not need full detail, and avoid rendering features outside the viewport.
 
-## Behavior notes
+## Enable workers for large data operations
 
-Large topology operations should use `useWorker: "auto"` and an appropriate `workerThreshold`; small pointer edits should stay on the main thread.
+```ts
+const map = new Emap({
+  container: "map",
+  useWorker: "auto",
+  workerThreshold: 50_000,
+})
+```
 
-Large layers prebuild spatial indexes when data loads or is replaced, sharing them with feature queries. At local views, point, line, and fill rendering visits spatial candidates. Views covering much of the data extent retain direct scans to avoid querying and sorting large candidate sets. Classified lines also cache each style bucket's ordered arc list.
+With `useWorker: "auto"`, dataset-replace operations route to a worker when a dataset's arc vertex count reaches `workerThreshold`; smaller datasets stay on the main thread to avoid transfer overhead. `useWorker: true` routes every such operation to a worker. Worker routing handles data operations; Canvas rendering remains on the main thread.
 
-When a full draw exceeds about 33 ms, pan and zoom reuse the existing canvas and redraw at full quality after interaction ends. Initial indexing takes additional time and memory, and geometry edits invalidate the index. Indexing cannot reduce the number of features visible at full extent. Worker routing applies to data operations; it does not automatically move Canvas drawing off the main thread.
+## Simplification and viewport culling
+
+Run `map.ops.simplifyLayer()` on line and polygon data to reduce the vertices processed by later rendering and operations. Choose the least detail that preserves readability, and simplify after import or as a separate user action.
+
+Emap builds spatial indexes for large layers and, in local views, visits only viewport candidate features. Set `layout.visibility: "none"` to skip layers that do not need rendering. Features visible at full extent still need drawing; an index cannot reduce their count.
 
 ## API
 
-- [src.MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
-- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
+- `Emap`
+- `MapOptions`
+- `SimplifyOptions`
 
 ## Runnable examples
 
-- [web-worker](/mapseekai/emap/examples/web-worker/)
-- [simplify-control](/mapseekai/emap/examples/simplify-control/)
-- [simplify](/mapseekai/emap/examples/simplify/)
-
-## Minimal snippet
-
-```ts
-const map = new Emap({ container: "map", useWorker: "auto", workerThreshold: 50000 })
-```
+- [Web Worker](/mapseekai/emap/examples/web-worker/)
+- [Simplify control](/mapseekai/emap/examples/simplify-control/)
+- [Geometry simplification](/mapseekai/emap/examples/simplify/)

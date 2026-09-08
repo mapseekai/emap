@@ -2,33 +2,39 @@
 id: status-control
 slug: /recipes/status-control
 title: 状态控件
-api: ["Emap"]
-examples: ["duckdb-geoparquet-query","duckdb-query"]
+api: ["Emap", "StatusControl", "StatusOptions"]
+examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 状态控件
 
-异步加载、可选依赖不可用、Worker 进度和操作错误都适合进入状态区域。
+`StatusControl` 在地图上显示鼠标坐标和地图 CRS。它监听 `mousemove` 和 `crschange`，并在鼠标位置更新时按动画帧更新 DOM。
 
-## 行为说明
+## 添加状态控件
 
-状态 UI 应区分 loading、success、warning 和 error；底层 operation error 应保留给日志或诊断。
+```ts
+map.addControl(
+  new StatusControl({
+    showMousePos: true,
+    showEPSG: true,
+    alignment: "right",
+  }),
+  "bottom-left",
+)
+```
+
+`showMousePos` 控制坐标读数，`showEPSG` 控制 CRS 读数，`alignment` 控制控件内容对齐。应用自己的加载、进度和错误消息应放在应用状态区域；`StatusControl` 专门呈现坐标和 CRS。
 
 ## API
 
-- [src.StatusControl](/mapseekai/emap/api/classes/emap.StatusControl.html)
-- [src.StatusOptions](/mapseekai/emap/api/interfaces/emap.StatusOptions.html)
+- `Emap`
+- `StatusControl`
+- `StatusOptions`
 
 ## 可运行示例
 
-- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
-- [web-worker](/mapseekai/emap/examples/web-worker/)
-- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
-
-## 最小片段
-
-```ts
-map.addControl(new StatusControl({ showMousePos: true, showEPSG: true }), "bottom-left")
-```
+- [DuckDB GeoParquet 查询](/mapseekai/emap/examples/duckdb-geoparquet-query/)
+- [DuckDB 查询](/mapseekai/emap/examples/duckdb-query/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

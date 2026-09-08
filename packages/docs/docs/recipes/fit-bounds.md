@@ -2,33 +2,34 @@
 id: fit-bounds
 slug: /recipes/fit-bounds
 title: 适配范围
-api: ["Emap"]
-examples: ["getting-started/geojson-viewer"]
+api: ["Emap", "Bounds", "FitBoundsOptions"]
+examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # 适配范围
 
-加载 source 后读取范围并适配相机。用户上传或过滤后的图层可能为空，因此要判断空范围。
+数据源加载完成后，用它的 `Bounds` 调整相机。空数据源和过滤后没有要素的数据源会返回空范围，调用 `fitBounds` 前应检查 `hasBounds()`。
 
-## 行为说明
-
-首次加载、测试和示例使用 `duration: 0`；首个有效渲染之后再使用动画 duration。
-
-## API
-
-- [src.Emap](/mapseekai/emap/api/classes/emap.Emap.html)
-- [src.FitBoundsOptions](/mapseekai/emap/api/interfaces/emap.FitBoundsOptions.html)
-
-## 可运行示例
-
-- [getting-started/geojson-viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
-- [getting-started/polygon-fill](/mapseekai/emap/examples/getting-started/polygon-fill/)
-
-## 最小片段
+## 适配已加载数据
 
 ```ts
 const extent = source.getExtent()
-if (extent.hasBounds()) map.fitBounds(extent, { padding: 48, duration: 0 })
+if (extent.hasBounds()) {
+  map.fitBounds(extent, { padding: 48, duration: 0 })
+}
 ```
+
+`padding` 为四周保留像素空间，`duration` 控制相机动画时长。首次展示数据时使用 `duration: 0` 可立即显示范围；交互触发的视图调整可使用动画时长。
+
+## API
+
+- `Emap`
+- `Bounds`
+- `FitBoundsOptions`
+
+## 可运行示例
+
+- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [面填充](/mapseekai/emap/examples/getting-started/polygon-fill/)

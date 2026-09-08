@@ -2,29 +2,19 @@
 id: topology
 slug: /concepts/topology
 title: Topology model
-api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape"]
-examples: ["rebuild-topology","vertex-editing"]
+api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape","TopologySource","ArcCollection","MapshaperDataset"]
+examples: ["rebuild-topology","vertex-editing","simplify"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Topology model
 
-Emap stores geometry in a mapshaper dataset. Line and polygon coordinates are
-not repeated in every feature; shapes reference shared arcs. Adjacent polygons
-that share a boundary reference the same arc coordinates.
+Emap stores lines and polygons in a mapshaper topology dataset. Path-feature shapes reference arc IDs instead of repeating coordinates in every feature. Adjacent polygons reference the same arc for their shared boundary; point features store coordinates directly in their shapes and do not use arcs.
 
-## Why topology matters
+## What shared arcs provide
 
-- Editing a shared boundary can keep neighboring features connected.
-- Simplification processes a shared arc once instead of opening different
-  gaps on each side.
-- Inner-line extraction, dissolve, clip, and topology repair can use adjacency.
-- Several layers may reuse one `ArcCollection`.
-
-Point layers store coordinates directly in shapes and do not use arcs.
-
-## Dataset structure
+A shared boundary has one set of coordinates, so editing a vertex on that arc is reflected in every adjacent feature that references it and keeps the boundary consistent. Simplifying a shared arc also processes it once, so the two sides do not acquire different shapes. Inner-line extraction, dissolve, clip, and topology rebuilding use the same adjacency.
 
 ```text
 MapshaperDataset
@@ -35,46 +25,27 @@ MapshaperDataset
    └─ data
 ```
 
-A shape array index is its feature ID. Path shapes contain signed arc IDs that
-describe direction and path order. Applications normally use query and editing
-APIs rather than interpreting signed IDs directly.
+The array index of a layer's `shapes` is its feature ID. Signed arc IDs in a path shape encode arc direction and order. Applications normally work with features through query, rendering, and editing APIs rather than interpreting those IDs.
 
-## Read-only inspection
+## Inspect topology data
 
 ```ts
 const dataset = source.getDataset();
 const layers = source.getLayers();
-
-if (dataset) {
-  console.log(dataset.arcs?.getPointCount());
-}
+const arcs = source.getArcs();
 
 console.log(layers.map((layer) => layer.name));
+console.log(arcs?.getPointCount());
+console.log(dataset?.layers.length);
 ```
 
-`getDataset()` returns a zero-copy, deeply read-only TypeScript view of the
-current live object, not a copy. Nested layers, shapes, records, and metadata
-are read-only, and arcs expose query methods only. JavaScript, `any`, and
-explicit assertions can still bypass this type boundary, so mutations must use
-the entry points below.
+These methods return zero-copy, read-only TypeScript views of live data. They are for inspection, not mutation; change data with edit commands, edit sessions, or `map.ops` so the map synchronizes history, selection, spatial indexes, and rendering.
 
-## Choose the correct mutation entry point
+## Editing and shared boundaries
 
-| Change | Entry point |
-|---|---|
-| Property or field | `map.attributes` or an attribute operation |
-| Feature transform or vertex | Edit command or handler |
-| Simplify, dissolve, clip, buffer | `map.ops.*` |
-| Reproject every registered dataset | `map.reproject(...)` |
-| Reproject a detached source | `TopologySource.reproject(...)` |
-| Replace a detached source's dataset | `TopologySource.setDataset(...)` |
+Vertex editing changes the referenced arc. When translating selected features, `splitSharedArcs` defaults to `true`: Emap splits arcs shared by the selection and unselected neighbors first, leaving unselected neighbors in place. Setting `splitSharedArcs: false` retains the shared relationship, so the boundary moves with the selected feature.
 
-Direct mutation bypasses history, spatial indexes, display arcs, selection
-maintenance, and rendering invalidation.
-
-## Rebuild topology
-
-After import or editing, rebuild intersections and shared boundaries with:
+Use topology rebuilding to recalculate intersections and shared boundaries from lines and polygons:
 
 ```ts
 const result = await map.ops.rebuildTopology({
@@ -82,50 +53,23 @@ const result = await map.ops.rebuildTopology({
   snapInterval: 0.001,
 });
 
-if (!result.ok) {
-  console.error(result.error);
-}
+if (!result.ok) console.error(result.error);
 ```
 
-`snapInterval` uses dataset coordinate units. A value that is too large merges
-distinct vertices; do not guess the unit when CRS is unknown.
+`snapInterval` uses dataset coordinate units. A value that is too large merges distinct vertices; choose it for the data CRS.
 
-## Simplification and display LOD
+## Render simplification and data simplification
 
-`DisplayArcs` maintains zoom-dependent simplification for rendering. Display
-simplification does not delete coordinates from the source dataset. Use
-`map.ops.simplifyLayer(...)` only when output geometry should be permanently
-simplified.
-
-Do not set the ArcCollection retained interval directly; it conflicts with
-Emap's LOD management.
-
-## Operation effects and selection
-
-Operations are classified as `shape-count`, `topology-only`, `attribute-only`,
-or `crs-only`. Emap uses the effect to preserve, remap, or clear selection and
-to invalidate indexes. A shape-count operation may change feature IDs, so old
-references must not be retained.
-
-## Troubleshooting
-
-- For gaps after editing adjacent polygons, ensure the edit used shared-arc
-  commands and consider `rebuildTopology` with a CRS-appropriate interval.
-- Use `map.attributes` instead of mutating data-table records.
-- Rendering LOD and permanent simplification are separate.
-  `TopologySource.export()` exports complete geometry unless a simplify
-  operation changed the dataset.
+Emap's display LOD selects simplified arcs for drawing according to view scale without deleting coordinates from the source dataset. `map.ops.simplifyLayer(...)` permanently simplifies data and affects later exports.
 
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
-- [ITopologySource](/mapseekai/emap/api/interfaces/emap.ITopologySource.html)
 - [MapshaperDataset](/mapseekai/emap/api/interfaces/emap.MapshaperDataset.html)
 - [ArcCollection](/mapseekai/emap/api/interfaces/emap.ArcCollection.html)
 
 ## Runnable examples
 
 - [Rebuild topology](/mapseekai/emap/examples/rebuild-topology/)
-- [Inner lines](/mapseekai/emap/examples/innerlines/)
 - [Vertex editing](/mapseekai/emap/examples/vertex-editing/)
 - [Simplify](/mapseekai/emap/examples/simplify/)

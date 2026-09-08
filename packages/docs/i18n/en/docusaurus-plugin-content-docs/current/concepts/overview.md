@@ -1,29 +1,24 @@
 ---
 id: overview
 slug: /concepts/overview
-title: Concepts Overview
-api: []
-examples: []
+title: Concepts overview
+api: ["Emap","TopologySource","LayerSpecification"]
+examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.8.1
+verifiedVersion: 0.9.0
 ---
 
 # Concepts overview
 
-Emap is organized around `Emap`, `TopologySource`, source layers, and render
-layers. Understanding their ownership boundaries prevents common failures such
-as loaded data that is not visible, mixed-up layer IDs, or direct dataset
-mutations that bypass history and caches.
+`@mapseekai/emap` is a browser Canvas map and geospatial-data editing library. An application creates an `Emap`, imports a `TopologySource`, and declares how data is drawn with render layers. Separate objects own data, presentation, and interaction.
 
 ## Object relationship
 
 ```text
 Browser container
 └─ Emap
-   ├─ Camera / Viewport
-   ├─ Controls and Handlers
-   ├─ History and Selection
-   ├─ TopologySource "main"
+   ├─ camera, Canvas, events, selection, and edit history
+   ├─ source "main" → TopologySource
    │  └─ mapshaper dataset
    │     ├─ source layer "districts"
    │     └─ source layer "roads"
@@ -33,82 +28,23 @@ Browser container
       └─ "road-line" → main / roads
 ```
 
-## Map instance
+## Four levels
 
-`Emap` binds to a browser container and:
+| Level | Owns | Common entry point |
+| --- | --- | --- |
+| `Emap` | Container, camera, layer order, interaction, and map state | `new Emap(...)` |
+| source | Imported dataset plus its CRS, extent, and topology | `TopologySource` |
+| source layer | One set of geometry and attributes in a dataset | `source-layer` |
+| render layer | Draw type, style, and display order | `map.addLayer(...)` |
 
-- Creates and updates the canvas.
-- Stores camera and viewport state.
-- Registers sources and maintains render-layer order.
-- Coordinates selection, editing, dragging, and zoom handlers.
-- Owns controls, history, validation, and worker routing.
-- Dispatches engine events through `on`, `off`, `once`, and `fire`.
+One source layer can supply several render layers. For example, a `fill` layer draws district interiors and a `line` layer draws the same districts' boundaries; both read the same geometry.
 
-One container has one map instance. Application UI should synchronize through
-public APIs and events instead of changing canvas or viewport internals.
-
-## Source
-
-`TopologySource` is the boundary between imported data and the map. It accepts
-URLs, files, or in-memory bytes, converts them into a mapshaper dataset, and
-provides:
-
-- Data bounds.
-- Source layers inside the dataset.
-- Topology arcs and simplification levels used for rendering.
-- Export and format-plugin entry points.
-
-A source ID such as `main`, `roads`, or `upload` is a map-level reference.
-After `map.addSource('main', source)`, render layers and operations use that ID
-to locate the data.
-
-## Source layer and render layer
-
-These two kinds of “layer” have different responsibilities:
-
-| Kind | Origin | Contains | Example |
-|---|---|---|---|
-| source layer | Imported dataset | Geometry and attribute records | `districts` |
-| render layer | Application configuration | Draw type, order, and paint | `district-fill` |
-
-One source layer can feed multiple render layers. A district polygon layer may
-be drawn once as a fill and again as an outline. A multi-layer dataset uses
-`source-layer` to select the source layer.
-
-## Extent and camera
-
-Data coordinates do not automatically determine what the user currently sees.
-After loading, applications usually run:
+## From data to an interactive map
 
 ```ts
-const extent = source.getExtent();
-if (extent.hasBounds()) {
-  map.fitBounds(extent, { padding: 32, duration: 0 });
-}
-```
+import { Emap, TopologySource } from '@mapseekai/emap';
 
-`setExtent` directly sets an initial extent. `fitBounds` also supports padding
-and animation. Check the bounds before moving the camera when the input may be
-empty.
-
-## Query, selection, and editing
-
-- A **query** answers which features are under a screen position without
-  necessarily changing map state.
-- A **selection** stores source, source-layer, and feature ID references and
-  fires `selectionchange`.
-- An **edit** modifies data through a command or edit session and synchronizes
-  history, caches, and rendering invalidation.
-- A **data operation** updates or replaces a dataset through `map.ops` and
-  returns an `OpResult`.
-
-Do not mutate the object returned by `source.getDataset()`. A direct mutation
-does not create an undo snapshot and may leave spatial indexes, simplified
-display data, and selection state inconsistent.
-
-## Complete data flow
-
-```ts
+const map = new Emap({ container: 'map' });
 const source = await TopologySource.fromUrl('main', '/data/roads.geojson');
 
 await map.addSource('main', source);
@@ -116,38 +52,27 @@ map.addLayer({
   id: 'roads',
   type: 'line',
   source: 'main',
-  paint: {
-    'line-color': '#334155',
-    'line-width': 2,
-  },
+  paint: { 'line-color': '#334155', 'line-width': 2 },
 });
 
-map.setExtent(source.getExtent());
-
-map.on(
-  'feature:click',
-  { layers: ['roads'] },
-  (event) => {
-    console.log(event.ref);
-  },
-);
+const extent = source.getExtent();
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 ```
 
-The sequence is input data → topology dataset → registered source → render
-layer configuration → camera → event-driven interaction.
+`main` is the map source ID. A render layer's `source` and data operations' `source` both use it. A multi-layer dataset also uses `source-layer` to select its source layer.
 
 ## Where state changes belong
 
-| Requirement | API surface |
-|---|---|
-| Change the view | Camera APIs such as `jumpTo`, `fitBounds`, `flyTo`, and `panBy` |
-| Change appearance | Add, remove, or update render layers |
-| Change selection | Map selection APIs or selection handlers |
-| Change one feature | Edit commands, edit sessions, or built-in edit handlers |
-| Process a dataset | `map.ops.*` |
-| Group user actions | Transaction |
-| React to internal changes | `map.on(...)` |
+| Goal | API |
+| --- | --- |
+| Change the view | `jumpTo`, `fitBounds`, `flyTo`, `panTo` |
+| Change presentation | `addLayer`, `removeLayer`, `setLayerVisibility` |
+| Read features at a screen position | `queryFeatures` |
+| Change selection | `map.selection` or a selection handler |
+| Edit features | Edit commands, edit sessions, or edit handlers |
+| Process a dataset | `map.ops` |
+| React to map changes | `on`, `once`, `off` |
 
-Continue with [Emap map instance](./emap.md),
-[Sources and layers](./source-layer.md), [Topology model](./topology.md), and
-[Coordinates and CRS](./coordinates-crs.md).
+Do not mutate the data returned by `source.getDataset()`. It is a zero-copy, read-only TypeScript view of the live dataset. Change data through the map's editing and operation entry points so rendering, selection, spatial indexes, and history stay synchronized.
+
+Continue with [Emap map instance](./emap.md), [Sources and layers](./source-layer.md), [Topology model](./topology.md), and [Coordinates and CRS](./coordinates-crs.md).

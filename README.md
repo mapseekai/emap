@@ -6,19 +6,18 @@
 
 [简体中文](README.zh-CN.md)
 
-`@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. It uses mapshaper data structures, renders editable business layers with Canvas2D, and can synchronize optional MapLibre basemaps and overlays.
+`@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. It stores data in mapshaper topology structures, renders editable layers with Canvas2D, and requires no backend map service.
 
-> The project is pre-1.0 and evolves quickly. Pin the package version and validate upgrades before using it in production-critical editing workflows.
+## What emap supports
 
-## Highlights
-
-- Load GeoJSON, TopoJSON, Shapefile ZIP, KML, MSX snapshots, and optional GeoArrow or GeoParquet data.
-- Render point, line, and polygon layers with Canvas2D, viewport culling, simplification-aware display arcs, and attribute-driven fill buckets.
-- Select, draw, translate, rotate, scale, split, merge, reshape, and edit vertices, holes, and multipart geometry.
-- Record reversible commands with undo, redo, transactions, validation, and source-aware selection restoration.
-- Offload dataset operations to a Web Worker with stale-result protection.
-- Run optional DuckDB-Wasm SQL and spatial operations through a restricted, typed API.
-- Use optional MapLibre services for raster/vector basemaps and online overlays.
+- **Data formats**: GeoJSON, TopoJSON, Shapefile ZIP, KML, and MSX snapshots out of the box; GeoArrow and GeoParquet through the optional `@mapseekai/emap/arrow` entry.
+- **Layers**: `fill`, `line`, and `circle` layers rendered with Canvas2D, with viewport culling, simplification-aware display arcs, and attribute-driven fill buckets.
+- **Editing**: select, draw, translate, rotate, scale, split, merge, reshape, auto-complete polygons, and edit vertices, rings, holes, and multipart geometry.
+- **History**: every mutation is a reversible command with undo, redo, transactions, validation, and selection restoration.
+- **Dataset operations**: `map.ops` exposes clip, erase, dissolve, buffer, filter, simplify, classify, join, projection, repair, and ring/part operations (see `MapshaperOps` in the API reference).
+- **Execution**: dataset operations can run in a Web Worker with stale-result protection.
+- **Analysis**: optional DuckDB-Wasm SQL and spatial operations through the restricted, typed `@mapseekai/emap/duckdb` entry.
+- **Basemaps**: optional MapLibre services for raster/vector basemaps and online overlays; editable Canvas layers stay managed by emap.
 
 ## Install
 
@@ -33,7 +32,7 @@ import { Emap, TopologySource } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 ```
 
-Use modern browser-oriented TypeScript resolution:
+emap targets modern browsers and bundler-based TypeScript resolution:
 
 ```json
 {
@@ -112,11 +111,11 @@ const source = await TopologySource.fromBytes('upload', await file.arrayBuffer()
 });
 ```
 
-The built-in ZIP defaults allow up to 2 GiB of compressed input and 2 GiB total uncompressed content. The example above deliberately applies stricter limits for public uploads. ZIP imports also reject duplicate basenames instead of silently pairing files from different directories.
+ZIP imports accept up to 2 GiB compressed input and 2 GiB total uncompressed content by default; pass `zipLimits` to tighten them for public uploads. Archives with duplicate basenames are rejected with an explicit error.
 
 ## Editing and History
 
-Handlers provide interaction state; commands own reversible mutations:
+Handlers own interaction state; commands own reversible mutations:
 
 ```ts
 map.vertexEdit.enable();
@@ -152,12 +151,12 @@ export async function cleanAndSimplify(map: Emap, source: string, target: string
 ```
 
 Operations return `OpResult`; check `ok` rather than relying only on `try/catch`.
-Here `source` is the registered source ID and `target` is its data layer name or ID.
-Undo/redo are disabled while a transaction is active, and clearing history or
-replacing external input is rejected. External dataset replacement clears old
-history and that source's selection/highlight; normal command undo/redo does not.
+`source` is the registered source ID and `target` is its data layer name or ID.
+While a transaction is open, undo/redo, history clearing, and external input
+replacement are rejected. Replacing a dataset externally clears that source's
+history, selection, and highlight; command undo/redo does not.
 
-String expressions forwarded to mapshaper are disabled by default. Only set `expressionPolicy: 'trusted'` when configuration and data are fully controlled by the application.
+String expressions forwarded to mapshaper are disabled by default. Set `expressionPolicy: 'trusted'` only when configuration and data are fully controlled by the application.
 
 ## Attribute-Driven Fill Styling
 
@@ -181,7 +180,7 @@ map.addLayer({
 });
 ```
 
-`fill-color` also accepts the documented restricted expression subset. It is validated without `eval` and cached against the dataset attribute version.
+`fill-color` accepts the restricted expression subset documented in the styling guide. Expressions are validated without `eval` and cached against the dataset attribute version.
 
 ## Worker Offloading
 
@@ -207,25 +206,25 @@ The main thread validates source identity plus geometry and attribute versions b
 
 ## Optional Arrow and GeoParquet
 
-Install the optional peer used by the Arrow subpath; add `parquet-wasm` only for GeoParquet import or export:
+Install the peer used by the Arrow subpath; add `parquet-wasm` only for GeoParquet import or export:
 
 ```bash
 pnpm add apache-arrow
 pnpm add parquet-wasm # GeoParquet only
 ```
 
-Importing the Arrow subpath registers GeoArrow and GeoParquet formats:
+Importing the Arrow subpath registers the GeoArrow and GeoParquet formats:
 
 ```ts
 import '@mapseekai/emap/arrow';
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 ```
 
-GeoParquet support loads `parquet-wasm` only when needed. Applications that do not import this entry point do not execute the optional format module.
+`parquet-wasm` loads on first GeoParquet use; applications that never import this entry point never execute the format module.
 
 ## Optional DuckDB-Wasm
 
-Install the optional runtime peers before importing the DuckDB subpath:
+Install the runtime peers before importing the DuckDB subpath:
 
 ```bash
 pnpm add @duckdb/duckdb-wasm apache-arrow
@@ -246,7 +245,7 @@ const result = await attributeFilter(source.getDataset()!, {
 });
 ```
 
-The attribute-filter API accepts a restricted single-`SELECT` contract. The DuckDB processing toolbox also exposes overlay, proximity, aggregate, join, geometry, transform, selection, and data-management operations. Distance-like operations reject geographic CRS by default when their result would otherwise use degrees.
+The attribute-filter API accepts a restricted single-`SELECT` contract. The DuckDB processing toolbox exposes overlay, proximity, aggregate, join, geometry, transform, selection, and data-management operations. Distance-like operations reject geographic CRS by default so results are never measured in degrees.
 
 ## Optional MapLibre Services
 
@@ -269,7 +268,7 @@ const map = new Emap({
 });
 ```
 
-The integration owns MapLibre source/layer registration, revision cancellation, failure rollback, and camera synchronization. Canvas editing layers remain owned by emap.
+The integration owns MapLibre source/layer registration, revision cancellation, failure rollback, and camera synchronization.
 
 ## Documentation
 
@@ -307,16 +306,16 @@ Key boundaries:
 - `src/renderer/` owns Canvas drawing and edit overlays.
 - `src/core/handlers/` owns browser interaction state.
 - `src/arrow/` and `src/duckdb/` implement optional data and analysis entry points.
-- `src/map/maplibre-service-manager.ts` owns optional online-service resources and asynchronous rollback.
+- `src/map/maplibre-service-manager.ts` owns online-service resources and asynchronous rollback.
 
-Geometry edits and attribute edits use separate monotonic version counters. Worker and asynchronous operations must compare both before committing.
+Geometry edits and attribute edits use separate monotonic version counters. Worker and asynchronous operations compare both before committing.
 
 ## Development
 
 Requirements:
 
 ```text
-Node.js 24
+Node.js 22.18–24
 pnpm 11.15.1
 ```
 
@@ -344,11 +343,13 @@ pnpm run docs:dev
 
 Generated TypeDoc files under `packages/docs/static/api/` are intentionally ignored. `api:build`, `docs:build`, and `docs:verify` regenerate them.
 
+DuckDB integration suites run under `pnpm run test:duckdb`, which sets `DUCKDB_WASM_INTEGRATION=1` across `src/duckdb`.
+
 Before changing a mapshaper-backed operation, update its effect classification in `src/map/ops/_runner.ts` and verify history, selection, worker, and stale-operation behavior. See [AGENTS.md](AGENTS.md) for repository rules.
 
 ## Security
 
-Report vulnerabilities according to [SECURITY.md](SECURITY.md). Do not enable trusted mapshaper expressions for untrusted configuration, and apply conservative source-size limits when accepting uploads from the public internet.
+Report vulnerabilities according to [SECURITY.md](SECURITY.md). Keep mapshaper expressions disabled for untrusted configuration, and apply conservative source-size limits when accepting uploads from the public internet.
 
 ## License
 
