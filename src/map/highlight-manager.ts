@@ -73,6 +73,7 @@ export class HighlightManager {
     transform: AffineTransform,
     lineScale: number,
     visibleLayers?: VisibleLayerLookup,
+    featureMask?: (sourceId: string, layerId: string) => Uint8Array | null,
   ): void {
     if (this._highlighted.size === 0) return;
     const highlightColor = this._highlightStyle.color || EMAP_THEME_COLORS.primary;
@@ -95,8 +96,10 @@ export class HighlightManager {
         if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
         const ids = sourceHighlights.get(layerId);
         if (!ids || ids.size === 0) continue;
+        const mask = featureMask?.(sourceId, layerId);
         const shapes: FeatureShape[] = [];
         for (const id of ids) {
+          if (mask && mask[id] !== 1) continue;
           const shape = layer.shapes[id];
           if (shape) shapes.push(shape);
         }

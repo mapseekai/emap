@@ -248,6 +248,34 @@ describe('HighlightManager.renderHighlights', () => {
     expect(painter.drawPaths).toHaveBeenCalledTimes(1);
   });
 
+  it('skips highlighted features filtered out by the feature mask', () => {
+    const h = new HighlightManager();
+    const layer: MapshaperLayer = {
+      name: 'parks',
+      geometry_type: 'polygon',
+      shapes: [[[0]], [[1]]],
+    } as MapshaperLayer;
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    h.setHighlightedFeatures([
+      { source: 'src1', layer: 'parks', id: 0, geometryType: 'polygon', properties: {} },
+      { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
+    ]);
+    const painter = makePainterStub();
+    h.renderHighlights(
+      painter,
+      sources,
+      new AffineTransform(),
+      1,
+      undefined,
+      () => Uint8Array.from([0, 1]),
+    );
+    expect(painter.drawPaths).toHaveBeenCalledWith(
+      [layer.shapes[1]],
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('skips layers whose ids do not match', () => {
     const h = new HighlightManager();
     const parks: MapshaperLayer = {

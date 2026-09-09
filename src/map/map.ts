@@ -2398,6 +2398,7 @@ export class Emap extends EventDispatcher {
       transform,
       lineScale,
       visibleKeys,
+      this._featureMaskForPick,
     );
   }
 
