@@ -5,7 +5,7 @@ title: Camera
 api: ["Emap","Bounds","Viewport","CameraOptions","AnimationOptions","FlyToOptions","FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer","crs-switch"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Camera

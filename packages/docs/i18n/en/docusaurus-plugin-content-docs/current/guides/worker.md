@@ -5,7 +5,7 @@ title: Web Worker
 api: ["Emap","MapOptions","MapshaperWorkerPool","MapshaperWorkerPoolOptions"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Web Worker

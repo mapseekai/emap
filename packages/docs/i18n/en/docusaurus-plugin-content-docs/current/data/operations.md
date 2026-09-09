@@ -5,7 +5,7 @@ title: Data operations
 api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureHandler","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions","OpResult","OpError","ClassifyFeaturesOptions"]
 examples: ["buffer","clip-erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Data operations

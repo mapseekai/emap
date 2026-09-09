@@ -5,7 +5,7 @@ title: Events reference
 api: ["Emap","EmapEventMap","CameraEvent","LayerChangeEvent","EventListener","FeatureEvent","FeatureEventFilter","PointerMoveEvent"]
 examples: ["feature-selection","web-worker"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Events reference

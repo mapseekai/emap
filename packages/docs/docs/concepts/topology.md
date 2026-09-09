@@ -5,7 +5,7 @@ title: 拓扑模型
 api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape","TopologySource","ArcCollection","MapshaperDataset"]
 examples: ["rebuild-topology","vertex-editing","simplify"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # 拓扑模型

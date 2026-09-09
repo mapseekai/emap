@@ -5,7 +5,7 @@ title: 属性
 api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions"]
 examples: ["attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # 属性

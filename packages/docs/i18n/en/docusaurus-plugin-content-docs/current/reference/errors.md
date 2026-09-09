@@ -5,7 +5,7 @@ title: Errors reference
 api: ["Emap","Err","OK","okValue","OpError","OpResult","topologyValidator","TopologyValidatorOptions","ValidationChange","ValidationIssue","ValidationReport","Validator","ValidatorPhase","ValidatorRegistry","ValidatorResult","SourceLoadError","DuckDbOperationError","DuckDbOperationErrorKind"]
 examples: ["check-geometry","duckdb-query","transaction"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Errors reference

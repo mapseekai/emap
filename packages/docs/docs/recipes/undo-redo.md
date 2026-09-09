@@ -5,7 +5,7 @@ title: 撤销与重做
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # 撤销与重做

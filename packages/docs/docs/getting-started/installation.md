@@ -5,7 +5,7 @@ title: 安装
 api: ["Emap","TopologySource"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # 安装

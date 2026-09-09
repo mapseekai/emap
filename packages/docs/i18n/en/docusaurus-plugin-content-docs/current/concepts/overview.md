@@ -5,7 +5,7 @@ title: Concepts overview
 api: ["Emap","TopologySource","LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.0
+verifiedVersion: 0.9.1
 ---
 
 # Concepts overview
