@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-09
+
+### Added
+
+- Layer display filters: `addLayer({ filter })`, `map.setFilter(id, expression)`,
+  and `map.getFilter(id)` apply a MapLibre-subset boolean expression per render
+  layer so only matching features render, hit-test, and highlight. Data is
+  untouched, filters never enter undo history, and `setFilter` fires
+  `layerchange` with reason `'filter'`. Attribute tables can bind the filtered
+  view via `map.features.iterFiltered(renderLayerId)` /
+  `map.features.countFiltered(renderLayerId)`; the unfiltered `iter()`/`count()`
+  keep their full-data semantics. A non-boolean evaluation result deactivates
+  the filter and fires a structured `error` event carrying `layerId`,
+  `filterExpression`, and `valueType`.
+
+
 ## [0.9.2] - 2026-09-09
 
 ### Fixed
@@ -1028,7 +1044,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mapseekai/emap/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/mapseekai/emap/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mapseekai/emap/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/mapseekai/emap/compare/v0.8.1...v0.9.0
