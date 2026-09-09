@@ -202,7 +202,11 @@ describe('FeatureAccessor filtered view', () => {
         makeHost(layers, { sourceId: 's', layerId: 'data' }, Uint8Array.from([0, 1, 1])),
       ).countFiltered('render'),
     ).toBe(2);
-    expect(new FeatureAccessor(makeHost(layers, { sourceId: 's', layerId: 'data' })).countFiltered('render')).toBe(3);
+    expect(
+      new FeatureAccessor(makeHost(layers, { sourceId: 's', layerId: 'data' })).countFiltered(
+        'render',
+      ),
+    ).toBe(3);
   });
 
   it('unknown render layer yields nothing and counts 0', () => {

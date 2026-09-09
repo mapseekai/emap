@@ -60,7 +60,11 @@ export class FilterResolver {
     try {
       mask = this._evaluate(args.filter, args.layer);
     } catch (error) {
-      this._opts.onError?.({ layerId: args.layerId, error: error as Error, expression: args.filter });
+      this._opts.onError?.({
+        layerId: args.layerId,
+        error: error as Error,
+        expression: args.filter,
+      });
       mask = null;
     }
     this._cache.set(args.layerId, {

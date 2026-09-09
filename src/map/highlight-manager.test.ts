@@ -261,13 +261,8 @@ describe('HighlightManager.renderHighlights', () => {
       { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
     ]);
     const painter = makePainterStub();
-    h.renderHighlights(
-      painter,
-      sources,
-      new AffineTransform(),
-      1,
-      undefined,
-      () => Uint8Array.from([0, 1]),
+    h.renderHighlights(painter, sources, new AffineTransform(), 1, undefined, () =>
+      Uint8Array.from([0, 1]),
     );
     expect(painter.drawPaths).toHaveBeenCalledWith(
       [layer.shapes[1]],

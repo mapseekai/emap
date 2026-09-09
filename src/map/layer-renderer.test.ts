@@ -12,7 +12,6 @@ import type { LayerSpecification } from './layer';
 import { StyleResolver } from './style-resolver';
 import { FilterResolver } from './filter-resolver';
 
-
 describe('renderLayers fill rendering', () => {
   it('skips outline arc-id work when fill layer line width is zero', () => {
     const arcs = { size: () => 0 };
