@@ -39,6 +39,7 @@ MapLibre subset as style expressions (`get / == != < <= > >= / ! / all / any / m
 and **must evaluate to a boolean for every feature**—if any feature produces a non-boolean value (for example,
 `['get', 'enabled']` yielding the string `'false'` or the number `1`), the entire filter is disabled and an
 `error` event fires; no truthiness coercion occurs.
+When evaluation fails, the `error` event includes `layerId`, `filterExpression`, and `valueType`.
 
 You can also declare a filter when calling `addLayer` through the layer specification's `filter` field:
 

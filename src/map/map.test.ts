@@ -18,7 +18,7 @@ import { TopologySource } from '../source/topology-source';
 import { FeatureQuery } from './feature-query';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import { FilterResolver } from './filter-resolver';
+import { FilterEvaluationError, FilterResolver } from './filter-resolver';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -1623,6 +1623,43 @@ describe('Emap layer display filter', () => {
     map.addLayer({ id: 'l1', type: 'circle', source: 'src1' });
     map.setFilter('l1', ['>', ['get', 'pop'], 100]);
     expect(map.canUndo()).toBe(false);
+  });
+
+  it('reports structured details when a filter produces a non-boolean value', () => {
+    const map = createBareMap();
+    const filter = ['get', 'enabled'] as const;
+    const dataLayer = {
+      name: 'cities',
+      geometry_type: 'point',
+      shapes: [[[0]]],
+      data: { getRecords: () => [{ enabled: 'false' }] },
+    };
+    const source = createMockSource([dataLayer]);
+    source.getDataset.mockReturnValue({ attributeVersion: 0, editVersion: 0 });
+    setPrivate(
+      map,
+      '_filterResolver',
+      new FilterResolver({
+        onError: (e) =>
+          map.fire('error', {
+            error: e.error,
+            layerId: e.layerId,
+            filterExpression: e.expression,
+            valueType: e.error instanceof FilterEvaluationError ? e.error.valueType : undefined,
+          }),
+      }),
+    );
+    registerMockSource(map, 'src1', source);
+    setPrivate(map, 'features', new FeatureAccessor(map));
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1', 'source-layer': 'cities', filter });
+    const onError = vi.fn();
+    map.on('error', onError);
+
+    expect(map.features.countFiltered('l1')).toBe(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ layerId: 'l1', filterExpression: filter, valueType: 'string' }),
+    );
   });
 });
 

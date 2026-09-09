@@ -8,11 +8,18 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 
 export class FilterEvaluationError extends Error {
   override readonly name = 'FilterEvaluationError';
+  constructor(
+    message: string,
+    readonly valueType: string,
+  ) {
+    super(message);
+  }
 }
 
 export interface FilterError {
   layerId: string;
   error: Error;
+  expression: StyleExpression;
 }
 
 interface CacheEntry {
@@ -53,7 +60,7 @@ export class FilterResolver {
     try {
       mask = this._evaluate(args.filter, args.layer);
     } catch (error) {
-      this._opts.onError?.({ layerId: args.layerId, error: error as Error });
+      this._opts.onError?.({ layerId: args.layerId, error: error as Error, expression: args.filter });
       mask = null;
     }
     this._cache.set(args.layerId, {
@@ -74,8 +81,10 @@ export class FilterResolver {
     for (let i = 0; i < n; i++) {
       const value = compiled(records[i]);
       if (typeof value !== 'boolean') {
+        const valueType = value === null ? 'null' : typeof value;
         throw new FilterEvaluationError(
-          `feature ${i}: filter must evaluate to a boolean, got ${value === null ? 'null' : typeof value}`,
+          `feature ${i}: filter must evaluate to a boolean, got ${valueType}`,
+          valueType,
         );
       }
       mask[i] = value ? 1 : 0;

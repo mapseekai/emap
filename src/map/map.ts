@@ -100,7 +100,7 @@ import {
   type StyleExpression,
 } from './style-expression';
 import { StyleResolver } from './style-resolver';
-import { FilterResolver } from './filter-resolver';
+import { FilterEvaluationError, FilterResolver } from './filter-resolver';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -332,7 +332,13 @@ export class Emap extends EventDispatcher {
     onWarn: (w) => this.fire('warning', w),
   });
   private _filterResolver = new FilterResolver({
-    onError: (e) => this.fire('error', { error: e.error }),
+    onError: (e) =>
+      this.fire('error', {
+        error: e.error,
+        layerId: e.layerId,
+        filterExpression: e.expression,
+        valueType: e.error instanceof FilterEvaluationError ? e.error.valueType : undefined,
+      }),
   });
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;

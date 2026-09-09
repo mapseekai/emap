@@ -38,6 +38,7 @@ console.log(hits[0]?.properties, feature?.properties);
 MapLibre 子集（`get / == != < <= > >= / ! / all / any / match / step / interpolate`），
 并且**必须对每个要素求值为 boolean**——任一要素返回非布尔值（如 `['get', 'enabled']`
 得到字符串 `'false'` 或数值 `1`）时，过滤器整体失效并触发 `error` 事件，不做真值转换。
+求值失败的 `error` 事件携带 `layerId`、`filterExpression` 和 `valueType`。
 
 过滤器也可在 `addLayer` 时通过图层 spec 的 `filter` 字段声明：
 

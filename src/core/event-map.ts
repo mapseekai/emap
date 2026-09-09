@@ -5,6 +5,7 @@ import type { LayerSpecification } from '../map/layer';
 import type { ValidatorResult } from '../validation/validator';
 import type { FeatureEvent } from './feature-event-dispatcher';
 import type { PointerMoveEvent } from './pointer-event-dispatcher';
+import type { StyleExpression } from '../map/style-expression';
 
 /**
  * Camera lifecycle payload (P9). `zoom` is `log2(scale)` — meaningful for
@@ -67,7 +68,7 @@ export interface EmapEventMap {
   };
   layerchange: LayerChangeEvent;
   editmodechange: { mode: EditMode };
-  error: { error: Error };
+  error: { error: Error; layerId?: string; filterExpression?: StyleExpression; valueType?: string };
   // Fired bare AND with a snapshot → Partial.
   historychange: Partial<HistoryStateSnapshot>;
   selectionchange: { selected: FeatureRef[]; added: FeatureRef[]; removed: FeatureRef[] };
