@@ -1917,6 +1917,34 @@ export class Emap extends EventDispatcher {
     return union;
   };
 
+  /** @internal */
+  _resolveRenderLayerTarget(renderLayerId: string): { sourceId: string; layerId: string } | null {
+    const spec = this._getEffectiveLayers().find((l) => l.id === renderLayerId);
+    if (!spec) return null;
+    const source = this._sources.get(spec.source);
+    const ml = this.layers.resolve(spec.source, spec['source-layer']);
+    if (!source || !ml) return null;
+    const mapshaperLayers = source.getLayers() as MapshaperLayer[];
+    const idx = mapshaperLayers.indexOf(ml);
+    return { sourceId: spec.source, layerId: getLayerId(ml, idx >= 0 ? idx : 0) };
+  }
+
+  /** @internal */
+  _filterMaskForRenderLayer(renderLayerId: string): Uint8Array | null {
+    const spec = this._getEffectiveLayers().find((l) => l.id === renderLayerId);
+    if (!spec?.filter) return null;
+    const source = this._sources.get(spec.source);
+    const ml = this.layers.resolve(spec.source, spec['source-layer']);
+    const dataset = source?.getDataset?.();
+    if (!source || !ml?.shapes || !dataset) return null;
+    return this._filterResolver.mask({
+      layerId: spec.id,
+      filter: spec.filter,
+      dataset,
+      layer: ml,
+    });
+  }
+
   public getCRS(): string {
     return this._projection.crs;
   }

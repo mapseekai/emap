@@ -82,9 +82,46 @@ export class FeatureAccessor {
     }
   }
 
+  /**
+   * Iterate the features visible through a render layer's display filter.
+   * `renderLayerId` is a render layer id (`addLayer` / `setFilter` 的那个 id)，
+   * 与按数据层寻址的 {@link iter} 区分：同一数据层上不同渲染层可有不同条件。
+   * 该渲染层无过滤器时等价于全量迭代。
+   */
+  *iterFiltered(renderLayerId: string): IterableIterator<Feature> {
+    const target = this._host._resolveRenderLayerTarget(renderLayerId);
+    if (!target) return;
+    const layer = this._host.layers.resolve(target.sourceId, target.layerId);
+    if (!layer?.shapes) return;
+    const mask = this._host._filterMaskForRenderLayer(renderLayerId);
+    const shapes = layer.shapes;
+    const records = layer.data?.getRecords?.() ?? [];
+    for (let i = 0; i < shapes.length; i++) {
+      if (mask && mask[i] !== 1) continue;
+      yield {
+        ref: { source: target.sourceId, layer: target.layerId, id: i },
+        geometry: shapes[i] as Feature['geometry'],
+        properties: Object.freeze({ ...(records[i] ?? {}) }),
+      };
+    }
+  }
+
   /** Number of features in the layer, or `0` for unresolved layers. */
   count(sourceId: string, layerId: string): number {
     const layer = this._host.layers.resolve(sourceId, layerId);
     return layer?.shapes?.length ?? 0;
+  }
+
+  /** Number of features visible through a render layer's display filter. */
+  countFiltered(renderLayerId: string): number {
+    const target = this._host._resolveRenderLayerTarget(renderLayerId);
+    if (!target) return 0;
+    const layer = this._host.layers.resolve(target.sourceId, target.layerId);
+    if (!layer?.shapes) return 0;
+    const mask = this._host._filterMaskForRenderLayer(renderLayerId);
+    if (!mask) return layer.shapes.length;
+    let n = 0;
+    for (let i = 0; i < mask.length; i++) n += mask[i]!;
+    return n;
   }
 }

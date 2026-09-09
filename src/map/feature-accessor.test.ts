@@ -3,7 +3,11 @@ import { FeatureAccessor } from './feature-accessor';
 import type { EmapHostInternal } from './emap-host';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 
-function makeHost(layers: globalThis.Map<string, MapshaperLayer | null>): EmapHostInternal {
+function makeHost(
+  layers: globalThis.Map<string, MapshaperLayer | null>,
+  target: { sourceId: string; layerId: string } | null = null,
+  mask: Uint8Array | null = null,
+): EmapHostInternal {
   // Tiny fake host with just enough surface for the accessor to call
   // through. The accessor only reads `_host.layers.resolve(...)` so
   // every other field can be a no-op.
@@ -22,6 +26,8 @@ function makeHost(layers: globalThis.Map<string, MapshaperLayer | null>): EmapHo
       },
     },
     _resolveLayer: () => null,
+    _resolveRenderLayerTarget: () => target,
+    _filterMaskForRenderLayer: () => mask,
     _scheduleRender: () => undefined,
     _fireHistoryChange: () => undefined,
     _fireSelectionChange: () => undefined,
@@ -161,5 +167,48 @@ describe('FeatureAccessor.count', () => {
   it('returns 0 for a missing layer or null shapes', () => {
     const acc = new FeatureAccessor(makeHost(new globalThis.Map()));
     expect(acc.count('nope', 'x')).toBe(0);
+  });
+});
+
+describe('FeatureAccessor filtered view', () => {
+  it('iterFiltered yields only mask-matching features with render-layer refs', () => {
+    const layer = makeLayer('data', [[[0]], [[1]], [[2]]], [{ i: 0 }, { i: 1 }, { i: 2 }]);
+    const layers = new globalThis.Map<string, MapshaperLayer>([['s/data', layer]]);
+    const acc = new FeatureAccessor(
+      makeHost(layers, { sourceId: 's', layerId: 'data' }, Uint8Array.from([0, 1, 1])),
+    );
+
+    const out = Array.from(acc.iterFiltered('render'));
+    expect(out.map((f) => f.ref)).toEqual([
+      { source: 's', layer: 'data', id: 1 },
+      { source: 's', layer: 'data', id: 2 },
+    ]);
+  });
+
+  it('iterFiltered without a filter yields everything', () => {
+    const layer = makeLayer('data', [[[0]], [[1]], [[2]]]);
+    const layers = new globalThis.Map<string, MapshaperLayer>([['s/data', layer]]);
+    const acc = new FeatureAccessor(makeHost(layers, { sourceId: 's', layerId: 'data' }));
+
+    expect(Array.from(acc.iterFiltered('render')).map((f) => f.ref.id)).toEqual([0, 1, 2]);
+  });
+
+  it('countFiltered counts mask matches and full length without mask', () => {
+    const layer = makeLayer('data', [[[0]], [[1]], [[2]]]);
+    const layers = new globalThis.Map<string, MapshaperLayer>([['s/data', layer]]);
+
+    expect(
+      new FeatureAccessor(
+        makeHost(layers, { sourceId: 's', layerId: 'data' }, Uint8Array.from([0, 1, 1])),
+      ).countFiltered('render'),
+    ).toBe(2);
+    expect(new FeatureAccessor(makeHost(layers, { sourceId: 's', layerId: 'data' })).countFiltered('render')).toBe(3);
+  });
+
+  it('unknown render layer yields nothing and counts 0', () => {
+    const acc = new FeatureAccessor(makeHost(new globalThis.Map()));
+
+    expect(Array.from(acc.iterFiltered('missing'))).toEqual([]);
+    expect(acc.countFiltered('missing')).toBe(0);
   });
 });

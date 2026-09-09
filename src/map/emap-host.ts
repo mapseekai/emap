@@ -46,6 +46,11 @@ export interface EmapHostInternal {
    */
   readonly layers: LayerRegistry;
 
+  /** Resolve a render layer id to its data-layer coordinate. */
+  _resolveRenderLayerTarget(renderLayerId: string): { sourceId: string; layerId: string } | null;
+  /** Display-filter mask of a render layer; null = 不过滤。 */
+  _filterMaskForRenderLayer(renderLayerId: string): Uint8Array | null;
+
   _scheduleRender(): void;
   _fireHistoryChange(): void;
   _fireSelectionChange(diff: import('./selection').SelectionDiff): void;
