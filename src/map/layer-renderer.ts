@@ -12,6 +12,8 @@ import { resolvePointStyle, resolveStrokeStyle } from './layer';
 import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 import type { StyleResolution, StyleResolver } from './style-resolver';
+import { applyMaskToCandidates, type FilterResolver } from './filter-resolver';
+
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
@@ -20,6 +22,8 @@ export interface LayerRendererContext {
   painter: CorePainter;
   /** 可选：缺省时表达式/烘焙样式不解析（静态路径）。 */
   styleResolver?: StyleResolver;
+  /** 可选：图层显示过滤器掩码解析器。 */
+  filterResolver?: FilterResolver;
   resolveSourceLayer(sourceId: string, sourceLayerName?: string): MapshaperLayer | null;
   getLayerArcIds(sourceId: string, ml: MapshaperLayer, arcs: ArcCollection): Uint32Array | null;
   getRenderCandidates?(
@@ -107,18 +111,47 @@ export function renderLayers(
 
     const ml = ctx.resolveSourceLayer(layer.source, layer['source-layer']);
     const dataset = source.getDataset?.();
+    let featureMask: Uint8Array | null = null;
+    if (layer.filter && dataset && ml?.shapes && ctx.filterResolver) {
+      featureMask = ctx.filterResolver.mask({
+        layerId: layer.id,
+        filter: layer.filter,
+        dataset,
+        layer: ml,
+      });
+      if (featureMask && !featureMask.some((v) => v === 1)) continue;
+    }
     if (layer.type === 'line' && arcs) {
-      renderLineLayer(ctx, layer, ml, arcs, dataset?.editVersion ?? 0, lineScale, dataset);
+      renderLineLayer(
+        ctx,
+        layer,
+        ml,
+        arcs,
+        dataset?.editVersion ?? 0,
+        lineScale,
+        dataset,
+        featureMask,
+      );
     } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-      renderFillLayer(ctx, layer, ml, arcs, dataset?.editVersion ?? 0, lineScale, dataset);
+      renderFillLayer(
+        ctx,
+        layer,
+        ml,
+        arcs,
+        dataset?.editVersion ?? 0,
+        lineScale,
+        dataset,
+        featureMask,
+      );
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
-      const candidates = getCandidates(
+      let candidates = getCandidates(
         ctx,
         layer.source,
         ml,
         (Number(style.radius) || 4) * pixelSize,
       );
+      if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
       const resolution = visibleStyleBuckets(
         ctx.styleResolver && dataset
           ? ctx.styleResolver.resolveCircle({
@@ -198,11 +231,13 @@ function renderLineLayer(
   geometryRevision: number,
   lineScale: number,
   dataset?: MapshaperDataset,
+  featureMask: Uint8Array | null = null,
 ): void {
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
     const viewportFilter = ctx.viewport.getArcFilter(arcs);
-    const candidates = getCandidates(ctx, layer.source, ml);
+    let candidates = getCandidates(ctx, layer.source, ml);
+    if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
     const resolution = visibleStyleBuckets(
       ctx.styleResolver && dataset
         ? ctx.styleResolver.resolveLine({
@@ -262,6 +297,7 @@ function renderFillLayer(
   geometryRevision: number,
   lineScale: number,
   dataset?: MapshaperDataset,
+  featureMask: Uint8Array | null = null,
 ): void {
   const fillPaint = layer.paint;
   const fillColorValue = fillPaint?.['fill-color'];
@@ -275,7 +311,8 @@ function renderFillLayer(
   const cullParts = ctx.viewport.getMapScale() > 1.1;
   // At full extent the fill deliberately bypasses part culling. Keep that
   // behavior, including polygons whose boundary encloses the whole viewport.
-  const candidates = cullParts ? getCandidates(ctx, layer.source, ml) : null;
+  let candidates = cullParts ? getCandidates(ctx, layer.source, ml) : null;
+  if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
   const resolution = visibleStyleBuckets(
     ctx.styleResolver && dataset
       ? ctx.styleResolver.resolveFill({

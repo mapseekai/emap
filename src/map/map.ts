@@ -2341,6 +2341,7 @@ export class Emap extends EventDispatcher {
         viewport: this._viewport,
         painter: this._painter,
         styleResolver: this._styleResolver,
+        filterResolver: this._filterResolver,
         resolveSourceLayer: (sourceId, sourceLayerName) =>
           this.layers.resolve(sourceId, sourceLayerName),
         getLayerArcIds: (sourceId, ml, arcs) => this._getLayerArcIds(sourceId, ml, arcs),

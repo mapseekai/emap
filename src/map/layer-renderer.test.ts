@@ -10,6 +10,8 @@ import type { MapshaperDataset, MapshaperLayer, PathShape } from '../types/mapsh
 import { FeatureQuery } from './feature-query';
 import type { LayerSpecification } from './layer';
 import { StyleResolver } from './style-resolver';
+import { FilterResolver } from './filter-resolver';
+
 
 describe('renderLayers fill rendering', () => {
   it('skips outline arc-id work when fill layer line width is zero', () => {
@@ -709,5 +711,92 @@ describe('renderLayers style integration', () => {
       color: '#123456',
       shape: 'square',
     });
+  });
+});
+
+describe('renderLayers display filter', () => {
+  it('circle layer with filter draws only matching features', () => {
+    const ml = {
+      geometry_type: 'point',
+      shapes: [[[1, 1]], [[2, 2]], [[3, 3]]],
+      data: { getRecords: () => [{ v: 1 }, { v: 2 }, { v: 3 }] },
+    };
+    const painter = makePainter();
+    const ctx = makeStyleCtx({
+      layers: [
+        {
+          id: 'L',
+          type: 'circle',
+          source: 's',
+          filter: ['>', ['get', 'v'], 1],
+        },
+      ],
+      ml: ml as Partial<MapshaperLayer>,
+      dataset: { editVersion: 0, attributeVersion: 0 },
+      painter,
+    });
+    ctx.filterResolver = new FilterResolver();
+
+    renderLayers(ctx as never, 1, 1);
+
+    expect([...painter.drawPoints.mock.calls[0]?.[2]]).toEqual([1, 2]);
+  });
+
+  it('line layer with filter limits drawPaths to matching features', () => {
+    const ml = {
+      geometry_type: 'polyline',
+      shapes: [[[0]], [[1]], [[2]]],
+      data: { getRecords: () => [{ v: 1 }, { v: 2 }, { v: 3 }] },
+    };
+    const painter = makePainter();
+    const ctx = makeStyleCtx({
+      layers: [
+        {
+          id: 'L',
+          type: 'line',
+          source: 's',
+          filter: ['>', ['get', 'v'], 1],
+          paint: { 'line-color': ['match', ['get', 'v'], 2, '#111111', '#222222'] },
+        },
+      ],
+      ml: ml as Partial<MapshaperLayer>,
+      dataset: { editVersion: 0, attributeVersion: 0 },
+      painter,
+    });
+    ctx.filterResolver = new FilterResolver();
+
+    renderLayers(ctx as never, 1, 1);
+
+    expect(painter.drawPaths.mock.calls.flatMap((call) => [...call[4]]).sort()).toEqual([1, 2]);
+  });
+
+  it('filter matching nothing skips the layer entirely', () => {
+    const ml = {
+      geometry_type: 'point',
+      shapes: [[[1, 1]], [[2, 2]], [[3, 3]]],
+      data: { getRecords: () => [{ v: 1 }, { v: 2 }, { v: 3 }] },
+    };
+    const painter = makePainter();
+    const ctx = makeStyleCtx({
+      layers: [
+        {
+          id: 'L',
+          type: 'circle',
+          source: 's',
+          filter: ['>', ['get', 'v'], 99],
+        },
+      ],
+      ml: ml as Partial<MapshaperLayer>,
+      dataset: { editVersion: 0, attributeVersion: 0 },
+      painter,
+    });
+    ctx.filterResolver = new FilterResolver();
+
+    renderLayers(ctx as never, 1, 1);
+
+    expect(painter.drawPoints).not.toHaveBeenCalled();
+    expect(painter.drawPaths).not.toHaveBeenCalled();
+    expect(painter.drawArcs).not.toHaveBeenCalled();
+    expect(painter.drawPolygonFill).not.toHaveBeenCalled();
   });
 });
