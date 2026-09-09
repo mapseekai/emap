@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-09
+
+### Maintenance
+
+- Republished the current `v0.10.0` release line after the release verification
+  gate passed across builds, tests, browsers, documentation, and package audits.
+
 ## [0.10.0] - 2026-09-09
 
 ### Added
