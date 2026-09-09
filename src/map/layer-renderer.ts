@@ -64,6 +64,7 @@ function visibleStyleBuckets(
   membership.filtered = {
     styles: resolution.styles,
     buckets: lists.map((ids) => Uint32Array.from(ids)),
+    ...(resolution.extras ? { extras: resolution.extras } : {}),
   };
   return membership.filtered;
 }
@@ -136,7 +137,7 @@ export function renderLayers(
           if (resolution.buckets[i].length === 0) continue;
           ctx.painter.drawPoints(
             ml.shapes,
-            { ...style, color: resolution.styles[i] },
+            { ...style, color: resolution.styles[i], ...resolution.extras?.[i] },
             resolution.buckets[i],
           );
         }
@@ -219,7 +220,14 @@ function renderLineLayer(
       for (let i = 0; i < resolution.buckets.length; i++) {
         const bucket = resolution.buckets[i];
         if (bucket.length === 0) continue;
-        const bucketStyle = { ...style, color: resolution.styles[i] };
+        // 表达式桶覆盖 dashType 时，dash 数组必须按具名模式重解：
+        // 图层级 style.dash 来自 line-dasharray/静态 dashstyle，直接沿用会错配。
+        const extra = resolution.extras?.[i];
+        const base =
+          extra?.dashType !== undefined
+            ? resolveStrokeStyle({ ...layer.paint, 'line-dashstyle': extra.dashType }, lineScale)
+            : style;
+        const bucketStyle = { ...base, color: resolution.styles[i], ...extra };
         if (bucketStyle.dashType === 'arrow-dot') {
           ctx.painter.drawArcs(arcs, bucketStyle, viewportFilter, undefined, {
             shapes: ml.shapes as readonly (PathShape | null)[],

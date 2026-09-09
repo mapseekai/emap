@@ -19,14 +19,15 @@
         <div class="emap-example-field"><label for="field">字段</label><select id="field"></select></div>
         <div class="emap-example-field">
           <label class="emap-example-check"><input type="radio" name="mode" value="baked" checked /> 分级烘焙</label>
-          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 表达式</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 颜色表达式</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="dashstyle" /> 线型表达式</label>
         </div>
         <button id="apply" class="emap-example-primary-button" disabled>应用样式</button>
       </section>
       <section class="emap-example-section">
         <p id="status" class="emap-example-status">加载一个 polyline 图层</p>
         <p class="emap-example-hint">
-          分级烘焙使用 <code>classifyFeatures({ saveAs: 'stroke' })</code>，线图层通过 <code>styleSource: 'mapshaper'</code> 读取每条记录的 <code>stroke</code>；表达式模式直接把表达式写入 <code>line-color</code>。
+          分级烘焙使用 <code>classifyFeatures({ saveAs: 'stroke' })</code>，线图层通过 <code>styleSource: 'mapshaper'</code> 读取每条记录的 <code>stroke</code>；颜色表达式直接把表达式写入 <code>line-color</code>；线型表达式在颜色表达式之上把 <code>step</code> 表达式写入 <code>line-dashstyle</code>，按数值字段把线分成 solid / dash / dot 三档。
         </p>
       </section>
     </div>
@@ -57,15 +58,25 @@
       return source?.getLayers().find((layer, i) => (layer?.name || layer?.id || `layer-${i}`) === target) ?? null;
     }
 
-    function addStyledLayer(expression = null) {
+    function addStyledLayer(expression = null, dashstyle = null) {
       if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
       const layer = { id: LAYER_ID, type: 'line', source: SOURCE_ID, 'source-layer': target };
-      if (expression) layer.paint = { 'line-color': expression, 'line-width': 5 };
-      else {
+      if (expression) {
+        layer.paint = { 'line-color': expression, 'line-width': 5 };
+        if (dashstyle) layer.paint['line-dashstyle'] = dashstyle;
+      } else {
         layer.styleSource = 'mapshaper';
         layer.paint = { 'line-width': 5 };
       }
       map.addLayer(layer);
+    }
+
+    function buildDashExpression(field) {
+      const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return ['match', ['get', 'group'], 'a', 'solid', 'b', 'dash', 'dot'];
+      return ['step', ['get', field], 'solid', min + (max - min) / 3, 'dash', min + ((max - min) * 2) / 3, 'dot'];
     }
 
     function buildExpression(field) {
@@ -80,9 +91,10 @@
       const field = fieldSelect.value;
       if (!target || !field) return;
       const mode = document.querySelector('input[name="mode"]:checked').value;
-      if (mode === 'expression') {
-        addStyledLayer(buildExpression(field));
-        status.textContent = `已应用 line-color 属性表达式：${field}`;
+      if (mode === 'expression' || mode === 'dashstyle') {
+        const dashstyle = mode === 'dashstyle' ? buildDashExpression(field) : null;
+        addStyledLayer(buildExpression(field), dashstyle);
+        status.textContent = `已应用 line-color 属性表达式：${field}${dashstyle ? `，line-dashstyle 分档：${field}` : ''}`;
         return;
       }
       const result = await map.ops.classifyFeatures({

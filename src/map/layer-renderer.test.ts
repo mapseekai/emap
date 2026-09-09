@@ -622,4 +622,92 @@ describe('renderLayers style integration', () => {
       '#abcdef',
     ]);
   });
+  it('line layer with dashstyle expression renders per-bucket dashType with resolved dash arrays', () => {
+    const dataset = { editVersion: 0, attributeVersion: 0 };
+    const ml = {
+      geometry_type: 'polyline',
+      shapes: [[[0]], [[1]], [[2]]],
+      data: { getRecords: () => [{ k: 'a' }, { k: 'b' }, { k: 'c' }] },
+    };
+    const painter = makePainter();
+    const ctx = makeStyleCtx({
+      layers: [
+        {
+          id: 'L',
+          type: 'line',
+          source: 's',
+          paint: {
+            'line-color': '#123456',
+            'line-dasharray': [3, 2],
+            'line-dashstyle': ['match', ['get', 'k'], 'a', 'dash', 'b', 'dot', 'solid'],
+          },
+        },
+      ],
+      ml: ml as Partial<MapshaperLayer>,
+      dataset,
+      painter,
+    });
+
+    renderLayers(ctx as never, 1, 1);
+
+    expect(painter.drawPaths).toHaveBeenCalledTimes(3);
+    // 具名模式的 dash 数组按 lineScale=1 重解，不得沿用图层级 [3, 2]。
+    expect(painter.drawPaths.mock.calls[0]?.[1]).toMatchObject({
+      color: '#123456',
+      dashType: 'dash',
+      dash: [8, 6],
+    });
+    expect(painter.drawPaths.mock.calls[1]?.[1]).toMatchObject({
+      color: '#123456',
+      dashType: 'dot',
+      dash: [1.5, 5],
+    });
+    // solid 桶必须丢弃图层静态 dasharray。
+    expect(painter.drawPaths.mock.calls[2]?.[1]).toMatchObject({
+      color: '#123456',
+      dashType: 'solid',
+    });
+    expect(painter.drawPaths.mock.calls[2]?.[1].dash).toBeUndefined();
+    expect([...painter.drawPaths.mock.calls[0]?.[4]]).toEqual([0]);
+    expect([...painter.drawPaths.mock.calls[1]?.[4]]).toEqual([1]);
+    expect([...painter.drawPaths.mock.calls[2]?.[4]]).toEqual([2]);
+  });
+
+  it('circle layer with shape expression renders per-bucket shape', () => {
+    const dataset = { editVersion: 0, attributeVersion: 0 };
+    const ml = {
+      geometry_type: 'point',
+      shapes: [[[1, 1]], [[2, 2]]],
+      data: { getRecords: () => [{ k: 'a' }, { k: 'b' }] },
+    };
+    const painter = makePainter();
+    const ctx = makeStyleCtx({
+      layers: [
+        {
+          id: 'L',
+          type: 'circle',
+          source: 's',
+          paint: {
+            'circle-color': '#123456',
+            'circle-shape': ['match', ['get', 'k'], 'a', 'star', 'square'],
+          },
+        },
+      ],
+      ml: ml as Partial<MapshaperLayer>,
+      dataset,
+      painter,
+    });
+
+    renderLayers(ctx as never, 1, 1);
+
+    expect(painter.drawPoints).toHaveBeenCalledTimes(2);
+    expect(painter.drawPoints.mock.calls[0]?.[1]).toMatchObject({
+      color: '#123456',
+      shape: 'star',
+    });
+    expect(painter.drawPoints.mock.calls[1]?.[1]).toMatchObject({
+      color: '#123456',
+      shape: 'square',
+    });
+  });
 });

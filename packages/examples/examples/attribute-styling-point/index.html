@@ -19,14 +19,15 @@
         <div class="emap-example-field"><label for="field">字段</label><select id="field"></select></div>
         <div class="emap-example-field">
           <label class="emap-example-check"><input type="radio" name="mode" value="baked" checked /> 分级烘焙</label>
-          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 表达式</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 颜色表达式</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="shape" /> 点型表达式</label>
         </div>
         <button id="apply" class="emap-example-primary-button" disabled>应用样式</button>
       </section>
       <section class="emap-example-section">
         <p id="status" class="emap-example-status">加载一个 point 图层</p>
         <p class="emap-example-hint">
-          分级烘焙沿用面的 <code>fill</code> 字段：<code>classifyFeatures({ saveAs: 'fill' })</code> 后由 circle 图层的 <code>styleSource: 'mapshaper'</code> 读取；表达式模式直接把表达式写入 <code>circle-color</code>。
+          分级烘焙沿用面的 <code>fill</code> 字段：<code>classifyFeatures({ saveAs: 'fill' })</code> 后由 circle 图层的 <code>styleSource: 'mapshaper'</code> 读取；颜色表达式直接把表达式写入 <code>circle-color</code>；点型表达式在颜色表达式之上把 <code>step</code> 表达式写入 <code>circle-shape</code>，按数值字段把点分成 circle / star / square 三档。
         </p>
       </section>
     </div>
@@ -57,15 +58,25 @@
       return source?.getLayers().find((layer, i) => (layer?.name || layer?.id || `layer-${i}`) === target) ?? null;
     }
 
-    function addStyledLayer(expression = null) {
+    function addStyledLayer(expression = null, shape = null) {
       if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
       const layer = { id: LAYER_ID, type: 'circle', source: SOURCE_ID, 'source-layer': target };
-      if (expression) layer.paint = { 'circle-color': expression, 'circle-radius': 9 };
-      else {
+      if (expression) {
+        layer.paint = { 'circle-color': expression, 'circle-radius': 9 };
+        if (shape) layer.paint['circle-shape'] = shape;
+      } else {
         layer.styleSource = 'mapshaper';
         layer.paint = { 'circle-radius': 9 };
       }
       map.addLayer(layer);
+    }
+
+    function buildShapeExpression(field) {
+      const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return ['match', ['get', 'group'], 'a', 'circle', 'b', 'star', 'square'];
+      return ['step', ['get', field], 'circle', min + (max - min) / 3, 'star', min + ((max - min) * 2) / 3, 'square'];
     }
 
     function buildExpression(field) {
@@ -80,9 +91,10 @@
       const field = fieldSelect.value;
       if (!target || !field) return;
       const mode = document.querySelector('input[name="mode"]:checked').value;
-      if (mode === 'expression') {
-        addStyledLayer(buildExpression(field));
-        status.textContent = `已应用 circle-color 属性表达式：${field}`;
+      if (mode === 'expression' || mode === 'shape') {
+        const shape = mode === 'shape' ? buildShapeExpression(field) : null;
+        addStyledLayer(buildExpression(field), shape);
+        status.textContent = `已应用 circle-color 属性表达式：${field}${shape ? `，circle-shape 分档：${field}` : ''}`;
         return;
       }
       const result = await map.ops.classifyFeatures({

@@ -30,7 +30,7 @@ export interface LinePaint {
   /** Alternating dash and gap lengths in CSS pixels. */
   'line-dasharray'?: readonly number[];
   /** Named dash pattern. `arrow-dot` replaces repeated dots with directional arrows. */
-  'line-dashstyle'?: LineDashStyle;
+  'line-dashstyle'?: LineDashStyle | StyleExpression;
   /** Arrow-to-arrow spacing in CSS pixels for `arrow-dot`. Default `32`. */
   'line-arrow-spacing'?: number;
   /** Arrow wing length in CSS pixels for `arrow-dot`. Default `6`. */
@@ -41,7 +41,7 @@ export interface CirclePaint {
   'circle-color'?: string | StyleExpression;
   'circle-radius'?: number;
   'circle-fill'?: boolean;
-  'circle-shape'?: PointMarkerShape;
+  'circle-shape'?: PointMarkerShape | StyleExpression;
 }
 
 export interface FillLayerPaint extends FillPaint, LinePaint {}
@@ -129,7 +129,7 @@ export function resolveStrokeStyle(
   const fillColor =
     'fill-color' in p && typeof p['fill-color'] === 'string' ? p['fill-color'] : undefined;
   const dash = p['line-dasharray'];
-  const dashStyle = p['line-dashstyle'];
+  const dashStyle = typeof p['line-dashstyle'] === 'string' ? p['line-dashstyle'] : undefined;
   const parsedArrowSpacing =
     typeof p['line-arrow-spacing'] === 'number' ? Math.max(4, p['line-arrow-spacing']) : undefined;
   const parsedArrowSize =
@@ -176,6 +176,6 @@ export function resolvePointStyle(paint: CirclePaint | undefined): PointStyle {
       DEFAULT_LAYER_COLOR,
     radius: p['circle-radius'] ?? 4,
     fill: p['circle-fill'] !== false,
-    shape: p['circle-shape'] ?? 'circle',
+    shape: typeof p['circle-shape'] === 'string' ? p['circle-shape'] : 'circle',
   };
 }

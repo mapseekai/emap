@@ -51,9 +51,9 @@ map.setLayerVisibility('stations', 'none');
 
 用 `map.moveLayer(id, beforeId)` 调整顺序；不提供 `beforeId` 时图层移到顶部。
 
-## 属性驱动颜色
+## 属性驱动样式
 
-`fill-color`、`line-color` 和 `circle-color` 接受颜色字符串或 `StyleExpression`。表达式是受限、无 `eval` 的子集：`get`、`match`、`step`、`interpolate`（仅 `linear`）、`==`、`!=`、`<`、`<=`、`>`、`>=`、`!`、`all` 和 `any`。其他 MapLibre 表达式不受支持。
+`fill-color`、`line-color` 和 `circle-color` 接受颜色字符串或 `StyleExpression`；line 图层的 `line-dashstyle` 和 circle 图层的 `circle-shape` 同样接受表达式，取值必须是各自枚举成员（非法值回退到图层静态值）。fill 图层的轮廓不支持表达式。表达式是受限、无 `eval` 的子集：`get`、`match`、`step`、`interpolate`（仅 `linear`）、`==`、`!=`、`<`、`<=`、`>`、`>=`、`!`、`all` 和 `any`。其他 MapLibre 表达式不受支持。
 
 ```ts
 map.setPaintProperty('parcel-fill', 'fill-color', [

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { StyleResolver } from './style-resolver';
-import type { FillLayerPaint } from './layer';
+import { DEFAULT_LAYER_COLOR, type FillLayerPaint } from './layer';
 
 function makeLayer(records: Array<Record<string, unknown>>, shapes: unknown[] | null = null) {
   // 形状与记录一一对应的最小层夹具：resolver 只读 shapes.length 与 getRecords。
@@ -160,6 +160,128 @@ describe('StyleResolver.resolveFill', () => {
     expect(
       r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset: other, layer }),
     ).not.toBe(a1);
+  });
+});
+
+describe('StyleResolver non-color paint expressions', () => {
+  it('line-dashstyle expression buckets features and fills extras', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ k: 'a' }, { k: 'b' }, { k: 'a' }]);
+    const res = r.resolveLine({
+      layerId: 'a',
+      paint: {
+        'line-color': '#123456',
+        'line-dashstyle': ['match', ['get', 'k'], 'a', 'dash', 'solid'],
+      },
+      styleSource: undefined,
+      dataset,
+      layer,
+    })!;
+    expect(res.styles).toEqual(['#123456', '#123456']);
+    expect(res.extras).toEqual([{ dashType: 'dash' }, { dashType: 'solid' }]);
+    expect([...res.buckets[0]]).toEqual([0, 2]);
+    expect([...res.buckets[1]]).toEqual([1]);
+  });
+
+  it('circle-shape expression buckets; invalid values fall back to the static layer value', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ k: 'a' }, { k: 'bad' }, { k: 'a' }]);
+    const res = r.resolveCircle({
+      layerId: 'a',
+      paint: {
+        'circle-shape': ['match', ['get', 'k'], 'a', 'star', 'nonsense'],
+      },
+      styleSource: undefined,
+      dataset,
+      layer,
+    })!;
+    expect(res.extras).toEqual([{ shape: 'star' }, {}]);
+    expect([...res.buckets[0]]).toEqual([0, 2]);
+    expect([...res.buckets[1]]).toEqual([1]);
+  });
+
+  it('color + dashstyle expressions cross-product into shared buckets', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([
+      { t: 'a', k: 'x' },
+      { t: 'a', k: 'y' },
+      { t: 'b', k: 'x' },
+    ]);
+    const res = r.resolveLine({
+      layerId: 'a',
+      paint: {
+        'line-color': ['match', ['get', 't'], 'a', '#111111', '#999999'],
+        'line-dashstyle': ['match', ['get', 'k'], 'x', 'dash', 'dot'],
+      },
+      styleSource: undefined,
+      dataset,
+      layer,
+    })!;
+    expect(res.styles).toEqual(['#111111', '#111111', '#999999']);
+    expect(res.extras).toEqual([{ dashType: 'dash' }, { dashType: 'dot' }, { dashType: 'dash' }]);
+    expect(res.buckets.map((b) => [...b])).toEqual([[0], [1], [2]]);
+  });
+
+  it('static dashstyle without any expression keeps the static painter path', () => {
+    const r = new StyleResolver();
+    expect(
+      r.resolveLine({
+        layerId: 'a',
+        paint: { 'line-color': '#123456', 'line-dashstyle': 'dash' },
+        styleSource: undefined,
+        dataset,
+        layer: makeLayer([{ k: 'a' }]),
+      }),
+    ).toBeNull();
+    expect(
+      r.resolveCircle({
+        layerId: 'a',
+        paint: { 'circle-shape': 'star' },
+        styleSource: undefined,
+        dataset,
+        layer: makeLayer([{ k: 'a' }]),
+      }),
+    ).toBeNull();
+  });
+
+  it('extras-only expression does not hijack baked fill/stroke fields without styleSource', () => {
+    const r = new StyleResolver();
+    const records = [
+      { k: 'a', fill: '#ff0000', stroke: '#00ff00' },
+      { k: 'b', fill: '#ff0000', stroke: '#00ff00' },
+    ];
+    const circle = r.resolveCircle({
+      layerId: 'a',
+      paint: { 'circle-shape': ['match', ['get', 'k'], 'a', 'star', 'square'] },
+      styleSource: undefined,
+      dataset,
+      layer: makeLayer(records),
+    })!;
+    expect([...new Set(circle.styles)]).toEqual([DEFAULT_LAYER_COLOR]);
+    expect(circle.extras).toEqual([{ shape: 'star' }, { shape: 'square' }]);
+    const line = r.resolveLine({
+      layerId: 'b',
+      paint: { 'line-dashstyle': ['match', ['get', 'k'], 'a', 'dash', 'dot'] },
+      styleSource: undefined,
+      dataset,
+      layer: makeLayer(records),
+    })!;
+    expect([...new Set(line.styles)]).toEqual([DEFAULT_LAYER_COLOR]);
+  });
+
+  it('rejects prototype-chain property names as enum values', () => {
+    const r = new StyleResolver();
+    const records = [{ k: 'toString' }, { k: 'constructor' }, { k: '__proto__' }];
+    const res = r.resolveCircle({
+      layerId: 'a',
+      paint: { 'circle-shape': ['get', 'k'] },
+      styleSource: undefined,
+      dataset,
+      layer: makeLayer(records),
+    })!;
+    // 三个值都是 Object.prototype 上的继承属性名，必须全部判定非法 → 空 extras、单一默认色桶。
+    expect(res.extras).toEqual([{}]);
+    expect(res.buckets.map((b) => [...b])).toEqual([[0, 1, 2]]);
   });
 });
 

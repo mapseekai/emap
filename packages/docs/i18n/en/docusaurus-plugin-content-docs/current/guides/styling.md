@@ -51,9 +51,9 @@ map.setLayerVisibility('stations', 'none');
 
 Use `map.moveLayer(id, beforeId)` to change order; omit `beforeId` to move a layer to the top.
 
-## Attribute-driven colors
+## Attribute-driven styles
 
-`fill-color`, `line-color`, and `circle-color` accept a color string or `StyleExpression`. Expressions are a restricted, eval-free subset: `get`, `match`, `step`, `interpolate` (with `linear` only), `==`, `!=`, `<`, `<=`, `>`, `>=`, `!`, `all`, and `any`. Other MapLibre expressions are not supported.
+`fill-color`, `line-color`, and `circle-color` accept a color string or a `StyleExpression`; `line-dashstyle` on line layers and `circle-shape` on circle layers accept expressions too, and each value must be a member of the respective enum (invalid values fall back to the layer's static value). Fill-layer outlines do not support expressions. Expressions are a restricted, eval-free subset: `get`, `match`, `step`, `interpolate` (with `linear` only), `==`, `!=`, `<`, `<=`, `>`, `>=`, `!`, `all`, and `any`. Other MapLibre expressions are not supported.
 
 ```ts
 map.setPaintProperty('parcel-fill', 'fill-color', [
