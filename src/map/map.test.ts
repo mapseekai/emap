@@ -1574,6 +1574,21 @@ describe('Emap layer display filter', () => {
     ).toThrow(/Layer "l1" filter/);
   });
 
+  it('materializes a default layer when setting its filter', () => {
+    const map = createBareMap();
+    registerMockSource(
+      map,
+      'src1',
+      createMockSource([{ name: 'cities', geometry_type: 'point', shapes: [] }]),
+    );
+    const filter = ['>', ['get', 'pop'], 100] as const;
+
+    map.setFilter('src1:cities', filter);
+
+    expect(map.getFilter('src1:cities')).toEqual(filter);
+    expect(map.getLayers()).toContainEqual(expect.objectContaining({ id: 'src1:cities', filter }));
+  });
+
   it('setFilter/getFilter round-trip and null clears', () => {
     const map = createBareMap();
     registerMockSource(map, 'src1', createMockSource());
