@@ -40,6 +40,14 @@ and **must evaluate to a boolean for every feature**—if any feature produces a
 `['get', 'enabled']` yielding the string `'false'` or the number `1`), the entire filter is disabled and an
 `error` event fires; no truthiness coercion occurs.
 
+You can also declare a filter when calling `addLayer` through the layer specification's `filter` field:
+
+```ts
+map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
+```
+
+Use `map.getFilter(layerId)` to read the current filter.
+
 Filters only affect what is seen: rendering, picking/hover, highlighting, and the filtered attribute views
 `map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`.
 They do not alter data, enter undo history, or affect `map.ops.*` or exports; `map.features.iter()/count()`

@@ -39,6 +39,14 @@ MapLibre 子集（`get / == != < <= > >= / ! / all / any / match / step / interp
 并且**必须对每个要素求值为 boolean**——任一要素返回非布尔值（如 `['get', 'enabled']`
 得到字符串 `'false'` 或数值 `1`）时，过滤器整体失效并触发 `error` 事件，不做真值转换。
 
+过滤器也可在 `addLayer` 时通过图层 spec 的 `filter` 字段声明：
+
+```ts
+map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
+```
+
+使用 `map.getFilter(layerId)` 读取当前过滤器。
+
 过滤器只影响“看”：渲染、拾取/悬停、高亮，以及属性过滤视图
 `map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`。
 数据本身不变、不进撤销历史、不影响 `map.ops.*` 与导出；`map.features.iter()/count()`
