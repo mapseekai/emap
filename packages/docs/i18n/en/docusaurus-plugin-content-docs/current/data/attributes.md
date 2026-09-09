@@ -32,6 +32,26 @@ console.log(hits[0]?.properties, feature?.properties);
 
 A `Feature` is a read view. Do not mutate `feature.properties` or source-dataset records directly; those changes bypass Emap's history, selection, and rendering updates.
 
+## Layer display filtering
+
+`map.setFilter(layerId, expression)` sets a display filter for a render layer. Expressions use the same
+MapLibre subset as style expressions (`get / == != < <= > >= / ! / all / any / match / step / interpolate`)
+and **must evaluate to a boolean for every feature**—if any feature produces a non-boolean value (for example,
+`['get', 'enabled']` yielding the string `'false'` or the number `1`), the entire filter is disabled and an
+`error` event fires; no truthiness coercion occurs.
+
+Filters only affect what is seen: rendering, picking/hover, highlighting, and the filtered attribute views
+`map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`.
+They do not alter data, enter undo history, or affect `map.ops.*` or exports; `map.features.iter()/count()`
+retain their all-features semantics. `iterFiltered` accepts a render-layer ID (the `addLayer` ID), not a data-layer ID.
+
+To show only filtered contents in an attribute table, iterate/count with `iterFiltered(layerId)` /
+`countFiltered(layerId)`, and refresh the table on the `layerchange` event (`setFilter` fires it with reason
+`'filter'`). Attribute-data changes continue to use the existing `data` event.
+
+For layers without an attribute table, every feature evaluates against a `null` record (`['get', ...]` yields
+`undefined`). `map.setFilter(layerId, null)` clears the filter.
+
 ## Change feature properties
 
 `map.attributes.setFeatureProperty()` changes one field, and `setFeatureProperties()` writes several fields as one history entry. Assigning `undefined` to a field deletes it.

@@ -32,6 +32,25 @@ console.log(hits[0]?.properties, feature?.properties);
 
 `Feature` 是读取视图。不要直接改写 `feature.properties` 或 source dataset 的 records；这些修改不会经过 Emap 的历史、选择和渲染更新流程。
 
+## 图层显示过滤
+
+`map.setFilter(layerId, expression)` 为渲染层设置显示过滤器：表达式使用与样式表达式相同的
+MapLibre 子集（`get / == != < <= > >= / ! / all / any / match / step / interpolate`），
+并且**必须对每个要素求值为 boolean**——任一要素返回非布尔值（如 `['get', 'enabled']`
+得到字符串 `'false'` 或数值 `1`）时，过滤器整体失效并触发 `error` 事件，不做真值转换。
+
+过滤器只影响“看”：渲染、拾取/悬停、高亮，以及属性过滤视图
+`map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`。
+数据本身不变、不进撤销历史、不影响 `map.ops.*` 与导出；`map.features.iter()/count()`
+保持全量语义，`iterFiltered` 接收的是渲染层 id（`addLayer` 的 id），不是数据层 id。
+
+属性表要只显示过滤后的内容：迭代/计数改用 `iterFiltered(layerId)` / `countFiltered(layerId)`，
+并监听 `layerchange` 事件（`setFilter` 会以 reason `'filter'` 触发）刷新表格；属性数据本身的
+变化仍走既有 `data` 事件。
+
+无属性表的图层中每个要素按 `null` 记录求值（`['get', ...]` 得到 `undefined`）。
+`map.setFilter(layerId, null)` 清除过滤器。
+
 ## 修改要素属性
 
 `map.attributes.setFeatureProperty()` 修改一个字段，`setFeatureProperties()` 将多个字段写成一次历史记录。为字段赋值 `undefined` 会删除它。
