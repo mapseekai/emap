@@ -94,8 +94,13 @@ import {
   type LayerPaint,
   type LayerSpecification,
 } from './layer';
-import { compileStyleExpression, isStyleExpression } from './style-expression';
+import {
+  compileStyleExpression,
+  isStyleExpression,
+  type StyleExpression,
+} from './style-expression';
 import { StyleResolver } from './style-resolver';
+import { FilterResolver } from './filter-resolver';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -246,6 +251,17 @@ function assertValidPaint(
   }
 }
 
+function assertValidFilter(id: string, filter: StyleExpression | undefined): void {
+  if (filter === undefined) return;
+  try {
+    compileStyleExpression(filter);
+  } catch (err) {
+    throw new Error(
+      `Layer "${id}" filter: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
+    );
+  }
+}
+
 function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
   if (
     crs !== snapshot.view.crs ||
@@ -314,6 +330,9 @@ export class Emap extends EventDispatcher {
   private _layers: LayerSpecification[] = [];
   private _styleResolver = new StyleResolver({
     onWarn: (w) => this.fire('warning', w),
+  });
+  private _filterResolver = new FilterResolver({
+    onError: (e) => this.fire('error', { error: e.error }),
   });
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
@@ -1517,6 +1536,7 @@ export class Emap extends EventDispatcher {
     this._sources.delete(id);
 
     this._layers = this._layers.filter((layer) => layer.source !== id);
+    this._filterResolver.clear();
     this._defaultLayersDirty = true;
     this._featureQuery.clear(id);
     this._invalidateShapeCachesForSources([id]);
@@ -1623,6 +1643,7 @@ export class Emap extends EventDispatcher {
       throw new Error(`Layer "${layer.id}" already exists`);
     }
     assertValidPaint(layer.id, layer.paint);
+    assertValidFilter(layer.id, layer.filter);
     if (before) {
       const idx = this._layers.findIndex((l) => l.id === before);
       if (idx === -1) {
@@ -1641,6 +1662,7 @@ export class Emap extends EventDispatcher {
     const idx = this._layers.findIndex((l) => l.id === id);
     if (idx !== -1) {
       this._layers.splice(idx, 1);
+      this._filterResolver.clear(id);
       this._defaultLayersDirty = true;
       this._scheduleRender();
       this._fireLayerChange('remove', id);
@@ -1685,6 +1707,35 @@ export class Emap extends EventDispatcher {
       (layer.paint as Record<string, unknown>)[name] = value;
       this._scheduleRender();
     }
+  }
+
+  /**
+   * Set or clear the display filter of a layer. The expression uses the
+   * MapLibre subset accepted by style expressions and must evaluate to a
+   * boolean per feature. Data is untouched: filtering affects rendering,
+   * picking and the filtered attribute view only, and never enters undo
+   * history. Pass `null` to clear.
+   */
+  public setFilter(id: string, expression: StyleExpression | null): void {
+    let layer = this._layers.find((candidate) => candidate.id === id);
+    if (!layer && this._layers.length === 0) {
+      const effectiveLayers = this._getEffectiveLayers();
+      const index = effectiveLayers.findIndex((candidate) => candidate.id === id);
+      if (index === -1) return;
+      this._layers = effectiveLayers.map(cloneLayerSpecification);
+      layer = this._layers[index];
+    }
+    if (!layer) return;
+    if (expression !== null) assertValidFilter(id, expression);
+    layer.filter = expression === null ? undefined : expression;
+    this._filterResolver.clear(id);
+    this._scheduleRender();
+    this._fireLayerChange('filter', id);
+  }
+
+  /** The layer's display filter expression, or `undefined` when unset. */
+  public getFilter(id: string): StyleExpression | undefined {
+    return this.getLayer(id)?.filter;
   }
 
   public moveLayer(id: string, beforeId?: string): void {

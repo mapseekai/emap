@@ -18,6 +18,7 @@ import { TopologySource } from '../source/topology-source';
 import { FeatureQuery } from './feature-query';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { FilterResolver } from './filter-resolver';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -202,6 +203,7 @@ function createBareMap(): Emap {
   });
   setPrivate(map, '_activeTransaction', null);
   setPrivate(map, '_history', new EditHistory());
+  setPrivate(map, '_filterResolver', new FilterResolver());
   // Stub _scheduleRender so it doesn't try to use requestAnimationFrame
   setPrivate(map, '_scheduleRender', vi.fn());
   // Tests exercise expression-evaluating ops (applyExpression, filter,
@@ -1553,6 +1555,59 @@ describe('Emap layer management', () => {
       const keys = callPrivate(map, '_getVisibleLayerKeys') as Map<string, Set<string>>;
       expect(keys.get('src1')?.has('roads')).toBe(true);
     });
+  });
+});
+
+describe('Emap layer display filter', () => {
+  it('addLayer accepts a StyleExpression filter and getFilter returns it', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100] });
+    expect(map.getFilter('l1')).toEqual(['>', ['get', 'pop'], 100]);
+  });
+
+  it('addLayer rejects an invalid filter expression synchronously', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    expect(() =>
+      map.addLayer({ id: 'l1', type: 'circle', source: 'src1', filter: ['not-an-op', 1] }),
+    ).toThrow(/Layer "l1" filter/);
+  });
+
+  it('setFilter/getFilter round-trip and null clears', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1' });
+    map.setFilter('l1', ['==', ['get', 'level'], 'A']);
+    expect(map.getFilter('l1')).toEqual(['==', ['get', 'level'], 'A']);
+    map.setFilter('l1', null);
+    expect(map.getFilter('l1')).toBeUndefined();
+  });
+
+  it('setFilter rejects an invalid expression and keeps the old filter', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100] });
+    expect(() => map.setFilter('l1', ['not-an-op'])).toThrow(/filter/);
+    expect(map.getFilter('l1')).toEqual(['>', ['get', 'pop'], 100]);
+  });
+
+  it('setFilter fires layerchange with reason filter', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1' });
+    const events: Array<{ reason: string; layerId?: string }> = [];
+    map.on('layerchange', (e) => events.push(e));
+    map.setFilter('l1', ['>', ['get', 'pop'], 100]);
+    expect(events).toContainEqual(expect.objectContaining({ reason: 'filter', layerId: 'l1' }));
+  });
+
+  it('setFilter does not touch undo history', () => {
+    const map = createBareMap();
+    registerMockSource(map, 'src1', createMockSource());
+    map.addLayer({ id: 'l1', type: 'circle', source: 'src1' });
+    map.setFilter('l1', ['>', ['get', 'pop'], 100]);
+    expect(map.canUndo()).toBe(false);
   });
 });
 

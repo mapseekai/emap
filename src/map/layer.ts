@@ -57,6 +57,8 @@ interface LayerSpecificationBase {
   source: string;
   'source-layer'?: string;
   layout?: LayerLayout;
+  /** 显示过滤器：MapLibre 子集表达式，必须逐要素求值为 boolean。数据不动，只影响渲染/拾取/属性过滤视图。 */
+  filter?: StyleExpression;
   /** 显式 opt-in：按图层类型读取 mapshaper 兼容烘焙颜色字段（fill / stroke）。 */
   styleSource?: 'mapshaper';
 }
@@ -109,12 +111,14 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
             }
           : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,
+        filter: layer.filter ? [...layer.filter] : undefined,
       };
     case 'circle':
       return {
         ...layer,
         paint: layer.paint ? { ...layer.paint } : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,
+        filter: layer.filter ? [...layer.filter] : undefined,
       };
   }
 }

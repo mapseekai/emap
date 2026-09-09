@@ -30,7 +30,7 @@ map.on('selectionchange', (e) => {
 });
 
 map.on('layerchange', (event) => {
-  const reason: 'add' | 'remove' | 'visibility' | 'effective' = event.reason;
+  const reason: 'add' | 'remove' | 'visibility' | 'effective' | 'filter' = event.reason;
   const layerId: string | undefined = event.layerId;
   const layers: readonly LayerSpecification[] = event.layers;
   // @ts-expect-error a layer change never has an arbitrary reason

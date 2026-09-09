@@ -17,7 +17,7 @@ export interface CameraEvent {
   originalEvent: MouseEvent | null;
 }
 
-export type LayerChangeReason = 'add' | 'remove' | 'visibility' | 'effective';
+export type LayerChangeReason = 'add' | 'remove' | 'visibility' | 'effective' | 'filter';
 
 export interface LayerChangeEvent {
   reason: LayerChangeReason;
