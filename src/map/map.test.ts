@@ -9271,3 +9271,126 @@ describe('Emap classifyFeatures (real baking + undo)', () => {
     expect(records.map((r) => r.fill)).toEqual([undefined, undefined, undefined]);
   });
 });
+
+describe('Emap queryFeatures with display filter', () => {
+  function createPickMap(points: Array<[number, number]>, values: number[]): Emap {
+    const map = createBareMap();
+    const records = values.map((v) => ({ v }));
+    const layer = {
+      name: 'points',
+      geometry_type: 'point' as const,
+      shapes: points.map((point) => [point]),
+      data: { getRecords: () => records },
+    };
+    const dataset = { layers: [layer] };
+    const source = {
+      id: 'src1',
+      type: 'topology' as const,
+      getDataset: () => dataset,
+      getLayers: () => dataset.layers,
+      getArcs: () => undefined,
+      getDisplayArcs: () => null,
+    };
+    (getPrivate(map, '_sources') as Map<string, unknown>).set('src1', source);
+    const query = new FeatureQuery(
+      getPrivate(map, '_sources') as ConstructorParameters<typeof FeatureQuery>[0],
+      () => new AffineTransform(),
+      () => ({ width: 100, height: 100 }),
+      () => 1,
+    );
+    query.setFeatureMaskProvider((sourceId, layerId) => {
+      if (sourceId !== 'src1' || layerId !== 'points') return null;
+      let union: Uint8Array | null = null;
+      for (const renderLayer of map.getRenderedLayers()) {
+        if (
+          renderLayer.source !== sourceId ||
+          renderLayer['source-layer'] !== layerId ||
+          renderLayer.layout?.visibility === 'none'
+        ) {
+          continue;
+        }
+        if (!renderLayer.filter) return null;
+        const mask = (getPrivate(map, '_filterResolver') as FilterResolver).mask({
+          layerId: renderLayer.id,
+          filter: renderLayer.filter,
+          dataset,
+          layer,
+        });
+        if (!mask) return null;
+        if (!union) union = mask.slice();
+        else for (let i = 0; i < union.length; i++) union[i]! |= mask[i]!;
+      }
+      return union;
+    });
+    setPrivate(map, '_featureQuery', query);
+    return map;
+  }
+
+  function addFilteredLayer(map: Emap, id = 'l1'): void {
+    map.addLayer({
+      id,
+      type: 'circle',
+      source: 'src1',
+      'source-layer': 'points',
+      filter: ['>', ['get', 'v'], 1],
+    });
+  }
+
+  it('filtered-out features are not pickable', () => {
+    const map = createPickMap(
+      [
+        [10, 10],
+        [100, 10],
+        [200, 10],
+      ],
+      [1, 2, 3],
+    );
+    addFilteredLayer(map);
+
+    expect(map.queryFeatures([10, 10])).toEqual([]);
+    expect(map.queryFeatures([100, 10]).map((feature) => feature.id)).toEqual([1]);
+  });
+
+  it('a visible runner-up is picked when the nearest feature is filtered out', () => {
+    const map = createPickMap(
+      [
+        [10, 10],
+        [15, 10],
+      ],
+      [0, 5],
+    );
+    addFilteredLayer(map);
+
+    expect(map.queryFeatures([11, 10]).map((feature) => feature.id)).toEqual([1]);
+  });
+
+  it('a hidden near point does not tighten the bullseye threshold', () => {
+    const map = createPickMap(
+      [
+        [1, 0],
+        [5, 0],
+      ],
+      [0, 5],
+    );
+    addFilteredLayer(map);
+
+    expect(map.queryFeatures([0, 0]).map((feature) => feature.id)).toEqual([1]);
+  });
+
+  it('a second unfiltered render layer on the same data layer keeps everything pickable', () => {
+    const map = createPickMap([[10, 10]], [0]);
+    addFilteredLayer(map);
+    map.addLayer({ id: 'l2', type: 'circle', source: 'src1', 'source-layer': 'points' });
+
+    expect(map.queryFeatures([10, 10]).map((feature) => feature.id)).toEqual([0]);
+  });
+
+  it('clearing the filter restores pickability', () => {
+    const map = createPickMap([[10, 10]], [0]);
+    addFilteredLayer(map);
+
+    expect(map.queryFeatures([10, 10])).toEqual([]);
+    map.setFilter('l1', null);
+    expect(map.queryFeatures([10, 10]).map((feature) => feature.id)).toEqual([0]);
+  });
+});

@@ -615,6 +615,7 @@ export class Emap extends EventDispatcher {
       () => ({ width: this._viewport.width, height: this._viewport.height }),
       () => this._viewport.initialMX,
     );
+    this._featureQuery.setFeatureMaskProvider(this._featureMaskForPick);
     this.features = new FeatureAccessor(this);
     const _self = this;
     this._featureEvents = new FeatureEventDispatcher({
@@ -1879,6 +1880,42 @@ export class Emap extends EventDispatcher {
     }
     return keys;
   }
+
+  /**
+   * Pick mask for a data layer: union of every visible render layer's display
+   * filter bound to it. A visible render layer without a filter makes the
+   * whole data layer pickable (returns null).
+   */
+  private _featureMaskForPick = (sourceId: string, dataLayerId: string): Uint8Array | null => {
+    const source = this._sources.get(sourceId);
+    if (!source) return null;
+    let union: Uint8Array | null = null;
+    for (const layer of this._getEffectiveLayers()) {
+      if (layer.source !== sourceId) continue;
+      if (layer.layout?.visibility === 'none') continue;
+      const ml = this.layers.resolve(layer.source, layer['source-layer']);
+      if (!ml?.shapes) continue;
+      const mapshaperLayers = source.getLayers() as MapshaperLayer[];
+      const idx = mapshaperLayers.indexOf(ml);
+      if (getLayerId(ml, idx >= 0 ? idx : 0) !== dataLayerId) continue;
+      if (!layer.filter) return null;
+      const dataset = source.getDataset?.();
+      if (!dataset) return null;
+      const mask = this._filterResolver.mask({
+        layerId: layer.id,
+        filter: layer.filter,
+        dataset,
+        layer: ml,
+      });
+      if (!mask) return null;
+      if (!union) {
+        union = mask.slice();
+      } else {
+        for (let i = 0; i < union.length; i++) union[i]! = union[i]! | mask[i]!;
+      }
+    }
+    return union;
+  };
 
   public getCRS(): string {
     return this._projection.crs;

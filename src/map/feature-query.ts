@@ -59,6 +59,9 @@ export class FeatureQuery {
   private _getSize: () => { width: number; height: number };
   private _getInitialMX: () => number;
 
+  private _featureMaskProvider: ((sourceId: string, layerId: string) => Uint8Array | null) | null =
+    null;
+
   // Per-(source, layer) Flatbush spatial index cache. Each entry records
   // shape count, arc count, and edit version so any change invalidates it:
   //   1. Dataset-replace ops change shape and/or arc counts.
@@ -82,6 +85,14 @@ export class FeatureQuery {
     this._getSize = getSize;
     this._getInitialMX = getInitialMX;
   }
+
+  /** Host wires the render-layer filter union here; null mask = no filtering. */
+  setFeatureMaskProvider(
+    fn: ((sourceId: string, layerId: string) => Uint8Array | null) | null,
+  ): void {
+    this._featureMaskProvider = fn;
+  }
+
 
   // ---------------------------------------------------------------------------
   // Spatial index — public surface
@@ -361,6 +372,7 @@ export class FeatureQuery {
     y: number,
     dist: number,
     dataset?: { editVersion?: number },
+    mask?: Uint8Array | null,
   ): HitCandidate[] {
     const cands: HitCandidate[] = [];
     const index: Record<number, HitCandidate> = {};
@@ -380,6 +392,7 @@ export class FeatureQuery {
     for (let i = 0; i < idCount; i++) {
       const shpId = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[shpId] as PathShape | null | undefined;
+      if (mask && mask[shpId] !== 1) continue;
       if (!shp) continue;
       for (let j = 0; j < shp.length; j++) {
         const part: PathPart = shp[j];
@@ -434,6 +447,7 @@ export class FeatureQuery {
     x: number,
     y: number,
     dataset?: { editVersion?: number },
+    mask?: Uint8Array | null,
   ): number[] {
     const adapter = getDefaultMapshaperAdapter();
     const toPx = Math.abs(this._getTransform().mx || 1);
@@ -457,6 +471,7 @@ export class FeatureQuery {
       const id = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[id];
       if (!shp) continue;
+      if (mask && mask[id] !== 1) continue;
       for (const p of normalizePointShape(shp)) {
         if (!p) continue;
         const dist = adapter.distance2D(x, y, p[0], p[1]) * toPx;
@@ -482,11 +497,22 @@ export class FeatureQuery {
     y: number,
     bufArg: number,
     dataset?: { editVersion?: number },
+    mask?: Uint8Array | null,
   ): number[] {
     const maxDist = this._getZoomAdjustedHitBuffer(15, 2);
     const bufPix = bufArg >= 0 ? bufArg : 0.05;
     const bufDist = this._getZoomAdjustedHitBuffer(bufPix, 0);
-    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
+    let cands = this._findHitCandidates(
+      sourceId,
+      layerIndex,
+      layer,
+      arcs,
+      x,
+      y,
+      maxDist,
+      dataset,
+      mask,
+    );
     this._sortByDistance(x, y, cands, arcs);
     cands = this._pickNearestCandidates(cands, bufDist, maxDist);
     return cands.length ? [cands[0].id] : [];
@@ -500,6 +526,7 @@ export class FeatureQuery {
     x: number,
     y: number,
     dataset?: { editVersion?: number },
+    mask?: Uint8Array | null,
   ): number[] {
     const adapter = getDefaultMapshaperAdapter();
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
@@ -512,6 +539,7 @@ export class FeatureQuery {
       y,
       maxDist,
       dataset,
+      mask,
     );
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
@@ -536,9 +564,10 @@ export class FeatureQuery {
     x: number,
     y: number,
     dataset?: { editVersion?: number },
+    mask?: Uint8Array | null,
   ): number[] {
-    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y, dataset);
-    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5, dataset);
+    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y, dataset, mask);
+    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5, dataset, mask);
     return a.length ? a : b;
   }
 
@@ -610,14 +639,15 @@ export class FeatureQuery {
       options,
       visibleLayers,
       (sourceId, layerId, layerIndex, layer, arcs, dataset) => {
+        const mask = this._featureMaskProvider?.(sourceId, layerId) ?? undefined;
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
-          ids = this._pointTest(sourceId, layerIndex, layer, mx, my, dataset);
+          ids = this._pointTest(sourceId, layerIndex, layer, mx, my, dataset, mask);
         } else if (geometryType === 'polyline' && arcs) {
-          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1, dataset);
+          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1, dataset, mask);
         } else if (geometryType === 'polygon' && arcs) {
-          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my, dataset);
+          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my, dataset, mask);
         }
         for (const id of ids) {
           this._pushResult(results, sourceId, layerId, geometryType, layer.data, id);
@@ -653,6 +683,7 @@ export class FeatureQuery {
       options,
       visibleLayers,
       (sourceId, layerId, layerIndex, layer, arcs, dataset) => {
+        const mask = this._featureMaskProvider?.(sourceId, layerId);
         const geometryType = layer.geometry_type;
         const table = layer.data;
         const bboxTmp: number[] = [];
@@ -668,6 +699,7 @@ export class FeatureQuery {
           const id = candidateIds !== null ? candidateIds[i] : i;
           const shp = layer.shapes![id];
           if (!shp) continue;
+          if (mask && mask[id] !== 1) continue;
           let hit = false;
           if (geometryType === 'point') {
             hit = normalizePointShape(shp).some(
