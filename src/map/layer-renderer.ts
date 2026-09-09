@@ -14,7 +14,6 @@ import { EMAP_THEME_COLORS } from '../theme/colors';
 import type { StyleResolution, StyleResolver } from './style-resolver';
 import { applyMaskToCandidates, type FilterResolver } from './filter-resolver';
 
-
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
   sources: ReadonlyMap<string, MutableTopologySource>;
