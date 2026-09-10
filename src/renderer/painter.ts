@@ -106,6 +106,8 @@ export interface CorePainter {
     shapes: readonly (FeatureShape | null | undefined)[],
     style: PointStyle,
     shapeIndices?: Uint32Array,
+    /** One original component per shapeIndices entry (MultiPoint LOD). */
+    componentIndices?: Uint32Array,
   ): void;
   drawPolygonFill(
     shapes: readonly (FeatureShape | null | undefined)[],

@@ -736,6 +736,7 @@ export class CanvasPainter implements EditPainter {
     _shapes: readonly (FeatureShape | null | undefined)[],
     _style: PointStyle,
     shapeIndices?: Uint32Array,
+    componentIndices?: Uint32Array,
   ): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
@@ -768,7 +769,11 @@ export class CanvasPainter implements EditPainter {
       const shape = _shapes[shapeIndices?.[shapeIndex] ?? shapeIndex];
       if (!shape) continue;
       const points = normalizePointShape(shape);
-      for (const p of points) {
+      const first = componentIndices?.[shapeIndex] ?? 0;
+      const end = componentIndices ? first + 1 : points.length;
+      for (let component = first; component < end; component++) {
+        const p = points[component];
+        if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
         if (x < left || x > right || y < top || y > bottom) continue;

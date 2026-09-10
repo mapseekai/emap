@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automatic density LOD for large circle layers, with stable original Point/MultiPoint
+  representatives, bounded scale caches and indexed warm pan queries. Configure
+  `pointLod: { cellSize: 8 }` or disable with `pointLod: false`.
+- Pointer picking follows painted representatives (including CSS snapshot navigation)
+  and selected/highlighted overlays. Range queries, edits, attributes, exports and
+  source-only snapshots retain original data. Includes a seeded dense-point example
+  with click and Shift-box selection for validating LOD selection semantics, plus
+  separate cold-build/warm-query benchmarks.
+
 ## [0.10.1] - 2026-09-09
 
 ### Maintenance

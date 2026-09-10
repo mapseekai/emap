@@ -62,6 +62,11 @@ export class HighlightManager {
     return removed;
   }
 
+  /** Original feature IDs drawn by the highlight overlay. */
+  getByLayer(source: string, layer: string): number[] {
+    return Array.from(this._highlighted.get(source)?.get(layer) ?? []);
+  }
+
   setHighlightStyle(style: HighlightStyle): boolean {
     this._highlightStyle = { ...this._highlightStyle, ...style };
     return this._highlighted.size > 0;

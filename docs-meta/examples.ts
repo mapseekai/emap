@@ -74,6 +74,10 @@ const route = (id: string) => `/examples/${id}/`;
 const sourceHtml = (id: string) => `packages/examples/examples/${id}/index.html`;
 
 const exampleDescriptions = {
+  'point-lod': {
+    zh: '用固定种子的十万或百万点比较自动 LOD、原始点绘制和过滤后的代表点。',
+    en: 'Compares automatic LOD, full-detail drawing and filtered representatives with 100k or 1M seeded points.',
+  },
   'getting-started/geojson-viewer': {
     zh: '加载同时包含点、线和面的 GeoJSON，并自动缩放到全部要素范围。',
     en: 'Loads GeoJSON containing points, lines, and polygons, then fits the map to every feature.',
@@ -752,6 +756,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('explode', 'data-analysis', '拆分多部件', 'Explode multipart features', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('buffer', 'data-analysis', '缓冲区', 'Buffer', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('simplify', 'data-analysis', '几何简化', 'Simplify geometry', [docsOperations, docsPerformance], 'Emap', ['spatial', 'history'], [task7Fixture]),
+  recipe('point-lod', 'style-interaction', '密集点 LOD', 'Dense point LOD', [docsPerformance, docsStyling, docsSelection], 'Emap', ['point-lod'], ['inline:seeded-points']),
   recipe('simplify-control', 'data-analysis', '简化控件', 'Simplify control', [docsOperations, docsControls, docsPerformance], 'Emap', ['spatial', 'controls', 'history'], [task7Fixture]),
   recipe('dissolve', 'data-analysis', '融合', 'Dissolve', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('innerlines', 'data-analysis', '抽取共享边', 'Innerlines', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),

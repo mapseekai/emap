@@ -75,6 +75,8 @@ export interface LineLayerSpecification extends LayerSpecificationBase {
 
 export interface CircleLayerSpecification extends LayerSpecificationBase {
   type: 'circle';
+  /** Automatic density thinning; false draws all points. Cell size is in CSS pixels (default 8). */
+  pointLod?: false | { cellSize?: number };
   paint?: CirclePaint;
 }
 
@@ -116,6 +118,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'circle':
       return {
         ...layer,
+        ...(layer.pointLod && { pointLod: { ...layer.pointLod } }),
         paint: layer.paint ? { ...layer.paint } : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,
         filter: layer.filter ? [...layer.filter] : undefined,

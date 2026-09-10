@@ -1,3 +1,4 @@
+import type { PointLodSelection } from '../renderer/point-lod';
 import Flatbush from 'flatbush';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { AffineTransform } from '../geo/transform';
@@ -42,6 +43,12 @@ interface IndexedLayerCacheEntry {
   value: Exclude<IndexedLayer, null>;
 }
 
+export interface PointLodPick {
+  selections: PointLodSelection[];
+  fullDetailMasks: (Uint8Array | null)[];
+  overlayIds: readonly number[];
+}
+
 interface HitCandidate {
   shape: PathShape;
   id: number;
@@ -61,6 +68,17 @@ export class FeatureQuery {
 
   private _featureMaskProvider: ((sourceId: string, layerId: string) => Uint8Array | null) | null =
     null;
+
+  private _pointLodProvider?: (
+    sourceId: string,
+    layer: MapshaperLayer,
+    bounds: readonly number[],
+  ) => PointLodPick | null;
+
+  /** @internal Render-only pointer candidates; never used by bbox/lasso/business queries. */
+  setPointLodProvider(provider: FeatureQuery['_pointLodProvider']): void {
+    this._pointLodProvider = provider;
+  }
 
   // Per-(source, layer) Flatbush spatial index cache. Each entry records
   // shape count, arc count, and edit version so any change invalidates it:
@@ -460,28 +478,46 @@ export class FeatureQuery {
     // y ± hitThresholdInData]`. Since we're working in data-space here,
     // convert the pixel threshold to data units via `1 / toPx`.
     const dataThresh = hitThreshold / (toPx || 1);
-    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined, dataset);
-    const candidateIds = indexed
-      ? indexed.index.search(x - dataThresh, y - dataThresh, x + dataThresh, y + dataThresh)
-      : null;
-    const idCount = candidateIds !== null ? candidateIds.length : shapes.length;
-
-    for (let i = 0; i < idCount; i++) {
-      const id = candidateIds !== null ? candidateIds[i] : i;
-      const shp = shapes[id];
-      if (!shp) continue;
-      if (mask && mask[id] !== 1) continue;
-      for (const p of normalizePointShape(shp)) {
-        if (!p) continue;
+    const lod = this._pointLodProvider?.(sourceId, layer, [
+      x - dataThresh,
+      y - dataThresh,
+      x + dataThresh,
+      y + dataThresh,
+    ]);
+    const testPoint = (id: number, component?: number): void => {
+      if (mask && mask[id] !== 1) return;
+      const points = normalizePointShape(shapes[id]);
+      const start = component ?? 0;
+      const end = component === undefined ? points.length : start + 1;
+      for (let c = start; c < end; c++) {
+        const p = points[c];
+        if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
         const dist = adapter.distance2D(x, y, p[0], p[1]) * toPx;
         if (dist > hitThreshold) continue;
-        if (dist < hitThreshold && hitThreshold > POINT_BULLSEYE_DIST) {
+        if (dist < hitThreshold && hitThreshold > POINT_BULLSEYE_DIST)
           hitThreshold = Math.max(POINT_BULLSEYE_DIST, dist);
-        }
         if (dist < bestDist) {
           bestDist = dist;
           bestId = id;
         }
+      }
+    };
+    if (lod) {
+      for (const selection of lod.selections)
+        for (let i = 0; i < selection.featureIds.length; i++)
+          testPoint(selection.featureIds[i], selection.componentIds[i]);
+      for (const id of lod.overlayIds) testPoint(id);
+    }
+    if (!lod || lod.fullDetailMasks.length) {
+      const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined, dataset);
+      const candidateIds = indexed
+        ? indexed.index.search(x - dataThresh, y - dataThresh, x + dataThresh, y + dataThresh)
+        : null;
+      const idCount = candidateIds !== null ? candidateIds.length : shapes.length;
+      for (let i = 0; i < idCount; i++) {
+        const id = candidateIds !== null ? candidateIds[i] : i;
+        if (lod && !lod.fullDetailMasks.some((filter) => !filter || filter[id] === 1)) continue;
+        testPoint(id);
       }
     }
     return bestId === -1 ? [] : [bestId];

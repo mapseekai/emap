@@ -1,3 +1,5 @@
+import { pointLodForPainter } from '../renderer/point-lod';
+import { HighlightManager } from './highlight-manager';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import mapshaper from 'mapshaper';
 import { Emap } from './map';
@@ -9429,5 +9431,183 @@ describe('Emap queryFeatures with display filter', () => {
     expect(map.queryFeatures([10, 10])).toEqual([]);
     map.setFilter('l1', null);
     expect(map.queryFeatures([10, 10]).map((feature) => feature.id)).toEqual([0]);
+  });
+});
+
+describe('Emap point LOD integration', () => {
+  function pointMap() {
+    const map = createBareMap();
+    const layer = {
+      name: 'points',
+      geometry_type: 'point' as const,
+      shapes: Array.from({ length: 20_000 }, (_, id) => [[id === 0 ? 1 : 7, 1]]),
+      data: getDefaultMapshaperAdapter().createDataTable(
+        Array.from({ length: 20_000 }, (_, id) => ({ id })),
+      ),
+    };
+    const dataset: MapshaperDataset = { layers: [layer], editVersion: 0, attributeVersion: 0 };
+    const source = createMockSource([layer]);
+    source.getDataset.mockReturnValue(dataset as never);
+    registerMockSource(map, 's', source);
+    const transform = new AffineTransform();
+    setPrivate(map, '_viewport', { transform, getViewBounds: () => [0, 0, 100, 100] });
+    setPrivate(map, '_painter', { drawPoints: vi.fn() });
+    const query = new FeatureQuery(
+      getPrivate(map, '_sources') as ConstructorParameters<typeof FeatureQuery>[0],
+      () => transform,
+      () => ({ width: 100, height: 100 }),
+      () => 1,
+    );
+    setPrivate(map, '_featureQuery', query);
+    setPrivate(map, '_highlightManager', new HighlightManager());
+    map.addLayer({ id: 'dots', source: 's', type: 'circle' });
+    return { map, layer, dataset, transform };
+  }
+
+  it('picks the drawn representative while range queries retain every original feature', () => {
+    const { map } = pointMap();
+    expect(map.queryFeatures([7, 1]).map((f) => f.id)).toEqual([0]);
+    expect(
+      map.queryFeatures([
+        [0, 0],
+        [8, 2],
+      ]),
+    ).toHaveLength(20_000);
+    expect(
+      map.queryFeatures([
+        [6, 0],
+        [8, 2],
+      ]),
+    ).toHaveLength(19_999);
+    map.removeLayer('dots');
+    map.addLayer({ id: 'dots', source: 's', type: 'circle', pointLod: false });
+    expect(map.queryFeatures([7, 1])[0].id).not.toBe(0);
+  });
+
+  it('keeps selected and highlighted original points pickable above LOD', () => {
+    const { map, layer } = pointMap();
+    layer.shapes[2] = [[6, 1]];
+    map.select([{ source: 's', layer: 'points', id: 1 }]);
+    expect(map.queryFeatures([7, 1])[0].id).toBe(1);
+    map.setHighlightedFeatures([{ source: 's', layer: 'points', id: 2 }]);
+    expect(map.queryFeatures([6, 1])[0].id).toBe(2);
+  });
+
+  it('picks the actually painted level throughout CSS snapshot zoom until redraw', () => {
+    const { map, transform } = pointMap();
+    callPrivate(map, '_renderLayers', 1, 1);
+    expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+    transform.scale(2, 0, 0);
+    // Fast navigation transforms the previous bitmap; no new level was painted.
+    expect(map.queryFeatures([14, 2])[0].id).toBe(0);
+    callPrivate(map, '_renderLayers', 0.5, 1);
+    expect(map.queryFeatures([14, 2])[0].id).toBe(1);
+  });
+
+  it('filters before picking and unions independent render layers without leaking hidden originals', () => {
+    const { map } = pointMap();
+    map.setFilter('dots', ['>', ['get', 'id'], 0]);
+    expect(map.queryFeatures([1, 1])[0].id).toBe(1);
+    map.addLayer({
+      id: 'all',
+      source: 's',
+      type: 'circle',
+      pointLod: false,
+      filter: ['==', ['get', 'id'], 0],
+    });
+    expect(map.queryFeatures([1, 1])[0].id).toBe(0);
+    map.setLayerVisibility('all', 'none');
+    expect(map.queryFeatures([1, 1])[0].id).toBe(1);
+  });
+
+  it('does not hit hidden components of a rendered MultiPoint feature', () => {
+    const { map, layer } = pointMap();
+    layer.shapes[0] = [
+      [1, 1],
+      [7, 1],
+    ];
+    layer.shapes[1] = [[10, 1]];
+    expect(map.queryFeatures([7, 1])[0].id).toBe(1);
+    map.select([{ source: 's', layer: 'points', id: 0 }]);
+    expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+  });
+
+  it('rebuilds after geometry edits and attribute changes, then restores original IDs', () => {
+    const { map, layer, dataset } = pointMap();
+    expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+    layer.shapes[0] = [[40, 40]];
+    dataset.editVersion!++;
+    expect(map.queryFeatures([7, 1])[0].id).toBe(1);
+    layer.shapes[0] = [[1, 1]];
+    dataset.editVersion!++;
+    expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+    map.setFilter('dots', ['>', ['get', 'id'], 0]);
+    expect(map.queryFeatures([1, 1])[0].id).toBe(1);
+    dataset.attributeVersion!++;
+    layer.data.getRecords()[0].id = 10;
+    expect(map.queryFeatures([1, 1])[0].id).toBe(0);
+  });
+
+  for (const sourceId of ['s', undefined]) {
+    it(`clears point LOD through the explicit spatial-cache escape hatch (${sourceId ?? 'all'})`, () => {
+      const { map, layer } = pointMap();
+      expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+      layer.shapes[0] = [[40, 40]];
+      map.clearSpatialIndex(sourceId);
+      expect(map.queryFeatures([7, 1]).map((feature) => feature.id)).toEqual([1]);
+    });
+  }
+
+  for (const action of ['layer', 'source', 'map'] as const) {
+    it(`releases the point cache when removing the ${action}`, () => {
+      const { map, layer, dataset } = pointMap();
+      expect(map.queryFeatures([7, 1])[0].id).toBe(0);
+      const cache = pointLodForPainter(getPrivate(map, '_painter') as object);
+      layer.shapes[0] = [[40, 40]];
+      if (action === 'layer') map.removeLayer('dots');
+      else if (action === 'source') map.removeSource('s');
+      else map.remove();
+      expect(
+        cache.query(
+          { id: 'dots', source: 's', type: 'circle' },
+          layer,
+          dataset,
+          null,
+          new AffineTransform(),
+          [0, 0, 8, 8],
+        )!.featureIds,
+      ).toEqual(new Uint32Array([1]));
+    });
+  }
+
+  it('validates pointLod and defensively clones input and returned layer snapshots', () => {
+    const { map } = pointMap();
+    for (const value of [
+      true,
+      null,
+      3,
+      [],
+      { cellSize: 0 },
+      { cellSize: Infinity },
+      { cellSize: 65 },
+      { cellSize: '8' },
+      { mode: 'cluster' },
+    ]) {
+      expect(() =>
+        map.addLayer({ id: 'bad', source: 's', type: 'circle', pointLod: value } as never),
+      ).toThrow(/pointLod/);
+    }
+    expect(() =>
+      map.addLayer({ id: 'bad', source: 's', type: 'line', pointLod: false } as never),
+    ).toThrow(/pointLod/);
+    const pointLod = { cellSize: 12 };
+    map.addLayer({ id: 'copy', source: 's', type: 'circle', pointLod });
+    pointLod.cellSize = 32;
+    const snapshot = map.getLayer('copy');
+    expect(snapshot).toMatchObject({ pointLod: { cellSize: 12 } });
+    if (snapshot?.type === 'circle' && snapshot.pointLod) snapshot.pointLod.cellSize = 64;
+    expect(map.getLayer('copy')).toMatchObject({ pointLod: { cellSize: 12 } });
+    const restored = JSON.parse(JSON.stringify(map.getLayers()));
+    expect(restored[1].pointLod).toEqual({ cellSize: 12 });
   });
 });
