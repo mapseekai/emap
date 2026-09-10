@@ -327,6 +327,7 @@ function fixture(type: 'circle' | 'line' | 'fill', classified: boolean) {
   const { painter } = createCanvasPainterHarness(context);
   painter.setTransform(viewport.transform);
   const layer: LayerSpecification = {
+    ...(type === 'circle' ? { pointLod: false as const } : {}),
     id: 'style',
     source: 's',
     type,
@@ -797,5 +798,82 @@ describe('renderLayers display filter', () => {
     expect(painter.drawPaths).not.toHaveBeenCalled();
     expect(painter.drawArcs).not.toHaveBeenCalled();
     expect(painter.drawPolygonFill).not.toHaveBeenCalled();
+  });
+});
+
+describe('automatic point LOD', () => {
+  it('reduces dense points without modifying original shapes', () => {
+    const { ctx, ml, events } = fixture('circle', false);
+    if (ctx.layers[0].type === 'circle') ctx.layers[0].pointLod = undefined;
+    ml.shapes = Array.from({ length: 10_000 }, (_, i) => [
+      [250 + (i % 100) / 100, 250 + Math.floor(i / 100) / 100],
+    ]);
+    const original = JSON.stringify(ml.shapes);
+    renderLayers(ctx, 1, 1);
+    expect(events.filter((event) => event[0] === 'arc').length).toBeLessThan(100);
+    expect(JSON.stringify(ml.shapes)).toBe(original);
+  });
+});
+
+describe('point LOD drawing contracts', () => {
+  it('keeps original MultiPoint components and attribute buckets at DPR 1 and 2', () => {
+    for (const ratio of [1, 2]) {
+      const { ctx, ml, events, dataset } = fixture('circle', true);
+      if (ctx.layers[0].type === 'circle') ctx.layers[0].pointLod = undefined;
+      ml.shapes = Array.from({ length: 20_000 }, () => [
+        [250, 250],
+        [250.1, 250.1],
+      ]);
+      ml.shapes[1] = [
+        [258, 250],
+        [266, 250],
+      ];
+      ml.data = getDefaultMapshaperAdapter().createDataTable(
+        ml.shapes.map((_, id) => ({ fill: id % 2 ? '#ff0000' : '#0000ff' })),
+      );
+      dataset.attributeVersion = 1;
+      ctx.painter.setPixelRatio(ratio);
+      const spy = vi.spyOn(ctx.painter, 'drawPoints');
+      renderLayers(ctx, 1, 1);
+      expect(spy.mock.calls).toHaveLength(2);
+      const calls = spy.mock.calls.map((call) => ({
+        color: call[1].color,
+        ids: [...call[2]!],
+        components: [...call[3]!],
+      }));
+      expect(calls).toEqual([
+        { color: '#0000ff', ids: [0], components: [0] },
+        { color: '#ff0000', ids: [1, 1], components: [0, 1] },
+      ]);
+      const first = events.find((event) => event[0] === 'arc')!;
+      expect(first.slice(1, 4)).toEqual([50 * ratio, 50 * ratio, 4 * ratio]);
+    }
+  });
+
+  it('warm filtered pans do not consult original candidates or hidden point coordinates', () => {
+    const { ctx, ml, dataset } = fixture('circle', false);
+    if (ctx.layers[0].type === 'circle') {
+      ctx.layers[0].pointLod = undefined;
+      ctx.layers[0].filter = ['>', ['get', 'id'], 0];
+    }
+    ml.shapes = Array.from({ length: 20_000 }, () => [[250, 250]]);
+    ml.data = getDefaultMapshaperAdapter().createDataTable(ml.shapes.map((_, id) => ({ id })));
+    dataset.attributeVersion = 1;
+    ctx.filterResolver = new FilterResolver();
+    const candidates = vi.fn(() => {
+      throw new Error('original spatial candidates');
+    });
+    ctx.getRenderCandidates = candidates;
+    renderLayers(ctx, 1, 1);
+    for (let id = 2; id < ml.shapes.length; id++) {
+      Object.defineProperty(ml.shapes[id]!, '0', {
+        get() {
+          throw new Error('hidden coordinate rescan');
+        },
+      });
+    }
+    ctx.viewport.pan(1, 0);
+    expect(() => renderLayers(ctx, 1, 1)).not.toThrow();
+    expect(candidates).not.toHaveBeenCalled();
   });
 });

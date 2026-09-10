@@ -1,3 +1,5 @@
+import { pointLodForPainter } from '../renderer/point-lod';
+import type { PointLodPick } from './feature-query';
 import { EventDispatcher } from '../core/events';
 import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
@@ -247,6 +249,29 @@ function assertValidPaint(
         }
         throw err;
       }
+    }
+  }
+}
+
+function assertValidPointLod(layer: LayerSpecification): void {
+  if ('pointLod' in layer && layer.pointLod !== undefined) {
+    const lod = layer.pointLod;
+    if (
+      layer.type !== 'circle' ||
+      (lod !== false &&
+        (!lod ||
+          typeof lod !== 'object' ||
+          Array.isArray(lod) ||
+          Object.keys(lod).some((key) => key !== 'cellSize') ||
+          (lod.cellSize !== undefined &&
+            (typeof lod.cellSize !== 'number' ||
+              !Number.isFinite(lod.cellSize) ||
+              lod.cellSize < 1 ||
+              lod.cellSize > 64))))
+    ) {
+      throw new Error(
+        `Layer "${layer.id}": pointLod must be false or { cellSize: 1..64 } on a circle layer`,
+      );
     }
   }
 }
@@ -1546,6 +1571,7 @@ export class Emap extends EventDispatcher {
     this._filterResolver.clear();
     this._defaultLayersDirty = true;
     this._featureQuery.clear(id);
+    if (this._painter) pointLodForPainter(this._painter).clearSource(id);
     this._invalidateShapeCachesForSources([id]);
     this._highlightManager.removeSource(id);
     const renderedLayersAfter = this.getRenderedLayers();
@@ -1649,6 +1675,7 @@ export class Emap extends EventDispatcher {
     if (this._layers.some((l) => l.id === layer.id)) {
       throw new Error(`Layer "${layer.id}" already exists`);
     }
+    assertValidPointLod(layer);
     assertValidPaint(layer.id, layer.paint);
     assertValidFilter(layer.id, layer.filter);
     if (before) {
@@ -1670,6 +1697,7 @@ export class Emap extends EventDispatcher {
     if (idx !== -1) {
       this._layers.splice(idx, 1);
       this._filterResolver.clear(id);
+      if (this._painter) pointLodForPainter(this._painter).clear(id);
       this._defaultLayersDirty = true;
       this._scheduleRender();
       this._fireLayerChange('remove', id);
@@ -2462,6 +2490,67 @@ export class Emap extends EventDispatcher {
     return this.queryFeatures([point.x, point.y]).some((feature) => this.isSelected(feature));
   }
 
+  private _pointLodForPick(
+    sourceId: string,
+    ml: MapshaperLayer,
+    bounds: readonly number[],
+  ): PointLodPick | null {
+    const source = this._sources.get(sourceId);
+    if (!source || !this._painter) return null;
+    const dataset = source.getDataset?.();
+    const selections: PointLodPick['selections'] = [];
+    const fullDetailMasks: PointLodPick['fullDetailMasks'] = [];
+    for (const spec of this._getEffectiveLayers()) {
+      if (
+        spec.type !== 'circle' ||
+        spec.source !== sourceId ||
+        spec.layout?.visibility === 'none' ||
+        this.layers.resolve(sourceId, spec['source-layer']) !== ml
+      )
+        continue;
+      const mask =
+        spec.filter && dataset
+          ? this._filterResolver.mask({ layerId: spec.id, filter: spec.filter, dataset, layer: ml })
+          : null;
+      const cache = pointLodForPainter(this._painter);
+      const painted = cache.queryPainted(spec, ml, dataset, mask, bounds);
+      const viewBounds = this._viewport.getViewBounds();
+      const padding =
+        (Number(spec.paint?.['circle-radius']) || 4) / Math.abs(this._viewport.transform.mx);
+      const renderBounds = viewBounds
+        ? [
+            viewBounds[0] - padding,
+            viewBounds[1] - padding,
+            viewBounds[2] + padding,
+            viewBounds[3] + padding,
+          ]
+        : null;
+      const lod =
+        painted !== undefined
+          ? painted
+          : cache.query(spec, ml, dataset, mask, this._viewport.transform, bounds, {
+              width: this._viewport.width ?? 1024,
+              height: this._viewport.height ?? 768,
+              getCandidates: () =>
+                renderBounds
+                  ? this._featureQuery.getRenderCandidates(sourceId, ml, renderBounds)
+                  : null,
+            });
+      if (lod) selections.push(lod);
+      else fullDetailMasks.push(mask);
+    }
+    if (!selections.length) return null;
+    const layerId = getLayerId(ml, source.getLayers().indexOf(ml));
+    return {
+      selections,
+      fullDetailMasks,
+      overlayIds: [
+        ...(this._selection?.getByLayer(sourceId, layerId) ?? []),
+        ...(this._highlightManager?.getByLayer(sourceId, layerId) ?? []),
+      ],
+    };
+  }
+
   public queryFeatures(
     geometryOrOptions?:
       | [number, number]
@@ -2470,6 +2559,9 @@ export class Emap extends EventDispatcher {
     options?: QueryFeaturesOptions,
   ): QueriedFeature[] {
     const visibleKeys = this._getVisibleLayerKeys();
+    this._featureQuery.setPointLodProvider?.((sourceId, layer, bounds) =>
+      this._pointLodForPick(sourceId, layer, bounds),
+    );
     const results = this._featureQuery.query(geometryOrOptions, options, visibleKeys);
     const renderRanks: MutableLayerValueIndex<number> = new globalThis.Map();
     const effectiveLayers = this._getEffectiveLayers();
@@ -2525,6 +2617,11 @@ export class Emap extends EventDispatcher {
    */
   public clearSpatialIndex(sourceId?: string): void {
     this._featureQuery.clear(sourceId);
+    if (this._painter) {
+      const lod = pointLodForPainter(this._painter);
+      if (sourceId === undefined) lod.clear();
+      else lod.clearSource(sourceId);
+    }
   }
 
   /** @internal Clear spatial indexes after an in-place edit. */
@@ -2884,6 +2981,7 @@ export class Emap extends EventDispatcher {
     // Per-source feature query + arc-flag caches.
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);
     this._layerArcIdsCache.clear();
+    if (this._painter) pointLodForPainter(this._painter).clear();
     this._sources.clear();
 
     // Released registered controls. Each `onRemove` is responsible for its

@@ -1,3 +1,4 @@
+import { pointLodForPainter } from '../renderer/point-lod';
 import type { Viewport } from '../geo/viewport';
 import type { CorePainter } from '../renderer/painter';
 import type { MutableTopologySource } from '../source/source';
@@ -42,12 +43,7 @@ const bucketMembership = new WeakMap<
   }
 >();
 
-function visibleStyleBuckets(
-  resolution: StyleResolution | null,
-  candidates: Uint32Array | null,
-  count: number,
-): StyleResolution | null {
-  if (!resolution || !candidates) return resolution;
+function getStyleMembership(resolution: StyleResolution, count: number) {
   let membership = bucketMembership.get(resolution);
   if (!membership || membership.count !== count) {
     const ids = new Uint32Array(count);
@@ -57,6 +53,16 @@ function visibleStyleBuckets(
     membership = { count, ids };
     bucketMembership.set(resolution, membership);
   }
+  return membership;
+}
+
+function visibleStyleBuckets(
+  resolution: StyleResolution | null,
+  candidates: Uint32Array | null,
+  count: number,
+): StyleResolution | null {
+  if (!resolution || !candidates) return resolution;
+  const membership = getStyleMembership(resolution, count);
   if (membership.candidates === candidates && membership.filtered) return membership.filtered;
   const lists: number[][] = resolution.buckets.map(() => []);
   for (const id of candidates) {
@@ -94,6 +100,8 @@ export function renderLayers(
   pixelSize: number,
   lineScale: number,
 ): void {
+  const pointLod = pointLodForPainter(ctx.painter);
+  pointLod.retainLayers(new Set(ctx.layers.map((layer) => layer.id)));
   for (const layer of ctx.layers) {
     if (layer.layout?.visibility === 'none') continue;
 
@@ -118,7 +126,7 @@ export function renderLayers(
         dataset,
         layer: ml,
       });
-      if (featureMask && !featureMask.some((v) => v === 1)) continue;
+      if (layer.type !== 'circle' && featureMask && !featureMask.some((v) => v === 1)) continue;
     }
     if (layer.type === 'line' && arcs) {
       renderLineLayer(
@@ -144,14 +152,7 @@ export function renderLayers(
       );
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
-      let candidates = getCandidates(
-        ctx,
-        layer.source,
-        ml,
-        (Number(style.radius) || 4) * pixelSize,
-      );
-      if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
-      const resolution = visibleStyleBuckets(
+      const fullResolution =
         ctx.styleResolver && dataset
           ? ctx.styleResolver.resolveCircle({
               layerId: layer.id,
@@ -160,10 +161,58 @@ export function renderLayers(
               dataset,
               layer: ml,
             })
-          : null,
-        candidates,
-        ml.shapes.length,
-      );
+          : null;
+      const radius = Number(style.radius) || 4;
+      const bounds = ctx.viewport.getViewBounds();
+      const padding = radius * pixelSize;
+      const lod =
+        bounds && ctx.viewport.transform
+          ? pointLod.query(
+              layer,
+              ml,
+              dataset,
+              featureMask,
+              ctx.viewport.transform,
+              [bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding],
+              {
+                width: ctx.viewport.width ?? 1024,
+                height: ctx.viewport.height ?? 768,
+                painting: true,
+                getCandidates: () => getCandidates(ctx, layer.source, ml, padding),
+              },
+            )
+          : null;
+      if (lod) {
+        if (!lod.featureIds.length) continue;
+        if (fullResolution) {
+          // One pass through survivors; styles still resolve by original feature ID.
+          const membership = getStyleMembership(fullResolution, ml.shapes.length);
+          const features: number[][] = fullResolution.buckets.map(() => []);
+          const components: number[][] = fullResolution.buckets.map(() => []);
+          for (let i = 0; i < lod.featureIds.length; i++) {
+            const bucket = membership.ids[lod.featureIds[i]] - 1;
+            if (bucket < 0) continue;
+            features[bucket].push(lod.featureIds[i]);
+            components[bucket].push(lod.componentIds[i]);
+          }
+          for (let b = 0; b < features.length; b++) {
+            if (!features[b].length) continue;
+            ctx.painter.drawPoints(
+              ml.shapes,
+              { ...style, color: fullResolution.styles[b], ...fullResolution.extras?.[b] },
+              Uint32Array.from(features[b]),
+              Uint32Array.from(components[b]),
+            );
+          }
+        } else {
+          ctx.painter.drawPoints(ml.shapes, style, lod.featureIds, lod.componentIds);
+        }
+        continue;
+      }
+      let candidates = getCandidates(ctx, layer.source, ml, padding);
+      if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
+      if (candidates?.length === 0) continue;
+      const resolution = visibleStyleBuckets(fullResolution, candidates, ml.shapes.length);
       if (resolution) {
         for (let i = 0; i < resolution.buckets.length; i++) {
           if (resolution.buckets[i].length === 0) continue;
