@@ -35,6 +35,12 @@ export type ExportFormat =
 export interface ExportOptions {
   format: ExportFormat;
   /**
+   * Opt into lossy automatic coordinate quantization for TopoJSON.
+   * Defaults to false: preserve coordinates during storage and roundtrips.
+   * Ignored for other formats.
+   */
+  quantization?: boolean;
+  /**
    * Geometry encoding for `geoparquet` / `geoarrow` output.
    * Defaults: `'wkb'` for geoparquet (max interop — DuckDB, GeoPandas, GDAL),
    * `'native'` (GeoArrow nested coordinate arrays) for geoarrow.

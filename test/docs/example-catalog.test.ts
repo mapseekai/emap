@@ -755,7 +755,14 @@ describe('example catalog metadata', () => {
         html.includes('installExampleMapUi(map') || html.includes('mountDuckDbSpatialExample'),
         `${example.id} installs shared map UI directly or through its DuckDB spatial runner`,
       ).toBe(true);
-      expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
+      if (example.id === 'create-layer') {
+        // This example creates data from scratch instead of uploading a fixture.
+        expect(parsed.querySelector('form#create-form')).not.toBeNull();
+        expect(parsed.querySelector('#create')).not.toBeNull();
+        expect(html).toContain('map.createLayer(');
+      } else {
+        expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
+      }
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
         /\.\.\/\.\.\/(?:dist|src)\//,
       );

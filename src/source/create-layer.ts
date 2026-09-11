@@ -2,14 +2,26 @@ import type { GeometryType, MapshaperDataset, MapshaperLayer } from '../types/ma
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { normalizeProjectCrsMetadata, resolveProjectCrsDefinition } from '../geo/crs-resolver';
 
-/** Field metadata for a newly created layer. Types describe defaults, not an expression schema. */
+/**
+ * Field metadata for a newly created layer. Types describe defaults, not an expression schema.
+ * @example
+ * const field: LayerFieldDefinition = { name: 'name', type: 'string', defaultValue: '' };
+ */
 export interface LayerFieldDefinition {
   readonly name: string;
   readonly type: 'string' | 'number' | 'boolean';
   readonly defaultValue?: string | number | boolean | null;
 }
 
-/** Options for creating one empty, editable data layer. */
+/**
+ * Options for creating one empty, editable data layer.
+ * @example
+ * const options: CreateLayerOptions = {
+ *   name: 'places', geometryType: 'point', crs: 'EPSG:4326',
+ *   fields: [{ name: 'name', type: 'string', defaultValue: '' }],
+ * };
+ * await map.createLayer('places', options);
+ */
 export interface CreateLayerOptions {
   name: string;
   geometryType: GeometryType;

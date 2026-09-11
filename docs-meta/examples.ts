@@ -532,7 +532,6 @@ const exampleDescriptions = {
 type ExampleId = keyof typeof exampleDescriptions;
 
 export const examples: readonly ExampleDefinition[] = [
-  recipe('create-layer', 'data-editing', '创建图层', 'Create a layer', [docsAttributes, docsEditing, docsCrs], 'Emap', ['drawing', 'attributes', 'history'], []),
   seed(
     'getting-started/geojson-viewer',
     'map-data',
@@ -702,6 +701,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('feature-selection', 'style-interaction', '要素选择', 'Feature selection', [docsSelection], 'Emap', ['selection', 'history'], [task6Fixture]),
   recipe('box-select', 'style-interaction', '拉框选择', 'Box select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'history'], [task6Fixture]),
   recipe('lasso-select', 'style-interaction', '拉框 / 套索选择切换', 'Box and lasso select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'lasso-select', 'history'], [task6Fixture]),
+  recipe('create-layer', 'data-editing', '创建图层', 'Create a layer', [docsAttributes, docsEditing, docsCrs], 'Emap', ['drawing', 'attributes', 'history'], []),
   recipe('attribute-editing', 'data-editing', '属性编辑', 'Attribute editing', [docsAttributes, docsEditing, docsUndoRedo], 'Emap', ['attributes', 'history'], [task6Fixture]),
   recipe('undo-redo', 'data-editing', '撤销 / 重做', 'Undo and redo', [docsUndoRedo, docsEditing], 'Emap', ['editing', 'history'], [task6Fixture]),
   recipe('attribute-expressions', 'data-editing', '属性表达式批量更新', 'Attribute expressions', [docsAttributes, docsOperations], 'Emap', ['expressions', 'attributes', 'history'], [task6Fixture]),

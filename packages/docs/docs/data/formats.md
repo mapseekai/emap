@@ -105,7 +105,9 @@ link.click();
 URL.revokeObjectURL(url);
 ```
 
-Shapefile 的 `.shp`、`.shx`、`.dbf` 和可选 `.prj` 文件会打包到一个 ZIP Blob。导出始终使用完整精度的几何。
+Shapefile 的 `.shp`、`.shx`、`.dbf` 和可选 `.prj` 文件会打包到一个 ZIP Blob。导出不使用渲染 LOD 简化。
+
+TopoJSON 默认保留坐标精度，不进行量化，适合保存、恢复和反复导入。若明确需要有损压缩，可使用 `source.export({ format: 'topojson', quantization: true })` 启用自动量化；该选项会移动顶点，不应用于内部数据中转。此前已量化的数据不能由关闭量化恢复精度，需重新导入原始文件。
 
 ## API
 

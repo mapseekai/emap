@@ -798,6 +798,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * `flatgeobuf`; import `@mapseekai/emap/arrow` for the Arrow formats and
    * register a FlatGeobuf plugin before exporting that format. Multi-file
    * shapefile output is packed into one ZIP Blob using fflate.
+   * TopoJSON preserves coordinates by default; `quantization: true` opts
+   * into a smaller but lossy automatic coordinate grid.
    */
   public async export(options: ExportOptions): Promise<Blob> {
     if (!this._dataset) {
@@ -849,7 +851,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       } else {
         // GeoJSON iterates shapes (orphans drop out naturally); TopoJSON
         // export dissolves arcs on its own copy. Both stay untouched.
-        files = adapter.exportFileContent(this._dataset, { format: options.format });
+        files = adapter.exportFileContent(this._dataset, {
+          format: options.format,
+          // Internal storage must not move vertices on every save/import.
+          // Mapshaper's automatic TopoJSON grid is lossy and may change after
+          // topology reconstruction, so quantization must be explicit.
+          ...(options.format === 'topojson'
+            ? { no_quantization: options.quantization !== true }
+            : {}),
+        });
       }
       return this._filesToBlob(files, options.format);
     } finally {

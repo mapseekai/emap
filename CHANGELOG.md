@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-11
+
 ### Added
 
+- Create empty layers with `map.createLayer()`, including a name, geometry type,
+  coordinate reference system, typed fields and default values. Includes an
+  interactive create-layer example.
 - Automatic density LOD for large circle layers, with stable original Point/MultiPoint
   representatives, bounded scale caches and indexed warm pan queries. Configure
   `pointLod: { cellSize: 8 }` or disable with `pointLod: false`.
@@ -17,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source-only snapshots retain original data. Includes a seeded dense-point example
   with click and Shift-box selection for validating LOD selection semantics, plus
   separate cold-build/warm-query benchmarks.
+
+### Fixed
+
+- TopoJSON export now preserves coordinate precision by default, preventing
+  coordinate shifts during repeated save/import and GeoJSON/Shapefile export
+  workflows. Set `quantization: true` to opt into the previous lossy automatic
+  quantization. Previously quantized data must be reimported from the original
+  source to recover its precision.
 
 ## [0.10.1] - 2026-09-09
 

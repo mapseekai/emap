@@ -105,7 +105,9 @@ link.click();
 URL.revokeObjectURL(url);
 ```
 
-Shapefile `.shp`, `.shx`, `.dbf`, and optional `.prj` files are packed into one ZIP Blob. Exports always use full-detail geometry.
+Shapefile `.shp`, `.shx`, `.dbf`, and optional `.prj` files are packed into one ZIP Blob. Exports do not use rendering LOD simplification.
+
+TopoJSON preserves coordinate precision without quantization by default, making it suitable for storage, restoration, and repeated imports. To explicitly enable lossy compression, use `source.export({ format: 'topojson', quantization: true })`. Automatic quantization moves vertices and should not be used for internal data transfers. Disabling quantization cannot restore precision already lost in stored data; reimport the original file instead.
 
 ## API
 

@@ -398,7 +398,10 @@ export interface MapshaperAdapter {
   ): Promise<ExportedFile[]>;
 
   /** Plain-text export (GeoJSON / TopoJSON). */
-  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[];
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string; no_quantization?: boolean },
+  ): ExportedFile[];
 
   // -- Format-module bridge (GeoParquet / GeoArrow) -----------------------
   // Used exclusively by src/arrow/* for direct (non-GeoJSON) conversion
@@ -1164,7 +1167,10 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.exportPackedDatasets(datasets, opts ?? {});
   }
 
-  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[] {
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string; no_quantization?: boolean },
+  ): ExportedFile[] {
     return mapshaper.internal.exportFileContent(dataset, opts);
   }
 
