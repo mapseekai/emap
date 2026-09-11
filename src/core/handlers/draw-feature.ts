@@ -1,6 +1,7 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { DrawOverlaySnapKind } from '../../renderer/painter';
 import { getLayerId } from '../../source/layer-utils';
+import { createLayerRecord } from '../../source/create-layer';
 import { FeatureCreateCommand } from '../../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../../types/mapshaper-types';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
@@ -384,7 +385,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     if (layer.data) {
       const records = layer.data.getRecords?.();
       if (records) {
-        appendedRecord = {};
+        appendedRecord = createLayerRecord(layer);
         records.push(appendedRecord);
       }
     }
@@ -414,7 +415,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       source: this._opts.source,
       layer: layerId,
       geometryType: this._opts.type,
-      properties: {},
+      properties: { ...appendedRecord },
     });
 
     // Clear drawing state and trigger re-render via source data event

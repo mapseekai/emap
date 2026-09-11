@@ -1,4 +1,6 @@
 import { EventDispatcher } from '../core/events';
+import { createLayerDataset, type CreateLayerOptions } from './create-layer';
+import { bindLayerFields } from './layer-fields';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzip, strFromU8, zipSync } from 'fflate';
@@ -149,6 +151,15 @@ export interface TopologySourceFromBytesOptions extends Omit<TopologySourceOptio
 }
 
 export class TopologySource extends EventDispatcher implements ITopologySource {
+  /** Create a detached empty layer with a name, CRS and optional field defaults. */
+  static async create(id: string, options: CreateLayerOptions): Promise<TopologySource> {
+    if (!id.trim()) throw new Error('Source id is required');
+    const dataset = await createLayerDataset(options);
+    const source = new TopologySource(id);
+    source.setDataset(dataset, false);
+    return source;
+  }
+
   public id: string;
   public type: 'topology' = 'topology';
   private _dataset: MapshaperDataset | undefined;
@@ -762,6 +773,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * @internal
    */
   public setDataset(dataset: MapshaperDataset, notify = true): void {
+    for (const layer of dataset.layers) bindLayerFields(layer);
     this._dataset = dataset;
     if (dataset.arcs) {
       this._displayArcs = new DisplayArcs(dataset.arcs);

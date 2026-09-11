@@ -90,6 +90,15 @@ export class AttributeOps {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');
+    if (
+      layer.fields &&
+      (!opts.field.trim() ||
+        (opts.defaultValue != null &&
+          !['string', 'number', 'boolean'].includes(typeof opts.defaultValue)) ||
+        (typeof opts.defaultValue === 'number' && !Number.isFinite(opts.defaultValue)))
+    ) {
+      return Err.validation('field', 'Schema fields require a name and a finite scalar default');
+    }
     const dataset = this._emap._sources.get(opts.source)?.getDataset();
     if (!dataset) return Err.notFound('source', opts.source);
     const cmd = new FieldAddCommand({
@@ -128,6 +137,9 @@ export class AttributeOps {
     const records = layer.data.getRecords?.();
     if (!records) return Err.validation('target', 'data table has no records');
     if (opts.from === opts.to) return Err.validation('to', '`from` and `to` are identical');
+    if (layer.fields && (!opts.to.trim() || layer.fields.some((field) => field.name === opts.to))) {
+      return Err.validation('to', 'Field name is empty or already exists in the schema');
+    }
     for (const r of records) {
       if (r && Object.hasOwn(r, opts.from) && Object.hasOwn(r, opts.to)) {
         return Err.validation('to', `would overwrite existing '${opts.to}' on at least one record`);

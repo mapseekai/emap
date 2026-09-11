@@ -74,6 +74,10 @@ const route = (id: string) => `/examples/${id}/`;
 const sourceHtml = (id: string) => `packages/examples/examples/${id}/index.html`;
 
 const exampleDescriptions = {
+  'create-layer': {
+    zh: '设置名称、几何类型、坐标系和字段，从空图层开始绘制并查看默认属性。',
+    en: 'Create an empty layer with a name, geometry type, CRS and fields, then draw features with default attributes.',
+  },
   'point-lod': {
     zh: '用固定种子的十万或百万点比较自动 LOD、原始点绘制和过滤后的代表点。',
     en: 'Compares automatic LOD, full-detail drawing and filtered representatives with 100k or 1M seeded points.',
@@ -528,6 +532,7 @@ const exampleDescriptions = {
 type ExampleId = keyof typeof exampleDescriptions;
 
 export const examples: readonly ExampleDefinition[] = [
+  recipe('create-layer', 'data-editing', '创建图层', 'Create a layer', [docsAttributes, docsEditing, docsCrs], 'Emap', ['drawing', 'attributes', 'history'], []),
   seed(
     'getting-started/geojson-viewer',
     'map-data',

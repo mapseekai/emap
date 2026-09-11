@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>创建图层 · Emap</title>
+  <style>
+    .panel { position: absolute; top: 12px; right: 12px; width: 360px; max-width: calc(100vw - 80px); max-height: 85vh; overflow: auto; z-index: 20; }
+    .field-row { display: grid; grid-template-columns: 1fr 90px 1fr 48px; gap: 4px; margin: 6px 0; }
+    .field-row input, .field-row select { min-width: 0; width: 100%; }
+    #records { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-size: 12px; }
+  </style>
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>创建图层</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>创建图层</h1></summary>
+    <div class="emap-example-workbench-body">
+      <form id="create-form" class="emap-example-section">
+        <div class="emap-example-field"><label for="name">图层名称</label><input id="name" value="调查点" required /></div>
+        <div class="emap-example-field"><label for="geometry">几何类型</label><select id="geometry"><option value="point">点</option><option value="polyline">线</option><option value="polygon">面</option></select></div>
+        <div class="emap-example-field"><label for="crs">输入坐标系</label><select id="crs"><option>EPSG:4326</option><option>EPSG:3857</option></select></div>
+        <p class="emap-example-hint">首个图层决定地图坐标系，后续图层自动转换到该坐标系。</p>
+        <p>字段：名称 / 类型 / 默认值</p>
+        <div id="fields"></div>
+        <p class="emap-example-hint">默认值留空为 null；布尔值填写 true 或 false。字段类型用于校验默认值，不是属性编辑约束。</p>
+        <button id="add-field" type="button">添加字段</button>
+        <button id="create" class="emap-example-primary-button" type="submit">创建并绘制</button>
+      </form>
+      <section class="emap-example-section">
+        <div class="emap-example-field"><label for="active">当前图层</label><select id="active" disabled></select></div>
+        <button id="draw" disabled>开始绘制</button><button id="stop" disabled>停止绘制</button>
+        <p class="emap-example-hint">点：单击。线/面：连续单击，双击完成。Esc 取消当前草图。左上角撤销/重做仅作用于要素编辑，不撤销图层创建。</p>
+        <p id="status" class="emap-example-status">无需导入文件，创建一个空图层即可开始。</p>
+        <pre id="records">尚未创建图层</pre>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+    import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, Bounds, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+    const $ = (id) => document.getElementById(id);
+    const sources = new Map();
+    let sequence = 0;
+
+    function addField(name = '', type = 'string', value = '') {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      row.innerHTML = '<input aria-label="字段名称" required /><select aria-label="字段类型"><option>string</option><option>number</option><option>boolean</option></select><input aria-label="默认值" placeholder="null" /><button type="button" aria-label="删除字段">删除</button>';
+      row.children[0].value = name;
+      row.children[1].value = type;
+      row.children[2].value = value;
+      row.children[3].onclick = () => row.remove();
+      $('fields').append(row);
+    }
+    addField('name', 'string', '新要素');
+    addField('height', 'number');
+    addField('checked', 'boolean', 'false');
+    $('add-field').onclick = () => addField();
+
+    function refresh() {
+      const source = sources.get($('active').value);
+      if (!source) return;
+      const layer = source.getLayers()[0];
+      $('records').textContent = JSON.stringify({
+        name: layer.name, crs: map.getCRS(),
+        fields: layer.fields, count: layer.shapes.length,
+        records: layer.data.getRecords().slice(-10),
+      }, null, 2);
+    }
+
+    function startDrawing() {
+      const id = $('active').value;
+      const layer = sources.get(id).getLayers()[0];
+      map.drawFeature.disable();
+      map.drawFeature.setOptions({ source: id, sourceLayer: layer.name, type: layer.geometry_type });
+      map.drawFeature.enable();
+      $('status').dataset.state = 'ready';
+      $('status').textContent = `正在绘制：${layer.name}。新要素会填入字段默认值。`;
+      refresh();
+    }
+
+    $('create-form').onsubmit = async (event) => {
+      event.preventDefault();
+      $('create').disabled = true;
+      map.drawFeature.disable();
+      try {
+        const fields = Array.from($('fields').children, (row) => {
+          const [nameInput, typeInput, valueInput] = row.children;
+          const type = typeInput.value;
+          const raw = valueInput.value;
+          if (type === 'boolean' && raw !== '' && raw !== 'true' && raw !== 'false') {
+            throw new Error('布尔默认值必须是 true 或 false');
+          }
+          if (type === 'number' && raw !== '' && (!raw.trim() || !Number.isFinite(Number(raw)))) {
+            throw new Error('数值默认值必须是有限数字');
+          }
+          return { name: nameInput.value.trim(), type, defaultValue: raw === '' ? null : type === 'number' ? Number(raw) : type === 'boolean' ? raw === 'true' : raw };
+        });
+        const id = `created-${++sequence}`;
+        const source = await map.createLayer(id, {
+          name: $('name').value.trim(), geometryType: $('geometry').value,
+          crs: $('crs').value, fields,
+        });
+        if (sources.size === 0) {
+          const size = $('crs').value === 'EPSG:3857' ? 1000000 : 10;
+          map.setExtent(new Bounds(-size, -size, size, size));
+        }
+        sources.set(id, source);
+        $('active').add(new Option(`${source.getLayers()[0].name} (${id})`, id));
+        $('active').value = id;
+        for (const control of ['active', 'draw', 'stop']) $(control).disabled = false;
+        startDrawing();
+      } catch (error) {
+        $('status').dataset.state = 'error';
+        $('status').textContent = error.message;
+      } finally {
+        $('create').disabled = false;
+      }
+    };
+    $('active').onchange = startDrawing;
+    $('draw').onclick = startDrawing;
+    $('stop').onclick = () => {
+      map.drawFeature.disable();
+      $('status').textContent = '绘制已停止，可平移和缩放地图。';
+    };
+    map.on('feature_created', refresh);
+    map.on('historychange', refresh);
+  </script>
+</body>
+</html>

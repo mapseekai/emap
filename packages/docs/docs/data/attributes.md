@@ -3,7 +3,7 @@ id: attributes
 slug: /data/attributes
 title: 属性
 api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions"]
-examples: ["attribute-editing","attribute-expressions","feature-attributes","join"]
+examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
 verifiedVersion: 0.9.1
 ---
@@ -83,6 +83,43 @@ map.attributes.setFeatureProperties(
 
 ## 管理字段
 
+### 创建带字段的空图层
+
+`map.createLayer(id, options)` 创建独立数据源并注册到地图，使用默认渲染样式。
+`geometryType` 支持 `point`、`polyline`、`polygon`，无需导入文件或添加占位要素。
+
+```ts
+const source = await map.createLayer('survey', {
+  name: '调查点',
+  geometryType: 'point',
+  crs: 'EPSG:4326',
+  fields: [
+    { name: 'name', type: 'string', defaultValue: '' },
+    { name: 'height', type: 'number' },
+    { name: 'checked', type: 'boolean', defaultValue: false },
+  ],
+});
+
+// 即使没有要素，字段名称和定义也可以读取。
+console.log(source.getLayers()[0].data?.getFields?.());
+console.log(source.getLayers()[0].fields);
+
+map.drawFeature.setOptions({ source: 'survey', sourceLayer: '调查点', type: 'point' });
+map.drawFeature.enable();
+```
+
+字段类型支持 `string`、`number`、`boolean`，用于验证创建时的默认值；未指定默认值时，
+绘制的新要素对应属性为 `null`。字段定义不是数据库约束，不会限制已有的表达式或属性编辑接口。
+字段名称必须非空且不重复，默认值必须与类型相符，数值必须有限。
+
+`crs` 指定数据源初始坐标系；地图已有坐标系时，新源会统一到地图坐标系。
+源 ID 必须唯一，失败通过 Promise rejection 返回。创建源本身不进入要素撤销历史，
+后续绘制、字段增删改支持正常撤销重做。
+
+只需构造数据源而暂不添加到地图时，使用 `await TopologySource.create(id, options)`，
+之后再 `await map.addSource(id, source)`。字段定义是 emap 图层元数据；GeoJSON 等交换格式
+不表示空表的字段类型和绘制默认值，不能依赖它们保存这些定义。
+
 字段操作针对 source layer 名称，并可撤销。重命名不会覆盖已有目标字段。
 
 ```ts
@@ -154,5 +191,6 @@ await map.ops.joinTable({
 
 - [要素属性](/mapseekai/emap/examples/feature-attributes/)
 - [属性编辑](/mapseekai/emap/examples/attribute-editing/)
+- [创建图层](/mapseekai/emap/examples/create-layer/)
 - [属性表达式](/mapseekai/emap/examples/attribute-expressions/)
 - [表连接](/mapseekai/emap/examples/join/)

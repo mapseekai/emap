@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DrawFeatureHandler, projectPointOnSegment } from './draw-feature';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { TopologySource } from '../../source/topology-source';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -43,6 +44,50 @@ function createMockMap(sources?: Record<string, unknown>) {
 }
 
 describe('DrawFeatureHandler draw-state defaults', () => {
+  it.each([
+    'point',
+    'polyline',
+    'polygon',
+  ] as const)('draws the first %s with declared defaults and preserves them through undo/redo', async (type) => {
+    const source = await TopologySource.create('draft', {
+      name: 'Draft',
+      geometryType: type,
+      crs: 'EPSG:4326',
+      fields: [
+        { name: 'label', type: 'string', defaultValue: 'new' },
+        { name: 'count', type: 'number' },
+        { name: 'active', type: 'boolean', defaultValue: false },
+      ],
+    });
+    const map = createMockMap({ draft: source });
+    const handler = new DrawFeatureHandler(map as any, { source: 'draft', type });
+    setPrivate(
+      handler,
+      '_vertices',
+      type === 'point'
+        ? [[0, 0]]
+        : [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+          ],
+    );
+    callPrivate(handler, '_commitFeature');
+    const layer = source.getLayers()[0];
+    expect(layer.shapes).toHaveLength(1);
+    expect(layer.data?.getRecords?.()).toEqual([{ label: 'new', count: null, active: false }]);
+    expect(map.fire).toHaveBeenCalledWith(
+      'feature_created',
+      expect.objectContaining({ properties: { label: 'new', count: null, active: false } }),
+    );
+    const command = map.pushCommand.mock.calls[0][0];
+    command.undo();
+    expect(layer.shapes).toHaveLength(0);
+    expect(layer.data?.getFields?.()).toEqual(['label', 'count', 'active']);
+    command.do();
+    expect(layer.shapes).toHaveLength(1);
+    expect(layer.data?.getRecords?.()).toEqual([{ label: 'new', count: null, active: false }]);
+  });
   it('skips distant arc vertices and segments when snapping on a large source', () => {
     const arcs = getDefaultMapshaperAdapter().createArcCollection([
       { xx: [0, 100], yy: [0, 0] },

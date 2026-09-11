@@ -196,6 +196,8 @@ export interface ReadonlyDataTable {
  * {@link PathLayer} / {@link PointLayer} where shapes carry a precise type.
  */
 export interface MapshaperLayer {
+  /** Optional creation schema, retained even when there are no records. */
+  fields?: readonly import('../source/create-layer').LayerFieldDefinition[];
   name?: string;
   id?: string;
   geometry_type?: GeometryType;
@@ -205,6 +207,7 @@ export interface MapshaperLayer {
 
 /** Deep read-only layer view exposed to package consumers. */
 export interface ReadonlyMapshaperLayer {
+  readonly fields?: readonly import('../source/create-layer').LayerFieldDefinition[];
   readonly name?: string;
   readonly id?: string;
   readonly geometry_type?: GeometryType;

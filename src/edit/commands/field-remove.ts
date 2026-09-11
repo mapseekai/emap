@@ -20,6 +20,7 @@ export interface FieldRemoveCommandOptions {
 export class FieldRemoveCommand implements EditCommand {
   readonly label: string;
   private _snapshot: globalThis.Map<number, unknown> = new globalThis.Map();
+  private _previousFields: MapshaperLayer['fields'];
 
   constructor(private readonly opts: FieldRemoveCommandOptions) {
     this.label = `Remove field ${opts.field}`;
@@ -29,6 +30,12 @@ export class FieldRemoveCommand implements EditCommand {
     const records = this.opts.layer.data?.getRecords?.();
     if (!records) return;
     this._snapshot.clear();
+    this._previousFields = this.opts.layer.fields;
+    if (this._previousFields) {
+      this.opts.layer.fields = this._previousFields.filter(
+        (field) => field.name !== this.opts.field,
+      );
+    }
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       if (r && Object.hasOwn(r, this.opts.field)) {
@@ -40,6 +47,7 @@ export class FieldRemoveCommand implements EditCommand {
   }
 
   undo(): void {
+    this.opts.layer.fields = this._previousFields;
     const records = this.opts.layer.data?.getRecords?.();
     if (!records) return;
     for (const [i, value] of this._snapshot) {

@@ -66,6 +66,28 @@ function deferred<T>(): {
 }
 
 describe('source loading preflight', () => {
+  it('creates and registers an empty layer using the existing project CRS', async () => {
+    const { map } = createBareMap();
+    const first = await map.createLayer('draft', {
+      name: 'Draft',
+      geometryType: 'polygon',
+      crs: 'EPSG:3857',
+    });
+    expect(map.getSource('draft')).toBe(first);
+    expect(map.getCRS()).toBe('EPSG:3857');
+    const second = await map.createLayer('points', {
+      name: 'Points',
+      geometryType: 'point',
+      crs: 'EPSG:4326',
+      fields: [{ name: 'label', type: 'string' }],
+    });
+    expect(second.getCRS()).toBe('EPSG:3857');
+    expect(second.getLayers()[0].data?.getFields?.()).toEqual(['label']);
+    await expect(
+      map.createLayer('draft', { name: 'Other', geometryType: 'point', crs: 'EPSG:4326' }),
+    ).rejects.toThrow();
+    expect(map.getSource('draft')).toBe(first);
+  });
   it('requires sourceCrs without changing state for a Shapefile missing its .prj', async () => {
     const { map, viewportSetCrs } = createBareMap();
     const dataset: MapshaperDataset = { layers: [], info: { input_files: ['unknown.shp'] } };

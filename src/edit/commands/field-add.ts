@@ -24,6 +24,7 @@ export class FieldAddCommand implements EditCommand {
   readonly label: string;
   /** Indices of records this command added the key to (used by undo). */
   private _addedIndices: number[] = [];
+  private _previousFields: MapshaperLayer['fields'];
 
   constructor(private readonly opts: FieldAddCommandOptions) {
     this.label = `Add field ${opts.field}`;
@@ -33,6 +34,24 @@ export class FieldAddCommand implements EditCommand {
     const records = this.opts.layer.data?.getRecords?.();
     if (!records) return;
     const value = this.opts.defaultValue ?? null;
+    this._previousFields = this.opts.layer.fields;
+    if (
+      this._previousFields &&
+      !this._previousFields.some((field) => field.name === this.opts.field)
+    ) {
+      const type = typeof value;
+      if (value !== null && type !== 'string' && type !== 'number' && type !== 'boolean') {
+        throw new Error('Field default must be a string, number, boolean or null');
+      }
+      this.opts.layer.fields = [
+        ...this._previousFields,
+        {
+          name: this.opts.field,
+          type: type === 'number' || type === 'boolean' ? type : 'string',
+          defaultValue: value as string | number | boolean | null,
+        },
+      ];
+    }
     this._addedIndices = [];
     for (let i = 0; i < records.length; i++) {
       if (records[i] && !Object.hasOwn(records[i], this.opts.field)) {
@@ -49,6 +68,7 @@ export class FieldAddCommand implements EditCommand {
   }
 
   undo(): void {
+    this.opts.layer.fields = this._previousFields;
     const records = this.opts.layer.data?.getRecords?.();
     if (!records) return;
     for (const i of this._addedIndices) {

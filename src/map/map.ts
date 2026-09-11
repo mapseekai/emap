@@ -43,6 +43,7 @@ import {
   type TopologySource,
 } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
+import type { CreateLayerOptions } from '../source/create-layer';
 import { ScrollZoomHandler } from '../core/handlers/scroll-zoom';
 import type { ScrollZoomOptions } from '../core/handlers/scroll-zoom';
 import { DragPanHandler } from '../core/handlers/drag-pan';
@@ -1284,6 +1285,20 @@ export class Emap extends EventDispatcher {
             },
           ];
     throw new SourceLoadError(diagnostics[0].code, diagnostics);
+  }
+
+  /**
+   * Create and register one empty editable data layer in its own source.
+   * Uses automatic default rendering, like addSource; addLayer can customize styling.
+   * Registration is not an undoable feature edit. Drawn features use normal history.
+   */
+  public async createLayer(
+    id: string,
+    options: CreateLayerOptions,
+  ): Promise<ConcreteTopologySource> {
+    const source = await ConcreteTopologySource.create(id, options);
+    await this.addSource(id, source);
+    return source;
   }
 
   /** Atomically normalize and register a source from a ready preflight plan. */

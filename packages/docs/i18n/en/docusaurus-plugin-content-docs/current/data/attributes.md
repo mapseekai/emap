@@ -3,7 +3,7 @@ id: attributes
 slug: /data/attributes
 title: Attributes
 api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions"]
-examples: ["attribute-editing","attribute-expressions","feature-attributes","join"]
+examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
 verifiedVersion: 0.9.1
 ---
@@ -84,6 +84,43 @@ A complete no-op returns a validation error and creates no history entry.
 
 ## Manage fields
 
+### Create an empty layer with fields
+
+`map.createLayer(id, options)` creates and registers a separate source with default rendering.
+`geometryType` supports `point`, `polyline`, and `polygon`; no imported file or placeholder feature is needed.
+
+```ts
+const source = await map.createLayer('survey', {
+  name: 'Survey points',
+  geometryType: 'point',
+  crs: 'EPSG:4326',
+  fields: [
+    { name: 'name', type: 'string', defaultValue: '' },
+    { name: 'height', type: 'number' },
+    { name: 'checked', type: 'boolean', defaultValue: false },
+  ],
+});
+
+// Field names and definitions are available even before drawing a feature.
+console.log(source.getLayers()[0].data?.getFields?.());
+console.log(source.getLayers()[0].fields);
+
+map.drawFeature.setOptions({ source: 'survey', sourceLayer: 'Survey points', type: 'point' });
+map.drawFeature.enable();
+```
+
+Field types are `string`, `number`, and `boolean`. They validate creation defaults, not later
+expressions or property edits. Omitted defaults become `null` on newly drawn features.
+Names must be nonempty and unique; defaults must match their types, with finite numbers.
+
+`crs` specifies the initial source CRS. An established map normalizes the new source to its project CRS.
+Source IDs must be unique, and failures reject the returned promise. Source creation does not enter
+feature history; subsequent drawing and field edits support undo/redo.
+
+Use `await TopologySource.create(id, options)` to prepare a detached source, then register it with
+`await map.addSource(id, source)`. Definitions are emap layer metadata; exchange formats such as
+GeoJSON do not represent empty-table field types or drawing defaults and cannot preserve them.
+
 Field operations target a source-layer name and are undoable. Rename does not overwrite an existing destination field.
 
 ```ts
@@ -155,5 +192,6 @@ Attribute operations normally preserve feature IDs and selection. Operations tha
 
 - [Feature attributes](/mapseekai/emap/examples/feature-attributes/)
 - [Attribute editing](/mapseekai/emap/examples/attribute-editing/)
+- [Create a layer](/mapseekai/emap/examples/create-layer/)
 - [Attribute expressions](/mapseekai/emap/examples/attribute-expressions/)
 - [Table join](/mapseekai/emap/examples/join/)

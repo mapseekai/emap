@@ -22,6 +22,7 @@ import '../shim';
 import 'mapshaper';
 import mapshaper from 'mapshaper';
 import { collectTransferables } from './transferables';
+import { packLayerFields, restoreLayerFields, runWithLayerFields } from '../source/layer-fields';
 
 interface ParsedCommandWire {
   name: string;
@@ -63,26 +64,42 @@ async function handleRun(req: RunRequest): Promise<void> {
     if (!datasets || datasets.length === 0) {
       throw new Error('worker: packed payload contained no datasets');
     }
+    restoreLayerFields(packed, datasets);
 
     // mapshaper writes results back into a Job's catalog. We seed the
     // catalog with the first restored dataset (matches main-thread runner).
     const job = new mapshaper.internal.Job();
     job.catalog.addDataset(datasets[0]);
-
-    const finished: any = await new Promise((resolve, reject) => {
-      mapshaper.internal.runParsedCommands(commands, job, (err: any, fin: any) => {
-        if (err) reject(err);
-        else resolve(fin);
+    const execute = async (
+      activeJob: InstanceType<typeof mapshaper.internal.Job>,
+      steps: ParsedCommandWire[],
+    ) => {
+      const finished: any = await new Promise((resolve, reject) => {
+        mapshaper.internal.runParsedCommands(steps, activeJob, (err: any, fin: any) => {
+          if (err) reject(err);
+          else resolve(fin);
+        });
       });
-    });
-
-    const targets = finished.catalog.getDefaultTargets();
-    if (targets.length === 0) {
-      throw new Error('mapshaper command completed but produced no default target');
-    }
-    const result = targets[0].dataset;
+      const targets = finished.catalog.getDefaultTargets();
+      if (targets.length === 0)
+        throw new Error('mapshaper command completed but produced no default target');
+      return targets[0].dataset;
+    };
+    const result = await runWithLayerFields(
+      datasets[0],
+      commands,
+      (steps) => execute(job, steps),
+      (records) => new mapshaper.internal.DataTable(records),
+      () => job.catalog.getDefaultTargets().flatMap((target) => target.layers),
+      (dataset, steps) => {
+        const schemaJob = new mapshaper.internal.Job();
+        schemaJob.catalog.addDataset(dataset);
+        return execute(schemaJob, steps);
+      },
+    );
 
     const repacked = await mapshaper.internal.exportDatasetsToPack([result], { compact: false });
+    packLayerFields(repacked, [result]);
 
     const transferList = collectTransferables(repacked);
     (self as unknown as Worker).postMessage({ id, type: 'ok', packed: repacked }, transferList);

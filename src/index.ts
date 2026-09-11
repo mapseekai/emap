@@ -13,6 +13,7 @@ import './shim';
 // Core orchestrator + types
 // ===========================================================================
 export { Emap } from './map/map';
+export type { CreateLayerOptions, LayerFieldDefinition } from './source/create-layer';
 export type {
   MapOptions,
   // map options + view

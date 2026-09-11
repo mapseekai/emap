@@ -20,17 +20,25 @@ export interface FieldRenameCommandOptions {
 export class FieldRenameCommand implements EditCommand {
   readonly label: string;
   private _renamedIndices: number[] = [];
+  private _previousFields: MapshaperLayer['fields'];
 
   constructor(private readonly opts: FieldRenameCommandOptions) {
     this.label = `Rename field ${opts.from} → ${opts.to}`;
   }
 
   do(): void {
+    this._previousFields = this.opts.layer.fields;
+    if (this._previousFields) {
+      this.opts.layer.fields = this._previousFields.map((field) =>
+        field.name === this.opts.from ? { ...field, name: this.opts.to } : field,
+      );
+    }
     this._renamedIndices = rename(this.opts.layer, this.opts.from, this.opts.to);
     bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
+    this.opts.layer.fields = this._previousFields;
     rename(this.opts.layer, this.opts.to, this.opts.from, this._renamedIndices);
     bumpAttributeVersion(this.opts.dataset);
   }

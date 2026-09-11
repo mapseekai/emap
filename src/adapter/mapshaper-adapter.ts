@@ -20,6 +20,7 @@
 // resolves a singleton via {@link getDefaultMapshaperAdapter} when no explicit
 // adapter is supplied.
 
+import { packLayerFields, restoreLayerFields, runWithLayerFields } from '../source/layer-fields';
 import {
   absArcId,
   type ArcCollection,
@@ -1125,20 +1126,24 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return { xmin: bb.xmin, ymin: bb.ymin, xmax: bb.xmax, ymax: bb.ymax };
   }
 
-  exportDatasetsToPack(
+  async exportDatasetsToPack(
     datasets: MapshaperDataset[],
     opts?: { compact?: boolean },
   ): Promise<PackedSession> {
-    return mapshaper.internal.exportDatasetsToPack(datasets, opts ?? {});
+    const packed = await mapshaper.internal.exportDatasetsToPack(datasets, opts ?? {});
+    packLayerFields(packed, datasets);
+    return packed;
   }
 
-  restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }> {
+  async restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }> {
     // mapshaper's `.d.ts` insists `datasets` is required on the input; our
     // public `PackedSession` keeps it optional so callers can spread `emap`
     // metadata onto a fresh object. Cast on the way down.
-    return mapshaper.internal.restoreSessionData(
+    const restored = await mapshaper.internal.restoreSessionData(
       packed as { [k: string]: unknown; datasets: unknown[] },
     );
+    restoreLayerFields(packed, restored.datasets);
+    return restored;
   }
 
   pack(obj: PackedSession): Uint8Array {
@@ -1197,7 +1202,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     dataset: MapshaperDataset,
     inputFiles?: RunnerInputFiles,
   ): Promise<MapshaperDataset> {
-    return this._runParsedCommands(mapshaper.internal.parseCommands(cmd), dataset, inputFiles);
+    return this.runOnDatasetParsed(mapshaper.internal.parseCommands(cmd), dataset, inputFiles);
   }
 
   runOnDatasetParsed(
@@ -1205,17 +1210,27 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     dataset: MapshaperDataset,
     inputFiles?: RunnerInputFiles,
   ): Promise<MapshaperDataset> {
-    return this._runParsedCommands(commands, dataset, inputFiles);
+    const job = new mapshaper.internal.Job();
+    job.catalog.addDataset(dataset);
+    return runWithLayerFields(
+      dataset,
+      commands,
+      (steps) => this._runParsedCommands(steps, dataset, inputFiles, job),
+      (records) => this.createDataTable(records),
+      () => job.catalog.getDefaultTargets().flatMap((target) => target.layers),
+      (working, steps) => this._runParsedCommands(steps, working, inputFiles),
+    );
   }
 
   private _runParsedCommands(
     commands: ParsedCommand[],
     dataset: MapshaperDataset,
     inputFiles?: RunnerInputFiles,
+    existingJob?: InstanceType<typeof mapshaper.internal.Job>,
   ): Promise<MapshaperDataset> {
     return new Promise((resolve, reject) => {
-      const job = new mapshaper.internal.Job();
-      job.catalog.addDataset(dataset);
+      const job = existingJob ?? new mapshaper.internal.Job();
+      if (!existingJob) job.catalog.addDataset(dataset);
       if (inputFiles) {
         // mapshaper resolves filename references in command args via
         // `cli.readFile(name, null, opts.input)`, so the cache must be present
