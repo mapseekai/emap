@@ -364,6 +364,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         if (data.length === 0) {
           throw new Error('setData received an empty array; nothing to import');
         }
+        const originsByBasename = new Map<string, string>();
+        const addInputFile = (filename: string, content: Uint8Array | string, origin: string) => {
+          const basename = filename.split('/').pop() || filename;
+          const key = basename.toLowerCase();
+          const previousOrigin = originsByBasename.get(key);
+          if (previousOrigin !== undefined) {
+            throw new Error(
+              `Import contains duplicate basename "${basename}" in "${previousOrigin}" and "${origin}"`,
+            );
+          }
+          originsByBasename.set(key, origin);
+          inputFiles[filename] = content;
+        };
         for (const entry of data) {
           if (this._isZipFile(entry.filename)) {
             const extracted = await this._extractZip(entry.content);
@@ -372,14 +385,16 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
               throw new Error(`No importable file found in zip archive: ${entry.filename}`);
             }
             for (const [name, content] of Object.entries(extracted)) {
-              inputFiles[name] = content;
+              addInputFile(name, content, `${entry.filename}/${name}`);
             }
             primaryFiles.push(...primaries);
           } else {
             // KML goes through DOMParser and needs a string, not bytes.
-            inputFiles[entry.filename] = /\.kml$/i.test(entry.filename)
-              ? strFromU8(entry.content)
-              : entry.content;
+            addInputFile(
+              entry.filename,
+              /\.kml$/i.test(entry.filename) ? strFromU8(entry.content) : entry.content,
+              entry.filename,
+            );
             primaryFiles.push(entry.filename);
           }
         }

@@ -12,8 +12,8 @@ const ZOOM_TICK_FRACTION = 0.12;
 /** Animated zoom step factor for zoomIn / zoomOut */
 const ZOOM_STEP_FACTOR = 1.15;
 
-/** Web Mercator y-axis limit (approx ±85.06° lat) */
-const WEB_MERCATOR_Y_LIMIT = 18485274.7;
+/** Canonical EPSG:3857 world Y limit at ±85.0511287798066° latitude. */
+const WEB_MERCATOR_MAX_Y = 6378137 * Math.PI;
 
 /** Minimum floating point scale to prevent overflow */
 const MIN_PIXEL_SCALE = 1e-16;
@@ -299,7 +299,7 @@ export class Viewport {
   private _getStrictBounds(): Bounds | null {
     const crs = this._crs.toLowerCase();
     if (crs === 'epsg:3857' || crs === 'webmercator') {
-      return new Bounds(-Infinity, -WEB_MERCATOR_Y_LIMIT, Infinity, WEB_MERCATOR_Y_LIMIT);
+      return new Bounds(-Infinity, -WEB_MERCATOR_MAX_Y, Infinity, WEB_MERCATOR_MAX_Y);
     }
     return null;
   }
@@ -308,7 +308,7 @@ export class Viewport {
     const crs = this._crs.toLowerCase();
     let worldHeight: number;
     if (crs === 'epsg:3857' || crs === 'webmercator') {
-      worldHeight = WEB_MERCATOR_Y_LIMIT * 2;
+      worldHeight = WEB_MERCATOR_MAX_Y * 2;
     } else if (crs === 'epsg:4326' || crs === 'wgs84') {
       worldHeight = 180;
     } else {

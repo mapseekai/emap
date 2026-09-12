@@ -143,7 +143,10 @@ function partCoordinates(
   arcs: NonNullable<MapshaperDataset['arcs']>,
 ): Coordinate[] {
   const segments = shapeSegments([part.slice()], arcs);
-  return segments.map(([start]) => start).concat(segments.at(-1)?.[1] ?? []);
+  const coordinates = segments.map(([start]) => start);
+  const last = segments.at(-1);
+  if (last) coordinates.push(last[1]);
+  return coordinates;
 }
 
 function validateNewLine(
@@ -204,7 +207,8 @@ function validateNewPolygon(
   const existing = exteriors[0];
   if (!existing) return 'selected polygon geometry is invalid';
   const existingCoordinates = partCoordinates(shape[existing.exteriorIndex]!, arcs);
-  if (shoelaceArea(part) * shoelaceArea(existingCoordinates) < 0)
+  // addPart reverses input coordinates before storing the new exterior.
+  if (shoelaceArea(part) * shoelaceArea(existingCoordinates) > 0)
     return 'part orientation must match existing exteriors';
   return null;
 }

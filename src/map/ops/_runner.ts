@@ -823,18 +823,30 @@ function commitDatasetReplace(
   transaction: TransactionInternal | null,
 ): OpResult {
   reuseUnchangedDatasetState(before, after, effect);
+  if (effectInvalidatesSelection(effect)) {
+    commitDatasetReplaceSelection(
+      host,
+      sourceId,
+      source,
+      before,
+      after,
+      label,
+      host._selection.snapshot(),
+      [],
+      transaction,
+    );
+    return OK;
+  }
   transaction?._captureFirstTouch(sourceId, before);
   if (before.editVersion !== undefined) after.editVersion = before.editVersion;
   if (before.attributeVersion !== undefined) after.attributeVersion = before.attributeVersion;
   source.setDataset(after, false);
   const command = new DatasetReplaceCommand({ source, before, after, label });
   host._history.push(command);
-  const selectionDiff = effectInvalidatesSelection(effect) ? host._selection.clear() : null;
   host._invalidateShapeCachesForSources([sourceId]);
   host._scheduleRender();
   command.publish();
   if (!host._history.isCapturing()) host._fireHistoryChange();
-  if (selectionDiff) host._fireSelectionChange(selectionDiff);
   return OK;
 }
 

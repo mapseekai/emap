@@ -9,7 +9,7 @@ import type { OpContext } from './_context';
 import { Err, okValue, type OpResult } from '../op-result';
 import { Selection } from '../selection';
 import { addPart, deletePart } from './parts';
-import { shapeSegments, shoelaceArea } from './geometry-2d';
+import { shapeSegments, shoelaceArea, validatePolygon } from './geometry-2d';
 
 const adapter = getDefaultMapshaperAdapter();
 type Position = [number, number];
@@ -154,6 +154,29 @@ describe('addPart', () => {
       shapeSegments([shape[1]!], fixture.dataset().arcs!).map(([start]) => start),
     );
     expect(Math.sign(first)).toBe(Math.sign(second));
+    expect(() => validatePolygon(shape, fixture.dataset().arcs!, adapter)).not.toThrow();
+    expect(exported(fixture.dataset()).type).toBe('MultiPolygon');
+  });
+
+  it('rejects reversed polygon part winding without changing geometry or history', async () => {
+    const dataset = await importDataset({ type: 'Polygon', coordinates: [square] });
+    const before = exported(dataset);
+    const beforeArcCount = dataset.arcs!.size();
+    const fixture = integrationHarness(dataset);
+
+    const result = await fixture.ops.addPart({
+      coordinates: [
+        [20, 0],
+        [20, 10],
+        [30, 10],
+        [30, 0],
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'part' } });
+    expect(exported(fixture.source.getDataset())).toEqual(before);
+    expect(dataset.arcs!.size()).toBe(beforeArcCount);
+    expect(fixture.history.entries).toHaveLength(0);
   });
 
   it('rejects a stale prepared dataset without mutating or recording history', async () => {

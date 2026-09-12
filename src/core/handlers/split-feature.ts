@@ -52,6 +52,11 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
   private readonly _onSelectionChangeBound = () => this._onSelectionChange();
+  private readonly _onSourceDataBound = (event: { sourceId?: string }) => {
+    if (this._map.getSelection().some((ref) => ref.source === event.sourceId)) {
+      this._onSelectionChange();
+    }
+  };
 
   constructor(
     private readonly _map: EditHandlerHost,
@@ -75,6 +80,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._map.setEditMode('split');
     window.addEventListener('keydown', this._onKeyDownBound);
     this._map.on('selectionchange', this._onSelectionChangeBound);
+    this._map.on('data', this._onSourceDataBound);
+    this._map.on('crschange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
   }
 
@@ -85,6 +92,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
     this._map.off('selectionchange', this._onSelectionChangeBound);
+    this._map.off('data', this._onSourceDataBound);
+    this._map.off('crschange', this._onSelectionChangeBound);
     this._map.setEditMode('none');
     this._manager?.refreshCursor();
     this._map.render();
@@ -147,6 +156,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
     this._map.off('selectionchange', this._onSelectionChangeBound);
+    this._map.off('data', this._onSourceDataBound);
+    this._map.off('crschange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
     this._map.render();
   }

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-09-12
+
+### Fixed
+
+- Preserve null attribute rows when undoing feature deletion.
+- Reject duplicate basenames across combined ZIP and file imports.
+- Clear split sketches when their selected source is replaced or reprojected.
+- Reject unsupported GeoParquet and GeoArrow geometry encodings instead of dropping geometry.
+- Preserve polygon part winding and selection state across dataset-operation history replay.
+
 ## [0.11.0] - 2026-09-11
 
 ### Added

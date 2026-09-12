@@ -265,6 +265,74 @@ describe('TopologySource.export', () => {
 });
 
 describe('TopologySource.setData', () => {
+  it.each([
+    ['roads.geojson', 'roads.geojson', 'first.zip', 'second.zip'],
+    ['roads.geojson', 'ROADS.GEOJSON', 'first.zip', 'second.zip'],
+    ['roads.geojson', 'ROADS.GEOJSON', 'first.zip', undefined],
+    ['ROADS.GEOJSON', 'roads.geojson', undefined, 'second.zip'],
+    ['nested/roads.geojson', 'roads.geojson', undefined, 'second.zip'],
+    ['roads.geojson', 'ROADS.GEOJSON', undefined, undefined],
+  ] as const)('rejects conflicting input basenames %s / %s from %s / %s without replacing live data', async (firstName, secondName, firstArchive, secondArchive) => {
+    const source = new TopologySource('t');
+    const firstContent = new TextEncoder().encode('{"type":"Point","coordinates":[1,2]}');
+    const secondContent = new TextEncoder().encode('{"type":"Point","coordinates":[3,4]}');
+    await source.setData({ filename: 'original.geojson', content: firstContent });
+    const original = source.getDataset();
+    const onData = vi.fn();
+    source.on('data', onData);
+
+    const load = source.setData([
+      {
+        filename: firstArchive ?? firstName,
+        content: firstArchive ? zipSync({ [firstName]: firstContent }) : firstContent,
+      },
+      {
+        filename: secondArchive ?? secondName,
+        content: secondArchive ? zipSync({ [secondName]: secondContent }) : secondContent,
+      },
+    ]);
+
+    await expect(load).rejects.toThrow(/duplicate basename/i);
+    await expect(load).rejects.toThrow(firstArchive ?? firstName);
+    await expect(load).rejects.toThrow(secondArchive ?? secondName);
+    expect(source.getDataset()).toBe(original);
+    expect(onData).not.toHaveBeenCalled();
+  });
+
+  it('imports distinct files from multiple archives and a loose input', async () => {
+    const source = new TopologySource('t');
+    const bytes = new TextEncoder().encode('{"type":"Point","coordinates":[1,2]}');
+
+    await source.setData([
+      { filename: 'first.zip', content: zipSync({ 'north/roads.geojson': bytes }) },
+      { filename: 'second.zip', content: zipSync({ 'south/districts.geojson': bytes }) },
+      { filename: 'places.geojson', content: bytes },
+    ]);
+
+    expect(source.getLayers().map((layer) => layer.name)).toEqual(['roads', 'districts', 'places']);
+    expect(source.getLayers().map((layer) => layer.shapes?.length)).toEqual([1, 1, 1]);
+  });
+
+  it('rejects conflicting auxiliary files even when archive primary files differ', async () => {
+    const source = new TopologySource('t');
+    const bytes = new TextEncoder().encode('{"type":"Point","coordinates":[1,2]}');
+    const load = source.setData([
+      {
+        filename: 'first.zip',
+        content: zipSync({ 'roads.geojson': bytes, 'shared.prj': new Uint8Array([1]) }),
+      },
+      {
+        filename: 'second.zip',
+        content: zipSync({ 'districts.geojson': bytes, 'SHARED.PRJ': new Uint8Array([2]) }),
+      },
+    ]);
+
+    await expect(load).rejects.toThrow(/duplicate basename.*SHARED\.PRJ/i);
+    await expect(load).rejects.toThrow('first.zip/shared.prj');
+    await expect(load).rejects.toThrow('second.zip/SHARED.PRJ');
+    expect(source.getDataset()).toBeUndefined();
+  });
+
   it('imports every shapefile in one zip', async () => {
     const runImport = vi.fn(async () => FAKE_DATASET);
     const splitSelfIntersectingPolygonRings = vi.fn();

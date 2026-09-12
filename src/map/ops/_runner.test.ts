@@ -5,6 +5,11 @@ import { DatasetReplaceSelectionCommand } from '../../edit/commands/dataset-repl
 import { EditHistory } from '../../edit/edit-history';
 import { Selection } from '../selection';
 import { Err } from '../op-result';
+import { TopologySource } from '../../source/topology-source';
+import { Transaction } from '../../edit/transaction';
+import { LayerRegistry } from '../layer-registry';
+import { MapshaperOps } from '../mapshaper-ops';
+import type { EmapHostInternal } from '../emap-host';
 import {
   _runPreparedDatasetMutation,
   _runDatasetCommandParsed,
@@ -14,6 +19,108 @@ import {
   inferEffectForHeads,
 } from './_runner';
 import * as runnerModule from './_runner';
+
+describe('dataset command selection history', () => {
+  function setup() {
+    const source = new TopologySource('s');
+    source.setDataset({
+      layers: [
+        {
+          name: 'points',
+          geometry_type: 'point',
+          shapes: [[[1, 1]], [[2, 2]]],
+          data: getDefaultMapshaperAdapter().createDataTable([{ rank: 2 }, { rank: 1 }]),
+        },
+      ],
+    });
+    const sources = new Map([['s', source]]);
+    const selection = new Selection();
+    const history = new EditHistory();
+    const host = {
+      _removed: false,
+      _activeTransaction: null,
+      _sources: sources,
+      _selection: selection,
+      _history: history,
+      _workerMode: false,
+      layers: new LayerRegistry(sources),
+      _allowExpressionEvaluation: () => true,
+      _invalidateShapeCachesForSources: vi.fn(),
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      fire: vi.fn(),
+    } as unknown as EmapHostInternal;
+    return { source, selection, history, host, ops: new MapshaperOps(host) };
+  }
+
+  const ref = { source: 's', layer: 'points', id: 0 };
+
+  it('restores the pre-sort selection on undo and clears a new selection on redo', async () => {
+    const { source, selection, history, host, ops } = setup();
+    selection.apply([ref], 'replace');
+    expect((await ops.sortFeatures({ source: 's', target: 'points', expression: 'rank' })).ok).toBe(
+      true,
+    );
+    expect(selection.getAll()).toEqual([]);
+    expect(source.getDataset()!.layers[0].shapes![0]).toEqual([[2, 2]]);
+
+    const command = history.undo() as DatasetReplaceSelectionCommand;
+    command.publish();
+    expect(source.getDataset()!.layers[0].shapes![0]).toEqual([[1, 1]]);
+    expect(selection.getAll()).toEqual([ref]);
+    expect(host._fireSelectionChange).toHaveBeenLastCalledWith({
+      changed: true,
+      added: [ref],
+      removed: [],
+    });
+
+    selection.apply([{ ...ref, id: 1 }], 'replace');
+    (history.redo() as DatasetReplaceSelectionCommand).publish();
+    expect(selection.getAll()).toEqual([]);
+    expect(host._fireSelectionChange).toHaveBeenLastCalledWith({
+      changed: true,
+      added: [],
+      removed: [{ ...ref, id: 1 }],
+    });
+  });
+
+  it('restores filtered feature selection through a committed transaction', async () => {
+    const { source, selection, history, host, ops } = setup();
+    selection.apply([ref], 'replace');
+    const transaction = new Transaction(host);
+    expect(
+      (await ops.filterFeatures({ source: 's', target: 'points', expression: 'rank === 1' })).ok,
+    ).toBe(true);
+    expect(selection.getAll()).toEqual([]);
+    await transaction.commit('Filter points');
+    history.undo();
+    expect(source.getDataset()!.layers[0].shapes).toHaveLength(2);
+    expect(selection.getAll()).toEqual([ref]);
+    history.redo();
+    expect(source.getDataset()!.layers[0].shapes).toEqual([[[2, 2]]]);
+    expect(selection.getAll()).toEqual([]);
+  });
+
+  it.each([
+    'attribute-only',
+    'crs-only',
+  ] as const)('does not reset later selections for %s undo/redo', async (effect) => {
+    const { selection, history, host } = setup();
+    selection.apply([ref], 'replace');
+    expect(
+      (await runnerModule._runDatasetTransform(host, 's', 'Preserve selection', effect, () => {}))
+        .ok,
+    ).toBe(true);
+    expect(selection.getAll()).toEqual([ref]);
+    const later = { ...ref, id: 1 };
+    selection.apply([later], 'replace');
+    history.undo();
+    expect(selection.getAll()).toEqual([later]);
+    history.redo();
+    expect(selection.getAll()).toEqual([later]);
+  });
+});
 
 describe('inferEffectForHeads (PR-10)', () => {
   it.each([
@@ -231,7 +338,7 @@ describe('prepared parsed-command runner', () => {
       _workerMode: false,
       _workerThreshold: 50_000,
       _history: { push: vi.fn(), isCapturing: () => false },
-      _selection: { clear: () => null },
+      _selection: new Selection(),
       _invalidateShapeCachesForSources: vi.fn(),
       _scheduleRender: vi.fn(),
       _fireHistoryChange: vi.fn(),
@@ -756,7 +863,7 @@ describe('recordCount routing (runner)', () => {
         return info.defaultDecision;
       },
       _history: { push: vi.fn(), isCapturing: () => false },
-      _selection: { clear: () => null },
+      _selection: new Selection(),
       _invalidateShapeCachesForSources: vi.fn(),
       _scheduleRender: vi.fn(),
       _fireHistoryChange: vi.fn(),

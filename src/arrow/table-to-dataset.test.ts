@@ -166,6 +166,82 @@ describe('fromArrowTable', () => {
     expect(dataset.layers[0].shapes![0]).toEqual([[5, 6]]);
   });
 
+  it.each([
+    'future-encoding',
+    'wkb',
+    '',
+    null,
+    42,
+  ])('rejects unsupported geo metadata encoding %j instead of losing geometry', (encoding) => {
+    const geom = wkbColumn('geometry', (w) => {
+      w.writePoint(5, 6);
+      w.endRow();
+    });
+    geom.field.metadata.set('ARROW:extension:name', 'geoarrow.wkb');
+    const metadata = new Map([
+      [
+        'geo',
+        JSON.stringify({
+          primary_column: 'geometry',
+          columns: { geometry: { encoding } },
+        }),
+      ],
+    ]);
+
+    expect(() => fromArrowTable(tableFromColumns([geom], metadata))).toThrow(
+      /Unsupported geometry encoding .* for column 'geometry'/,
+    );
+  });
+
+  it.each([
+    ['geometry', undefined],
+    ['geometry', 'geometry'],
+    ['shape', undefined],
+    ['shape', 'shape'],
+  ] as const)('rejects unsupported GeoArrow extensions on %s (override: %s)', (name, geometryColumn) => {
+    const geom = wkbColumn(name, (w) => {
+      w.writePoint(5, 6);
+      w.endRow();
+    });
+    geom.field.metadata.set('ARROW:extension:name', 'geoarrow.future-encoding');
+
+    expect(() => fromArrowTable(tableFromColumns([geom]), { geometryColumn })).toThrow(
+      `Unsupported GeoArrow extension 'geoarrow.future-encoding' for column '${name}'`,
+    );
+  });
+
+  it('keeps geo metadata precedence over an unsupported extension on the chosen column', () => {
+    const geom = wkbColumn('shape', (w) => {
+      w.writePoint(5, 6);
+      w.endRow();
+    });
+    geom.field.metadata.set('ARROW:extension:name', 'geoarrow.future-encoding');
+    const metadata = new Map([
+      [
+        'geo',
+        JSON.stringify({
+          primary_column: 'shape',
+          columns: { shape: { encoding: 'WKB', crs: null } },
+        }),
+      ],
+    ]);
+
+    const dataset = fromArrowTable(tableFromColumns([geom], metadata));
+    expect(dataset.layers[0].shapes).toEqual([[[5, 6]]]);
+    expect(dataset.info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('keeps WKB name detection with null geo metadata and unrelated Arrow extensions', () => {
+    const geom = wkbColumn('geometry', (w) => {
+      w.writePoint(5, 6);
+      w.endRow();
+    });
+    geom.field.metadata.set('ARROW:extension:name', 'example.binary');
+
+    const dataset = fromArrowTable(tableFromColumns([geom], new Map([['geo', 'null']])));
+    expect(dataset.layers[0].shapes).toEqual([[[5, 6]]]);
+  });
+
   it('detects geoarrow extension types without geo metadata', () => {
     const xs = Float64Array.from([1, 2]);
     const ys = Float64Array.from([3, 4]);

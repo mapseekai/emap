@@ -51,6 +51,30 @@ describe('Viewport camera-state primitives', () => {
   });
 });
 
+describe('Viewport Web Mercator constraints', () => {
+  const maxY = 6378137 * Math.PI;
+
+  it('uses the canonical EPSG:3857 world Y limit', () => {
+    const v = new Viewport();
+    v.updateSize(800, 600);
+    v.setCRS('EPSG:3857');
+    v.setExtent(new Bounds(-maxY, -maxY, maxY, maxY));
+    v.applyCameraState([0, maxY * 2], 1);
+
+    expect(v.getCameraState().center[1]).toBeCloseTo(maxY - 300, 6);
+  });
+
+  it('derives the minimum Web Mercator scale from the canonical world height', () => {
+    const v = new Viewport();
+    v.updateSize(800, 600);
+    v.setCRS('EPSG:3857');
+    v.setExtent(new Bounds(-maxY, -maxY, maxY, maxY));
+    v.applyCameraState([0, 0], 1e-12);
+
+    expect(v.getCameraState().scale).toBeCloseTo(600 / (maxY * 2), 12);
+  });
+});
+
 describe('Viewport arc filtering', () => {
   it('filters tiny arcs near full extent before they reach Canvas stroke', () => {
     const v = vp();

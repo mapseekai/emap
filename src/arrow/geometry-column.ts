@@ -58,7 +58,7 @@ export function detectGeometryColumn(
   // 2. geoarrow extension metadata
   for (let i = 0; i < fields.length; i++) {
     const extName = fields[i].metadata.get(ARROW_EXTENSION_NAME);
-    if (encodingFromExtensionName(extName)) {
+    if (extName?.startsWith('geoarrow.')) {
       return describeField(table, i, undefined);
     }
   }
@@ -88,17 +88,36 @@ function isBinaryField(table: Table, idx: number): boolean {
 function describeField(
   table: Table,
   idx: number,
-  geoColumn: { encoding?: string; crs?: unknown } | undefined,
+  geoColumn: { encoding?: unknown; crs?: unknown } | undefined,
 ): GeometryColumnInfo {
   const field = table.schema.fields[idx];
 
   // Encoding: geo metadata wins, then extension name, then Binary→WKB.
   let encoding: GeoEncoding | null = null;
-  if (geoColumn?.encoding) {
-    encoding = geoColumn.encoding === 'WKB' ? 'WKB' : (geoColumn.encoding as GeoEncoding);
+  const declaredEncoding = geoColumn?.encoding;
+  if (declaredEncoding !== undefined) {
+    if (
+      declaredEncoding === 'WKB' ||
+      declaredEncoding === 'point' ||
+      declaredEncoding === 'linestring' ||
+      declaredEncoding === 'polygon' ||
+      declaredEncoding === 'multipoint' ||
+      declaredEncoding === 'multilinestring' ||
+      declaredEncoding === 'multipolygon'
+    ) {
+      encoding = declaredEncoding;
+    } else {
+      throw new Error(
+        `Unsupported geometry encoding '${String(declaredEncoding)}' for column '${field.name}'`,
+      );
+    }
   }
   if (!encoding) {
-    encoding = encodingFromExtensionName(field.metadata.get(ARROW_EXTENSION_NAME));
+    const extName = field.metadata.get(ARROW_EXTENSION_NAME);
+    encoding = encodingFromExtensionName(extName);
+    if (!encoding && extName?.startsWith('geoarrow.')) {
+      throw new Error(`Unsupported GeoArrow extension '${extName}' for column '${field.name}'`);
+    }
   }
   if (!encoding && isBinaryField(table, idx)) {
     encoding = 'WKB';

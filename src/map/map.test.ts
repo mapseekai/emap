@@ -21,6 +21,10 @@ import { FeatureQuery } from './feature-query';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { FilterEvaluationError, FilterResolver } from './filter-resolver';
+import { SplitFeatureHandler } from '../core/handlers/split-feature';
+import type { EditHandlerHost } from '../core/handlers/edit-handler-host';
+import type { NormalizedPointerEvent } from '../core/handler';
+import { EditStateStore } from './edit-state-store';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -215,6 +219,75 @@ function createBareMap(): Emap {
   setPrivate(map, '_expressionPolicy', 'trusted');
   return map as Emap;
 }
+
+describe('split sketch source lifecycle', () => {
+  it.each([
+    'reproject',
+    'replace',
+  ])('clears a sketch after %s while preserving selected refs', async (change) => {
+    const map = createBareMap();
+    const viewport = new Viewport();
+    viewport.updateSize(100, 100);
+    viewport.setExtent(new Bounds(0, 0, 10, 10));
+    const state = new EditStateStore(() => {});
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_projection', new Projection());
+    setPrivate(map, '_editState', state);
+    setPrivate(map, 'render', vi.fn());
+    const source = await TopologySource.fromBytes(
+      'sketch',
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [10, 10],
+            ],
+          },
+        }),
+      ),
+      { filename: 'lines.geojson' },
+    );
+    await map.addSource('sketch', source);
+    const refs = [{ source: 'sketch', layer: 'lines', id: 0 }];
+    map.select(refs);
+    const split = vi
+      .spyOn(map.ops, 'splitSelected')
+      .mockResolvedValue({ ok: true, value: undefined });
+    const pointer = (kind: 'click' | 'contextmenu', x: number): NormalizedPointerEvent => ({
+      kind,
+      point: { x, y: 50 },
+      button: 0,
+      modifiers: { shift: false, alt: false, ctrl: false, meta: false },
+      originalEvent: new Event(kind),
+    });
+    vi.stubGlobal('window', new EventTarget());
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(pointer('click', 10));
+      expect(state.draw?.vertices).toHaveLength(1);
+      if (change === 'reproject') await map.reproject('EPSG:3857');
+      else
+        source.setDataset(
+          getDefaultMapshaperAdapter().copyDataset(source.getDataset() as MapshaperDataset),
+        );
+      expect(map.getSelection()).toEqual(refs);
+      expect(state.draw).toBeNull();
+      handler.handlePointer(pointer('click', 90));
+      handler.handlePointer(pointer('contextmenu', 90));
+      expect(split).not.toHaveBeenCalled();
+    } finally {
+      handler.disable();
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe('Emap rendering', () => {
   it('rebases fast navigation on a full frame rendered partway through a gesture', () => {

@@ -5,6 +5,7 @@ import { SplitFeatureHandler } from './split-feature';
 import type { NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import { OK, Err, type OpResult } from '../../map/op-result';
+import { EventDispatcher } from '../events';
 
 const selected = { source: 'source', layer: 'lines', id: 0 };
 const modifiers = { shift: false, ctrl: false, alt: false, meta: false };
@@ -193,6 +194,83 @@ describe('SplitFeatureHandler', () => {
     handler.handlePointer(event('click', 9, 1));
     handler.handlePointer(event('contextmenu', 9, 1));
     expect(map.ops.splitSelected).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['data', { sourceId: 'source', reason: 'replace' }],
+    ['data', { sourceId: 'source', reason: 'reproject' }],
+    ['crschange', {}],
+  ])('discards old sketch coordinates after %s %j', (type, payload) => {
+    const signals = new EventDispatcher();
+    const host = { ...map, on: signals.on.bind(signals), off: signals.off.bind(signals) };
+    const handler = new SplitFeatureHandler(host as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(event('click', 1, 1));
+      map.unproject.mockImplementation((x, y) => [x * 100, y * 100]);
+      signals.fire(type, payload);
+      handler.handlePointer(event('click', 9, 1));
+      handler.handlePointer(event('contextmenu', 9, 1));
+      expect(map.ops.splitSelected).not.toHaveBeenCalled();
+
+      handler.handlePointer(event('click', 2, 1));
+      handler.handlePointer(event('click', 9, 1));
+      handler.handlePointer(event('contextmenu', 9, 1));
+      expect(map.ops.splitSelected).toHaveBeenCalledWith({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [200, 100],
+            [900, 100],
+          ],
+        },
+      });
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it('keeps the sketch when an unrelated source changes', () => {
+    const signals = new EventDispatcher();
+    const host = { ...map, on: signals.on.bind(signals), off: signals.off.bind(signals) };
+    const handler = new SplitFeatureHandler(host as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(event('click', 1, 1));
+      signals.fire('data', { sourceId: 'other', reason: 'replace' });
+      handler.handlePointer(event('click', 9, 1));
+      handler.handlePointer(event('contextmenu', 9, 1));
+      expect(map.ops.splitSelected).toHaveBeenCalledWith({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [1, 1],
+            [9, 1],
+          ],
+        },
+      });
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it.each(['disable', 'mode-change'])('releases data and CRS listeners on %s', (method) => {
+    const signals = new EventDispatcher();
+    const host = { ...map, on: signals.on.bind(signals), off: signals.off.bind(signals) };
+    const handler = new SplitFeatureHandler(host as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
+    handler.enable();
+    if (method === 'disable') handler.disable();
+    else signals.fire('editmodechange', { mode: 'draw' });
+    map.clearEditDrawState.mockClear();
+    signals.fire('data', { sourceId: 'source' });
+    signals.fire('crschange');
+    expect(map.clearEditDrawState).not.toHaveBeenCalled();
   });
 
   it('clears a published snap overlay when the cursor leaves the threshold', () => {

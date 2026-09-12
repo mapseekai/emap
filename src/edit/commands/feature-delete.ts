@@ -13,8 +13,8 @@ export interface FeatureDeleteCommandOptions {
   /** Snapshot of the shape, taken before deletion. Restored by undo. */
   shape: FeatureShape | null;
   /**
-   * Snapshot of the data record, taken before deletion. `null` when the
-   * layer has no data table.
+   * Snapshot of the data record, taken before deletion. `null` is a valid
+   * table row and is also used when the layer has no data table.
    */
   record: Record<string, unknown> | null;
   /** Owning source; bumps revisions on do/undo. */
@@ -61,10 +61,8 @@ export class FeatureDeleteCommand implements EditCommand {
     const { layer, featureId, shape, record } = this.opts;
     if (!layer.shapes) layer.shapes = [];
     layer.shapes.splice(featureId, 0, shape);
-    if (record !== null) {
-      const records = layer.data?.getRecords?.();
-      records?.splice(featureId, 0, record);
-    }
+    const records: Array<Record<string, unknown> | null> | undefined = layer.data?.getRecords?.();
+    records?.splice(featureId, 0, record);
     markShapeCountChanged(this.opts.source);
   }
 }
@@ -163,7 +161,7 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     }
     layer.shapes = shapes;
 
-    const records = layer.data?.getRecords?.();
+    const records: Array<Record<string, unknown> | null> | undefined = layer.data?.getRecords?.();
     if (!records) {
       markShapeCountChanged(this.opts.source);
       return;
@@ -175,7 +173,7 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     for (let dst = records.length - 1; dst >= 0; dst--) {
       const snapshot = snapshots[snapshotIndex];
       if (snapshot && snapshot.id === dst) {
-        records[dst] = snapshot.record ?? {};
+        records[dst] = snapshot.record;
         snapshotIndex--;
       } else {
         records[dst] = records[recordSource--];

@@ -244,6 +244,80 @@ describe('BulkFeatureDeleteCommand', () => {
   });
 });
 
+describe('nullable feature records', () => {
+  it.each([
+    ['single', [0]],
+    ['bulk', [0, 2]],
+    ['bulk', [0, 1, 2]],
+  ] as const)('preserves null rows through %s deletion and repeated undo/redo (%j)', (kind, ids) => {
+    const records: Array<Record<string, unknown> | null> = [null, { a: 1 }, null];
+    const originalRecords = records.slice();
+    const originalShapes = [[[0, 0]], [[1, 1]], [[2, 2]]];
+    const layer = {
+      shapes: originalShapes.slice(),
+      data: { getRecords: () => records },
+    } as unknown as MapshaperLayer;
+    const source = makeSource();
+    const command =
+      kind === 'single'
+        ? new FeatureDeleteCommand({
+            layer,
+            featureId: 0,
+            shape: originalShapes[0],
+            record: records[0],
+            source,
+          })
+        : new BulkFeatureDeleteCommand({
+            layer,
+            snapshots: ids.map((id) => ({
+              id,
+              shape: originalShapes[id],
+              record: records[id],
+            })),
+            source,
+          });
+    const deletedIds = new Set<number>(ids);
+
+    for (let round = 0; round < 2; round++) {
+      command.do();
+      expect(layer.shapes).toEqual(originalShapes.filter((_, id) => !deletedIds.has(id)));
+      expect(records).toEqual(originalRecords.filter((_, id) => !deletedIds.has(id)));
+      expect(records).toHaveLength(layer.shapes!.length);
+
+      command.undo();
+      expect(layer.shapes).toEqual(originalShapes);
+      expect(records).toEqual(originalRecords);
+      expect(layer.data!.getRecords!()).toBe(records);
+      expect(records).toHaveLength(layer.shapes!.length);
+    }
+  });
+
+  it.each([
+    'single',
+    'bulk',
+  ] as const)('keeps a layer without a table table-free through %s undo/redo', (kind) => {
+    const layer: MapshaperLayer = { shapes: [[[0, 0]]] };
+    const source = makeSource();
+    const command =
+      kind === 'single'
+        ? new FeatureDeleteCommand({ layer, featureId: 0, shape: [[0, 0]], record: null, source })
+        : new BulkFeatureDeleteCommand({
+            layer,
+            snapshots: [{ id: 0, shape: [[0, 0]], record: null }],
+            source,
+          });
+
+    for (let round = 0; round < 2; round++) {
+      command.do();
+      expect(layer.shapes).toEqual([]);
+      expect(layer.data).toBeUndefined();
+      command.undo();
+      expect(layer.shapes).toEqual([[[0, 0]]]);
+      expect(layer.data).toBeUndefined();
+    }
+  });
+});
+
 describe('FeatureDeleteWithSelectionCommand', () => {
   function makeSetup() {
     const layer = {
