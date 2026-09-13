@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-09-14
+
+### Changed
+
+- Upgrade DuckDB-Wasm to `1.33.1-dev64.0` and align the Apache Arrow development
+  and peer dependencies with DuckDB-Wasm's `^17.0.0` requirement so both use a
+  single Arrow version.
+
 ## [0.11.1] - 2026-09-12
 
 ### Fixed
@@ -1085,7 +1093,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/mapseekai/emap/compare/v0.11.1...v0.11.2
 [0.10.0]: https://github.com/mapseekai/emap/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/mapseekai/emap/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mapseekai/emap/compare/v0.9.0...v0.9.1

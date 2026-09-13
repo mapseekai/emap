@@ -44,9 +44,9 @@ Emap 在浏览器中运行，需要具备实际尺寸的 DOM 容器、Canvas 2D 
 | 使用的入口或能力 | 安装的 peer 依赖 |
 | --- | --- |
 | 核心 `@mapseekai/emap` | 无 |
-| `@mapseekai/emap/arrow` 的 Arrow 与 GeoArrow | `apache-arrow` `^21.1.0` |
-| Arrow 入口的 GeoParquet 导入和导出 | `apache-arrow` `^21.1.0`、`parquet-wasm` `^0.7.1` |
-| `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev57.0`、`apache-arrow` `^21.1.0` |
+| `@mapseekai/emap/arrow` 的 Arrow 与 GeoArrow | `apache-arrow` `^17.0.0` |
+| Arrow 入口的 GeoParquet 导入和导出 | `apache-arrow` `^17.0.0`、`parquet-wasm` `^0.7.1` |
+| `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`、`apache-arrow` `^17.0.0` |
 
 这些 peer 依赖均为可选安装项；仅安装应用实际导入的入口所需依赖。GeoParquet 首次使用时加载 `parquet-wasm`。无法由打包器解析该模块的环境可以通过 `setParquetWasm` 注入已初始化模块。
 

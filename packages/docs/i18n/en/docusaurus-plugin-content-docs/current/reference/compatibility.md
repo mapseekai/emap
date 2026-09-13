@@ -44,9 +44,9 @@ Native Node ESM uses paired `"module": "Node16"` and `"moduleResolution": "Node1
 | Entry point or capability | Peer dependencies to install |
 | --- | --- |
 | Core `@mapseekai/emap` | None |
-| Arrow and GeoArrow from `@mapseekai/emap/arrow` | `apache-arrow` `^21.1.0` |
-| GeoParquet import and export from the Arrow entry point | `apache-arrow` `^21.1.0`, `parquet-wasm` `^0.7.1` |
-| `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev57.0`, `apache-arrow` `^21.1.0` |
+| Arrow and GeoArrow from `@mapseekai/emap/arrow` | `apache-arrow` `^17.0.0` |
+| GeoParquet import and export from the Arrow entry point | `apache-arrow` `^17.0.0`, `parquet-wasm` `^0.7.1` |
+| `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`, `apache-arrow` `^17.0.0` |
 
 All of these peers are optional installs; install the dependencies required by the entry points your application imports. GeoParquet loads `parquet-wasm` on first use. Environments whose bundler cannot resolve that module can inject an initialized module with `setParquetWasm`.
 

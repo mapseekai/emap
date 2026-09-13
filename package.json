@@ -1,6 +1,6 @@
 {
   "name": "@mapseekai/emap",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
@@ -134,7 +134,7 @@
   "homepage": "https://github.com/mapseekai/emap#readme",
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
-    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
     "@playwright/test": "1.62.1",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
@@ -142,7 +142,7 @@
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@zwishing/epsg-index": "^3.0.0",
-    "apache-arrow": "^21.1.0",
+    "apache-arrow": "^17.0.0",
     "esbuild": "^0.25.12",
     "jsdom": "^29.1.0",
     "parquet-wasm": "^0.7.1",
@@ -165,8 +165,8 @@
     "mproj": "^0.1.2"
   },
   "peerDependencies": {
-    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
-    "apache-arrow": "^21.1.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
+    "apache-arrow": "^17.0.0",
     "parquet-wasm": "^0.7.1"
   },
   "peerDependenciesMeta": {
