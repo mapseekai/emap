@@ -1,0 +1,1303 @@
+// Single contact surface for mapshaper's `internal.*` API.
+//
+// Why this exists: the codebase reaches into `mapshaper.internal.*` from 13
+// production modules across 28 distinct symbols. Mapshaper has no stability
+// promise on these — they are versioned along with the public CLI but the
+// shapes shift between minor releases. Concentrating every call here lets a
+// future mapshaper upgrade fail (or be forwarded to a shim) in exactly one
+// file instead of thirteen.
+//
+// Phase 1 (PR-3) covered the topology-editing surface plus the command
+// runner. Phase 2 (PR-11, this version) folds in projection / display-arcs /
+// snapshot pack-unpack / intersection layers / segment-endpoint helpers, so
+// every main-thread `mapshaper.internal.*` reference now routes here. The
+// dedicated worker entry (`src/engine/worker/mapshaper-worker.ts`) intentionally
+// keeps direct calls — it IS the host that exposes mapshaper to the rest
+// of the bundle, not a consumer.
+//
+// Tests inject a mock adapter via the `adapter` option on each command and via
+// {@link setDefaultMapshaperAdapter} for shared/global paths. Production code
+// resolves a singleton via {@link getDefaultMapshaperAdapter} when no explicit
+// adapter is supplied.
+
+import {
+  packLayerFields,
+  restoreLayerFields,
+  runWithLayerFields,
+} from '../../domain/source/layer-fields';
+import {
+  absArcId,
+  type ArcCollection,
+  type ArcVertexData,
+  type DataTable,
+  type MapshaperDataset,
+  type MapshaperLayer,
+  type PathShape,
+} from '../../shared/types/mapshaper-types';
+
+// -- Pack / snapshot serialisation ------------------------------------------
+// Mapshaper's pack format has no published TypeScript shape. Treat it as an
+// opaque structured-clone-friendly value here; only the adapter and worker
+// produce / consume it.
+
+/** Plain-object form produced by `exportDatasetsToPack` / consumed by `restoreSessionData`. */
+export type PackedSession = Record<string, unknown> & { datasets?: unknown[] };
+
+/** Single export-file output — `exportFileContent` / `exportPackedDatasets` shape. */
+export interface ExportedFile {
+  filename: string;
+  content: string | Uint8Array | ArrayBuffer;
+}
+
+/** A single segment-intersection record; mapshaper carries extra fields we don't expose. */
+export interface SegmentIntersection {
+  x: number;
+  y: number;
+  [key: string]: unknown;
+}
+
+/** Bounding box returned by `getDatasetBounds` / `getLayerBounds`. */
+export interface MapshaperBBox {
+  xmin: number;
+  ymin: number;
+  xmax: number;
+  ymax: number;
+}
+
+/** Result from mapshaper.geom.getPointToShapeInfo; only distance is consumed. */
+export interface PointToShapeInfo {
+  distance: number;
+  [key: string]: unknown;
+}
+
+/**
+ * A point where an arc segment is split, keyed by its start vertex id.
+ *
+ * @example
+ * const cut: ArcCutPoint = { x: 121.5, y: 31.2, i: 42 };
+ */
+export interface ArcCutPoint {
+  x: number;
+  y: number;
+  i: number;
+}
+
+/**
+ * One entry in a parsed mapshaper command pipeline. Equivalent to what
+ * `parseCommands('-clip source=mask')` returns: a `name` (kebab-case op
+ * name like `'clip'`, `'rename-layers'`, `'filter-fields'`) plus an
+ * `options` bag whose keys match mapshaper's snake_case internal naming
+ * (e.g. `cap_style`, `gap_fill_area`, `no_replace`).
+ *
+ * Hand-built ParsedCommands skip mapshaper's CLI parser entirely, which
+ * removes the quoting / escaping concern that drove PR-4 phase 1: option
+ * values are typed JS values (`string`, `number`, `boolean`, `string[]`)
+ * rather than tokens interpolated into a shell-like grammar.
+ *
+ * Op modules under `src/engine/map/ops/` build these directly via
+ * `OpContext.runDatasetCommand(commands, ...)`.
+ */
+export interface ParsedCommand {
+  name: string;
+  options: Record<string, unknown>;
+}
+
+/** Files injected onto a `-i` command's `input` option. */
+export type RunnerInputFiles = Record<string, Uint8Array | string>;
+
+/**
+ * Handle over mapshaper's internal `PathImporter` — the same streaming
+ * builder mapshaper's own GeoJSON / Shapefile importers feed. Lets the
+ * Arrow module construct a dataset directly from coordinate buffers
+ * without a GeoJSON intermediate. Call `startShape` once per feature,
+ * then zero or more import* calls, then `done()`.
+ */
+export interface PathImporterHandle {
+  startShape(properties?: Record<string, unknown>): void;
+  /** Import a polygon ring; mapshaper fixes winding from the signed area. */
+  importRing(points: Array<[number, number]>, isHole?: boolean): void;
+  importLine(points: Array<[number, number]>): void;
+  importPoints(points: Array<[number, number]>): void;
+  done(): MapshaperDataset;
+}
+
+/** One exported path from {@link MapshaperAdapter.exportPathData}. */
+export interface ExportedPath {
+  points: Array<[number, number]>;
+  pointCount: number;
+  /** Signed planar area (polygons only): positive = shell, negative = hole. */
+  area?: number;
+  /** Signed arc ids making up this path (input shape part). */
+  ids?: number[];
+  /** mapshaper Bounds object; callers read xmin/ymin/xmax/ymax. */
+  bounds?: MapshaperBBox;
+}
+
+/** Result of {@link MapshaperAdapter.exportPathData} / `exportPointData`. */
+export interface ExportedPathData {
+  pathData: ExportedPath[];
+  pointCount: number;
+}
+/** Vertex data for one arc to append onto an `ArcCollection`. */
+export interface AppendedArc {
+  xx: Float64Array;
+  yy: Float64Array;
+  zz?: Float64Array | null;
+}
+
+/**
+ * The mapshaper internal API surface the editor depends on. Methods are
+ * grouped by purpose to make it obvious which mapshaper subsystem each one
+ * pokes; signatures match the underlying mapshaper functions exactly so the
+ * default adapter implementation can stay a one-line delegation.
+ */
+export interface MapshaperAdapter {
+  // -- Topology vertex editing -------------------------------------------
+
+  /**
+   * Move every vertex in `vertexIds` to `to`, preserving topology. Mapshaper
+   * mutates the per-arc `xx`/`yy` slices in place and updates affected arc
+   * bounds. Used by VertexMoveCommand for both do() and undo().
+   */
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void;
+
+  /**
+   * Insert `point` immediately before the vertex at index `vertexIndex`,
+   * shifting the rest of the arc forward. Returns the index of the newly
+   * inserted vertex (== `vertexIndex` of the original arg).
+   *
+   * Note: the underlying mapshaper signature is `(arcs, i, point)` — there
+   * is no separate `arcId` parameter; mapshaper resolves the arc internally
+   * from the global vertex index. The tuple-based naming in the plan was
+   * inaccurate; this signature matches actual mapshaper.
+   */
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void;
+
+  /** Remove the vertex at the given global vertex index. */
+  deleteVertex(arcs: ArcCollection, vertexIndex: number): void;
+
+  // -- Arc construction (used by FeatureCreateCommand) -------------------
+
+  /** Append a new empty arc to the collection; subsequent `appendVertex`
+   *  calls write into it. */
+  appendEmptyArc(arcs: ArcCollection): void;
+
+  /**
+   * Append `[x, y]` onto the arc most recently created via `appendEmptyArc`.
+   * Mapshaper resolves the target arc implicitly; pass the coord pair
+   * directly (mapshaper accepts `[x, y]` rather than separate args).
+   */
+  appendVertex(arcs: ArcCollection, point: [number, number]): void;
+
+  /**
+   * Append one arc holding `points` in a single allocation and return its id.
+   * `appendEmptyArc` + per-point `appendVertex` copies the whole vertex table
+   * on every point (mapshaper's `insertVertex`), which is quadratic for long
+   * rings; this batches the copy to O(existing + points) once.
+   */
+  appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number;
+
+  /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
+  deleteLastArc(arcs: ArcCollection): void;
+  /**
+   * Batch arc append. Returns the id of the first appended arc
+   * (`arcs.size()` at call time). Preserves the retained interval
+   * (`updateVertexData` resets it to 0 — saved and restored here). When
+   * the collection keeps simplification thresholds (`zz`), appended arcs
+   * missing `zz` are filled with `Infinity` (always retained), mirroring
+   * `appendArc`.
+   */
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
+
+  /**
+   * Truncates back to `targetArcCount` arcs, dropping tail vertex data in
+   * one pass. Preserves the retained interval. Throws when the target
+   * exceeds the current arc count — silently dropping arcs appended by
+   * someone else would corrupt history invariants.
+   */
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
+
+  /** Standalone-collection factory (canonical mapshaper constructor). */
+  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
+
+  // -- Topology queries (used by VertexEditControl) ----------------------
+
+  /**
+   * Find every vertex id that shares the same topological node as the
+   * vertex closest to `point` within the given `shape`. Returns an empty
+   * array when no vertex is close enough.
+   */
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[];
+
+  /**
+   * Resolve a global vertex index back to its parent arc id, given the
+   * `ii` (per-arc start-index) array from `ArcCollection.getVertexData()`.
+   * Used by VertexEditControl when mapping a vertex hit to a single arc.
+   */
+  findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
+
+  /**
+   * Walk every segment of every arc referenced by `shape`, invoking `cb`
+   * with the (i, j) global-vertex pair plus the shared `xx` / `yy`
+   * arrays. Used by VertexEditControl to find the closest edge under
+   * the cursor for drag-to-insert.
+   */
+  forEachSegmentInShape(
+    shape: number[][],
+    arcs: ArcCollection,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void;
+
+  /**
+   * Project (px, py) onto the segment from (ax, ay) to (bx, by). The
+   * returned coord is clamped to the segment endpoints when the
+   * projection falls outside them. `snapArg` mirrors mapshaper's
+   * snap-tolerance argument and is forwarded as-is.
+   */
+  findClosestPointOnSeg(
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    snapArg: number,
+  ): [number, number];
+
+  // -- Geometry / topology repair ----------------------------------------
+
+  /**
+   * Pre-pass run by every overlay command (clip / dissolve / union / …):
+   * inserts vertices at every detected segment intersection and rebuilds
+   * shared-arc topology. Mutates `dataset.arcs` in place. Surfaces as
+   * `Emap.ops.rebuildTopology()` when called explicitly.
+   */
+  addIntersectionCuts(
+    dataset: MapshaperDataset,
+    opts?: {
+      snap_interval?: number;
+      no_snap?: boolean;
+      rebuild_topology?: boolean;
+    },
+  ): void;
+
+  /**
+   * Split arcs at the supplied points and remap every affected layer path to
+   * the divided arc ids.
+   */
+  insertCutPoints(dataset: MapshaperDataset, points: ArcCutPoint[]): void;
+
+  /** Build polygon tiles from only the supplied absolute arc ids. */
+  buildPolygonMosaic(arcs: ArcCollection, arcIds: ReadonlySet<number>): PathShape[];
+
+  /**
+   * Split polygon parts that revisit a topological node into simple rings.
+   * Shapefile, TopoJSON and GeoParquet encoders may represent a hole tangent
+   * to its shell as one pinched part; mapshaper's splitter restores the
+   * explicit shell + hole representation expected by ring editing. Mutates
+   * polygon shapes in place.
+   */
+  splitSelfIntersectingPolygonRings(dataset: MapshaperDataset): void;
+
+  getShapeArea(shape: PathShape, arcs: ArcCollection): number;
+  getShapePerimeter(shape: PathShape, arcs: ArcCollection): number;
+  getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null;
+
+  /** Drop arcs that no remaining layer path references. */
+  cleanArcReferences(dataset: MapshaperDataset): void;
+
+  /**
+   * Read-only segment-intersection scan; populates the report consumed
+   * by `Emap.ops.checkGeometry`. Does NOT mutate the arcs.
+   */
+  findSegmentIntersections(
+    arcs: ArcCollection,
+    opts?: { tolerance?: number },
+  ): SegmentIntersection[];
+
+  /**
+   * Materialise a multi-point layer at every intersection found by
+   * {@link findSegmentIntersections}. Used by
+   * `Emap.ops.intersectionPointsLayer` to expose intersections as a
+   * pickable / editable layer.
+   */
+  getIntersectionLayer(
+    intersections: SegmentIntersection[],
+    target: MapshaperLayer,
+    arcs: ArcCollection,
+  ): MapshaperLayer;
+
+  // -- LOD / measurement -------------------------------------------------
+
+  /**
+   * Average segment length across the arc collection. Used by
+   * `DisplayArcs` to pick a sensible per-frame simplification floor.
+   */
+  getAvgSegment(arcs: ArcCollection): number;
+
+  /**
+   * Fast (non-Visvalingam) simplification: drops vertices below a
+   * length threshold. Used to pre-build a coarse "always-on" LOD copy
+   * the renderer falls back to at zoomed-out scales.
+   */
+  simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection;
+
+  // -- Geometry predicates / measurements ---------------------------------
+
+  distance2D(ax: number, ay: number, bx: number, by: number): number;
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo;
+
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
+
+  /**
+   * Returns `true` iff the layer carries renderable shape data (a
+   * `geometry_type` plus a non-empty `shapes` array). Used by the
+   * projection module to decide whether a layer participates in the
+   * extent rebuild.
+   */
+  layerHasGeometry(layer: MapshaperLayer): boolean;
+
+  /**
+   * Bounds of one layer's shapes against an arc collection. Returns a
+   * mapshaper-internal Bounds-like object — typed loosely because the
+   * caller only reads `xmin/ymin/xmax/ymax`.
+   */
+  getLayerBounds(layer: MapshaperLayer, arcs?: ArcCollection): MapshaperBBox;
+
+  /** Bounding box across every layer in the dataset. */
+  getDatasetBounds(dataset: MapshaperDataset): MapshaperBBox;
+
+  // -- Snapshot / export -------------------------------------------------
+
+  /**
+   * Pack one or more datasets into a structured-clone-friendly object
+   * suitable for `postMessage` (worker round-trips) or
+   * {@link pack} (`.msx` snapshot bytes). `compact: true` bakes
+   * simplification thresholds into `zz` and gzip-compresses arc
+   * buffers; `false` skips that for the worker pipeline.
+   */
+  exportDatasetsToPack(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<PackedSession>;
+
+  /**
+   * Inverse of {@link exportDatasetsToPack}. Decodes a packed session
+   * (typically produced by the worker) back into live datasets.
+   */
+  restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }>;
+
+  /** Materialise a `.msx` snapshot byte buffer from a packed session. */
+  pack(obj: PackedSession): Uint8Array;
+
+  /** Inverse of {@link pack}: `.msx` bytes → packed session object. */
+  unpackSessionData(bytes: Uint8Array): Promise<PackedSession>;
+
+  /** Convenience: pack + bytes in one call (`.msx` export pipeline). */
+  exportPackedDatasets(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<ExportedFile[]>;
+
+  /** Plain-text export (GeoJSON / TopoJSON). */
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string; no_quantization?: boolean },
+  ): ExportedFile[];
+
+  // -- Format-module bridge (GeoParquet / GeoArrow) -----------------------
+  // Used exclusively by src/integrations/arrow/* for direct (non-GeoJSON) conversion
+  // between Arrow tables and mapshaper datasets.
+
+  /** New streaming dataset builder (mapshaper's internal `PathImporter`). */
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle;
+
+  /**
+   * Post-import cleanup pass (duplicate-point removal, defective-path
+   * dropping) mapshaper's own importers run before topology building.
+   */
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void;
+
+  /** Convert imported per-ring arcs into shared-arc topology in place. */
+  buildTopology(dataset: MapshaperDataset): void;
+
+  /** Wrap a records array in a mapshaper `DataTable`. */
+  createDataTable(records: Array<Record<string, unknown>>): DataTable;
+
+  /**
+   * Per-feature absolute coordinates for export, traversing arcs in shape
+   * order (reversed arcs walked backwards). `type` selects ring-validity
+   * rules; polygons get a signed `area` per path (shell > 0, hole < 0).
+   */
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData;
+
+  /**
+   * Winding-number test of point (x, y) against the ring formed by the
+   * signed arc ids. Non-zero = inside. Used by the Arrow module's
+   * hole-to-shell grouping (port of mapshaper's groupPolygonRings).
+   */
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
+
+  // -- Dataset cloning (used by dataset-replace ops) ---------------------
+
+  /**
+   * Deep copy of `dataset` — separate arc storage, separate per-layer shape
+   * arrays. mapshaper's `_runDatasetCommand` snapshots this for undo before
+   * letting the in-place clip / dissolve / buffer pipeline run.
+   */
+  copyDataset(dataset: MapshaperDataset): MapshaperDataset;
+
+  // -- Command runner ----------------------------------------------------
+
+  /**
+   * Run a CLI-style command string starting with `-i` (import) and resolve
+   * with the first default-target dataset. `inputFiles` is injected as the
+   * import command's `input` option, matching the GUI import path.
+   */
+  runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset>;
+
+  /**
+   * Run a CLI-style command (sans `-i`) against an existing dataset and
+   * resolve with the resulting dataset. `inputFiles` is forwarded to every
+   * parsed command's `options.input` so `-join FILE` / similar can resolve
+   * relative names. Rejects if mapshaper produced no default target
+   * (no-op command — see PR-21 / L1).
+   */
+  runOnDataset(
+    cmd: string,
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset>;
+
+  /**
+   * Variant of {@link runOnDataset} that accepts a pre-parsed
+   * `ParsedCommand[]` and skips the CLI parser entirely. Op modules
+   * use this so option values flow as typed JS (numbers / arrays /
+   * booleans) rather than as tokens interpolated into a shell-like
+   * grammar — eliminates the entire quoting / escaping concern.
+   *
+   * `inputFiles` is wired onto every command's `options.input` exactly
+   * like the string variant, so `-join FILE` works the same way.
+   */
+  runOnDatasetParsed(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset>;
+}
+
+/**
+ * Default adapter implementation that delegates straight to
+ * `mapshaper.internal.*`. Held in a module-level singleton; tests can swap
+ * via {@link setDefaultMapshaperAdapter}. Each method is one line so that
+ * any future mapshaper rename lands here visibly.
+ */
+import mapshaper from 'mapshaper';
+import mproj from 'mproj';
+
+interface MapshaperProjectionInternals {
+  parseCrsString(crs: string): unknown;
+}
+
+interface MprojInternals {
+  get_normalized_proj_defn(projection: unknown): string;
+}
+
+export interface GeographicCoordinateTransformer {
+  readonly isGeographic: boolean;
+  readonly isEarthCompatible: boolean;
+  readonly semiMajorAxis: number;
+  readonly flattening: number;
+  inverse(point: readonly [number, number]): [number, number] | null;
+  forward(lngLat: readonly [number, number]): [number, number] | null;
+}
+
+interface MprojProjection {
+  is_latlong?: boolean;
+  a?: number;
+  es?: number;
+}
+interface MprojCoordinateApi {
+  pj_inv(
+    point: { x: number; y: number },
+    projection: MprojProjection,
+  ): { lam: number; phi: number };
+  pj_fwd(
+    point: { lam: number; phi: number },
+    projection: MprojProjection,
+  ): { x: number; y: number };
+  pj_transform_point(
+    source: MprojProjection,
+    destination: MprojProjection,
+    point: [number, number],
+  ): void;
+}
+
+type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['crs']>;
+
+const WGS84_SEMI_MAJOR_AXIS = 6378137;
+const WGS84_FLATTENING = 1 / 298.257223563;
+// Browser-safe WGS84 definition: the mapshaper browser bundle cannot resolve
+// 'EPSG:4326' (no EPSG init files), so always hand mproj a proj4 literal.
+const WGS84_PROJ4 = '+proj=longlat +datum=WGS84 +no_defs';
+const EARTH_SEMI_MAJOR_AXIS_TOLERANCE = 0.01;
+const EARTH_MAX_FLATTENING = 0.01;
+const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+
+/** Parse a CRS definition into Mapshaper's runtime projection representation. */
+export function parseMapshaperCrs(crs: string): MapshaperRuntimeCrs {
+  const projectionApi = mapshaper.internal as unknown as MapshaperProjectionInternals;
+  return projectionApi.parseCrsString(crs) as MapshaperRuntimeCrs;
+}
+
+export function createGeographicCoordinateTransformer(
+  definition: string,
+): GeographicCoordinateTransformer {
+  return createCoordinateTransformer(definition);
+}
+
+/** Transform source-CRS coordinates to and from geographic WGS84. */
+export function createWgs84CoordinateTransformer(
+  definition: string,
+): GeographicCoordinateTransformer {
+  return createCoordinateTransformer(definition, true);
+}
+
+function createCoordinateTransformer(
+  definition: string,
+  useWgs84 = false,
+): GeographicCoordinateTransformer {
+  const projection = parseMapshaperCrs(definition) as MprojProjection;
+  const semiMajorAxis = projection.a;
+  const eccentricitySquared = projection.es;
+  const hasEllipsoid =
+    Number.isFinite(semiMajorAxis) &&
+    Number.isFinite(eccentricitySquared) &&
+    Number(eccentricitySquared) >= 0 &&
+    Number(eccentricitySquared) < 1;
+  const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
+  const f = hasEllipsoid ? 1 - Math.sqrt(1 - Number(eccentricitySquared)) : WGS84_FLATTENING;
+  const wgs84Projection = useWgs84 ? (parseMapshaperCrs(WGS84_PROJ4) as MprojProjection) : null;
+  const mprojApi = mproj as unknown as MprojCoordinateApi;
+  const transformPoint = (
+    source: MprojProjection,
+    destination: MprojProjection,
+    point: readonly [number, number],
+  ): [number, number] | null => {
+    if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+    try {
+      const transformed: [number, number] = [point[0], point[1]];
+      mprojApi.pj_transform_point(source, destination, transformed);
+      return Number.isFinite(transformed[0]) && Number.isFinite(transformed[1])
+        ? transformed
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  return {
+    isGeographic: useWgs84 || projection.is_latlong === true,
+    // Proj.4 does not reliably identify the celestial body. Require usable
+    // ellipsoid evidence whose size and flattening are compatible with common
+    // terrestrial ellipsoids, including Earth spheres, and reject unknown or
+    // clearly incompatible bodies conservatively.
+    isEarthCompatible:
+      hasEllipsoid &&
+      Math.abs(a - WGS84_SEMI_MAJOR_AXIS) / WGS84_SEMI_MAJOR_AXIS <=
+        EARTH_SEMI_MAJOR_AXIS_TOLERANCE &&
+      Number.isFinite(f) &&
+      f >= 0 &&
+      f <= EARTH_MAX_FLATTENING,
+    semiMajorAxis: useWgs84 ? WGS84_SEMI_MAJOR_AXIS : a,
+    flattening: useWgs84 ? WGS84_FLATTENING : f,
+    inverse(point): [number, number] | null {
+      if (wgs84Projection) return transformPoint(projection, wgs84Projection, point);
+      if (projection.is_latlong) {
+        return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? [point[0], point[1]] : null;
+      }
+
+      try {
+        const lp = mprojApi.pj_inv({ x: point[0], y: point[1] }, projection);
+        const longitude = lp.lam * (180 / Math.PI);
+        const latitude = lp.phi * (180 / Math.PI);
+        return Number.isFinite(longitude) && Number.isFinite(latitude)
+          ? [longitude, latitude]
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    forward(lngLat): [number, number] | null {
+      if (wgs84Projection) return transformPoint(wgs84Projection, projection, lngLat);
+      if (!Number.isFinite(lngLat[0]) || !Number.isFinite(lngLat[1])) return null;
+      if (projection.is_latlong) return [lngLat[0], lngLat[1]];
+
+      try {
+        const point = mprojApi.pj_fwd(
+          {
+            lam: (lngLat[0] * Math.PI) / 180,
+            phi: (lngLat[1] * Math.PI) / 180,
+          },
+          projection,
+        );
+        return Number.isFinite(point.x) && Number.isFinite(point.y) ? [point.x, point.y] : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+export function resolveMapshaperCrsSignature(crs: string): string {
+  const mprojApi = mproj as unknown as { internal: MprojInternals };
+  const projection = parseMapshaperCrs(crs);
+  return mprojApi.internal
+    .get_normalized_proj_defn(projection)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => {
+      const separator = token.indexOf('=');
+      if (separator === -1) return token;
+      const value = token.slice(separator + 1);
+      if (!PROJECTION_NUMBER_RE.test(value)) return token;
+      return `${token.slice(0, separator + 1)}${Number(value)}`;
+    })
+    .join(' ');
+}
+
+function createStandaloneArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
+  let pointCount = 0;
+  let hasThresholds = false;
+  for (let index = 0; index < arcsToAppend.length; index++) {
+    const arc = arcsToAppend[index]!;
+    if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+      throw new Error(
+        `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+      );
+    }
+    pointCount += arc.xx.length;
+    hasThresholds ||= arc.zz !== null && arc.zz !== undefined;
+  }
+
+  const nn = new Int32Array(arcsToAppend.length);
+  const xx = new Float64Array(pointCount);
+  const yy = new Float64Array(pointCount);
+  const zz = hasThresholds ? new Float64Array(pointCount).fill(Infinity) : null;
+  let cursor = 0;
+  for (let index = 0; index < arcsToAppend.length; index++) {
+    const arc = arcsToAppend[index]!;
+    nn[index] = arc.xx.length;
+    xx.set(arc.xx, cursor);
+    yy.set(arc.yy, cursor);
+    if (zz && arc.zz) zz.set(arc.zz, cursor);
+    cursor += arc.xx.length;
+  }
+  const arcs = new mapshaper.internal.ArcCollection(nn, xx, yy);
+  if (zz) arcs.setThresholds!(zz);
+  return arcs;
+}
+
+/**
+ * Restore simplification values after mapshaper divides known source arcs.
+ * The returned source-to-destination map proves arc lineage; coordinate checks
+ * only align vertices inside that lineage and never establish arc identity.
+ */
+function restoreCutPointThresholds(
+  arcs: ArcCollection,
+  before: ArcVertexData,
+  firstDestBySource: ArrayLike<number>,
+  retainedInterval: number,
+): void {
+  if (!before.zz) return;
+  const after = arcs.getVertexData!();
+  const thresholds = new Float64Array(after.xx.length).fill(Infinity);
+
+  for (let sourceArcId = 0; sourceArcId < firstDestBySource.length; sourceArcId++) {
+    const firstDestArcId = firstDestBySource[sourceArcId]!;
+    const destArcEnd =
+      sourceArcId + 1 < firstDestBySource.length
+        ? firstDestBySource[sourceArcId + 1]!
+        : after.nn.length;
+    let sourceVertexId = before.ii[sourceArcId]!;
+    const sourceVertexEnd = sourceVertexId + before.nn[sourceArcId]!;
+
+    for (let destArcId = firstDestArcId; destArcId < destArcEnd; destArcId++) {
+      const destStart = after.ii[destArcId]!;
+      const destLength = after.nn[destArcId]!;
+      for (let offset = 0; offset < destLength; offset++) {
+        // Every divided piece after the first repeats the inserted boundary.
+        if (destArcId > firstDestArcId && offset === 0) continue;
+        const destVertexId = destStart + offset;
+        if (
+          sourceVertexId < sourceVertexEnd &&
+          after.xx[destVertexId] === before.xx[sourceVertexId] &&
+          after.yy[destVertexId] === before.yy[sourceVertexId]
+        ) {
+          thresholds[destVertexId] = before.zz[sourceVertexId]!;
+          sourceVertexId++;
+        }
+      }
+    }
+
+    if (sourceVertexId !== sourceVertexEnd) {
+      throw new Error('insertCutPoints: could not preserve simplification thresholds');
+    }
+  }
+
+  arcs.setThresholds!(thresholds);
+  arcs.setRetainedInterval?.(retainedInterval);
+}
+
+export class DefaultMapshaperAdapter implements MapshaperAdapter {
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
+    mapshaper.internal.snapVerticesToPoint(vertexIds, to, arcs);
+  }
+
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void {
+    mapshaper.internal.insertVertex(arcs, vertexIndex, point);
+  }
+
+  deleteVertex(arcs: ArcCollection, vertexIndex: number): void {
+    mapshaper.internal.deleteVertex(arcs, vertexIndex);
+  }
+
+  appendEmptyArc(arcs: ArcCollection): void {
+    const retainedInterval = arcs.getRetainedInterval?.();
+    mapshaper.internal.appendEmptyArc(arcs);
+    if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
+  }
+
+  appendVertex(arcs: ArcCollection, point: [number, number]): void {
+    const retainedInterval = arcs.getRetainedInterval?.();
+    mapshaper.internal.appendVertex(arcs, point);
+    if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
+  }
+
+  appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number {
+    const xx = new Float64Array(points.length);
+    const yy = new Float64Array(points.length);
+    for (let index = 0; index < points.length; index++) {
+      xx[index] = points[index]![0];
+      yy[index] = points[index]![1];
+    }
+    return this.appendArcs(arcs, [{ xx, yy }]);
+  }
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number {
+    const firstArcId = arcs.size();
+    for (let index = 0; index < arcsToAppend.length; index++) {
+      const arc = arcsToAppend[index]!;
+      if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+        throw new Error(
+          `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+        );
+      }
+    }
+    if (arcsToAppend.length === 0) return firstArcId;
+    const data = arcs.getVertexData!();
+    const { xx, yy, zz, nn } = data;
+    let extraPoints = 0;
+    for (const arc of arcsToAppend) extraPoints += arc.xx.length;
+
+    const newXx = new Float64Array(xx.length + extraPoints);
+    const newYy = new Float64Array(yy.length + extraPoints);
+    newXx.set(xx);
+    newYy.set(yy);
+
+    // Mirror appendArc: appended vertices carry Infinity thresholds (always
+    // retained) when the collection keeps simplification data.
+    const flat = arcs.isFlat?.() ?? zz === null;
+    let newZz: Float64Array | null = null;
+    if (!flat) {
+      newZz = new Float64Array(xx.length + extraPoints).fill(Infinity);
+      if (zz) newZz.set(zz);
+    }
+
+    let cursor = xx.length;
+    for (const arc of arcsToAppend) {
+      newXx.set(arc.xx, cursor);
+      newYy.set(arc.yy, cursor);
+      if (newZz && arc.zz) newZz.set(arc.zz, cursor);
+      cursor += arc.xx.length;
+    }
+
+    const newNn = new Int32Array(nn.length + arcsToAppend.length);
+    newNn.set(nn);
+    for (let i = 0; i < arcsToAppend.length; i++) {
+      newNn[nn.length + i] = arcsToAppend[i]!.xx.length;
+    }
+
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(newNn, newXx, newYy, newZz);
+    arcs.setRetainedInterval?.(retained);
+    return firstArcId;
+  }
+
+  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
+    return createStandaloneArcCollection(arcsToAppend);
+  }
+
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void {
+    const data = arcs.getVertexData!();
+    const { xx, yy, zz, nn } = data;
+    if (nn.length === targetArcCount) return;
+    if (targetArcCount > nn.length) {
+      throw new Error(
+        `truncateArcs: target ${targetArcCount} exceeds current arc count ${nn.length}`,
+      );
+    }
+    let keptPoints = 0;
+    for (let i = 0; i < targetArcCount; i++) keptPoints += nn[i]!;
+    const newNn = new Int32Array(targetArcCount);
+    newNn.set(nn.subarray(0, targetArcCount));
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(
+      newNn,
+      new Float64Array(xx.subarray(0, keptPoints)),
+      new Float64Array(yy.subarray(0, keptPoints)),
+      zz ? new Float64Array(zz.subarray(0, keptPoints)) : null,
+    );
+    arcs.setRetainedInterval?.(retained);
+  }
+
+  deleteLastArc(arcs: ArcCollection): void {
+    this.truncateArcs(arcs, arcs.size() - 1);
+  }
+
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[] {
+    return mapshaper.internal.findNearestVertices(point, shape, arcs);
+  }
+
+  findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number {
+    return mapshaper.internal.findArcIdFromVertexId(vertexId, ii);
+  }
+
+  forEachSegmentInShape(
+    shape: number[][],
+    arcs: ArcCollection,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void {
+    mapshaper.internal.forEachSegmentInShape(shape, arcs, cb);
+  }
+
+  findClosestPointOnSeg(
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    snapArg: number,
+  ): [number, number] {
+    return mapshaper.internal.findClosestPointOnSeg(px, py, ax, ay, bx, by, snapArg);
+  }
+
+  insertCutPoints(dataset: MapshaperDataset, points: ArcCutPoint[]): void {
+    const arcs = dataset.arcs!;
+    const before = arcs.getVertexData!();
+    const retainedInterval = arcs.getRetainedInterval?.() ?? 0;
+    const map = mapshaper.internal.insertCutPoints(points, arcs) as ArrayLike<number>;
+    restoreCutPointThresholds(arcs, before, map, retainedInterval);
+    mapshaper.internal.remapDividedArcs(dataset, map);
+  }
+
+  buildPolygonMosaic(arcs: ArcCollection, arcIds: ReadonlySet<number>): PathShape[] {
+    const nodes = new mapshaper.internal.NodeCollection(arcs);
+    nodes.setArcFilter((id: number) => arcIds.has(id < 0 ? ~id : id));
+    return mapshaper.internal
+      .buildPolygonMosaic(nodes)
+      .mosaic.map((shape: number[][]) => shape.map((part) => part.slice()));
+  }
+
+  splitSelfIntersectingPolygonRings(dataset: MapshaperDataset): void {
+    const arcs = dataset.arcs;
+    if (!arcs) return;
+    const split = mapshaper.internal.getSelfIntersectionSplitter(
+      new mapshaper.internal.NodeCollection(arcs),
+    );
+    const area = (ring: number[]) => mapshaper.geom.getShapeArea([ring], arcs);
+    const isContained = (ring: number[], container: number[]) => {
+      const anchor = mapshaper.internal.findAnchorPoint([ring], arcs);
+      return (
+        anchor !== null && mapshaper.geom.testPointInPolygon(anchor.x, anchor.y, [container], arcs)
+      );
+    };
+    const vertexData = arcs.getVertexData!();
+    const endpointKey = (signedArcId: number, start: boolean) => {
+      const arcId = signedArcId < 0 ? ~signedArcId : signedArcId;
+      const offset = vertexData.ii[arcId]!;
+      const count = vertexData.nn[arcId]!;
+      const forward = signedArcId >= 0;
+      const vertex = start === forward ? offset : offset + count - 1;
+      return `${vertexData.xx[vertex]},${vertexData.yy[vertex]}`;
+    };
+    const revisitsNode = (ring: number[]) => {
+      if (ring.length === 0) return false;
+      const first = endpointKey(ring[0]!, true);
+      const seen = new Set<string>([first]);
+      for (let index = 0; index < ring.length; index++) {
+        const key = endpointKey(ring[index]!, false);
+        if (index === ring.length - 1 && key === first) continue;
+        if (seen.has(key)) return true;
+        seen.add(key);
+      }
+      return false;
+    };
+    for (const layer of dataset.layers) {
+      if (layer.geometry_type !== 'polygon' || !layer.shapes) continue;
+      for (const rawShape of layer.shapes) {
+        if (!rawShape) continue;
+        const shape = rawShape as PathShape;
+        const normalized: PathShape = [];
+        for (const original of shape) {
+          if (!revisitsNode(original)) {
+            normalized.push(original);
+            continue;
+          }
+          const originalSign = Math.sign(area(original));
+          const parts = split(original.slice()).map((ring) => ({
+            ring,
+            area: area(ring),
+            nested: false,
+          }));
+          if (
+            parts.length <= 1 ||
+            parts.some((part) => part.area === 0) ||
+            parts.every((part) => Math.sign(part.area) !== originalSign)
+          ) {
+            normalized.push(original);
+            continue;
+          }
+          const main = parts.filter((part) => Math.sign(part.area) === originalSign);
+          for (const part of parts) {
+            if (Math.sign(part.area) === originalSign) continue;
+            if (main.some((container) => isContained(part.ring, container.ring))) {
+              part.nested = true;
+              continue;
+            }
+            part.ring.reverse();
+            for (let index = 0; index < part.ring.length; index++) {
+              part.ring[index] = ~part.ring[index]!;
+            }
+            part.area = -part.area;
+          }
+          parts.sort(
+            (left, right) =>
+              Number(left.nested) - Number(right.nested) ||
+              Math.abs(right.area) - Math.abs(left.area),
+          );
+          for (const part of parts) normalized.push(part.ring);
+        }
+        shape.length = 0;
+        for (const ring of normalized) shape.push(ring);
+      }
+    }
+  }
+
+  getShapeArea(shape: PathShape, arcs: ArcCollection): number {
+    return mapshaper.geom.getShapeArea(shape, arcs);
+  }
+
+  getShapePerimeter(shape: PathShape, arcs: ArcCollection): number {
+    return mapshaper.geom.getShapePerimeter(shape, arcs);
+  }
+
+  getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null {
+    const anchor = mapshaper.internal.findAnchorPoint(shape, arcs);
+    return anchor ? [anchor.x, anchor.y] : null;
+  }
+
+  cleanArcReferences(dataset: MapshaperDataset): void {
+    const arcs = dataset.arcs;
+    if (!arcs?.deleteArcs) return;
+
+    const paths: PathShape[] = [];
+    const used = new Uint8Array(arcs.size());
+    for (const layer of dataset.layers) {
+      if (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') continue;
+      for (const shape of layer.shapes ?? []) {
+        if (!shape) continue;
+        const path = shape as PathShape;
+        paths.push(path);
+        for (const part of path) {
+          for (const arcId of part) used[absArcId(arcId)] = 1;
+        }
+      }
+    }
+
+    const map = arcs.deleteArcs((arcId) => used[arcId] === 1);
+    if (arcs.size() === map.length) return;
+    for (const path of paths) {
+      for (const part of path) {
+        for (let i = 0; i < part.length; i++) {
+          const arcId = part[i]!;
+          const remapped = map[absArcId(arcId)]!;
+          part[i] = arcId < 0 ? ~remapped : remapped;
+        }
+      }
+    }
+  }
+
+  addIntersectionCuts(
+    dataset: MapshaperDataset,
+    opts?: {
+      snap_interval?: number;
+      no_snap?: boolean;
+      rebuild_topology?: boolean;
+    },
+  ): void {
+    mapshaper.internal.addIntersectionCuts(dataset, opts);
+  }
+
+  findSegmentIntersections(
+    arcs: ArcCollection,
+    opts?: { tolerance?: number },
+  ): SegmentIntersection[] {
+    return mapshaper.internal.findSegmentIntersections(arcs, opts);
+  }
+
+  getIntersectionLayer(
+    intersections: SegmentIntersection[],
+    target: MapshaperLayer,
+    arcs: ArcCollection,
+  ): MapshaperLayer {
+    return mapshaper.internal.getIntersectionLayer(intersections, target, arcs);
+  }
+
+  getAvgSegment(arcs: ArcCollection): number {
+    return mapshaper.internal.getAvgSegment(arcs);
+  }
+
+  simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection {
+    return mapshaper.internal.simplifyArcsFast(arcs, segLength);
+  }
+
+  distance2D(ax: number, ay: number, bx: number, by: number): number {
+    return mapshaper.geom.distance2D(ax, ay, bx, by);
+  }
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo {
+    return mapshaper.geom.getPointToShapeInfo(x, y, shape, arcs);
+  }
+
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean {
+    return mapshaper.geom.testPointInPolygon(x, y, shape, arcs);
+  }
+
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle {
+    return new mapshaper.internal.PathImporter(opts ?? {});
+  }
+
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void {
+    mapshaper.internal.cleanPathsAfterImport(dataset, opts ?? {});
+  }
+
+  buildTopology(dataset: MapshaperDataset): void {
+    mapshaper.internal.buildTopology(dataset);
+  }
+
+  createDataTable(records: Array<Record<string, unknown>>): DataTable {
+    return new mapshaper.internal.DataTable(records);
+  }
+
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData {
+    return mapshaper.internal.exportPathData(shape, arcs, type);
+  }
+
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number {
+    return mapshaper.geom.testPointInRing(x, y, ids, arcs);
+  }
+
+  layerHasGeometry(layer: MapshaperLayer): boolean {
+    return mapshaper.internal.layerHasGeometry(layer);
+  }
+
+  getLayerBounds(layer: MapshaperLayer, arcs?: ArcCollection): MapshaperBBox {
+    // mapshaper returns null for empty layers; surface that via NaN-bounds
+    // rather than mid-pipeline `null` so callers don't have to branch.
+    const bb = mapshaper.internal.getLayerBounds(layer, arcs);
+    if (!bb) return { xmin: NaN, ymin: NaN, xmax: NaN, ymax: NaN };
+    return { xmin: bb.xmin, ymin: bb.ymin, xmax: bb.xmax, ymax: bb.ymax };
+  }
+
+  getDatasetBounds(dataset: MapshaperDataset): MapshaperBBox {
+    const bb = mapshaper.internal.getDatasetBounds(dataset);
+    return { xmin: bb.xmin, ymin: bb.ymin, xmax: bb.xmax, ymax: bb.ymax };
+  }
+
+  async exportDatasetsToPack(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<PackedSession> {
+    const packed = await mapshaper.internal.exportDatasetsToPack(datasets, opts ?? {});
+    packLayerFields(packed, datasets);
+    return packed;
+  }
+
+  async restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }> {
+    // mapshaper's `.d.ts` insists `datasets` is required on the input; our
+    // public `PackedSession` keeps it optional so callers can spread `emap`
+    // metadata onto a fresh object. Cast on the way down.
+    const restored = await mapshaper.internal.restoreSessionData(
+      packed as { [k: string]: unknown; datasets: unknown[] },
+    );
+    restoreLayerFields(packed, restored.datasets);
+    return restored;
+  }
+
+  pack(obj: PackedSession): Uint8Array {
+    return mapshaper.internal.pack(obj as { [k: string]: unknown; datasets: unknown[] });
+  }
+
+  unpackSessionData(bytes: Uint8Array): Promise<PackedSession> {
+    return mapshaper.internal.unpackSessionData(bytes);
+  }
+
+  exportPackedDatasets(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<ExportedFile[]> {
+    // mapshaper's `.d.ts` requires the opts object; our public signature
+    // keeps it optional. Default to `{}` so the exported shape stays
+    // forgiving.
+    return mapshaper.internal.exportPackedDatasets(datasets, opts ?? {});
+  }
+
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string; no_quantization?: boolean },
+  ): ExportedFile[] {
+    return mapshaper.internal.exportFileContent(dataset, opts);
+  }
+
+  copyDataset(dataset: MapshaperDataset): MapshaperDataset {
+    return mapshaper.internal.copyDataset(dataset);
+  }
+
+  runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset> {
+    const commands = mapshaper.internal.parseCommands(cmd);
+    if (commands.length > 0 && commands[0].name === 'i') {
+      commands[0].options.input = inputFiles;
+    }
+    return new Promise<MapshaperDataset>((resolve, reject) => {
+      mapshaper.internal.runParsedCommands(
+        commands,
+        new mapshaper.internal.Job(),
+        (err: any, job: any) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          const targets = job.catalog.getDefaultTargets();
+          if (targets.length === 0) {
+            reject(new Error('No layers found in dataset'));
+            return;
+          }
+          resolve(targets[0].dataset);
+        },
+      );
+    });
+  }
+
+  runOnDataset(
+    cmd: string,
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset> {
+    return this.runOnDatasetParsed(mapshaper.internal.parseCommands(cmd), dataset, inputFiles);
+  }
+
+  runOnDatasetParsed(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset> {
+    const job = new mapshaper.internal.Job();
+    job.catalog.addDataset(dataset);
+    return runWithLayerFields(
+      dataset,
+      commands,
+      (steps) => this._runParsedCommands(steps, dataset, inputFiles, job),
+      (records) => this.createDataTable(records),
+      () => job.catalog.getDefaultTargets().flatMap((target) => target.layers),
+      (working, steps) => this._runParsedCommands(steps, working, inputFiles),
+    );
+  }
+
+  private _runParsedCommands(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+    existingJob?: InstanceType<typeof mapshaper.internal.Job>,
+  ): Promise<MapshaperDataset> {
+    return new Promise((resolve, reject) => {
+      const job = existingJob ?? new mapshaper.internal.Job();
+      if (!existingJob) job.catalog.addDataset(dataset);
+      if (inputFiles) {
+        // mapshaper resolves filename references in command args via
+        // `cli.readFile(name, null, opts.input)`, so the cache must be present
+        // on every command's options. Cheap to set on all of them.
+        for (const command of commands) {
+          if (command.options) command.options.input = inputFiles;
+        }
+      }
+      mapshaper.internal.runParsedCommands(commands as any[], job, (err: any, finished: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const targets = finished.catalog.getDefaultTargets();
+        if (targets.length === 0) {
+          // mapshaper completed without producing a default target — the
+          // command was effectively a no-op (e.g. `-target NAME` alone).
+          // The previous behaviour silently resolved with the input
+          // dataset reference, which let no-op commands pollute history
+          // with empty `DatasetReplaceCommand`s. Surface as an error so
+          // `_runDatasetCommand` records `Err.mapshaper` instead.
+          reject(new Error('mapshaper command completed but produced no default target'));
+          return;
+        }
+        resolve(targets[0].dataset);
+      });
+    });
+  }
+}
+
+let _default: MapshaperAdapter | null = null;
+
+/**
+ * Process-wide singleton adapter. Constructed lazily on first access so
+ * importing this module doesn't pay the mapshaper bundle cost up-front for
+ * call sites that inject their own adapter explicitly.
+ */
+export function getDefaultMapshaperAdapter(): MapshaperAdapter {
+  return _default ?? (_default = new DefaultMapshaperAdapter());
+}
+
+/**
+ * Swap the process-wide adapter — tests use this to inject a mock that
+ * records calls without invoking the real mapshaper bundle. Pass `null` to
+ * reset to the lazy-default behaviour.
+ */
+export function setDefaultMapshaperAdapter(adapter: MapshaperAdapter | null): void {
+  _default = adapter;
+}

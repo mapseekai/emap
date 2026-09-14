@@ -8,15 +8,15 @@ const intentionallyInternal = new Set(typedoc.intentionallyNotExported ?? []);
 
 const entryPoints = [
   { label: '@mapseekai/emap', path: 'src/index.ts' },
-  { label: '@mapseekai/emap/arrow', path: 'src/arrow/index.ts' },
-  { label: '@mapseekai/emap/duckdb', path: 'src/duckdb/index.ts' },
-  { label: '@mapseekai/emap/kernel', path: 'src/kernel/index.ts' },
-  { label: '@mapseekai/emap/services', path: 'src/services/index.ts' },
-  { label: '@mapseekai/emap/providers', path: 'src/providers/index.ts' },
-  { label: '@mapseekai/emap/plugins', path: 'src/plugins/index.ts' },
-  { label: '@mapseekai/emap/presets', path: 'src/presets/index.ts' },
-  { label: '@mapseekai/emap/ai', path: 'src/ai/index.ts' },
-  { label: '@mapseekai/emap/maplibre', path: 'src/providers/maplibre/index.ts' },
+  { label: '@mapseekai/emap/arrow', path: 'src/integrations/arrow/index.ts' },
+  { label: '@mapseekai/emap/duckdb', path: 'src/integrations/duckdb/index.ts' },
+  { label: '@mapseekai/emap/context', path: 'src/runtime/context/index.ts' },
+  { label: '@mapseekai/emap/services', path: 'src/runtime/services/index.ts' },
+  { label: '@mapseekai/emap/providers', path: 'src/runtime/providers/index.ts' },
+  { label: '@mapseekai/emap/plugins', path: 'src/runtime/plugins/index.ts' },
+  { label: '@mapseekai/emap/presets', path: 'src/runtime/presets/index.ts' },
+  { label: '@mapseekai/emap/ai', path: 'src/runtime/ai/index.ts' },
+  { label: '@mapseekai/emap/maplibre', path: 'src/integrations/maplibre/index.ts' },
 ];
 
 const failures = [];

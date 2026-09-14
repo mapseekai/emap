@@ -81,113 +81,103 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource } = emap;
-
-    const map = new Emap({
-      container: "map",
-    });
-
-    map.addControl(new emap.NavigationControl(), "top-left");
-    installExampleMapUi(map, emap);
-
-    const fileInput = document.getElementById("file-input");
-    const status = document.getElementById("status");
-    const layerSelect = document.getElementById("layer-select");
-    const attributes = document.getElementById("attributes");
-    const hlColor = document.getElementById("hl-color");
-    const hlWidth = document.getElementById("hl-width");
-    const hlRadius = document.getElementById("hl-radius");
-    const hlFill = document.getElementById("hl-fill");
-    const mapContainer = map.getCanvasContainer();
-
-    let activeSource = null;
-
-    function populateLayers(source) {
-      layerSelect.innerHTML = '<option value="">全部</option>';
-      const layers = source.getLayers();
-      layers.forEach((layer, idx) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const map = await Emap.create({
+    container: "map",
+});
+await map.addControl(new emap.NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById("file-input");
+const status = document.getElementById("status");
+const layerSelect = document.getElementById("layer-select");
+const attributes = document.getElementById("attributes");
+const hlColor = document.getElementById("hl-color");
+const hlWidth = document.getElementById("hl-width");
+const hlRadius = document.getElementById("hl-radius");
+const hlFill = document.getElementById("hl-fill");
+const mapContainer = map.getCanvasContainer();
+let activeSource = null;
+function populateLayers(source) {
+    layerSelect.innerHTML = '<option value="">全部</option>';
+    const layers = source.getLayers();
+    layers.forEach((layer, idx) => {
         const name = layer?.name || layer?.id || `layer-${idx}`;
         const option = document.createElement("option");
         option.value = name;
         option.textContent = name;
         layerSelect.appendChild(option);
-      });
-    }
-
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      status.textContent = `处理 ${file.name} 中...`;
-      attributes.textContent = "(点击地图上的要素)";
-      map.clearHighlightedFeatures();
-
-      try {
+    });
+}
+fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `处理 ${file.name} 中...`;
+    attributes.textContent = "(点击地图上的要素)";
+    map.clearHighlightedFeatures();
+    try {
         const reader = new FileReader();
         reader.onload = async (event) => {
-          const content = new Uint8Array(event.target.result);
-          const source = new TopologySource("test-source");
-
-          if (map.getSource("test-source")) {
-            map.removeSource("test-source");
-          }
-          activeSource = source;
-
-          // Load initial data before registration: await setData, then addSource and setExtent.
-          try {
-            await source.setData({
-              filename: file.name,
-              content: content,
-            });
-            await map.addSource("test-source", source);
-            map.setExtent(source.getExtent());
-            populateLayers(source);
-            status.textContent = `当前: ${file.name}`;
-          } catch (e) {
-            console.error(e);
-            status.textContent = "处理文件出错";
-          }
+            const content = new Uint8Array(event.target.result);
+            const source = new TopologySource("test-source");
+            if (map.getSource("test-source")) {
+                map.removeSource("test-source");
+            }
+            activeSource = source;
+            // Load initial data before registration: await setData, then addSource and setExtent.
+            try {
+                await source.setData({
+                    filename: file.name,
+                    content: content,
+                });
+                await map.addSource("test-source", source);
+                map.setExtent(source.getExtent());
+                populateLayers(source);
+                status.textContent = `当前: ${file.name}`;
+            }
+            catch (e) {
+                console.error(e);
+                status.textContent = "处理文件出错";
+            }
         };
         reader.readAsArrayBuffer(file);
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = "处理文件出错";
-      }
-    });
-
-    mapContainer.addEventListener("click", (e) => {
-      if (!activeSource) return;
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const layers = layerSelect.value ? [layerSelect.value] : undefined;
-      const features = map.queryFeatures(point, { layers });
-
-      if (!features.length) {
+    }
+});
+mapContainer.addEventListener("click", (e) => {
+    if (!activeSource)
+        return;
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const layers = layerSelect.value ? [layerSelect.value] : undefined;
+    const features = map.queryFeatures(point, { layers });
+    if (!features.length) {
         attributes.textContent = "(未命中要素)";
         map.clearHighlightedFeatures();
         return;
-      }
-
-      map.setHighlightedFeatures(features, {
+    }
+    map.setHighlightedFeatures(features, {
         color: hlColor.value,
         width: Number(hlWidth.value) || 2.5,
         radius: Number(hlRadius.value) || 6,
         fill: !!hlFill.checked,
-      });
-      attributes.textContent =
+    });
+    attributes.textContent =
         `命中 ${features.length} 个要素\n\n` +
-        JSON.stringify(features[0].properties, null, 2);
-    });
-
-    window.addEventListener("resize", () => {
-      map.resize();
-    });
-    await autoLoadExampleFixtures('feature-attributes');
-  </script>
+            JSON.stringify(features[0].properties, null, 2);
+});
+window.addEventListener("resize", () => {
+    map.resize();
+});
+await autoLoadExampleFixtures('feature-attributes');
+</script>
 </body>
 
 </html>

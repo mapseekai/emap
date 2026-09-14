@@ -59,87 +59,93 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'points-source';
-    const targetSel = document.getElementById('target');
-    const modeSel = document.getElementById('mode');
-    const intervalInput = document.getElementById('interval');
-    const nameInput = document.getElementById('name');
-    const noReplace = document.getElementById('no-replace');
-    const btn = document.getElementById('btn');
-    const status = document.getElementById('status');
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'points-source';
+const targetSel = document.getElementById('target');
+const modeSel = document.getElementById('mode');
+const intervalInput = document.getElementById('interval');
+const nameInput = document.getElementById('name');
+const noReplace = document.getElementById('no-replace');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      btn.disabled = source.getLayers().length === 0;
-    }
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    btn.disabled = source.getLayers().length === 0;
+}
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `错误: ${err?.message ?? err}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    btn.addEventListener('click', async () => {
-      const target = targetSel.value;
-      const type = modeSel.value;
-      if (!target) return;
-      const opts = { source: SOURCE_ID, target, type };
-      const intv = intervalInput.value.trim();
-      if (intv && !isNaN(Number(intv))) opts.interval = Number(intv);
-      const nm = nameInput.value.trim();
-      if (nm) opts.name = nm;
-      if (noReplace.checked) opts.noReplace = true;
-      status.textContent = `正在按 "${type}" 模式从 "${target}" 提取点...`;
-      btn.disabled = true;
-      try {
+        catch (err) {
+            console.error(err);
+            status.textContent = `错误: ${err?.message ?? err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+btn.addEventListener('click', async () => {
+    const target = targetSel.value;
+    const type = modeSel.value;
+    if (!target)
+        return;
+    const opts = { source: SOURCE_ID, target, type };
+    const intv = intervalInput.value.trim();
+    if (intv && !isNaN(Number(intv)))
+        opts.interval = Number(intv);
+    const nm = nameInput.value.trim();
+    if (nm)
+        opts.name = nm;
+    if (noReplace.checked)
+        opts.noReplace = true;
+    status.textContent = `正在按 "${type}" 模式从 "${target}" 提取点...`;
+    btn.disabled = true;
+    try {
         const result = await map.ops.pointsLayer(opts);
         status.textContent = result.ok
-          ? `已从 "${target}" 提取点 (${type}),Ctrl+Z 撤销。`
-          : '提取失败 (检查图层几何类型与 interpolated 的 interval)。';
+            ? `已从 "${target}" 提取点 (${type}),Ctrl+Z 撤销。`
+            : '提取失败 (检查图层几何类型与 interpolated 的 interval)。';
         const src = map.getSource(SOURCE_ID);
-        if (src) populate(src);
-      } catch (err) {
+        if (src)
+            populate(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         btn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('getting-started/points');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('getting-started/points');
+</script>
 </body>
 
 </html>

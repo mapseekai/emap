@@ -19,3 +19,4 @@ Interactive measurements may run while the map is displaying either geographic o
 ## Consequences
 
 Results remain consistent across map projections and zoom levels. The implementation depends on a reliable CRS transformer and geodesic library, and callers that explicitly need planar engineering measurements must use a separate operation with declared units.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

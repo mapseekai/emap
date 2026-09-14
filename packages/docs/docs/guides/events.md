@@ -2,10 +2,10 @@
 id: events
 slug: /guides/events
 title: 事件
-api: ["CameraEvent","Emap","EmapEventMap","EventDispatcher","EventListener","FeatureEvent","FeatureEventFilter"]
+api: ["CameraEvent", "Emap", "EmapEventMap", "EventDispatcher", "EventListener", "FeatureEvent", "FeatureEventFilter"]
 examples: ["feature-attributes","interaction-handlers"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 事件

@@ -5,7 +5,7 @@ title: Status control
 api: ["Emap", "StatusControl", "StatusOptions"]
 examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Status control
@@ -15,7 +15,7 @@ verifiedVersion: 0.9.1
 ## Add the status control
 
 ```ts
-map.addControl(
+await map.addControl(
   new StatusControl({
     showMousePos: true,
     showEPSG: true,

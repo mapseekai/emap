@@ -2,10 +2,10 @@
 id: installation
 slug: /getting-started/installation
 title: 安装
-api: ["Emap","TopologySource"]
+api: ["Emap", "TopologySource"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 安装
@@ -75,7 +75,7 @@ pnpm add apache-arrow parquet-wasm
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```

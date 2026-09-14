@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — breaking
+
+- Replace the custom plugin kernel with the exact official `cordis@4.0.0-rc.10`
+  package. All providers and features use native Context, inject, Fiber and effects;
+  existing GIS dependency versions are unchanged.
+- Initialize maps with `await Emap.create(options)` or await `map.ready` after
+  construction. Control mounting/removal and map disposal must be awaited.
+- Remove `map.runtime`, `map.services`, `map.use`, `map.getService`, custom service
+  tokens, PluginRuntime and EffectScope. Use `map.ctx`, `ctx.plugin`, native Fiber
+  disposal/restart/update and Context declaration merging instead.
+- Replace the `/kernel` package entry with `/context` native re-exports and
+  diagnostics. ESM output leaves Cordis external rather than bundling another copy.
+- Forward optional `Control.inject` metadata to native child plugins so controls
+  suspend and reactivate with their service dependencies.
+- Update all examples and the runtime inspector to use actual Cordis fibers;
+  add cross-browser tests of pointer behavior, optional providers and dependency recovery.
+- Reorganize internal source ownership into six top-level zones: `domain`, `engine`,
+  `runtime`, `integrations`, `ui`, and `shared`. Public package subpaths remain unchanged.
+- Enforce colocated `foo.ts` / `foo.test.ts` unit tests with at most one unit-test file
+  per implementation; move cross-module regressions to `test/integration`, build checks
+  to `test/build`, and public type contracts to `test/types`.
+- Add `test-layout:check` and `typecheck:contracts` to documentation and release gates.
+- Refresh README, security guidance, bilingual docs, architecture records, examples, and
+  release instructions for native Cordis and the current source/test layout.
+
+
 ## [0.11.2] - 2026-09-14
 
 ### Changed
@@ -799,7 +825,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pointer-event arbiter (`attach`/`detach`, normalized `NormalizedPointerEvent`,
   priority-ordered dispatch with exclusive-gesture locking). `dragPan` pans
   via `handlePointer` and owns no DOM listeners; the old internal pan
-  primitive (`src/core/drag-pan-handler.ts`) is removed. No pan behavior
+  primitive (`src/engine/core/drag-pan-handler.ts`) is removed. No pan behavior
   change; this is the seam P2b's selection handlers slot into.
 - DX Phase 2b (toward 0.3.0): three opt-in named selection handlers —
   `map.clickSelect`, `map.boxSelect`, `map.lassoSelect` (each a `Handler`
@@ -983,7 +1009,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tested
 
-- Added `src/map/setdata-addsource-ordering.test.ts`: end-to-end regression
+- Added `src/engine/map/setdata-addsource-ordering.test.ts`: end-to-end regression
   proving both `addSource`→`await setData` and `await setData`→`addSource`
   populate the dataset before the promise resolves and schedule a render
   (guards the loading contract against regression).

@@ -17,7 +17,7 @@ function copyControlsCss() {
     name: 'copy-controls-css',
     writeBundle() {
       copyFileSync('src/ui/controls.css', 'dist/emap.css');
-      copyFileSync('src/types/style.css.d.ts', 'dist/style.css.d.ts');
+      copyFileSync('src/shared/types/style.css.d.ts', 'dist/style.css.d.ts');
     },
   };
 }
@@ -133,6 +133,13 @@ function warningIncludesPath(warning, pathPart) {
 
 function quietKnownCircularWarnings(warning, warn) {
   if (
+    warning.code === 'EMPTY_BUNDLE' &&
+    warning.names?.length === 1 &&
+    warning.names[0] === 'emap-services'
+  )
+    return;
+
+  if (
     warning.code === 'CIRCULAR_DEPENDENCY' &&
     (warningIncludesPath(warning, 'polyfill-node._stream_') ||
       warningIncludesPath(warning, '/node_modules/apache-arrow/'))
@@ -181,7 +188,7 @@ function esbuildTypeScript() {
 function commonPlugins() {
   return [
     alias({
-      entries: [{ find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }],
+      entries: [{ find: 'iconv-lite', replacement: 'src/shared/types/iconv-shim.ts' }],
     }),
     nodeResolve({
       browser: true,
@@ -210,7 +217,7 @@ export default [
   // file MUST load before they execute (page <script> order, or worker
   // importScripts in the worker output's banner).
   {
-    input: 'src/vendor/mapshaper-vendor.ts',
+    input: 'src/integrations/mapshaper/vendor.ts',
     onwarn: quietKnownCircularWarnings,
     output: {
       file: vendorOutput,
@@ -223,7 +230,7 @@ export default [
   // ES module with `export default`. Imported by dist/emap.mjs (which marks
   // `mapshaper` external and rewrites the specifier to ./mapshaper-vendor.mjs).
   {
-    input: 'src/vendor/mapshaper-vendor-esm.ts',
+    input: 'src/integrations/mapshaper/vendor-esm.ts',
     external: ['maplibre-gl'],
     onwarn: quietKnownCircularWarnings,
     output: {
@@ -256,15 +263,15 @@ export default [
   {
     input: {
       emap: 'src/index.ts',
-      'emap-kernel': 'src/kernel/index.ts',
-      'emap-services': 'src/services/index.ts',
-      'emap-providers': 'src/providers/index.ts',
-      'emap-plugins': 'src/plugins/index.ts',
-      'emap-presets': 'src/presets/index.ts',
-      'emap-ai': 'src/ai/index.ts',
-      'emap-maplibre': 'src/providers/maplibre/index.ts',
+      'emap-context': 'src/runtime/context/index.ts',
+      'emap-services': 'src/runtime/services/index.ts',
+      'emap-providers': 'src/runtime/providers/index.ts',
+      'emap-plugins': 'src/runtime/plugins/index.ts',
+      'emap-presets': 'src/runtime/presets/index.ts',
+      'emap-ai': 'src/runtime/ai/index.ts',
+      'emap-maplibre': 'src/integrations/maplibre/index.ts',
     },
-    external: ['maplibre-gl', 'mapshaper'],
+    external: ['cordis', 'maplibre-gl', 'mapshaper'],
     onwarn: quietKnownCircularWarnings,
     output: {
       dir: 'dist',
@@ -284,8 +291,8 @@ export default [
   // apache-arrow v21 ships `sideEffects:false` ESM that breaks when
   // tree-shaken aggressively — keep its module side effects.
   {
-    input: 'src/arrow/index.ts',
-    external: ['maplibre-gl', 'mapshaper', 'parquet-wasm'],
+    input: 'src/integrations/arrow/index.ts',
+    external: ['cordis', 'maplibre-gl', 'mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
       // Codecs register only when explicitly mounted; retain Arrow library initialization.
@@ -304,7 +311,7 @@ export default [
   // users must call setParquetWasm() with a self-initialized module (the
   // loader's error message says exactly that). GeoArrow needs no wasm.
   {
-    input: 'src/arrow/index.ts',
+    input: 'src/integrations/arrow/index.ts',
     external: ['mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
@@ -325,8 +332,8 @@ export default [
   // processing support. Keep DuckDB runtime dependencies external/lazy so
   // the main and Arrow bundles stay light.
   {
-    input: 'src/duckdb/index.ts',
-    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+    input: 'src/integrations/duckdb/index.ts',
+    external: ['cordis', '@duckdb/duckdb-wasm', 'apache-arrow'],
     onwarn: quietKnownCircularWarnings,
     output: {
       file: 'dist/emap-duckdb.mjs',
@@ -342,7 +349,7 @@ export default [
   // mapshaper-vendor.js itself. Relative URL: vendor file is expected to
   // live in the same directory as the worker bundle.
   {
-    input: 'src/worker/mapshaper-worker.ts',
+    input: 'src/engine/worker/mapshaper-worker.ts',
     external: ['mapshaper'],
     onwarn: quietKnownCircularWarnings,
     output: {

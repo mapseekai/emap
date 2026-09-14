@@ -5,7 +5,7 @@ title: 撤销与重做
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 撤销与重做
@@ -15,7 +15,7 @@ verifiedVersion: 0.9.1
 ## 添加按钮和快捷键
 
 ```ts
-map.addControl(new HistoryControl(), "top-right")
+await map.addControl(new HistoryControl(), "top-right")
 map.bindHistoryShortcuts()
 ```
 

@@ -2,7 +2,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 const duckDb = vi.hoisted(() => ({
   closeDuckDbRuntime: vi.fn(async () => {}),
   createDuckDbRuntimeFromJsDelivr: vi.fn(async () => ({ runtime: true })),
@@ -15,22 +14,18 @@ const duckDb = vi.hoisted(() => ({
   spatialRelation: vi.fn(async (input) => input),
   reproject: vi.fn(async (dataset) => dataset),
 }));
-
 const exampleRuntime = vi.hoisted(() => ({
   autoLoadExampleFixtures: vi.fn(async () => {}),
   installExampleMapUi: vi.fn(),
   loadExampleRuntime: vi.fn(),
 }));
-
 vi.mock('@mapseekai/emap/duckdb', () => duckDb);
 vi.mock('../../packages/examples/src/example-runtime', () => exampleRuntime);
-
 import {
   duckDbSpatialOperationDefinitions,
   getDuckDbSpatialOperationDefinition,
   mountDuckDbSpatialExample,
 } from '../../packages/examples/src/duckdb-spatial-example';
-
 const operationNames = [
   'centroid',
   'envelope',
@@ -80,9 +75,7 @@ const operationNames = [
   'append',
   'reproject',
 ] as const;
-
 type Source = ReturnType<typeof createSource>;
-
 function createSource(id: string, setData: (id: string) => Promise<void> = async () => {}) {
   const dataset = {
     info: {},
@@ -100,12 +93,13 @@ function createSource(id: string, setData: (id: string) => Promise<void> = async
   source.setData.mockImplementation(() => setData(source.id));
   return source;
 }
-
 function fixture(
   options: {
     rejectDuplicateLayers?: boolean;
     setData?: (id: string) => Promise<void>;
-    sourceInfo?: { crs_string?: string };
+    sourceInfo?: {
+      crs_string?: string;
+    };
   } = {},
 ) {
   const { rejectDuplicateLayers = false, setData, sourceInfo } = options;
@@ -129,7 +123,10 @@ function fixture(
     <select id="mask-layer"></select><label id="mask-layer-label"></label>
   `;
   const sources = new Map<string, Source>();
-  const layers: Array<{ id: string; source: string }> = [];
+  const layers: Array<{
+    id: string;
+    source: string;
+  }> = [];
   const map = {
     addControl: vi.fn(),
     getCanvasContainer: () => document.getElementById('map')!,
@@ -173,6 +170,9 @@ function fixture(
   }
   exampleRuntime.loadExampleRuntime.mockResolvedValue({
     Emap: class {
+      static async create(...args: any[]) {
+        return new this(...args);
+      }
       constructor() {
         return map;
       }
@@ -182,12 +182,10 @@ function fixture(
   });
   return { map, sources, layers };
 }
-
 afterEach(() => {
   vi.clearAllMocks();
   document.body.innerHTML = '';
 });
-
 const geometryPages = [
   ['duckdb/geometry/centroid', 'centroid'],
   ['duckdb/geometry/envelope', 'envelope'],
@@ -197,7 +195,6 @@ const geometryPages = [
   ['duckdb/geometry/simplify-preserve-topology', 'simplifyPreserveTopology'],
   ['duckdb/geometry/make-valid', 'repairGeometry'],
 ] as const;
-
 const attributePages = [
   ['duckdb/attribute/area', 'area'],
   ['duckdb/attribute/length', 'length'],
@@ -211,7 +208,6 @@ const attributePages = [
   ['duckdb/attribute/centroid-x', 'centroidX'],
   ['duckdb/attribute/centroid-y', 'centroidY'],
 ] as const;
-
 const relationPages = [
   ['duckdb/relation/intersects', 'intersects'],
   ['duckdb/relation/contains', 'contains'],
@@ -227,7 +223,6 @@ const relationPages = [
   ['duckdb/relation/distance', 'distance'],
   ['duckdb/relation/distance-within', 'distanceWithin'],
 ] as const;
-
 const densifyPage = [['duckdb/geometry/densify', 'densify']] as const;
 const unaryGeometryPages = [
   ['duckdb/geometry/multipart-to-singlepart', 'multipartToSinglepart'],
@@ -252,7 +247,6 @@ const predicatePages = [
 ] as const;
 const joinKeyPages = [['duckdb/join/attribute-join', 'attributeJoin']] as const;
 const crsPages = [['duckdb/data-management/reproject', 'reproject']] as const;
-
 const newOperationPages = [
   ...densifyPage,
   ...unaryGeometryPages,
@@ -262,7 +256,6 @@ const newOperationPages = [
   ...joinKeyPages,
   ...crsPages,
 ] as const;
-
 async function executePage(
   id: string,
   mount: (config: { id: string; operation: string }) => Promise<void>,
@@ -280,14 +273,12 @@ async function executePage(
   ) => (mount: typeof mount) => Promise<void>;
   await new AsyncFunction('mountDuckDbSpatialExample', body)(mount);
 }
-
 describe('DuckDB spatial example runner', () => {
   it('defines every one-operation-per-page route exactly once', () => {
     expect(duckDbSpatialOperationDefinitions.map(({ operation }) => operation)).toEqual(
       operationNames,
     );
   });
-
   it.each([
     ...geometryPages,
     ...attributePages,
@@ -295,16 +286,12 @@ describe('DuckDB spatial example runner', () => {
     ...newOperationPages,
   ])('mounts %s with its fixed %s operation', async (id, operation) => {
     const mount = vi.fn(async () => {});
-
     await executePage(id, mount);
-
     expect(mount).toHaveBeenCalledExactlyOnceWith({ id, operation });
   });
-
   it.each(attributePages)('%s exposes only universal runner controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
-
     expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
     expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
     expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
@@ -318,11 +305,9 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
-
   it.each(relationPages.slice(0, -2))('%s exposes fixed relation controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
-
     expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
     expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
     expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
@@ -339,14 +324,12 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
-
   it('gives distance only its fixed target, mask, and distance controls', async () => {
     const html = await readFile(
       resolve('packages/examples/examples/duckdb/relation/distance/index.html'),
       'utf8',
     );
     const page = new DOMParser().parseFromString(html, 'text/html');
-
     expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
     expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
     expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
@@ -357,14 +340,12 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
-
   it('gives distance-within its filter-or-attribute relation controls', async () => {
     const html = await readFile(
       resolve('packages/examples/examples/duckdb/relation/distance-within/index.html'),
       'utf8',
     );
     const page = new DOMParser().parseFromString(html, 'text/html');
-
     expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
     expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
     expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
@@ -396,12 +377,10 @@ describe('DuckDB spatial example runner', () => {
     const page = new DOMParser().parseFromString(html, 'text/html');
     const workbench = page.querySelector<HTMLElement>('.emap-example-workbench-body');
     if (!workbench) throw new Error(`Missing workbench body for ${id}`);
-
     const sections = Array.from(workbench.children).filter((child) =>
       child.classList.contains('emap-example-section'),
     );
     expect(sections.length).toBeGreaterThanOrEqual(2);
-
     for (const controlId of [
       'file',
       'target',
@@ -432,7 +411,6 @@ describe('DuckDB spatial example runner', () => {
     expect(page.getElementById('crs-recovery-apply')?.closest('.emap-example-field')).toBe(
       recovery,
     );
-
     expect(page.querySelector('#run')?.classList.contains('emap-example-primary-button')).toBe(
       true,
     );
@@ -441,7 +419,6 @@ describe('DuckDB spatial example runner', () => {
       page.querySelector('#picked-attributes')?.closest('.emap-example-section'),
     ).not.toBeNull();
   });
-
   it('declares only required controls for each operation family', () => {
     expect(getDuckDbSpatialOperationDefinition('simplify').controls).toEqual({
       tolerance: true,
@@ -543,7 +520,6 @@ describe('DuckDB spatial example runner', () => {
       crs: true,
     });
   });
-
   it.each(maskPages)('%s exposes mask controls without relation extras', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
@@ -553,7 +529,6 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
-
   it.each(predicatePages)('%s exposes mask and predicate controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
@@ -577,14 +552,12 @@ describe('DuckDB spatial example runner', () => {
       'containsProperly',
     ]);
   });
-
   it.each(fieldPages)('%s exposes a group field without mask controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
     expect(page.querySelector('#field')).not.toBeNull();
     expect(page.querySelector('#mask-layer')).toBeNull();
   });
-
   it.each(joinKeyPages)('%s exposes both join key fields and mask controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
@@ -592,14 +565,12 @@ describe('DuckDB spatial example runner', () => {
     expect(page.querySelector('#field')).not.toBeNull();
     expect(page.querySelector('#join-field')).not.toBeNull();
   });
-
   it.each(densifyPage)('%s exposes a segment length without the geographic guard', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
     expect(page.querySelector('#tolerance')).not.toBeNull();
     expect(page.querySelector('#allow-geographic')).toBeNull();
   });
-
   it.each(crsPages)('%s exposes a labelled target CRS input', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
@@ -607,7 +578,6 @@ describe('DuckDB spatial example runner', () => {
     expect(page.querySelector('label[for="crs"]')).not.toBeNull();
     expect(page.querySelector('#mask-layer')).toBeNull();
   });
-
   it('requires only controls used by the selected operation', async () => {
     fixture();
     for (const id of [
@@ -623,24 +593,20 @@ describe('DuckDB spatial example runner', () => {
     ])
       document.getElementById(id)?.remove();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
-
     fixture();
     document.getElementById('tolerance')?.remove();
     await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'simplify' })).rejects.toThrow(
       '#tolerance',
     );
-
     fixture();
     document.getElementById('relation-mode')?.remove();
     document.getElementById('relation-mode-label')?.remove();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
-
     fixture();
     document.getElementById('mask-layer')?.remove();
     await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'distance' })).rejects.toThrow(
       '#mask-layer',
     );
-
     fixture();
     for (const id of [
       'tolerance',
@@ -651,20 +617,17 @@ describe('DuckDB spatial example runner', () => {
     ])
       document.getElementById(id)?.remove();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'intersects' });
-
     fixture();
     document.getElementById('relation-mode')?.remove();
     await expect(
       mountDuckDbSpatialExample({ id: 'test', operation: 'intersects' }),
     ).rejects.toThrow('#relation-mode');
-
     fixture();
     document.getElementById('distance')?.remove();
     await expect(
       mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' }),
     ).rejects.toThrow('#distance');
   });
-
   it('confirms detected input metadata without an explicit CRS override', async () => {
     const { map, sources } = fixture({ sourceInfo: { crs_string: 'EPSG:3857' } });
     await expect(
@@ -681,7 +644,6 @@ describe('DuckDB spatial example runner', () => {
     expect(sources.get('duckdb-spatial-input')?.getDataset().info.crs_string).toBe('EPSG:3857');
     expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
   });
-
   it('requests an explicit Input CRS after source preflight', async () => {
     const { map, sources } = fixture();
     const draft = { input: 'draft' };
@@ -716,7 +678,6 @@ describe('DuckDB spatial example runner', () => {
     expect(input.disabled).toBe(false);
     expect(document.getElementById('status')?.textContent).toBe('已按 EPSG:3857 加载输入数据。');
   });
-
   it('requests an explicit Mask CRS after source preflight', async () => {
     const { map, sources } = fixture();
     const maskDraft = { mask: 'draft' };
@@ -753,7 +714,6 @@ describe('DuckDB spatial example runner', () => {
     expect(sources.get('duckdb-spatial-input')).toBe(initialInput);
     expect(document.getElementById('status')?.textContent).toBe('已按 EPSG:3857 加载Mask 数据。');
   });
-
   it('retains concurrent Input and Mask CRS drafts until both are recovered', async () => {
     const parseResolvers = new Map<string, () => void>();
     const parsedSources = new Map<string, Source>();
@@ -798,7 +758,6 @@ describe('DuckDB spatial example runner', () => {
     parseResolvers.get('duckdb-spatial-mask')!();
     await vi.waitFor(() => expect(map.preflightSource).toHaveBeenCalledTimes(2));
     expect(document.getElementById('crs-recovery-label')?.textContent).toBe('输入数据 CRS');
-
     recoveryInput.value = 'EPSG:3857';
     recoveryApply.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
@@ -806,19 +765,20 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() =>
       expect(document.getElementById('crs-recovery-label')?.textContent).toBe('Mask 数据 CRS'),
     );
-
     recoveryInput.value = 'EPSG:3857';
     recoveryApply.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
     expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
   });
-
   it('submits a pending CRS draft only once while confirmation is in flight', async () => {
     const { map, sources } = fixture();
     const draft = { input: 'draft' };
     type ReadyResult = {
       status: 'ready';
-      plan: { sourceId: string; source: Source };
+      plan: {
+        sourceId: string;
+        source: Source;
+      };
     };
     const retryResolvers: Array<(result: ReadyResult) => void> = [];
     map.preflightSource.mockImplementation(async (request) => {
@@ -838,13 +798,11 @@ describe('DuckDB spatial example runner', () => {
     Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
     input.dispatchEvent(new Event('change'));
     await vi.waitFor(() => expect(document.getElementById('crs-recovery')?.hidden).toBe(false));
-
     recoveryInput.value = 'EPSG:3857';
     recoveryApply.dispatchEvent(new Event('click'));
     recoveryApply.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(retryResolvers).toHaveLength(1));
     expect(recoveryApply.disabled).toBe(true);
-
     retryResolvers[0]!({
       status: 'ready',
       plan: {
@@ -856,7 +814,6 @@ describe('DuckDB spatial example runner', () => {
     expect(map.confirmSource).toHaveBeenCalledTimes(1);
     expect(document.getElementById('status')?.textContent).toBe('已按 EPSG:3857 加载输入数据。');
   });
-
   it('does not offer CRS recovery for a rejected source', async () => {
     const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
@@ -882,7 +839,6 @@ describe('DuckDB spatial example runner', () => {
       reportError.mockRestore();
     }
   });
-
   it('replaces output, renders clicked attributes, and discards stale results before publication', async () => {
     const { map, sources } = fixture();
     let resolveOperation!: (value: unknown) => void;
@@ -908,7 +864,6 @@ describe('DuckDB spatial example runner', () => {
     document.getElementById('map')!.dispatchEvent(new MouseEvent('click'));
     expect(document.getElementById('picked-attributes')!.textContent).toContain('picked');
   });
-
   it('runs geometry and attribute helpers, replaces output, and fits its extent', async () => {
     const { map, sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
@@ -931,7 +886,6 @@ describe('DuckDB spatial example runner', () => {
     expect(duckDb.centroid.mock.calls[1]?.[0]).toBe(firstOutputDataset);
     expect(sources.get('duckdb-spatial-output')).not.toBe(firstOutput);
     expect(map.removeLayer).toHaveBeenCalledWith(firstOutputLayerIds[0]);
-
     const { sources: areaSources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'area' });
     const areaInput = document.getElementById('file') as HTMLInputElement;
@@ -944,7 +898,6 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() => expect(areaSources.has('duckdb-spatial-output')).toBe(true));
     expect(duckDb.area).toHaveBeenCalledTimes(1);
   });
-
   it('runs the envelope helper on the selected input layer', async () => {
     const { sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'envelope' });
@@ -952,13 +905,10 @@ describe('DuckDB spatial example runner', () => {
     Object.defineProperty(input, 'files', { value: [new File(['polygon'], 'polygon.geojson')] });
     input.dispatchEvent(new Event('change'));
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
-
     document.getElementById('run')!.dispatchEvent(new Event('click'));
-
     await vi.waitFor(() => expect(duckDb.envelope).toHaveBeenCalledTimes(1));
     expect(sources.has('duckdb-spatial-output')).toBe(true);
   });
-
   it.each([
     ['duckdb/attribute/x', 'x', 'x'],
     ['duckdb/attribute/y', 'y', 'y'],
@@ -1034,7 +984,6 @@ describe('DuckDB spatial example runner', () => {
       input.dispatchEvent(new Event('change'));
       mask.dispatchEvent(new Event('change'));
     });
-
     await executePage('duckdb/relation/distance', mountDuckDbSpatialExample);
     await vi.waitFor(() => expect(uploadResolvers.size).toBe(2));
     delayInitialUploads = false;
@@ -1044,7 +993,6 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
     const initialInputSource = sources.get('duckdb-spatial-input');
     const initialMaskSource = sources.get('duckdb-spatial-mask');
-
     expect(layers.map(({ id }) => id).sort()).toEqual([
       'duckdb-spatial-input-0-point',
       'duckdb-spatial-mask-0-point',
@@ -1058,11 +1006,9 @@ describe('DuckDB spatial example runner', () => {
     expect((document.getElementById('mask-layer') as HTMLSelectElement).value).toBe(
       'duckdb-spatial-mask:0',
     );
-
     document.getElementById('run')!.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(duckDb.spatialRelation).toHaveBeenCalledTimes(1));
   });
-
   it('discards a result when the input changes during output registration', async () => {
     const { map, sources } = fixture();
     const originalAddSource = map.addSource.getMockImplementation()!;
@@ -1082,7 +1028,6 @@ describe('DuckDB spatial example runner', () => {
     );
     expect(sources.has('duckdb-spatial-output')).toBe(false);
   });
-
   it('runs distanceWithin through the selected relation mode', async () => {
     const { sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' });
@@ -1099,7 +1044,6 @@ describe('DuckDB spatial example runner', () => {
     });
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
   });
-
   it('closes the created runtime on pagehide', async () => {
     const { sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });

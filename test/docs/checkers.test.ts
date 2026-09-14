@@ -3,9 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-
 const repoRoot = process.cwd();
-
 describe('documentation quality checkers', () => {
   it.each([
     ['unreleased', 0],
@@ -23,7 +21,6 @@ describe('documentation quality checkers', () => {
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
     expect(result.status, outputOf(result)).toBe(status);
   });
-
   it('fails when an English mirror document is missing', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -36,16 +33,13 @@ describe('documentation quality checkers', () => {
       api: ['Emap'],
       fixtures: ['inline:tiny.geojson'],
     });
-
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain(
       'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md',
     );
     expect(outputOf(result)).toContain('intro');
   });
-
   it('fails when a public TypeDoc reflection lacks an @example tag', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
@@ -66,14 +60,11 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('loadMap');
     expect(outputOf(result)).toContain('@example');
   });
-
   it('fails when docs front matter names an API without a real example association', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/reference/load-map.md', {
@@ -101,13 +92,10 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('loadMap: missing public API @example association');
   });
-
   it('fails the API checker on uncataloged public src reflections', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
@@ -128,14 +116,11 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('publicUtility');
     expect(outputOf(result)).toContain('uncataloged public API reflection');
   });
-
   it('does not treat nested reflection properties as standalone public APIs', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
@@ -167,12 +152,9 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(0);
   });
-
   it('requires example associations for APIs cataloged only from docs front matter', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/reference/doc-only.md', {
@@ -205,13 +187,10 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('docOnlyApi: missing public API @example association');
   });
-
   it('parses seed and recipe calls from the exported examples catalog', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/guides/selection.md', {
@@ -250,9 +229,7 @@ describe('documentation quality checkers', () => {
         '<script type="module" src="/src/main.ts"></script>',
       );
     }
-
     const result = runChecker('scripts/check-examples.mjs', root);
-
     expect(outputOf(result)).toContain('missing fixture missing.geojson');
     expect(outputOf(result)).toContain('missing fixture missing-seed.geojson');
     expect(outputOf(result)).toContain('missing docs ID /docs/missing-recipe');
@@ -260,7 +237,6 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('missing API reflection MissingRecipeApi');
     expect(outputOf(result)).toContain('missing API reflection MissingSeedApi');
   });
-
   it('fails when generated module reflections or pages contain filler prose', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
@@ -274,7 +250,7 @@ describe('documentation quality checkers', () => {
           name: 'duckdb',
           variant: 'declaration',
           kind: 2,
-          sources: [{ fileName: 'src/duckdb/index.ts' }],
+          sources: [{ fileName: 'src/integrations/duckdb/index.ts' }],
           comment: {
             summary: [
               {
@@ -291,16 +267,13 @@ describe('documentation quality checkers', () => {
       'duckdb',
       '<p>duckdb is a public emap API documented for package consumers.</p>',
     );
-
     const result = runChecker('scripts/check-docs-api.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('module:duckdb: generated module filler prose');
     expect(outputOf(result)).toContain(
       'packages/docs/static/api/modules/duckdb.html: generated module filler prose',
     );
   });
-
   it('fails when an English mirror document has no front matter id', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -318,13 +291,10 @@ describe('documentation quality checkers', () => {
       api: ['Emap'],
       fixtures: ['inline:tiny.geojson'],
     });
-
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing English id for intro');
   });
-
   it('fails when either locale is missing required Task8 front matter fields', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -344,14 +314,11 @@ describe('documentation quality checkers', () => {
       api: ['Emap'],
       fixtures: ['inline:tiny.geojson'],
     });
-
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing Chinese api for intro');
     expect(outputOf(result)).toContain('missing English examples for intro');
   });
-
   it('fails when locale front matter parity differs', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -371,15 +338,12 @@ describe('documentation quality checkers', () => {
       api: ['Emap'],
       fixtures: ['inline:tiny.geojson'],
     });
-
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain(
       'English api ["TopologySource"] does not match ["Emap"] for intro',
     );
   });
-
   it('parses CRLF Markdown front matter', async () => {
     const root = await fixtureRoot();
     await writeDoc(
@@ -407,12 +371,9 @@ describe('documentation quality checkers', () => {
       api: ['Emap'],
       fixtures: ['inline:tiny.geojson'],
     });
-
     const result = runChecker('scripts/check-docs-i18n.mjs', root);
-
     expect(result.status).toBe(0);
   });
-
   it('fails when an English document references an uncataloged example', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -448,13 +409,10 @@ describe('documentation quality checkers', () => {
       join(root, 'packages/examples/examples/getting-started/fixture/index.html'),
       '<script type="module" src="/src/main.ts"></script>',
     );
-
     const result = runChecker('scripts/check-examples.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing example catalog entry missing-example');
   });
-
   it('fails when a catalog item references a missing fixture', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -489,18 +447,14 @@ describe('documentation quality checkers', () => {
       join(root, 'packages/examples/examples/getting-started/fixture/index.html'),
       '<script type="module" src="/src/main.ts"></script>',
     );
-
     const result = runChecker('scripts/check-examples.mjs', root);
-
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing.geojson');
   });
 });
-
 async function fixtureRoot(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'emap-doc-checkers-'));
 }
-
 async function writeDoc(
   root: string,
   path: string,
@@ -541,10 +495,13 @@ async function writeDoc(
     ['---', ...frontMatterLines, '---', '', `# ${frontMatter.title}`, ''].join(lineEnding),
   );
 }
-
 async function writeCatalog(
   root: string,
-  values: { docs: string[]; api: string[]; fixtures: string[] },
+  values: {
+    docs: string[];
+    api: string[];
+    fixtures: string[];
+  },
 ): Promise<void> {
   const filePath = join(root, 'docs-meta/examples.ts');
   await mkdir(resolve(filePath, '..'), { recursive: true });
@@ -562,7 +519,6 @@ async function writeCatalog(
 }];\n`,
   );
 }
-
 async function writeRecipesCatalog(root: string): Promise<void> {
   const filePath = join(root, 'docs-meta/examples.ts');
   await mkdir(resolve(filePath, '..'), { recursive: true });
@@ -582,26 +538,22 @@ function recipe(id, category, zh, en, docs, api, featureFlags, fixtures) {
 `,
   );
 }
-
 async function writeReflections(root: string, value: unknown): Promise<void> {
   const filePath = join(root, 'packages/docs/static/api/reflections.json');
   await mkdir(resolve(filePath, '..'), { recursive: true });
   await writeFile(filePath, JSON.stringify(value, null, 2));
 }
-
 async function writeModulePage(root: string, name: string, html: string): Promise<void> {
   const filePath = join(root, `packages/docs/static/api/modules/${name}.html`);
   await mkdir(resolve(filePath, '..'), { recursive: true });
   await writeFile(filePath, html);
 }
-
 function runChecker(script: string, root: string): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, [resolve(repoRoot, script), '--root', root], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
 }
-
 function outputOf(result: ReturnType<typeof spawnSync>): string {
   return `${result.stdout ?? ''}${result.stderr ?? ''}`;
 }

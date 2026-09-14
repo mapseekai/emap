@@ -66,137 +66,152 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'simplify-source';
-    const scopeSel = document.getElementById('scope');
-    const thresholdModeSel = document.getElementById('threshold-mode');
-    const thresholdValue = document.getElementById('threshold-value');
-    const methodSel = document.getElementById('method');
-    const planarInput = document.getElementById('planar');
-    const keepShapesInput = document.getElementById('keep-shapes');
-    const lockBoxInput = document.getElementById('lock-box');
-    const noRepairInput = document.getElementById('no-repair');
-    const btn = document.getElementById('btn');
-    const status = document.getElementById('status');
-
-    function populate(source) {
-      // Reset to "all source" plus per-layer scopes
-      scopeSel.innerHTML = '<option value="">整个数据源 (推荐)</option>';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'simplify-source';
+const scopeSel = document.getElementById('scope');
+const thresholdModeSel = document.getElementById('threshold-mode');
+const thresholdValue = document.getElementById('threshold-value');
+const methodSel = document.getElementById('method');
+const planarInput = document.getElementById('planar');
+const keepShapesInput = document.getElementById('keep-shapes');
+const lockBoxInput = document.getElementById('lock-box');
+const noRepairInput = document.getElementById('no-repair');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+function populate(source) {
+    // Reset to "all source" plus per-layer scopes
+    scopeSel.innerHTML = '<option value="">整个数据源 (推荐)</option>';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         const geom = lyr?.geometry_type ?? '?';
         if (geom === 'polygon' || geom === 'polyline') {
-          scopeSel.appendChild(new Option(`${name} (${geom})`, name));
+            scopeSel.appendChild(new Option(`${name} (${geom})`, name));
         }
-      });
-      btn.disabled = source.getLayers().length === 0;
-    }
-
-    function placeholderForMode() {
-      const mode = thresholdModeSel.value;
-      if (mode === 'percentage') return '0..100, 例如 10';
-      if (mode === 'interval') return '> 0, 单位: 源 CRS';
-      if (mode === 'resolution') return '例如 1000x500';
-      return '';
-    }
-
-    thresholdModeSel.addEventListener('change', () => {
-      thresholdValue.placeholder = placeholderForMode();
     });
+    btn.disabled = source.getLayers().length === 0;
+}
+function placeholderForMode() {
+    const mode = thresholdModeSel.value;
+    if (mode === 'percentage')
+        return '0..100, 例如 10';
+    if (mode === 'interval')
+        return '> 0, 单位: 源 CRS';
+    if (mode === 'resolution')
+        return '例如 1000x500';
+    return '';
+}
+thresholdModeSel.addEventListener('change', () => {
     thresholdValue.placeholder = placeholderForMode();
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+});
+thresholdValue.placeholder = placeholderForMode();
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `错误: ${err?.message ?? err}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    btn.addEventListener('click', async () => {
-      const opts = { source: SOURCE_ID };
-      const scope = scopeSel.value;
-      if (scope) opts.target = scope;
-
-      const mode = thresholdModeSel.value;
-      const raw = thresholdValue.value.trim();
-      if (mode === 'percentage') {
+        catch (err) {
+            console.error(err);
+            status.textContent = `错误: ${err?.message ?? err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+btn.addEventListener('click', async () => {
+    const opts = { source: SOURCE_ID };
+    const scope = scopeSel.value;
+    if (scope)
+        opts.target = scope;
+    const mode = thresholdModeSel.value;
+    const raw = thresholdValue.value.trim();
+    if (mode === 'percentage') {
         const n = Number(raw);
-        if (Number.isNaN(n)) { status.textContent = 'percentage 必须是数字。'; return; }
+        if (Number.isNaN(n)) {
+            status.textContent = 'percentage 必须是数字。';
+            return;
+        }
         opts.percentage = n;
-      } else if (mode === 'interval') {
+    }
+    else if (mode === 'interval') {
         const n = Number(raw);
-        if (Number.isNaN(n)) { status.textContent = 'interval 必须是数字。'; return; }
+        if (Number.isNaN(n)) {
+            status.textContent = 'interval 必须是数字。';
+            return;
+        }
         opts.interval = n;
-      } else {
+    }
+    else {
         opts.resolution = raw;
-      }
-
-      const method = methodSel.value;
-      if (method) opts.method = method;
-      if (planarInput.checked) opts.planar = true;
-      if (keepShapesInput.checked) opts.keepShapes = true;
-      if (lockBoxInput.checked) opts.lockBox = true;
-      if (noRepairInput.checked) opts.noRepair = true;
-
-      const label = scope || '整个数据源';
-      status.textContent = `正在简化 ${label}...`;
-      btn.disabled = true;
-      try {
+    }
+    const method = methodSel.value;
+    if (method)
+        opts.method = method;
+    if (planarInput.checked)
+        opts.planar = true;
+    if (keepShapesInput.checked)
+        opts.keepShapes = true;
+    if (lockBoxInput.checked)
+        opts.lockBox = true;
+    if (noRepairInput.checked)
+        opts.noRepair = true;
+    const label = scope || '整个数据源';
+    status.textContent = `正在简化 ${label}...`;
+    btn.disabled = true;
+    try {
         const result = await map.ops.simplifyLayer(opts);
         if (result.ok) {
-          // Render-LOD verification: floor is what `-simplify` baked into
-          // the arcs; filtered count is how many vertices survive at that
-          // floor. Both are independent of the current zoom level.
-          const arcs = map.getSource(SOURCE_ID)?.getArcs?.();
-          const total = arcs?.getPointCount?.() ?? 0;
-          const floor = arcs?.getRetainedInterval?.() ?? 0;
-          const kept = arcs?.getFilteredPointCount?.() ?? total;
-          const dropped = total - kept;
-          const pct = total > 0 ? ((kept / total) * 100).toFixed(1) : '0';
-          status.textContent =
-            `已简化 ${label} (${mode}=${raw}): 保留 ${kept}/${total} 顶点 (${pct}%, 丢弃 ${dropped}), ` +
-            `floor=${floor.toExponential(2)}。Ctrl+Z 撤销。`;
-        } else {
-          status.textContent = '简化失败 (检查阈值是否合法)。';
+            // Render-LOD verification: floor is what `-simplify` baked into
+            // the arcs; filtered count is how many vertices survive at that
+            // floor. Both are independent of the current zoom level.
+            const arcs = map.getSource(SOURCE_ID)?.getArcs?.();
+            const total = arcs?.getPointCount?.() ?? 0;
+            const floor = arcs?.getRetainedInterval?.() ?? 0;
+            const kept = arcs?.getFilteredPointCount?.() ?? total;
+            const dropped = total - kept;
+            const pct = total > 0 ? ((kept / total) * 100).toFixed(1) : '0';
+            status.textContent =
+                `已简化 ${label} (${mode}=${raw}): 保留 ${kept}/${total} 顶点 (${pct}%, 丢弃 ${dropped}), ` +
+                    `floor=${floor.toExponential(2)}。Ctrl+Z 撤销。`;
+        }
+        else {
+            status.textContent = '简化失败 (检查阈值是否合法)。';
         }
         const src = map.getSource(SOURCE_ID);
-        if (src) populate(src);
-      } catch (err) {
+        if (src)
+            populate(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         btn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('simplify');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('simplify');
+</script>
 </body>
 
 </html>

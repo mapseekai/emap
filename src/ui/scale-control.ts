@@ -3,8 +3,8 @@ import {
   selectScaleDistance,
   type ScaleCalculationMethod,
   type ScaleViewMetrics,
-} from '../geo/scale-calculator';
-import type { ControlContext } from '../services/controls';
+} from '../domain/geo/scale-calculator';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 
 export type ScaleControlStyle = 'checker' | 'line' | 'ruler' | 'steps' | 'solid' | 'minimal';

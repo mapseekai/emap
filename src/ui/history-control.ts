@@ -1,5 +1,5 @@
-import type { HistoryStateSnapshot } from '../edit/edit-history';
-import type { ControlContext } from '../services/controls';
+import type { HistoryStateSnapshot } from '../domain/edit/edit-history';
+import type { ControlContext } from '../runtime/services/controls';
 import { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 

@@ -32,100 +32,118 @@
     </div>
   </details>
   <script type="module">
-    import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.clickSelect.enable();
-    map.boxSelect.setOptions({
-      dragActivator: 'shift',
-      style: { stroke: '#2563eb', strokeWidth: 1.5, fill: 'rgba(37, 99, 235, 0.10)' },
-    });
-    map.boxSelect.enable();
-    const status = document.getElementById('status');
-    const generate = document.getElementById('generate');
-    const lod = document.getElementById('lod');
-    const cell = document.getElementById('cell');
-    const filter = document.getElementById('filter');
-    let source;
-    let total = 0;
-    let selected = [];
-    function updateStatus() {
-      const ids = selected.slice(0, 8).map((feature) => feature.id).join(', ');
-      const more = selected.length > 8 ? ` … +${(selected.length - 8).toLocaleString()}` : '';
-      status.textContent = `${total.toLocaleString()} 个原始点 / original points · LOD ${lod.checked ? 'ON' : 'OFF'} · 已选择 / selected: ${selected.length.toLocaleString()}${ids ? ` · IDs: ${ids}${more}` : ''}`;
-      status.dataset.state = 'ready';
-    }
-    function style() {
-      if (!source) return;
-      if (!cell.reportValidity()) return;
-      if (map.getLayer('dots')) map.removeLayer('dots');
-      map.addLayer({ id: 'dots', type: 'circle', source: 'points',
+
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+map.clickSelect.enable();
+map.boxSelect.setOptions({
+    dragActivator: 'shift',
+    style: { stroke: '#2563eb', strokeWidth: 1.5, fill: 'rgba(37, 99, 235, 0.10)' },
+});
+map.boxSelect.enable();
+const status = document.getElementById('status');
+const generate = document.getElementById('generate');
+const lod = document.getElementById('lod');
+const cell = document.getElementById('cell');
+const filter = document.getElementById('filter');
+let source;
+let total = 0;
+let selected = [];
+function updateStatus() {
+    const ids = selected.slice(0, 8).map((feature) => feature.id).join(', ');
+    const more = selected.length > 8 ? ` … +${(selected.length - 8).toLocaleString()}` : '';
+    status.textContent = `${total.toLocaleString()} 个原始点 / original points · LOD ${lod.checked ? 'ON' : 'OFF'} · 已选择 / selected: ${selected.length.toLocaleString()}${ids ? ` · IDs: ${ids}${more}` : ''}`;
+    status.dataset.state = 'ready';
+}
+function style() {
+    if (!source)
+        return;
+    if (!cell.reportValidity())
+        return;
+    if (map.getLayer('dots'))
+        map.removeLayer('dots');
+    map.addLayer({ id: 'dots', type: 'circle', source: 'points',
         pointLod: lod.checked ? { cellSize: Number(cell.value) } : false,
         ...(filter.checked ? { filter: ['==', ['get', 'group'], 0] } : {}),
         paint: { 'circle-radius': 3, 'circle-color': ['match', ['get', 'group'], 0, '#2474b5', '#cf7637'] },
-      });
-      updateStatus();
-    }
-    async function load() {
-      generate.disabled = true;
-      status.textContent = '正在生成和导入 / Generating and importing…';
-      status.dataset.state = 'loading';
-      try {
+    });
+    updateStatus();
+}
+async function load() {
+    generate.disabled = true;
+    status.textContent = '正在生成和导入 / Generating and importing…';
+    status.dataset.state = 'loading';
+    try {
         await new Promise(requestAnimationFrame);
         total = Number(document.getElementById('count').value);
         const clustered = document.getElementById('distribution').value === 'clustered';
         let seed = 12345;
         const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
         const features = Array.from({ length: total }, (_, id) => {
-          const group = id % 2;
-          const x = clustered ? (id % 4) * 2.4 + (random() - 0.5) * 0.5 : random() * 10;
-          const y = clustered ? Math.floor(id % 16 / 4) * 2.4 + (random() - 0.5) * 0.5 : random() * 10;
-          return { type: 'Feature', properties: { id, group }, geometry: { type: 'Point', coordinates: [110 + x, 25 + y] } };
+            const group = id % 2;
+            const x = clustered ? (id % 4) * 2.4 + (random() - 0.5) * 0.5 : random() * 10;
+            const y = clustered ? Math.floor(id % 16 / 4) * 2.4 + (random() - 0.5) * 0.5 : random() * 10;
+            return { type: 'Feature', properties: { id, group }, geometry: { type: 'Point', coordinates: [110 + x, 25 + y] } };
         });
         const bytes = new TextEncoder().encode(JSON.stringify({ type: 'FeatureCollection', features }));
         const next = await TopologySource.fromBytes('points', bytes.buffer, { filename: 'points.geojson' });
-        if (source) map.removeSource('points');
+        if (source)
+            map.removeSource('points');
         await map.addSource('points', next);
         source = next;
         style();
         map.setExtent(source.getExtent());
-      } catch (error) {
+    }
+    catch (error) {
         status.textContent = String(error);
         status.dataset.state = 'error';
-      } finally { generate.disabled = false; }
     }
-    document.getElementById('file-input').addEventListener('change', async (event) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      try {
+    finally {
+        generate.disabled = false;
+    }
+}
+document.getElementById('file-input').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file)
+        return;
+    try {
         const next = await TopologySource.fromBytes('points', await file.arrayBuffer(), { filename: file.name });
-        if (next.getLayers()[0]?.geometry_type !== 'point') throw new Error('请选择点数据 / Choose point data');
-        if (source) map.removeSource('points');
+        if (next.getLayers()[0]?.geometry_type !== 'point')
+            throw new Error('请选择点数据 / Choose point data');
+        if (source)
+            map.removeSource('points');
         await map.addSource('points', next);
         source = next;
         total = source.getLayers()[0].shapes?.length ?? 0;
         filter.checked = false;
         style();
         map.setExtent(source.getExtent());
-      } catch (error) { status.textContent = String(error); status.dataset.state = 'error'; }
-    });
-    generate.addEventListener('click', load);
-    for (const input of [lod, cell, filter]) input.addEventListener('change', style);
-    document.getElementById('fit').addEventListener('click', () => source && map.setExtent(source.getExtent()));
-    document.getElementById('clear-selection').addEventListener('click', () => map.select([], { mode: 'replace' }));
-    map.on('selectionchange', (event) => {
-      selected = event.selected;
-      if (selected.length) {
+    }
+    catch (error) {
+        status.textContent = String(error);
+        status.dataset.state = 'error';
+    }
+});
+generate.addEventListener('click', load);
+for (const input of [lod, cell, filter])
+    input.addEventListener('change', style);
+document.getElementById('fit').addEventListener('click', () => source && map.setExtent(source.getExtent()));
+document.getElementById('clear-selection').addEventListener('click', () => map.select([], { mode: 'replace' }));
+map.on('selectionchange', (event) => {
+    selected = event.selected;
+    if (selected.length) {
         map.setHighlightedFeatures(selected, { color: '#ef4444', radius: 7, fill: true });
-      } else {
+    }
+    else {
         map.clearHighlightedFeatures();
-      }
-      updateStatus();
-    });
-    await load();
-  </script>
+    }
+    updateStatus();
+});
+await load();
+</script>
 </body>
 </html>

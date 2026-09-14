@@ -60,71 +60,66 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, EditToolbar } = emap;
-
-    const map = new Emap({ container: "map" });
-
-    map.addControl(new emap.NavigationControl(), "top-left");
-    installExampleMapUi(map, emap);
-    map.addControl(new EditToolbar(), "top-left");
-    map.bindHistoryShortcuts();
-
-    // 记录 vertex_moved 事件
-    const logEl = document.getElementById("event-log");
-    map.on("vertex_moved", (e) => {
-      const entry = document.createElement("div");
-      entry.className = "log-entry";
-      const coords = e.coords
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, EditToolbar } = emap;
+const map = await Emap.create({ container: "map" });
+await map.addControl(new emap.NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+await map.addControl(new EditToolbar(), "top-left");
+map.bindHistoryShortcuts();
+// 记录 vertex_moved 事件
+const logEl = document.getElementById("event-log");
+map.on("vertex_moved", (e) => {
+    const entry = document.createElement("div");
+    entry.className = "log-entry";
+    const coords = e.coords
         ? `[${e.coords[0].toFixed(6)}, ${e.coords[1].toFixed(6)}]`
         : "?";
-      const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
-      entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
-      logEl.appendChild(entry);
-      logEl.scrollTop = logEl.scrollHeight;
-    });
-
-    const fileInput = document.getElementById("file-input");
-    const status = document.getElementById("status");
-
-    fileInput.addEventListener("change", async (ev) => {
-      const file = ev.target.files[0];
-      if (!file) return;
-      status.textContent = `处理 ${file.name} 中...`;
-      try {
+    const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
+    entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+});
+const fileInput = document.getElementById("file-input");
+const status = document.getElementById("status");
+fileInput.addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `处理 ${file.name} 中...`;
+    try {
         const reader = new FileReader();
         reader.onload = async (event) => {
-          const content = new Uint8Array(event.target.result);
-          const source = new TopologySource("test-source");
-
-          if (map.getSource("test-source")) {
-            map.removeSource("test-source");
-          }
-
-          // Load initial data before registration: await setData, then addSource and setExtent.
-          try {
-            await source.setData({ filename: file.name, content });
-            await map.addSource("test-source", source);
-            map.setExtent(source.getExtent());
-            status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式；右击共享节点可分离；Ctrl/Cmd+Z 撤销`;
-          } catch (e) {
-            console.error(e);
-            status.textContent = "处理文件出错";
-          }
+            const content = new Uint8Array(event.target.result);
+            const source = new TopologySource("test-source");
+            if (map.getSource("test-source")) {
+                map.removeSource("test-source");
+            }
+            // Load initial data before registration: await setData, then addSource and setExtent.
+            try {
+                await source.setData({ filename: file.name, content });
+                await map.addSource("test-source", source);
+                map.setExtent(source.getExtent());
+                status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式；右击共享节点可分离；Ctrl/Cmd+Z 撤销`;
+            }
+            catch (e) {
+                console.error(e);
+                status.textContent = "处理文件出错";
+            }
         };
         reader.readAsArrayBuffer(file);
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = "处理文件出错";
-      }
-    });
-
-    window.addEventListener("resize", () => map.resize());
-    await autoLoadExampleFixtures('vertex-editing');
-  </script>
+    }
+});
+window.addEventListener("resize", () => map.resize());
+await autoLoadExampleFixtures('vertex-editing');
+</script>
 </body>
 
 </html>

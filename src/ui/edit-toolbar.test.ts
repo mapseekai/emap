@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import type { Emap } from '../map/map';
+import type { Emap } from '../engine/map/map';
 import type { Control } from './control';
 import { EditToolbar } from './edit-toolbar';
 

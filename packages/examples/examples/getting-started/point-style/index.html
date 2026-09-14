@@ -64,102 +64,101 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-
-    const SOURCE_ID = 'point-style-source';
-    const LAYER_ID = 'point-style-layer';
-    const targetSel = document.getElementById('target');
-    const circleShape = document.getElementById('circle-shape');
-    const circleColor = document.getElementById('circle-color');
-    const circleRadius = document.getElementById('circle-radius');
-    const circleFill = document.getElementById('circle-fill');
-    const radiusOutput = document.getElementById('radius-output');
-    const status = document.getElementById('status');
-
-    function currentPaint() {
-      return {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const SOURCE_ID = 'point-style-source';
+const LAYER_ID = 'point-style-layer';
+const targetSel = document.getElementById('target');
+const circleShape = document.getElementById('circle-shape');
+const circleColor = document.getElementById('circle-color');
+const circleRadius = document.getElementById('circle-radius');
+const circleFill = document.getElementById('circle-fill');
+const radiusOutput = document.getElementById('radius-output');
+const status = document.getElementById('status');
+function currentPaint() {
+    return {
         'circle-shape': circleShape.value,
         'circle-color': circleColor.value,
         'circle-radius': Number(circleRadius.value),
         'circle-fill': circleFill.checked,
-      };
-    }
-
-    function addPointLayer() {
-      const target = targetSel.value;
-      if (!target) {
+    };
+}
+function addPointLayer() {
+    const target = targetSel.value;
+    if (!target) {
         status.textContent = '此文件没有 point 图层';
         return;
-      }
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      map.addLayer({
+    }
+    if (map.getLayer(LAYER_ID))
+        map.removeLayer(LAYER_ID);
+    map.addLayer({
         id: LAYER_ID,
         type: 'circle',
         source: SOURCE_ID,
         'source-layer': target,
         paint: currentPaint(),
-      });
-      status.textContent = `正在显示点图层 "${target}"`;
-    }
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((layer, index) => {
-        if (layer?.geometry_type !== 'point') return;
+    });
+    status.textContent = `正在显示点图层 "${target}"`;
+}
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((layer, index) => {
+        if (layer?.geometry_type !== 'point')
+            return;
         const name = layer?.name || layer?.id || `layer-${index}`;
         targetSel.appendChild(new Option(name, name));
-      });
-      addPointLayer();
-    }
-
-    function updatePaint(name, value) {
-      if (!map.getLayer(LAYER_ID)) return;
-      map.setPaintProperty(LAYER_ID, name, value);
-      status.textContent = `已更新 ${name}`;
-    }
-
-    document.getElementById('file-input').addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (loadEvent) => {
+    });
+    addPointLayer();
+}
+function updatePaint(name, value) {
+    if (!map.getLayer(LAYER_ID))
+        return;
+    map.setPaintProperty(LAYER_ID, name, value);
+    status.textContent = `已更新 ${name}`;
+}
+document.getElementById('file-input').addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (loadEvent) => {
         const content = new Uint8Array(loadEvent.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getLayer(LAYER_ID))
+            map.removeLayer(LAYER_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-        } catch (error) {
-          console.error(error);
-          status.textContent = `错误: ${error?.message ?? error}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    targetSel.addEventListener('change', addPointLayer);
-    circleShape.addEventListener('change', () => updatePaint('circle-shape', circleShape.value));
-    circleColor.addEventListener('input', () => updatePaint('circle-color', circleColor.value));
-    circleRadius.addEventListener('input', () => {
-      const radius = Number(circleRadius.value);
-      radiusOutput.textContent = String(radius);
-      updatePaint('circle-radius', radius);
-    });
-    circleFill.addEventListener('change', () => updatePaint('circle-fill', circleFill.checked));
-
-    await autoLoadExampleFixtures('getting-started/point-style');
-  </script>
+        catch (error) {
+            console.error(error);
+            status.textContent = `错误: ${error?.message ?? error}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+targetSel.addEventListener('change', addPointLayer);
+circleShape.addEventListener('change', () => updatePaint('circle-shape', circleShape.value));
+circleColor.addEventListener('input', () => updatePaint('circle-color', circleColor.value));
+circleRadius.addEventListener('input', () => {
+    const radius = Number(circleRadius.value);
+    radiusOutput.textContent = String(radius);
+    updatePaint('circle-radius', radius);
+});
+circleFill.addEventListener('change', () => updatePaint('circle-fill', circleFill.checked));
+await autoLoadExampleFixtures('getting-started/point-style');
+</script>
 </body>
 
 </html>

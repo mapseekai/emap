@@ -12,9 +12,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TopologySource } from '../../src/source/topology-source';
-import type { MapshaperDataset } from '../../src/types/mapshaper-types';
-import { getDefaultMapshaperAdapter } from '../../src/adapter/mapshaper-adapter';
+import { TopologySource } from '../../src/domain/source/topology-source';
+import type { MapshaperDataset } from '../../src/shared/types/mapshaper-types';
+import { getDefaultMapshaperAdapter } from '../../src/integrations/mapshaper/adapter';
 
 const FIXTURES_DIR = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'fixtures');
 

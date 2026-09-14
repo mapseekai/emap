@@ -2,10 +2,10 @@
 id: emap
 slug: /concepts/emap
 title: Emap map instance
-api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup","MapOptions","TopologySource"]
+api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
 examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Emap map instance
@@ -17,7 +17,7 @@ verifiedVersion: 0.9.1
 ```ts
 import { Emap } from '@mapseekai/emap';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   interactive: true,
 });
@@ -79,7 +79,7 @@ Use `jumpTo`, `easeTo`, `flyTo`, `fitBounds`, `panTo`, and `zoomTo` to change th
 
 ## Lifecycle
 
-When the application unmounts the map container, call `map.remove()`. It stops interaction, removes the Canvas and controls, and releases resources held by the map.
+When the application unmounts the map container, use `await map.dispose()`. `remove()` only requests native Cordis teardown; `dispose()` waits until interaction, Canvas, controls, and other Fiber/effect-owned resources have been released. Await it before reusing the same container.
 
 ## API
 

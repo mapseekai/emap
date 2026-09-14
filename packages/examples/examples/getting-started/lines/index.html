@@ -66,121 +66,122 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    const SOURCE_ID = 'lines-source';
-    const LAYER_ID = 'lines-layer';
-    const targetSel = document.getElementById('target');
-    const lineColor = document.getElementById('line-color');
-    const lineWidth = document.getElementById('line-width');
-    const lineDash = document.getElementById('line-dash');
-    const arrowSpacing = document.getElementById('arrow-spacing');
-    const arrowSize = document.getElementById('arrow-size');
-    const widthOutput = document.getElementById('width-output');
-    const spacingOutput = document.getElementById('spacing-output');
-    const sizeOutput = document.getElementById('size-output');
-    const status = document.getElementById('status');
-
-    function currentDash() {
-      if (lineDash.value === 'arrow-dot') return [];
-      return lineDash.value.split(',').filter(Boolean).map(Number);
-    }
-
-    function currentDashStyle() {
-      return lineDash.value === 'arrow-dot' ? 'arrow-dot' : undefined;
-    }
-
-    function addLineLayer() {
-      const target = targetSel.value;
-      if (!target) {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const SOURCE_ID = 'lines-source';
+const LAYER_ID = 'lines-layer';
+const targetSel = document.getElementById('target');
+const lineColor = document.getElementById('line-color');
+const lineWidth = document.getElementById('line-width');
+const lineDash = document.getElementById('line-dash');
+const arrowSpacing = document.getElementById('arrow-spacing');
+const arrowSize = document.getElementById('arrow-size');
+const widthOutput = document.getElementById('width-output');
+const spacingOutput = document.getElementById('spacing-output');
+const sizeOutput = document.getElementById('size-output');
+const status = document.getElementById('status');
+function currentDash() {
+    if (lineDash.value === 'arrow-dot')
+        return [];
+    return lineDash.value.split(',').filter(Boolean).map(Number);
+}
+function currentDashStyle() {
+    return lineDash.value === 'arrow-dot' ? 'arrow-dot' : undefined;
+}
+function addLineLayer() {
+    const target = targetSel.value;
+    if (!target) {
         status.textContent = '此文件没有 polyline 图层';
         return;
-      }
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      map.addLayer({
+    }
+    if (map.getLayer(LAYER_ID))
+        map.removeLayer(LAYER_ID);
+    map.addLayer({
         id: LAYER_ID,
         type: 'line',
         source: SOURCE_ID,
         'source-layer': target,
         paint: {
-          'line-color': lineColor.value,
-          'line-width': Number(lineWidth.value),
-          'line-dasharray': currentDash(),
-          'line-dashstyle': currentDashStyle(),
-          'line-arrow-spacing': Number(arrowSpacing.value),
-          'line-arrow-size': Number(arrowSize.value),
+            'line-color': lineColor.value,
+            'line-width': Number(lineWidth.value),
+            'line-dasharray': currentDash(),
+            'line-dashstyle': currentDashStyle(),
+            'line-arrow-spacing': Number(arrowSpacing.value),
+            'line-arrow-size': Number(arrowSize.value),
         },
-      });
-      status.textContent = `正在显示线图层 "${target}"`;
-    }
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, index) => {
-        if (lyr?.geometry_type !== 'polyline') return;
+    });
+    status.textContent = `正在显示线图层 "${target}"`;
+}
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, index) => {
+        if (lyr?.geometry_type !== 'polyline')
+            return;
         const name = lyr?.name || lyr?.id || `layer-${index}`;
         targetSel.appendChild(new Option(name, name));
-      });
-      addLineLayer();
-    }
-
-    function updatePaint(name, value) {
-      if (!map.getLayer(LAYER_ID)) return;
-      map.setPaintProperty(LAYER_ID, name, value);
-      status.textContent = `已更新 ${name}`;
-    }
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    addLineLayer();
+}
+function updatePaint(name, value) {
+    if (!map.getLayer(LAYER_ID))
+        return;
+    map.setPaintProperty(LAYER_ID, name, value);
+    status.textContent = `已更新 ${name}`;
+}
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getLayer(LAYER_ID))
+            map.removeLayer(LAYER_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-        } catch (err) {
-          console.error(err);
-          status.textContent = `错误: ${err?.message ?? err}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    targetSel.addEventListener('change', addLineLayer);
-    lineColor.addEventListener('input', () => updatePaint('line-color', lineColor.value));
-    lineWidth.addEventListener('input', () => {
-      const width = Number(lineWidth.value);
-      widthOutput.textContent = String(width);
-      updatePaint('line-width', width);
-    });
-    lineDash.addEventListener('change', () => {
-      updatePaint('line-dasharray', currentDash());
-      updatePaint('line-dashstyle', currentDashStyle());
-    });
-    arrowSpacing.addEventListener('input', () => {
-      spacingOutput.textContent = arrowSpacing.value;
-      updatePaint('line-arrow-spacing', Number(arrowSpacing.value));
-    });
-    arrowSize.addEventListener('input', () => {
-      sizeOutput.textContent = arrowSize.value;
-      updatePaint('line-arrow-size', Number(arrowSize.value));
-    });
-    await autoLoadExampleFixtures('getting-started/lines');
-  </script>
+        catch (err) {
+            console.error(err);
+            status.textContent = `错误: ${err?.message ?? err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+targetSel.addEventListener('change', addLineLayer);
+lineColor.addEventListener('input', () => updatePaint('line-color', lineColor.value));
+lineWidth.addEventListener('input', () => {
+    const width = Number(lineWidth.value);
+    widthOutput.textContent = String(width);
+    updatePaint('line-width', width);
+});
+lineDash.addEventListener('change', () => {
+    updatePaint('line-dasharray', currentDash());
+    updatePaint('line-dashstyle', currentDashStyle());
+});
+arrowSpacing.addEventListener('input', () => {
+    spacingOutput.textContent = arrowSpacing.value;
+    updatePaint('line-arrow-spacing', Number(arrowSpacing.value));
+});
+arrowSize.addEventListener('input', () => {
+    sizeOutput.textContent = arrowSize.value;
+    updatePaint('line-arrow-size', Number(arrowSize.value));
+});
+await autoLoadExampleFixtures('getting-started/lines');
+</script>
 </body>
 
 </html>

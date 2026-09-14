@@ -1,3 +1,4 @@
+import { build } from 'esbuild';
 // Run after pnpm run build. Tests the actual built CanvasPainter with native pixels.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -8,6 +9,14 @@ import { chromium, firefox, webkit } from '@playwright/test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = resolve(root, 'dist');
 await readFile(resolve(dist, 'emap.mjs'));
+// Consume the built ESM entry as an application bundler would. Cordis deliberately
+// remains an external npm dependency in the published emap ESM output.
+const auditBundle = await build({
+  stdin: { contents: "export { CanvasPainter } from './dist/emap.mjs'", resolveDir: root },
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false,
+  external: ['maplibre-gl'],
+});
+const auditCode = auditBundle.outputFiles[0].contents;
 const names = process.argv.includes('--all-browsers')
   ? ['chrome', 'firefox', 'webkit']
   : (process.env.EMAP_AUDIT_BROWSERS ?? 'chrome').split(',').map((s) => s.trim());
@@ -16,6 +25,11 @@ for (const name of names) if (!Object.hasOwn(engines, name)) throw new Error(`Un
 const server = createServer(async (req, res) => {
   try {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+    if (pathname === '/audit-painter.mjs') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      res.end(auditCode);
+      return;
+    }
     if (pathname === '/') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<!doctype html><html><body></body></html>');
@@ -41,7 +55,7 @@ try {
       const page = await browser.newPage({ deviceScaleFactor: 1 });
       await page.goto(`http://127.0.0.1:${address.port}/`);
       const checks = await page.evaluate(async () => {
-        const { CanvasPainter } = await import('/dist/emap.mjs');
+        const { CanvasPainter } = await import('/audit-painter.mjs');
         const rings = [
           [[10, 10], [70, 10], [70, 70], [10, 70], [10, 10]],
           [[40, 40], [100, 40], [100, 100], [40, 100], [40, 40]],

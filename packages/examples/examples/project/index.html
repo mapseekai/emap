@@ -67,110 +67,114 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'project-source';
-    const scopeSel = document.getElementById('scope');
-    const crsPreset = document.getElementById('crs-preset');
-    const crsText = document.getElementById('crs-text');
-    const initInput = document.getElementById('init');
-    const densifyInput = document.getElementById('densify');
-    const filenameInput = document.getElementById('filename');
-    const btn = document.getElementById('btn');
-    const status = document.getElementById('status');
-
-    function populate(source) {
-      scopeSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'project-source';
+const scopeSel = document.getElementById('scope');
+const crsPreset = document.getElementById('crs-preset');
+const crsText = document.getElementById('crs-text');
+const initInput = document.getElementById('init');
+const densifyInput = document.getElementById('densify');
+const filenameInput = document.getElementById('filename');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+function populate(source) {
+    scopeSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         scopeSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      btn.disabled = source.getLayers().length === 0;
-    }
-
-    crsPreset.addEventListener('change', () => {
-      if (crsPreset.value) crsText.value = crsPreset.value;
     });
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    btn.disabled = source.getLayers().length === 0;
+}
+crsPreset.addEventListener('change', () => {
+    if (crsPreset.value)
+        crsText.value = crsPreset.value;
+});
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `错误: ${err?.message ?? err}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    btn.addEventListener('click', async () => {
-      const crs = (crsText.value || crsPreset.value).trim();
-      if (!crs) {
+        catch (err) {
+            console.error(err);
+            status.textContent = `错误: ${err?.message ?? err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+btn.addEventListener('click', async () => {
+    const crs = (crsText.value || crsPreset.value).trim();
+    if (!crs) {
         status.textContent = '请选择或输入目标 CRS。';
         return;
-      }
-      const opts = {
+    }
+    const opts = {
         source: SOURCE_ID,
         target: scopeSel.value,
         crs,
         output: { format: 'geojson' },
-      };
-      const init = initInput.value.trim();
-      if (init) opts.init = init;
-      if (densifyInput.checked) opts.densify = true;
-      const filename = filenameInput.value.trim();
-      if (filename) opts.output.filename = filename;
-
-      const label = scopeSel.value;
-      status.textContent = `正在投影并导出 ${label} → ${crs}...`;
-      btn.disabled = true;
-      try {
+    };
+    const init = initInput.value.trim();
+    if (init)
+        opts.init = init;
+    if (densifyInput.checked)
+        opts.densify = true;
+    const filename = filenameInput.value.trim();
+    if (filename)
+        opts.output.filename = filename;
+    const label = scopeSel.value;
+    status.textContent = `正在投影并导出 ${label} → ${crs}...`;
+    btn.disabled = true;
+    try {
         const result = await map.ops.projectLayer(opts);
         if (result.ok) {
-          const url = URL.createObjectURL(result.value.blob);
-          const download = document.createElement('a');
-          download.href = url;
-          download.download = result.value.filename;
-          download.hidden = true;
-          document.body.append(download);
-          download.click();
-          download.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 0);
-          status.textContent = `已导出 ${result.value.filename}；当前地图未改变。`;
-        } else {
-          status.textContent = `投影失败: ${result.error?.reason ?? result.error?.message ?? '未知错误'}`;
+            const url = URL.createObjectURL(result.value.blob);
+            const download = document.createElement('a');
+            download.href = url;
+            download.download = result.value.filename;
+            download.hidden = true;
+            document.body.append(download);
+            download.click();
+            download.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+            status.textContent = `已导出 ${result.value.filename}；当前地图未改变。`;
         }
-      } catch (err) {
+        else {
+            status.textContent = `投影失败: ${result.error?.reason ?? result.error?.message ?? '未知错误'}`;
+        }
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         btn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('project');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('project');
+</script>
 </body>
 
 </html>

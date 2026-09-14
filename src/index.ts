@@ -7,13 +7,13 @@
 // UI controls`). Avoid `export *` — every public name is listed explicitly so
 // tree-shaking is precise and the API surface stays auditable.
 
-import './shim';
+import './integrations/mapshaper/browser-shim';
 
 // ===========================================================================
 // Core orchestrator + types
 // ===========================================================================
-export { Emap } from './map/map';
-export type { CreateLayerOptions, LayerFieldDefinition } from './source/create-layer';
+export { Emap } from './engine/map/map';
+export type { CreateLayerOptions, LayerFieldDefinition } from './domain/source/create-layer';
 export type {
   MapOptions,
   // map options + view
@@ -85,8 +85,8 @@ export type {
   // snapshot
   ExportSnapshotOptions,
   LoadSnapshotOptions,
-} from './map/map';
-export type { VisibleLayerLookup } from './map/structured-keys';
+} from './engine/map/map';
+export type { VisibleLayerLookup } from './engine/map/structured-keys';
 export type {
   MapLibreService,
   MapLibreBasemapService,
@@ -101,7 +101,7 @@ export type {
   MapLibreServiceErrorEvent,
   MapLibreServiceEventMap,
   MapLibreServiceManager,
-} from './map/maplibre-service';
+} from './integrations/maplibre/maplibre-service';
 
 // ===========================================================================
 // Layers + selection + highlights
@@ -114,22 +114,22 @@ export type {
   FillPaint,
   LinePaint,
   CirclePaint,
-} from './map/layer';
-export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
-export type { StyleExpression } from './map/style-expression';
-export { HighlightManager } from './map/highlight-manager';
-export { Selection } from './map/selection';
-export type { SelectMode, SelectionDiff, SelectionSnapshot } from './map/selection';
-export { FeatureQuery } from './map/feature-query';
-export { FeatureAccessor } from './map/feature-accessor';
-export type { Feature } from './map/feature-accessor';
+} from './engine/map/layer';
+export { resolveStrokeStyle, resolvePointStyle } from './engine/map/layer';
+export type { StyleExpression } from './engine/map/style-expression';
+export { HighlightManager } from './engine/map/highlight-manager';
+export { Selection } from './engine/map/selection';
+export type { SelectMode, SelectionDiff, SelectionSnapshot } from './engine/map/selection';
+export { FeatureQuery } from './engine/map/feature-query';
+export { FeatureAccessor } from './engine/map/feature-accessor';
+export type { Feature } from './engine/map/feature-accessor';
 
 // ===========================================================================
 // Op-result + CLI safety helpers
 // ===========================================================================
-export { Err, OK, okValue } from './map/op-result';
-export type { OpError, OpResult } from './map/op-result';
-export { isValidFieldName, findInvalidFieldName } from './map/command-args';
+export { Err, OK, okValue } from './engine/map/op-result';
+export type { OpError, OpResult } from './engine/map/op-result';
+export { isValidFieldName, findInvalidFieldName } from './engine/map/command-args';
 
 // ===========================================================================
 // Mapshaper / topology types (path / point shape vocabulary, ArcCollection,
@@ -170,13 +170,13 @@ export type {
   LineDashStyle,
   StrokeStyle,
   VertexDotStyle,
-} from './types/mapshaper-types';
+} from './shared/types/mapshaper-types';
 export {
   isPathLayer,
   isPointLayer,
   bumpEditVersion,
   bumpAttributeVersion,
-} from './types/mapshaper-types';
+} from './shared/types/mapshaper-types';
 
 // ===========================================================================
 // Adapter + worker pool (low-level mapshaper bridges; advanced users only)
@@ -185,7 +185,7 @@ export {
   DefaultMapshaperAdapter,
   getDefaultMapshaperAdapter,
   setDefaultMapshaperAdapter,
-} from './adapter/mapshaper-adapter';
+} from './integrations/mapshaper/adapter';
 export type {
   ArcCutPoint,
   ExportedFile,
@@ -194,28 +194,28 @@ export type {
   PackedSession,
   RunnerInputFiles,
   SegmentIntersection,
-} from './adapter/mapshaper-adapter';
-export { MapshaperWorkerPool } from './core/mapshaper-worker-pool';
-export type { MapshaperWorkerPoolOptions } from './core/mapshaper-worker-pool';
+} from './integrations/mapshaper/adapter';
+export { MapshaperWorkerPool } from './engine/core/mapshaper-worker-pool';
+export type { MapshaperWorkerPoolOptions } from './engine/core/mapshaper-worker-pool';
 
 // ===========================================================================
 // Sources / data loading
 // ===========================================================================
-export { TopologySource } from './source/topology-source';
+export { TopologySource } from './domain/source/topology-source';
 export type {
   TopologySourceData,
   TopologySourceInput,
   TopologySourceOptions,
   TopologySourceFromBytesOptions,
   ZipExtractionLimits,
-} from './source/topology-source';
+} from './domain/source/topology-source';
 export type {
   TopologySource as ITopologySource,
   ReplaceableTopologySource,
   ExportFormat,
   ExportOptions,
-} from './source/source';
-export { SourceLoadError } from './map/source-loading';
+} from './domain/source/source';
+export { SourceLoadError } from './engine/map/source-loading';
 export type {
   ReadySourceLoadPlan,
   SourceLoadAnswers,
@@ -226,107 +226,111 @@ export type {
   SourceLoadRequirement,
   SourceLoadSummary,
   SourcePreflightResult,
-} from './map/source-loading';
+} from './engine/map/source-loading';
 // Format-plugin registry (the optional `@mapseekai/emap/arrow` bundle
 // registers GeoParquet / GeoArrow support through this; arrow-free).
-export { FormatRegistry, registerFormat } from './source/format-registry';
-export { FormatService } from './services/formats';
-export type { FormatRegistryContract } from './services/formats';
-export type { DatasetFormatPlugin, ExportedFormatFile } from './source/format-registry';
+export { FormatRegistry, registerFormat } from './domain/source/format-registry';
+export type { FormatRegistryContract } from './runtime/services/formats';
+export type { DatasetFormatPlugin, ExportedFormatFile } from './domain/source/format-registry';
 
 // ===========================================================================
 // Geometry / projection
 // ===========================================================================
-export { Bounds } from './geo/bounds';
-export { AffineTransform, AffineTransform as Transform } from './geo/transform';
-export { Viewport } from './geo/viewport';
-export { Projection } from './geo/projection';
+export { Bounds } from './domain/geo/bounds';
+export { AffineTransform, AffineTransform as Transform } from './domain/geo/transform';
+export { Viewport } from './domain/geo/viewport';
+export { Projection } from './domain/geo/projection';
 export type {
   GetScaleMetricsOptions,
   ScaleCalculationMethod,
   ScaleMetrics,
   ScaleViewMetrics,
-} from './geo/scale-calculator';
-export type { MeasurementMode } from './geo/measurement';
+} from './domain/geo/scale-calculator';
+export type { MeasurementMode } from './domain/geo/measurement';
 export {
   DEFAULT_CRS,
   inferFromPrj,
   normalizeCrsString,
   resolveDatasetCRS,
   setDatasetCrsMetadata,
-} from './geo/crs-resolver';
+} from './domain/geo/crs-resolver';
 
 // ===========================================================================
 // Renderers
 // ===========================================================================
-export { CanvasPainter } from './renderer/canvas-painter';
-export type { ArrowDotPathOptions } from './renderer/painter';
-export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
+export { CanvasPainter } from './engine/rendering/canvas-painter';
+export type { ArrowDotPathOptions } from './engine/rendering/painter';
+export { EditOverlayRenderer } from './engine/rendering/edit-overlay-renderer';
 
 // ===========================================================================
 // Core events + interactions
 // ===========================================================================
-export { EventDispatcher } from './core/events';
-export type { EventListener } from './core/events';
+export { EventDispatcher } from './engine/core/events';
+export type { EventListener } from './engine/core/events';
 export type {
   EmapEventMap,
   CameraEvent,
   LayerChangeReason,
   LayerChangeEvent,
-} from './core/event-map';
-export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
-export { HandlerManager } from './core/handler-manager';
-export { isHandler } from './core/handler';
+} from './engine/core/event-map';
+export type {
+  CameraOptions,
+  AnimationOptions,
+  FlyToOptions,
+  FitBoundsOptions,
+} from './domain/geo/camera';
+export { HandlerManager } from './engine/core/handler-manager';
+export { isHandler } from './engine/core/handler';
 export type {
   Handler,
   HandlerResult,
   NormalizedPointerEvent,
   PointerModifiers,
-} from './core/handler';
-export { DragPanHandler } from './core/handlers/drag-pan';
-export type { DragPanOptions } from './core/handlers/drag-pan';
-export { ScrollZoomHandler } from './core/handlers/scroll-zoom';
-export type { ScrollZoomOptions } from './core/handlers/scroll-zoom';
-export { ClickSelectHandler } from './core/handlers/click-select';
-export type { SelectHandlerOptions } from './core/handlers/click-select';
-export { BoxSelectHandler } from './core/handlers/box-select';
-export type { BoxSelectHandlerOptions } from './core/handlers/box-select';
-export { LassoSelectHandler } from './core/handlers/lasso-select';
-export type { LassoSelectHandlerOptions } from './core/handlers/lasso-select';
-export { resolveMode } from './core/handlers/select-mode';
-export type { ModifierCombo } from './core/handlers/select-mode';
-export type { FeatureEvent, FeatureEventFilter } from './core/feature-event-dispatcher';
-export type { PointerMoveEvent } from './core/pointer-event-dispatcher';
-export { VertexEditHandler } from './core/handlers/vertex-edit';
-export type { VertexEditOptions } from './core/handlers/vertex-edit';
-export { DrawFeatureHandler } from './core/handlers/draw-feature';
-export type { DrawFeatureOptions } from './core/handlers/draw-feature';
-export { SplitFeatureHandler } from './core/handlers/split-feature';
-export { ReshapeFeatureHandler } from './core/handlers/reshape-feature';
-export { AutoCompletePolygonHandler } from './core/handlers/auto-complete-polygon';
-export type { AutoCompletePolygonOptions, AutoCompletePolygonResult } from './map/types';
-export type { ReshapeFeatureOptions } from './core/handlers/reshape-feature';
-export { RingEditHandler } from './core/handlers/ring-edit';
-export type { RingEditOptions } from './core/handlers/ring-edit';
-export { PartEditHandler } from './core/handlers/part-edit';
-export type { PartEditOptions } from './core/handlers/part-edit';
-export { MeasureHandler } from './core/handlers/measure';
-export type { MeasureOptions, MeasureResult } from './core/handlers/measure';
-export { TransformFeatureHandler } from './core/handlers/transform-feature';
-export type { TransformFeatureOptions } from './core/handlers/transform-feature';
+} from './engine/core/handler';
+export { DragPanHandler } from './engine/core/handlers/drag-pan';
+export type { DragPanOptions } from './engine/core/handlers/drag-pan';
+export { ScrollZoomHandler } from './engine/core/handlers/scroll-zoom';
+export type { ScrollZoomOptions } from './engine/core/handlers/scroll-zoom';
+export { ClickSelectHandler } from './engine/core/handlers/click-select';
+export type { SelectHandlerOptions } from './engine/core/handlers/click-select';
+export { BoxSelectHandler } from './engine/core/handlers/box-select';
+export type { BoxSelectHandlerOptions } from './engine/core/handlers/box-select';
+export { LassoSelectHandler } from './engine/core/handlers/lasso-select';
+export type { LassoSelectHandlerOptions } from './engine/core/handlers/lasso-select';
+export { resolveMode } from './engine/core/handlers/select-mode';
+export type { ModifierCombo } from './engine/core/handlers/select-mode';
+export type { FeatureEvent, FeatureEventFilter } from './engine/core/feature-event-dispatcher';
+export type { PointerMoveEvent } from './engine/core/pointer-event-dispatcher';
+export { VertexEditHandler } from './engine/core/handlers/vertex-edit';
+export type { VertexEditOptions } from './engine/core/handlers/vertex-edit';
+export { DrawFeatureHandler } from './engine/core/handlers/draw-feature';
+export type { DrawFeatureOptions } from './engine/core/handlers/draw-feature';
+export { SplitFeatureHandler } from './engine/core/handlers/split-feature';
+export { ReshapeFeatureHandler } from './engine/core/handlers/reshape-feature';
+export { AutoCompletePolygonHandler } from './engine/core/handlers/auto-complete-polygon';
+export type { AutoCompletePolygonOptions, AutoCompletePolygonResult } from './engine/map/types';
+export type { ReshapeFeatureOptions } from './engine/core/handlers/reshape-feature';
+export { RingEditHandler } from './engine/core/handlers/ring-edit';
+export type { RingEditOptions } from './engine/core/handlers/ring-edit';
+export { PartEditHandler } from './engine/core/handlers/part-edit';
+export type { PartEditOptions } from './engine/core/handlers/part-edit';
+export { MeasureHandler } from './engine/core/handlers/measure';
+export type { MeasureOptions, MeasureResult } from './engine/core/handlers/measure';
+export { TransformFeatureHandler } from './engine/core/handlers/transform-feature';
+export type { TransformFeatureOptions } from './engine/core/handlers/transform-feature';
 
 // ===========================================================================
 // Edit history + commands
 // ===========================================================================
-export type { EditCommand } from './edit/edit-command';
-export { EditHistory } from './edit/edit-history';
-export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';
-export { Transaction } from './edit/transaction';
+export type { EditCommand } from './domain/edit/edit-command';
+export { EditHistory } from './domain/edit/edit-history';
+export type { HistoryStateSnapshot, EditHistoryOptions } from './domain/edit/edit-history';
+export { Transaction } from './domain/edit/transaction';
 
 // ===========================================================================
 // Validation (post-edit hooks for GIS / attribute constraints)
 // ===========================================================================
-export { ValidatorRegistry } from './validation/registry';
+export { ValidatorRegistry } from './domain/validation/registry';
 export type {
   Validator,
   ValidatorPhase,
@@ -334,29 +338,32 @@ export type {
   ValidationChange,
   ValidationIssue,
   ValidationReport,
-} from './validation/validator';
-export { topologyValidator } from './validation/builtin/topology';
-export type { TopologyValidatorOptions } from './validation/builtin/topology';
+} from './domain/validation/validator';
+export { topologyValidator } from './domain/validation/builtin/topology';
+export type { TopologyValidatorOptions } from './domain/validation/builtin/topology';
 
 // vertex-level
-export { VertexMoveCommand } from './edit/commands/vertex-move';
-export { VertexInsertCommand } from './edit/commands/vertex-insert';
-export { VertexDeleteCommand } from './edit/commands/vertex-delete';
+export { VertexMoveCommand } from './domain/edit/commands/vertex-move';
+export { VertexInsertCommand } from './domain/edit/commands/vertex-insert';
+export { VertexDeleteCommand } from './domain/edit/commands/vertex-delete';
 
 // feature-level
-export { FeatureCreateCommand } from './edit/commands/feature-create';
-export { FeatureAppendCommand } from './edit/commands/feature-append';
-export type { FeatureAppendCommandOptions } from './edit/commands/feature-append';
-export { FeatureDeleteCommand, BulkFeatureDeleteCommand } from './edit/commands/feature-delete';
+export { FeatureCreateCommand } from './domain/edit/commands/feature-create';
+export { FeatureAppendCommand } from './domain/edit/commands/feature-append';
+export type { FeatureAppendCommandOptions } from './domain/edit/commands/feature-append';
+export {
+  FeatureDeleteCommand,
+  BulkFeatureDeleteCommand,
+} from './domain/edit/commands/feature-delete';
 export type {
   FeatureDeleteCommandOptions,
   BulkFeatureDeleteCommandOptions,
-} from './edit/commands/feature-delete';
-export { FeatureTranslateCommand } from './edit/commands/feature-translate';
+} from './domain/edit/commands/feature-delete';
+export { FeatureTranslateCommand } from './domain/edit/commands/feature-translate';
 export type {
   FeatureTranslateCommandOptions,
   TranslatedPointFeature,
-} from './edit/commands/feature-translate';
+} from './domain/edit/commands/feature-translate';
 export {
   FeatureAffineCommand,
   rotateMatrix,
@@ -364,36 +371,42 @@ export {
   invertMatrix,
   composeMatrix,
   IDENTITY_MATRIX,
-} from './edit/commands/feature-affine';
+} from './domain/edit/commands/feature-affine';
 export type {
   FeatureAffineCommandOptions,
   AffineMatrix,
-} from './edit/commands/feature-affine';
+} from './domain/edit/commands/feature-affine';
 
 // topology-level
-export { SplitSharedArcsCommand, planSharedArcSplit } from './edit/commands/split-shared-arcs';
+export {
+  SplitSharedArcsCommand,
+  planSharedArcSplit,
+} from './domain/edit/commands/split-shared-arcs';
 export type {
   SplitSharedArcsCommandOptions,
   SplitSharedArcsRemap,
   AppendedArc,
-} from './edit/commands/split-shared-arcs';
-export { SplitSharedNodeCommand, planSharedNodeSplit } from './edit/commands/split-shared-node';
-export type { SplitSharedNodePlan } from './edit/commands/split-shared-node';
+} from './domain/edit/commands/split-shared-arcs';
+export {
+  SplitSharedNodeCommand,
+  planSharedNodeSplit,
+} from './domain/edit/commands/split-shared-node';
+export type { SplitSharedNodePlan } from './domain/edit/commands/split-shared-node';
 
 // dataset-replace + composite envelope
-export { CompositeCommand } from './edit/commands/composite';
-export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
-export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';
+export { CompositeCommand } from './domain/edit/commands/composite';
+export { DatasetReplaceCommand } from './domain/edit/commands/dataset-replace';
+export type { DatasetReplaceCommandOptions } from './domain/edit/commands/dataset-replace';
 
 // attribute / schema commands
-export { FeaturePropertyChangeCommand } from './edit/commands/feature-property-change';
-export type { FeaturePropertyChangeCommandOptions } from './edit/commands/feature-property-change';
-export { FieldAddCommand } from './edit/commands/field-add';
-export type { FieldAddCommandOptions } from './edit/commands/field-add';
-export { FieldRemoveCommand } from './edit/commands/field-remove';
-export type { FieldRemoveCommandOptions } from './edit/commands/field-remove';
-export { FieldRenameCommand } from './edit/commands/field-rename';
-export type { FieldRenameCommandOptions } from './edit/commands/field-rename';
+export { FeaturePropertyChangeCommand } from './domain/edit/commands/feature-property-change';
+export type { FeaturePropertyChangeCommandOptions } from './domain/edit/commands/feature-property-change';
+export { FieldAddCommand } from './domain/edit/commands/field-add';
+export type { FieldAddCommandOptions } from './domain/edit/commands/field-add';
+export { FieldRemoveCommand } from './domain/edit/commands/field-remove';
+export type { FieldRemoveCommandOptions } from './domain/edit/commands/field-remove';
+export { FieldRenameCommand } from './domain/edit/commands/field-rename';
+export type { FieldRenameCommandOptions } from './domain/edit/commands/field-rename';
 
 // ===========================================================================
 // UI controls
@@ -429,21 +442,17 @@ export type { LassoSelectControlOptions, LassoSelectStyle } from './ui/lasso-sel
 export { SimplifyControl } from './ui/simplify-control';
 export type { SimplifyControlOptions } from './ui/simplify-control';
 
-export { PluginRuntime, EffectScope, serviceKey } from './kernel';
-export type {
-  Plugin,
-  PluginContext,
-  PluginInspection,
-  ServiceKey,
-  ServiceResolver,
-} from './kernel';
-export type { EmapOptions } from './services/options';
-export { CapabilityService } from './services/capabilities';
+export type { EmapOptions } from './runtime/services/options';
 export type {
   CapabilityDescriptor,
   CapabilityAuthorizer,
   CapabilityRegistryContract,
-} from './services/capabilities';
+} from './runtime/services/capabilities';
 
-export type { FeatureReadContext } from './map/feature-accessor';
-export type { HandlerRegistration } from './core/handler-manager';
+export type { FeatureReadContext } from './engine/map/feature-accessor';
+export type { HandlerRegistration } from './engine/core/handler-manager';
+
+export { Context, Service, Fiber } from 'cordis';
+export type { Plugin } from 'cordis';
+export { inspectContext, inspectServices } from './runtime/context/inspection';
+export { settleContext } from './runtime/context/settle';

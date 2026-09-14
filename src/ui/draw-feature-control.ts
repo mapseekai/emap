@@ -1,9 +1,9 @@
-import type { DrawFeatureOptions, DrawGeometryType } from '../core/handlers/draw-feature';
-import type { ControlContext } from '../services/controls';
+import type { DrawFeatureOptions, DrawGeometryType } from '../engine/core/handlers/draw-feature';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 
-export type { DrawGeometryType } from '../core/handlers/draw-feature';
+export type { DrawGeometryType } from '../engine/core/handlers/draw-feature';
 
 export interface DrawFeatureControlOptions extends DrawFeatureOptions {
   icon?: string | Node;

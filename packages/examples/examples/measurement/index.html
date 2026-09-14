@@ -31,43 +31,43 @@
     </details>
 
     <script type="module">
-      import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      const emap = await loadExampleRuntime();
-      const { Emap, MeasureControl, NavigationControl, TopologySource } = emap;
-      const map = new Emap({ container: 'map' });
-      map.addControl(new NavigationControl(), 'top-left');
-      map.addControl(new MeasureControl({ mode: 'length' }), 'top-left');
-      map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const SOURCE_ID = 'measurement-source';
-      const status = document.getElementById('status');
-
-      document.getElementById('file-input').addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-        status.textContent = `正在加载 ${file.name}...`;
-        const reader = new FileReader();
-        reader.onload = async (loadEvent) => {
-          const content = new Uint8Array(loadEvent.target.result);
-          const source = new TopologySource(SOURCE_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          try {
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, MeasureControl, NavigationControl, TopologySource } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await map.addControl(new MeasureControl({ mode: 'length' }), 'top-left');
+await map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
+await installExampleMapUi(map, emap);
+const SOURCE_ID = 'measurement-source';
+const status = document.getElementById('status');
+document.getElementById('file-input').addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (loadEvent) => {
+        const content = new Uint8Array(loadEvent.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
+        try {
             await source.setData({ filename: file.name, content });
             await map.addSource(SOURCE_ID, source);
             map.setExtent(source.getExtent());
             status.textContent = '数据已加载。选择长度或面积控件后，在地图上单击开始量测。';
-          } catch (error) {
+        }
+        catch (error) {
             console.error(error);
             status.textContent = '处理文件出错';
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      });
-
-      window.addEventListener('resize', () => map.resize());
-      await autoLoadExampleFixtures('measurement');
-    </script>
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('measurement');
+</script>
   </body>
 </html>

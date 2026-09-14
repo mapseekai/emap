@@ -1,4 +1,4 @@
-import type { ControlContext } from '../services/controls';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 

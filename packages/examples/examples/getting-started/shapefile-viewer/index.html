@@ -534,156 +534,147 @@
     <div class="shp-map-hint" aria-hidden="true">滚轮缩放 · 拖拽平移</div>
 
     <script type="module">
-      import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      const emap = await loadExampleRuntime();
-      const { Emap, NavigationControl, TopologySource } = emap;
-      const map = new Emap({ container: 'map' });
-      map.addControl(new NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const SOURCE_ID = 'shapefile-source';
-      const fileInput = document.getElementById('shp-file-input');
-      const crsPreset = document.getElementById('shp-crs-preset');
-      const customCrsField = document.getElementById('shp-custom-crs-field');
-      const customCrsInput = document.getElementById('shp-crs-custom');
-      const loadButton = document.getElementById('shp-load-button');
-      const form = document.getElementById('shp-load-form');
-      const status = document.getElementById('shp-status');
-      const emptyState = document.getElementById('shp-map-empty');
-      const metadata = document.getElementById('shp-metadata');
-
-      let selectedFile = null;
-
-      function setStatus(message, state = 'idle') {
-        status.textContent = message;
-        status.dataset.state = state;
-      }
-
-      function setMetadata(values) {
-        const rows = [
-          ['文件', values.file ?? '—'],
-          ['输入 CRS', values.crs ?? '—'],
-          ['图层', values.layers ?? '—'],
-          ['几何类型', values.geometry ?? '—'],
-        ];
-        metadata.replaceChildren();
-        rows.forEach(([label, value]) => {
-          const term = document.createElement('dt');
-          term.textContent = label;
-          const detail = document.createElement('dd');
-          detail.textContent = value;
-          metadata.append(term, detail);
-        });
-      }
-
-      function selectedCrs() {
-        if (crsPreset.value !== 'custom') return crsPreset.value.trim();
-        return customCrsInput.value.trim();
-      }
-
-      function validCustomCrs(value) {
-        return /^EPSG:\d{4,6}$/i.test(value) || /^\+proj=\S+/.test(value);
-      }
-
-      function validCrs(value) {
-        return value === '' || value === 'EPSG:4326' || value === 'EPSG:3857' || value === 'EPSG:4490' || validCustomCrs(value);
-      }
-
-      function refreshFormState() {
-        const hasFile = Boolean(selectedFile);
-        const crs = selectedCrs();
-        customCrsField.hidden = crsPreset.value !== 'custom';
-        loadButton.disabled = !hasFile || !validCrs(crs) || (crsPreset.value === 'custom' && !crs);
-      }
-
-      function diagnosticMessage(result) {
-        return result?.diagnostics?.[0]?.message || result?.requirements?.[0]?.reason || '数据源预检未通过。';
-      }
-
-      async function loadShapefile() {
-        const crs = selectedCrs();
-        if (!selectedFile) {
-          setStatus('请先选择 ZIP Shapefile。', 'error');
-          return;
-        }
-        if (!validCrs(crs) || (crsPreset.value === 'custom' && !crs)) {
-          setStatus('请输入合法的 EPSG 或 Proj.4 坐标系。', 'error');
-          return;
-        }
-
-        loadButton.disabled = true;
-        fileInput.disabled = true;
-        crsPreset.disabled = true;
-        customCrsInput.disabled = true;
-        setStatus(`正在读取 ${selectedFile.name}…`, 'loading');
-
-        try {
-          const source = new TopologySource(SOURCE_ID);
-          const content = new Uint8Array(await selectedFile.arrayBuffer());
-          await source.setData({ filename: selectedFile.name, content });
-
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          const request = { id: SOURCE_ID, source, ...(crs ? { sourceCrs: crs } : {}) };
-          let result = await map.preflightSource(request);
-          if (result.status === 'needs-input' && !crs) {
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, NavigationControl, TopologySource } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const SOURCE_ID = 'shapefile-source';
+const fileInput = document.getElementById('shp-file-input');
+const crsPreset = document.getElementById('shp-crs-preset');
+const customCrsField = document.getElementById('shp-custom-crs-field');
+const customCrsInput = document.getElementById('shp-crs-custom');
+const loadButton = document.getElementById('shp-load-button');
+const form = document.getElementById('shp-load-form');
+const status = document.getElementById('shp-status');
+const emptyState = document.getElementById('shp-map-empty');
+const metadata = document.getElementById('shp-metadata');
+let selectedFile = null;
+function setStatus(message, state = 'idle') {
+    status.textContent = message;
+    status.dataset.state = state;
+}
+function setMetadata(values) {
+    const rows = [
+        ['文件', values.file ?? '—'],
+        ['输入 CRS', values.crs ?? '—'],
+        ['图层', values.layers ?? '—'],
+        ['几何类型', values.geometry ?? '—'],
+    ];
+    metadata.replaceChildren();
+    rows.forEach(([label, value]) => {
+        const term = document.createElement('dt');
+        term.textContent = label;
+        const detail = document.createElement('dd');
+        detail.textContent = value;
+        metadata.append(term, detail);
+    });
+}
+function selectedCrs() {
+    if (crsPreset.value !== 'custom')
+        return crsPreset.value.trim();
+    return customCrsInput.value.trim();
+}
+function validCustomCrs(value) {
+    return /^EPSG:\d{4,6}$/i.test(value) || /^\+proj=\S+/.test(value);
+}
+function validCrs(value) {
+    return value === '' || value === 'EPSG:4326' || value === 'EPSG:3857' || value === 'EPSG:4490' || validCustomCrs(value);
+}
+function refreshFormState() {
+    const hasFile = Boolean(selectedFile);
+    const crs = selectedCrs();
+    customCrsField.hidden = crsPreset.value !== 'custom';
+    loadButton.disabled = !hasFile || !validCrs(crs) || (crsPreset.value === 'custom' && !crs);
+}
+function diagnosticMessage(result) {
+    return result?.diagnostics?.[0]?.message || result?.requirements?.[0]?.reason || '数据源预检未通过。';
+}
+async function loadShapefile() {
+    const crs = selectedCrs();
+    if (!selectedFile) {
+        setStatus('请先选择 ZIP Shapefile。', 'error');
+        return;
+    }
+    if (!validCrs(crs) || (crsPreset.value === 'custom' && !crs)) {
+        setStatus('请输入合法的 EPSG 或 Proj.4 坐标系。', 'error');
+        return;
+    }
+    loadButton.disabled = true;
+    fileInput.disabled = true;
+    crsPreset.disabled = true;
+    customCrsInput.disabled = true;
+    setStatus(`正在读取 ${selectedFile.name}…`, 'loading');
+    try {
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await selectedFile.arrayBuffer());
+        await source.setData({ filename: selectedFile.name, content });
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
+        const request = { id: SOURCE_ID, source, ...(crs ? { sourceCrs: crs } : {}) };
+        let result = await map.preflightSource(request);
+        if (result.status === 'needs-input' && !crs) {
             setStatus('ZIP 中没有可用的 .prj。请选择一个输入 CRS 后重试。', 'error');
             return;
-          }
-          if (result.status !== 'ready') {
+        }
+        if (result.status !== 'ready') {
             throw new Error(diagnosticMessage(result));
-          }
-
-          await map.confirmSource(result.plan);
-          map.setExtent(source.getExtent());
-          const layers = source.getLayers();
-          const geometryTypes = [...new Set(layers.map((layer) => layer?.geometry_type).filter(Boolean))];
-          const resolvedCrs = source.getCRS?.() || crs || 'unknown';
-          emptyState.hidden = true;
-          setMetadata({
+        }
+        await map.confirmSource(result.plan);
+        map.setExtent(source.getExtent());
+        const layers = source.getLayers();
+        const geometryTypes = [...new Set(layers.map((layer) => layer?.geometry_type).filter(Boolean))];
+        const resolvedCrs = source.getCRS?.() || crs || 'unknown';
+        emptyState.hidden = true;
+        setMetadata({
             file: selectedFile.name,
             crs: resolvedCrs,
             layers: String(layers.length),
             geometry: geometryTypes.join(', ') || 'unknown',
-          });
-          setStatus(`已加载 ${selectedFile.name}。地图已缩放至数据范围。`, 'ready');
-        } catch (error) {
-          emptyState.hidden = false;
-          setMetadata({});
-          setStatus(`加载失败：${error?.message ?? error}`, 'error');
-        } finally {
-          loadButton.disabled = false;
-          fileInput.disabled = false;
-          crsPreset.disabled = false;
-          customCrsInput.disabled = false;
-          refreshFormState();
-        }
-      }
-
-      fileInput.addEventListener('change', () => {
-        selectedFile = fileInput.files?.[0] ?? null;
-        if (selectedFile && !selectedFile.name.toLowerCase().endsWith('.zip')) {
-          selectedFile = null;
-          fileInput.value = '';
-          setStatus('请选择 ZIP Shapefile 文件。', 'error');
-        } else if (selectedFile) {
-          setStatus(`${selectedFile.name} 已选择。确认 CRS 后加载。`);
-        } else {
-          setStatus('等待选择 ZIP 文件。');
-        }
+        });
+        setStatus(`已加载 ${selectedFile.name}。地图已缩放至数据范围。`, 'ready');
+    }
+    catch (error) {
+        emptyState.hidden = false;
+        setMetadata({});
+        setStatus(`加载失败：${error?.message ?? error}`, 'error');
+    }
+    finally {
+        loadButton.disabled = false;
+        fileInput.disabled = false;
+        crsPreset.disabled = false;
+        customCrsInput.disabled = false;
         refreshFormState();
-      });
-
-      crsPreset.addEventListener('change', () => {
-        if (crsPreset.value === 'custom') customCrsInput.focus();
-        refreshFormState();
-      });
-      customCrsInput.addEventListener('input', refreshFormState);
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        void loadShapefile();
-      });
-      window.addEventListener('resize', () => map.resize());
-    </script>
+    }
+}
+fileInput.addEventListener('change', () => {
+    selectedFile = fileInput.files?.[0] ?? null;
+    if (selectedFile && !selectedFile.name.toLowerCase().endsWith('.zip')) {
+        selectedFile = null;
+        fileInput.value = '';
+        setStatus('请选择 ZIP Shapefile 文件。', 'error');
+    }
+    else if (selectedFile) {
+        setStatus(`${selectedFile.name} 已选择。确认 CRS 后加载。`);
+    }
+    else {
+        setStatus('等待选择 ZIP 文件。');
+    }
+    refreshFormState();
+});
+crsPreset.addEventListener('change', () => {
+    if (crsPreset.value === 'custom')
+        customCrsInput.focus();
+    refreshFormState();
+});
+customCrsInput.addEventListener('input', refreshFormState);
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    void await loadShapefile();
+});
+window.addEventListener('resize', () => map.resize());
+</script>
   </body>
 </html>

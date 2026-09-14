@@ -2,10 +2,10 @@
 id: worker
 slug: /guides/worker
 title: Web Worker
-api: ["Emap","MapOptions","MapshaperWorkerPool","MapshaperWorkerPoolOptions"]
+api: ["Emap", "MapOptions", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Web Worker
@@ -17,7 +17,7 @@ Emap can run dataset-replace operations in a Web Worker so the main thread remai
 Set `useWorker` when creating the map:
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   useWorker: 'auto',
   workerThreshold: 50_000,
@@ -62,10 +62,10 @@ const workerPool = new MapshaperWorkerPool({
   poolSize: 2,
 });
 
-const map = new Emap({ container: 'map', useWorker: true, workerPool });
+const map = await Emap.create({ container: 'map', useWorker: true, workerPool });
 ```
 
-The map exclusively manages a supplied `workerPool` and destroys it during `map.remove()`. Do not pass one pool to multiple maps.
+The map exclusively manages a supplied `workerPool` and destroys it during native Cordis teardown; use `await map.dispose()` to wait for cleanup to finish. Do not pass one pool to multiple maps.
 
 ## Runnable examples
 

@@ -2,10 +2,10 @@
 id: emap
 slug: /concepts/emap
 title: Emap 地图实例
-api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup","MapOptions","TopologySource"]
+api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
 examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Emap 地图实例
@@ -17,7 +17,7 @@ verifiedVersion: 0.9.1
 ```ts
 import { Emap } from '@mapseekai/emap';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   interactive: true,
 });
@@ -79,7 +79,7 @@ if (!result.ok) console.error(result.error);
 
 ## 生命周期
 
-当应用卸载地图容器时，调用 `map.remove()`。它停止交互、移除 Canvas 和控件，并释放地图持有的资源。
+当应用卸载地图容器时，使用 `await map.dispose()`。`remove()` 只发起 Cordis 卸载；`dispose()` 会等待交互、Canvas、控件和其他由 Fiber/effect 持有的资源完成释放。复用同一个容器前应等待 `dispose()` 结束。
 
 ## API
 

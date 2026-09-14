@@ -155,105 +155,104 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    // Demo loads only its own bundled data, so opt in to expression
-    // evaluation. The library default is `'disabled'` for safety.
-    const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'expr-source';
-    const fileInput = document.getElementById('file-input');
-    const targetSel = document.getElementById('target');
-    const exprInput = document.getElementById('expr');
-    const whereInput = document.getElementById('where');
-    const applyBtn = document.getElementById('apply-btn');
-    const status = document.getElementById('status');
-    const attributes = document.getElementById('attributes');
-    const mapContainer = map.getCanvasContainer();
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+// Demo loads only its own bundled data, so opt in to expression
+// evaluation. The library default is `'disabled'` for safety.
+const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'expr-source';
+const fileInput = document.getElementById('file-input');
+const targetSel = document.getElementById('target');
+const exprInput = document.getElementById('expr');
+const whereInput = document.getElementById('where');
+const applyBtn = document.getElementById('apply-btn');
+const status = document.getElementById('status');
+const attributes = document.getElementById('attributes');
+const mapContainer = map.getCanvasContainer();
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      applyBtn.disabled = source.getLayers().length === 0;
-    }
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      attributes.textContent = '(click a feature)';
-      map.clearHighlightedFeatures();
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    applyBtn.disabled = source.getLayers().length === 0;
+}
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    attributes.textContent = '(click a feature)';
+    map.clearHighlightedFeatures();
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。编辑表达式后点击 "执行"。`;
-        } catch (err) {
-          console.error(err);
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。编辑表达式后点击 "执行"。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    applyBtn.addEventListener('click', async () => {
-      const target = targetSel.value;
-      const expression = exprInput.value;
-      const where = whereInput.value;
-      if (!target || !expression.trim()) return;
-      const opts = { source: SOURCE_ID, target, expression };
-      if (where.trim()) opts.where = where;
-      status.textContent = '正在执行表达式...';
-      applyBtn.disabled = true;
-      try {
+        catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+applyBtn.addEventListener('click', async () => {
+    const target = targetSel.value;
+    const expression = exprInput.value;
+    const where = whereInput.value;
+    if (!target || !expression.trim())
+        return;
+    const opts = { source: SOURCE_ID, target, expression };
+    if (where.trim())
+        opts.where = where;
+    status.textContent = '正在执行表达式...';
+    applyBtn.disabled = true;
+    try {
         const result = await map.ops.applyExpression(opts);
         status.textContent = result.ok
-          ? `已执行,点击要素查看新属性。Ctrl+Z 撤销。`
-          : '执行失败,请检查表达式。';
-      } catch (err) {
+            ? `已执行,点击要素查看新属性。Ctrl+Z 撤销。`
+            : '执行失败,请检查表达式。';
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         applyBtn.disabled = false;
-      }
-    });
-
-    mapContainer.addEventListener('click', (e) => {
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const layers = targetSel.value ? [targetSel.value] : undefined;
-      const features = map.queryFeatures(point, layers ? { layers } : undefined);
-
-      if (!features.length) {
+    }
+});
+mapContainer.addEventListener('click', (e) => {
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const layers = targetSel.value ? [targetSel.value] : undefined;
+    const features = map.queryFeatures(point, layers ? { layers } : undefined);
+    if (!features.length) {
         attributes.textContent = '(no feature hit)';
         map.clearHighlightedFeatures();
         return;
-      }
-
-      map.setHighlightedFeatures(features, { color: '#1e88e5', width: 3, radius: 6, fill: true });
-      attributes.textContent =
+    }
+    map.setHighlightedFeatures(features, { color: '#1e88e5', width: 3, radius: 6, fill: true });
+    attributes.textContent =
         `hit ${features.length} feature(s)\n${features[0].layer}#${features[0].id}\n\n` +
-        JSON.stringify(features[0].properties, null, 2);
-    });
-    await autoLoadExampleFixtures('attribute-expressions');
-  </script>
+            JSON.stringify(features[0].properties, null, 2);
+});
+await autoLoadExampleFixtures('attribute-expressions');
+</script>
 </body>
 
 </html>

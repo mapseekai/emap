@@ -2,10 +2,10 @@
 id: events
 slug: /reference/events
 title: 事件参考
-api: ["Emap","EmapEventMap","CameraEvent","LayerChangeEvent","EventListener","FeatureEvent","FeatureEventFilter","PointerMoveEvent"]
+api: ["Emap", "EmapEventMap", "CameraEvent", "LayerChangeEvent", "EventListener", "FeatureEvent", "FeatureEventFilter", "PointerMoveEvent"]
 examples: ["feature-selection","web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 事件参考

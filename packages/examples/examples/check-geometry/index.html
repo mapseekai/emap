@@ -53,91 +53,97 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'check-geom-source';
-    const tolInput = document.getElementById('tolerance');
-    const checkBtn = document.getElementById('check-btn');
-    const rebuildBtn = document.getElementById('rebuild-btn');
-    const report = document.getElementById('report');
-    const status = document.getElementById('status');
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'check-geom-source';
+const tolInput = document.getElementById('tolerance');
+const checkBtn = document.getElementById('check-btn');
+const rebuildBtn = document.getElementById('rebuild-btn');
+const report = document.getElementById('report');
+const status = document.getElementById('status');
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          checkBtn.disabled = false;
-          rebuildBtn.disabled = false;
-          status.textContent = `已加载 ${file.name}。点击检查几何。`;
-        } catch (err) {
-          console.error(err);
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            checkBtn.disabled = false;
+            rebuildBtn.disabled = false;
+            status.textContent = `已加载 ${file.name}。点击检查几何。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    checkBtn.addEventListener('click', async () => {
-      const opts = { source: SOURCE_ID };
-      const tol = tolInput.value.trim();
-      if (tol && !Number.isNaN(Number(tol))) opts.tolerance = Number(tol);
-      status.textContent = '检查中...';
-      checkBtn.disabled = true;
-      try {
+        catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+checkBtn.addEventListener('click', async () => {
+    const opts = { source: SOURCE_ID };
+    const tol = tolInput.value.trim();
+    if (tol && !Number.isNaN(Number(tol)))
+        opts.tolerance = Number(tol);
+    status.textContent = '检查中...';
+    checkBtn.disabled = true;
+    try {
         const result = await map.ops.checkGeometry(opts);
         if (!result.ok) {
-          report.innerHTML = '<span class="bad">无法检查 (检查源/图层)</span>';
-          status.textContent = '检查失败。';
-        } else if (result.value.ok) {
-          report.innerHTML = '<span class="ok">✓ 拓扑干净 — 0 个相交</span>';
-          status.textContent = '检查完成,数据无问题。';
-        } else {
-          const sample = result.value.intersections.slice(0, 5)
-            .map((p) => `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`).join(', ');
-          report.innerHTML = `<span class="bad">✗ 发现 ${result.value.intersectionCount} 个相交</span> — 前 5 个: ${sample}${result.value.intersectionCount > 5 ? '...' : ''}`;
-          status.textContent = '检查到自相交 —— 点击 "重建拓扑" 修复。';
+            report.innerHTML = '<span class="bad">无法检查 (检查源/图层)</span>';
+            status.textContent = '检查失败。';
         }
-      } catch (err) {
+        else if (result.value.ok) {
+            report.innerHTML = '<span class="ok">✓ 拓扑干净 — 0 个相交</span>';
+            status.textContent = '检查完成,数据无问题。';
+        }
+        else {
+            const sample = result.value.intersections.slice(0, 5)
+                .map((p) => `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`).join(', ');
+            report.innerHTML = `<span class="bad">✗ 发现 ${result.value.intersectionCount} 个相交</span> — 前 5 个: ${sample}${result.value.intersectionCount > 5 ? '...' : ''}`;
+            status.textContent = '检查到自相交 —— 点击 "重建拓扑" 修复。';
+        }
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         checkBtn.disabled = false;
-      }
-    });
-
-    rebuildBtn.addEventListener('click', async () => {
-      status.textContent = '正在重建拓扑...';
-      rebuildBtn.disabled = true;
-      try {
+    }
+});
+rebuildBtn.addEventListener('click', async () => {
+    status.textContent = '正在重建拓扑...';
+    rebuildBtn.disabled = true;
+    try {
         const result = await map.ops.rebuildTopology({ source: SOURCE_ID });
         status.textContent = result.ok ? '已重建。再次检查几何确认结果。' : '重建失败。';
-      } catch (err) {
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         rebuildBtn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('check-geometry');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('check-geometry');
+</script>
 </body>
 
 </html>

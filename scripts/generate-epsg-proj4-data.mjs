@@ -33,7 +33,7 @@ export const EPSG_PROJ4_TABLE: string = ${JSON.stringify(rows.join('\n'))};
 export const EPSG_CODES_WITHOUT_PROJ4: string = ${JSON.stringify(`|${codesWithoutProj4.join('|')}|`)};
 `;
 
-writeFileSync(resolve(root, 'src/geo/epsg-proj4-data.ts'), output);
+writeFileSync(resolve(root, 'src/domain/geo/epsg-proj4-data.ts'), output);
 
 const projjsonOutput = `// Generated from @zwishing/epsg-index/all.json by scripts/generate-epsg-proj4-data.mjs.
 // Compact TSV of EPSG code to @zwishing/epsg-index PROJJSON asset path.
@@ -41,4 +41,4 @@ const projjsonOutput = `// Generated from @zwishing/epsg-index/all.json by scrip
 export const EPSG_PROJJSON_PATH_TABLE: string = ${JSON.stringify(projjsonRows.join('\n'))};
 `;
 
-writeFileSync(resolve(root, 'src/geo/epsg-projjson-data.ts'), projjsonOutput);
+writeFileSync(resolve(root, 'src/domain/geo/epsg-projjson-data.ts'), projjsonOutput);

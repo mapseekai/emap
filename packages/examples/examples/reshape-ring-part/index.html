@@ -39,121 +39,124 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-    map.clickSelect.enable();
-
-    const fileInput = document.getElementById('file-input');
-    const reshape = document.getElementById('reshape');
-    const autoComplete = document.getElementById('auto-complete');
-    const addRing = document.getElementById('add-ring');
-    const deleteRing = document.getElementById('delete-ring');
-    const fillRing = document.getElementById('fill-ring');
-    const addPart = document.getElementById('add-part');
-    const deletePart = document.getElementById('delete-part');
-    const status = document.getElementById('status');
-    const ownedSourceIds = new Set();
-    const tools = [
-      { button: reshape, handler: map.reshapeFeature, mode: 'reshape' },
-      { button: autoComplete, handler: map.autoCompletePolygon, mode: 'auto-complete' },
-      { button: addRing, handler: map.ringEdit, mode: 'ring', operation: 'add' },
-      { button: deleteRing, handler: map.ringEdit, mode: 'ring', operation: 'delete' },
-      { button: fillRing, handler: map.ringEdit, mode: 'ring', operation: 'fill' },
-      { button: addPart, handler: map.partEdit, mode: 'part', operation: 'add' },
-      { button: deletePart, handler: map.partEdit, mode: 'part', operation: 'delete' },
-    ];
-
-    function showError(error) {
-      const message = error instanceof Error
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+map.clickSelect.enable();
+const fileInput = document.getElementById('file-input');
+const reshape = document.getElementById('reshape');
+const autoComplete = document.getElementById('auto-complete');
+const addRing = document.getElementById('add-ring');
+const deleteRing = document.getElementById('delete-ring');
+const fillRing = document.getElementById('fill-ring');
+const addPart = document.getElementById('add-part');
+const deletePart = document.getElementById('delete-part');
+const status = document.getElementById('status');
+const ownedSourceIds = new Set();
+const tools = [
+    { button: reshape, handler: map.reshapeFeature, mode: 'reshape' },
+    { button: autoComplete, handler: map.autoCompletePolygon, mode: 'auto-complete' },
+    { button: addRing, handler: map.ringEdit, mode: 'ring', operation: 'add' },
+    { button: deleteRing, handler: map.ringEdit, mode: 'ring', operation: 'delete' },
+    { button: fillRing, handler: map.ringEdit, mode: 'ring', operation: 'fill' },
+    { button: addPart, handler: map.partEdit, mode: 'part', operation: 'add' },
+    { button: deletePart, handler: map.partEdit, mode: 'part', operation: 'delete' },
+];
+function showError(error) {
+    const message = error instanceof Error
         ? error.message
         : error && typeof error === 'object'
-          ? error.reason ?? error.message ?? error.kind ?? JSON.stringify(error)
-          : String(error);
-      status.textContent = `错误: ${message}`;
-      console.error(error);
-    }
-
-    function syncButtons(activeMode) {
-      for (const tool of tools) {
+            ? error.reason ?? error.message ?? error.kind ?? JSON.stringify(error)
+            : String(error);
+    status.textContent = `错误: ${message}`;
+    console.error(error);
+}
+function syncButtons(activeMode) {
+    for (const tool of tools) {
         const active = activeMode === tool.mode && tool.handler.isEnabled() &&
-          (!tool.operation || tool.handler.getOptions().mode === tool.operation);
+            (!tool.operation || tool.handler.getOptions().mode === tool.operation);
         tool.button.classList.toggle('emap-example-primary-button', active);
         tool.button.setAttribute('aria-pressed', String(active));
-      }
     }
-
-    function toggle(tool) {
-      try {
+}
+function toggle(tool) {
+    try {
         const active = tool.handler.isEnabled() &&
-          (!tool.operation || tool.handler.getOptions().mode === tool.operation);
+            (!tool.operation || tool.handler.getOptions().mode === tool.operation);
         if (active) {
-          tool.handler.disable();
-          return;
+            tool.handler.disable();
+            return;
         }
-        if (tool.handler.isEnabled()) tool.handler.disable();
-        if (tool.operation) tool.handler.setOptions({ mode: tool.operation });
+        if (tool.handler.isEnabled())
+            tool.handler.disable();
+        if (tool.operation)
+            tool.handler.setOptions({ mode: tool.operation });
         tool.handler.enable();
-      } catch (error) {
-        showError(error);
-      }
     }
-
-    for (const tool of tools) tool.button.addEventListener('click', () => toggle(tool));
-    fileInput.addEventListener('change', async () => {
-      const files = Array.from(fileInput.files ?? []);
-      if (files.length === 0) return;
-      status.textContent = `正在加载 ${files.length} 个数据文件…`;
-      try {
-        for (const sourceId of ownedSourceIds) map.removeSource(sourceId);
+    catch (error) {
+        showError(error);
+    }
+}
+for (const tool of tools)
+    tool.button.addEventListener('click', () => toggle(tool));
+fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files ?? []);
+    if (files.length === 0)
+        return;
+    status.textContent = `正在加载 ${files.length} 个数据文件…`;
+    try {
+        for (const sourceId of ownedSourceIds)
+            map.removeSource(sourceId);
         ownedSourceIds.clear();
         for (const [index, file] of files.entries()) {
-          const sourceId = `reshape-ring-part-source-${index}`;
-          const source = new TopologySource(sourceId);
-          const content = new Uint8Array(await file.arrayBuffer());
-          await source.setData({ filename: file.name, content });
-          await map.addSource(sourceId, source);
-          const hasPolygon = source
-            .getLayers()
-            .some((layer) => layer.geometry_type === 'polygon');
-          if (hasPolygon) {
+            const sourceId = `reshape-ring-part-source-${index}`;
+            const source = new TopologySource(sourceId);
+            const content = new Uint8Array(await file.arrayBuffer());
+            await source.setData({ filename: file.name, content });
+            await map.addSource(sourceId, source);
+            const hasPolygon = source
+                .getLayers()
+                .some((layer) => layer.geometry_type === 'polygon');
+            if (hasPolygon) {
+                map.addLayer({
+                    id: `${sourceId}:fill`,
+                    type: 'fill',
+                    source: sourceId,
+                    paint: { 'fill-color': '#1e88e5', 'fill-opacity': 0.25 },
+                });
+            }
             map.addLayer({
-              id: `${sourceId}:fill`,
-              type: 'fill',
-              source: sourceId,
-              paint: { 'fill-color': '#1e88e5', 'fill-opacity': 0.25 },
+                id: `${sourceId}-line`,
+                type: 'line',
+                source: sourceId,
+                paint: { 'line-color': '#1e88e5', 'line-width': 1.2 },
             });
-          }
-          map.addLayer({
-            id: `${sourceId}-line`,
-            type: 'line',
-            source: sourceId,
-            paint: { 'line-color': '#1e88e5', 'line-width': 1.2 },
-          });
-          ownedSourceIds.add(sourceId);
-          map.setExtent(source.getExtent());
+            ownedSourceIds.add(sourceId);
+            map.setExtent(source.getExtent());
         }
         status.textContent = '数据已加载，可直接绘制整形线或洞；仅“加部分”需要先选择要素。';
-      } catch (error) {
+    }
+    catch (error) {
         showError(error);
-      }
-    });
-
-    map.on('selectionchange', (event) => {
-      if (event.selected.length === 0) map.clearHighlightedFeatures();
-      else map.setHighlightedFeatures(event.selected, { color: '#1e88e5', width: 3, fillOpacity: 0.3 });
-    });
-    map.on('editmodechange', (event) => syncButtons(event.mode));
-    map.on('error', (event) => showError(event?.error ?? event));
-    await autoLoadExampleFixtures('reshape-ring-part');
-  </script>
+    }
+});
+map.on('selectionchange', (event) => {
+    if (event.selected.length === 0)
+        map.clearHighlightedFeatures();
+    else
+        map.setHighlightedFeatures(event.selected, { color: '#1e88e5', width: 3, fillOpacity: 0.3 });
+});
+map.on('editmodechange', (event) => syncButtons(event.mode));
+map.on('error', (event) => showError(event?.error ?? event));
+await autoLoadExampleFixtures('reshape-ring-part');
+</script>
 </body>
 
 </html>

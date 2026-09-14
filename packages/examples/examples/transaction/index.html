@@ -65,156 +65,151 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl, topologyValidator } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'tx-source';
-    const fileInput = document.getElementById('file-input');
-    const txBtn = document.getElementById('tx-btn');
-    const clipBtn = document.getElementById('run-clip-btn');
-    const dissolveBtn = document.getElementById('run-dissolve-btn');
-    const commitBtn = document.getElementById('commit-btn');
-    const rollbackBtn = document.getElementById('rollback-btn');
-    const toggleValidatorBtn = document.getElementById('toggle-validator-btn');
-    const undoBtn = document.getElementById('undo-btn');
-    const status = document.getElementById('status');
-    const logEl = document.getElementById('log');
-
-    let currentTx = null;
-    let unregisterValidator = null;
-
-    function log(msg, cls = 'info') {
-      const d = document.createElement('div');
-      d.className = cls;
-      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logEl.appendChild(d);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    function refreshButtons() {
-      const hasSource = !!map.getSource(SOURCE_ID);
-      const hasTx = currentTx?.isOpen === true;
-      txBtn.disabled = !hasSource || hasTx;
-      clipBtn.disabled = !hasTx;
-      dissolveBtn.disabled = !hasTx;
-      commitBtn.disabled = !hasTx;
-      rollbackBtn.disabled = !hasTx;
-      toggleValidatorBtn.disabled = !hasSource;
-      toggleValidatorBtn.textContent = unregisterValidator
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl, topologyValidator } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'tx-source';
+const fileInput = document.getElementById('file-input');
+const txBtn = document.getElementById('tx-btn');
+const clipBtn = document.getElementById('run-clip-btn');
+const dissolveBtn = document.getElementById('run-dissolve-btn');
+const commitBtn = document.getElementById('commit-btn');
+const rollbackBtn = document.getElementById('rollback-btn');
+const toggleValidatorBtn = document.getElementById('toggle-validator-btn');
+const undoBtn = document.getElementById('undo-btn');
+const status = document.getElementById('status');
+const logEl = document.getElementById('log');
+let currentTx = null;
+let unregisterValidator = null;
+function log(msg, cls = 'info') {
+    const d = document.createElement('div');
+    d.className = cls;
+    d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+function refreshButtons() {
+    const hasSource = !!map.getSource(SOURCE_ID);
+    const hasTx = currentTx?.isOpen === true;
+    txBtn.disabled = !hasSource || hasTx;
+    clipBtn.disabled = !hasTx;
+    dissolveBtn.disabled = !hasTx;
+    commitBtn.disabled = !hasTx;
+    rollbackBtn.disabled = !hasTx;
+    toggleValidatorBtn.disabled = !hasSource;
+    toggleValidatorBtn.textContent = unregisterValidator
         ? '禁用 topologyValidator'
         : '启用 topologyValidator';
-      undoBtn.disabled = !map.canUndo();
-    }
-
-    function readFile(file) {
-      return new Promise((resolve, reject) => {
+    undoBtn.disabled = !map.canUndo();
+}
+function readFile(file) {
+    return new Promise((resolve, reject) => {
         const r = new FileReader();
         r.onload = (e) => resolve(new Uint8Array(e.target.result));
         r.onerror = reject;
         r.readAsArrayBuffer(file);
-      });
-    }
-
-    fileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-      const entries = await Promise.all(
-        files.map(async (f) => ({ filename: f.name, content: await readFile(f) }))
-      );
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      const source = new TopologySource(SOURCE_ID);
-      // Load initial data before registration: await setData, then addSource and setExtent.
-      try {
+    });
+}
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0)
+        return;
+    const entries = await Promise.all(files.map(async (f) => ({ filename: f.name, content: await readFile(f) })));
+    if (map.getSource(SOURCE_ID))
+        map.removeSource(SOURCE_ID);
+    const source = new TopologySource(SOURCE_ID);
+    // Load initial data before registration: await setData, then addSource and setExtent.
+    try {
         await source.setData(entries);
         await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         const layerNames = source.getLayers().map((l) => l.name).join(', ');
         status.textContent = `已加载图层: ${layerNames}`;
         refreshButtons();
-      } catch (e) {
+    }
+    catch (e) {
         log(`数据加载失败: ${e.error?.message ?? e}`, 'rollback');
-      }
-    });
-
-    map.on('historychange', () => refreshButtons());
-    map.on('validationfailed', (e) => {
-      for (const r of e.results) {
+    }
+});
+map.on('historychange', () => refreshButtons());
+map.on('validationfailed', (e) => {
+    for (const r of e.results) {
         log(`validator '${r.validator}' 失败 (label="${e.label}"): ${r.report.issues.map((i) => i.message).join('; ')}`, 'validation-failed');
-      }
-    });
-
-    txBtn.addEventListener('click', () => {
-      try {
+    }
+});
+txBtn.addEventListener('click', () => {
+    try {
         currentTx = map.beginTransaction();
         log('事务开始 (Transaction begin)', 'info');
         refreshButtons();
-      } catch (err) {
+    }
+    catch (err) {
         log(`begin 失败: ${err.message}`, 'rollback');
-      }
-    });
-
-    clipBtn.addEventListener('click', async () => {
-      const layers = map.getSource(SOURCE_ID).getLayers();
-      if (layers.length < 2) { log('需要至少 2 个图层 (target + mask)', 'rollback'); return; }
-      const target = layers[0].name;
-      const mask = layers.find((l) => l.geometry_type === 'polygon')?.name;
-      if (!mask) { log('没有可用的 polygon mask', 'rollback'); return; }
-      const r = await map.ops.clipLayer({ source: SOURCE_ID, target, mask });
-      log(`clipLayer(target=${target}, mask=${mask}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
-    });
-
-    dissolveBtn.addEventListener('click', async () => {
-      const target = map.getSource(SOURCE_ID).getLayers()[0]?.name;
-      if (!target) return;
-      const r = await map.ops.dissolveLayer({ source: SOURCE_ID, target });
-      log(`dissolveLayer(target=${target}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
-    });
-
-    commitBtn.addEventListener('click', async () => {
-      if (!currentTx) return;
-      const r = await currentTx.commit('Transaction batch');
-      currentTx = null;
-      log(`commit → ${r.ok ? 'ok (1 条 history 已写入)' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
-      refreshButtons();
-    });
-
-    rollbackBtn.addEventListener('click', () => {
-      if (!currentTx) return;
-      currentTx.rollback();
-      currentTx = null;
-      log('rollback (数据集恢复，无 history 写入)', 'rollback');
-      refreshButtons();
-    });
-
-    toggleValidatorBtn.addEventListener('click', () => {
-      if (unregisterValidator) {
+    }
+});
+clipBtn.addEventListener('click', async () => {
+    const layers = map.getSource(SOURCE_ID).getLayers();
+    if (layers.length < 2) {
+        log('需要至少 2 个图层 (target + mask)', 'rollback');
+        return;
+    }
+    const target = layers[0].name;
+    const mask = layers.find((l) => l.geometry_type === 'polygon')?.name;
+    if (!mask) {
+        log('没有可用的 polygon mask', 'rollback');
+        return;
+    }
+    const r = await map.ops.clipLayer({ source: SOURCE_ID, target, mask });
+    log(`clipLayer(target=${target}, mask=${mask}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+});
+dissolveBtn.addEventListener('click', async () => {
+    const target = map.getSource(SOURCE_ID).getLayers()[0]?.name;
+    if (!target)
+        return;
+    const r = await map.ops.dissolveLayer({ source: SOURCE_ID, target });
+    log(`dissolveLayer(target=${target}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+});
+commitBtn.addEventListener('click', async () => {
+    if (!currentTx)
+        return;
+    const r = await currentTx.commit('Transaction batch');
+    currentTx = null;
+    log(`commit → ${r.ok ? 'ok (1 条 history 已写入)' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+    refreshButtons();
+});
+rollbackBtn.addEventListener('click', () => {
+    if (!currentTx)
+        return;
+    currentTx.rollback();
+    currentTx = null;
+    log('rollback (数据集恢复，无 history 写入)', 'rollback');
+    refreshButtons();
+});
+toggleValidatorBtn.addEventListener('click', () => {
+    if (unregisterValidator) {
         unregisterValidator();
         unregisterValidator = null;
         log('topologyValidator 已禁用', 'info');
-      } else {
-        unregisterValidator = map.validators.register(
-          topologyValidator({ sources: [SOURCE_ID] })
-        );
+    }
+    else {
+        unregisterValidator = map.validators.register(topologyValidator({ sources: [SOURCE_ID] }));
         log('topologyValidator 已启用 (每次 commit 触发)', 'validation-ok');
-      }
-      refreshButtons();
-    });
-
-    undoBtn.addEventListener('click', () => {
-      map.undo();
-      log('undo', 'info');
-    });
-    await autoLoadExampleFixtures('transaction');
-  </script>
+    }
+    refreshButtons();
+});
+undoBtn.addEventListener('click', () => {
+    map.undo();
+    log('undo', 'info');
+});
+await autoLoadExampleFixtures('transaction');
+</script>
 </body>
 
 </html>

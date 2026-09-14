@@ -44,89 +44,85 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-
-    const SOURCE_ID = 'handlers-source';
-    const status = document.getElementById('status');
-    const togglePan = document.getElementById('toggle-pan');
-    const toggleZoom = document.getElementById('toggle-zoom');
-    const toggleShift = document.getElementById('toggle-shift');
-
-    function refreshStatus() {
-      // isEnabled() reads the live handler state — no private access.
-      status.textContent =
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const SOURCE_ID = 'handlers-source';
+const status = document.getElementById('status');
+const togglePan = document.getElementById('toggle-pan');
+const toggleZoom = document.getElementById('toggle-zoom');
+const toggleShift = document.getElementById('toggle-shift');
+function refreshStatus() {
+    // isEnabled() reads the live handler state — no private access.
+    status.textContent =
         `dragPan: ${map.dragPan.isEnabled() ? '启用' : '禁用'} · ` +
-        `scrollZoom: ${map.scrollZoom.isEnabled() ? '启用' : '禁用'} · ` +
-        `skipShiftDrag: ${map.dragPan.getOptions().skipShiftDrag}`;
-    }
-
-    togglePan.addEventListener('change', () => {
-      togglePan.checked ? map.dragPan.enable() : map.dragPan.disable();
-      refreshStatus();
-    });
-    toggleZoom.addEventListener('change', () => {
-      toggleZoom.checked ? map.scrollZoom.enable() : map.scrollZoom.disable();
-      refreshStatus();
-    });
-    toggleShift.addEventListener('change', () => {
-      // setOptions is part of the unified Handler contract. NOTE: in this
-      // Phase-1 release skipShiftDrag is fixed at construction in the
-      // underlying primitive — setOptions stores it (getOptions reflects it)
-      // but it takes runtime effect from a later phase's arbitration layer.
-      map.dragPan.setOptions({ skipShiftDrag: toggleShift.checked });
-      refreshStatus();
-    });
-
-    document.getElementById('btn-stop').addEventListener('click', () => {
-      map.dragPan.disable();
-      map.scrollZoom.disable();
-      togglePan.checked = false;
-      toggleZoom.checked = false;
-      refreshStatus();
-    });
-    document.getElementById('btn-go').addEventListener('click', () => {
-      map.dragPan.enable();
-      map.scrollZoom.enable();
-      togglePan.checked = true;
-      toggleZoom.checked = true;
-      refreshStatus();
-    });
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+            `scrollZoom: ${map.scrollZoom.isEnabled() ? '启用' : '禁用'} · ` +
+            `skipShiftDrag: ${map.dragPan.getOptions().skipShiftDrag}`;
+}
+togglePan.addEventListener('change', () => {
+    togglePan.checked ? map.dragPan.enable() : map.dragPan.disable();
+    refreshStatus();
+});
+toggleZoom.addEventListener('change', () => {
+    toggleZoom.checked ? map.scrollZoom.enable() : map.scrollZoom.disable();
+    refreshStatus();
+});
+toggleShift.addEventListener('change', () => {
+    // setOptions is part of the unified Handler contract. NOTE: in this
+    // Phase-1 release skipShiftDrag is fixed at construction in the
+    // underlying primitive — setOptions stores it (getOptions reflects it)
+    // but it takes runtime effect from a later phase's arbitration layer.
+    map.dragPan.setOptions({ skipShiftDrag: toggleShift.checked });
+    refreshStatus();
+});
+document.getElementById('btn-stop').addEventListener('click', () => {
+    map.dragPan.disable();
+    map.scrollZoom.disable();
+    togglePan.checked = false;
+    toggleZoom.checked = false;
+    refreshStatus();
+});
+document.getElementById('btn-go').addEventListener('click', () => {
+    map.dragPan.enable();
+    map.scrollZoom.enable();
+    togglePan.checked = true;
+    toggleZoom.checked = true;
+    refreshStatus();
+});
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          refreshStatus();
-        } catch (err) {
-          console.error(err);
-          status.textContent = '处理文件出错';
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            refreshStatus();
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    refreshStatus();
-
-    window.addEventListener('resize', () => map.resize());
-    await autoLoadExampleFixtures('interaction-handlers');
-  </script>
+        catch (err) {
+            console.error(err);
+            status.textContent = '处理文件出错';
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+refreshStatus();
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('interaction-handlers');
+</script>
 </body>
 
 </html>

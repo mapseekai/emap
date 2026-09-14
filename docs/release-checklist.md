@@ -4,6 +4,10 @@ Use this checklist before publishing or handing off the documentation platform.
 It records the static outputs, required gates, and manual evidence expected for
 the docs, examples, and API surfaces.
 
+Load this checklist for release or documentation-platform handoff work. Routine
+local edits use [scoped verification](../AGENTS.md#verification). Preparing and
+verifying a release does not authorize publishing, tagging, or deployment.
+
 ## Version and Commit
 
 Review and commit the intended worktree changes before creating a release tag. The tag must
@@ -43,7 +47,7 @@ pnpm run release:verify
 
 | Stage | Gates |
 | --- | --- |
-| Source | `format:check`, `typecheck`, `api:check-surface` |
+| Source | `format:check`, `typecheck`, `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `architecture:check`, `capabilities:check` |
 | Package | `build`, `bundle:smoke`, `test:run`, `test:duckdb` |
 | Documentation | `examples:build`, `docs:build`, `docs:compose-examples` |
 | Documentation contracts | `docs:check-i18n`, `docs:check-api`, `examples:check` |
@@ -55,11 +59,13 @@ rebuilds the package before the pixel checks. The release gate uses `browser:che
 which requires the earlier build stages and forces all three rendering backends.
 `docs:check-api` checks generated API page and anchor targets in both documentation languages.
 
-For documentation-only work, `npm run docs:verify` chains `typecheck`,
-`api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
+For product documentation, API, or example changes, `npm run docs:verify` chains `typecheck`,
+`typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
 `docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` generates
 the TypeDoc API reference before Docusaurus starts, so callers do not need a
 second `api:build` step. The complete release gate already includes these stages.
+Agent-instruction-only edits use link, command, and rule-consistency checks;
+they do not require rebuilding the documentation platform.
 
 `npm run audit:prod` fails closed when the registry cannot return a complete
 report. The only temporary exceptions are the exact advisory IDs and
@@ -97,6 +103,10 @@ serving the composed output.
   matching documentation locale.
 - Record representative browser checks for current Chromium, Firefox, and
   Safari or note the browser that was unavailable.
+
+## Source/test layout
+
+Before publishing, `src/` must contain only the six responsibility zones `domain / engine / runtime / integrations / ui / shared` plus root entry files. Unit tests under `src/` must have exact same-name implementations; all broad integration/regression and public type-contract tests live under root `test/`. `pnpm run test-layout:check` is the executable contract.
 
 ## Review Criteria
 

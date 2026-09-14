@@ -94,190 +94,187 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import {
-      autoLoadExampleFixtures,
-      exampleWorkerUrl,
-      loadExampleRuntime,
-    } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const SOURCE_ID = 'worker-demo-source';
-    let map = null;
-    let lastFile = null;
-    let lastFileBytes = null;
-
-    const modeSel = document.getElementById('mode');
-    const thresholdLabel = document.getElementById('threshold-label');
-    const thresholdInput = document.getElementById('threshold');
-    const rebuildBtn = document.getElementById('rebuild-btn');
-    const dissolveBtn = document.getElementById('dissolve-btn');
-    const simplifyBtn = document.getElementById('simplify-btn');
-    const unionBtn = document.getElementById('union-btn');
-    const cleanBtn = document.getElementById('clean-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const clearLogBtn = document.getElementById('clear-log-btn');
-    const stats = document.getElementById('stats');
-    const eventLog = document.getElementById('event-log');
-    const allOpsBtns = [dissolveBtn, simplifyBtn, unionBtn, cleanBtn];
-
-    // Track in-flight start times so we can show "+xxx ms" on each end event.
-    const inFlightStart = new Map();
-
-    function logEvent(html, klass) {
-      const line = document.createElement('div');
-      line.className = klass || '';
-      line.innerHTML = `<span style="opacity:0.6">${new Date().toLocaleTimeString()}</span> ${html}`;
-      eventLog.appendChild(line);
-      eventLog.scrollTop = eventLog.scrollHeight;
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, exampleWorkerUrl, loadExampleRuntime, } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const SOURCE_ID = 'worker-demo-source';
+let map = null;
+let lastFile = null;
+let lastFileBytes = null;
+const modeSel = document.getElementById('mode');
+const thresholdLabel = document.getElementById('threshold-label');
+const thresholdInput = document.getElementById('threshold');
+const rebuildBtn = document.getElementById('rebuild-btn');
+const dissolveBtn = document.getElementById('dissolve-btn');
+const simplifyBtn = document.getElementById('simplify-btn');
+const unionBtn = document.getElementById('union-btn');
+const cleanBtn = document.getElementById('clean-btn');
+const cancelBtn = document.getElementById('cancel-btn');
+const clearLogBtn = document.getElementById('clear-log-btn');
+const stats = document.getElementById('stats');
+const eventLog = document.getElementById('event-log');
+const allOpsBtns = [dissolveBtn, simplifyBtn, unionBtn, cleanBtn];
+// Track in-flight start times so we can show "+xxx ms" on each end event.
+const inFlightStart = new Map();
+function logEvent(html, klass) {
+    const line = document.createElement('div');
+    line.className = klass || '';
+    line.innerHTML = `<span style="opacity:0.6">${new Date().toLocaleTimeString()}</span> ${html}`;
+    eventLog.appendChild(line);
+    eventLog.scrollTop = eventLog.scrollHeight;
+}
+function updateThresholdVisibility() {
+    thresholdLabel.style.display = modeSel.value === 'auto' ? '' : 'none';
+}
+modeSel.addEventListener('change', updateThresholdVisibility);
+updateThresholdVisibility();
+async function buildMap() {
+    if (map) {
+        try {
+            await map.dispose();
+        }
+        catch (_) { }
     }
-
-    function updateThresholdVisibility() {
-      thresholdLabel.style.display = modeSel.value === 'auto' ? '' : 'none';
-    }
-    modeSel.addEventListener('change', updateThresholdVisibility);
-    updateThresholdVisibility();
-
-    function buildMap() {
-      if (map) {
-        try { map.remove(); } catch (_) {}
-      }
-      const mode = modeSel.value;
-      const useWorker = mode === 'on' ? true : mode === 'auto' ? 'auto' : false;
-      const workerThreshold = Number(thresholdInput.value) || 50000;
-      map = new Emap({
+    const mode = modeSel.value;
+    const useWorker = mode === 'on' ? true : mode === 'auto' ? 'auto' : false;
+    const workerThreshold = Number(thresholdInput.value) || 50000;
+    map = await Emap.create({
         container: 'map',
         useWorker,
         workerThreshold,
         workerUrl: exampleWorkerUrl(),
-      });
-      map.addControl(new NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-      map.addControl(new HistoryControl(), 'top-left');
-      map.bindHistoryShortcuts();
-      map.on('error', (e) => {
+    });
+    await map.addControl(new NavigationControl(), 'top-left');
+    await installExampleMapUi(map, emap);
+    await map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+    map.on('error', (e) => {
         console.error('emap error:', e);
         logEvent(`<span class="err">[error]</span> ${e?.error?.message ?? e}`);
-      });
-      map.on('workerjobstart', (e) => {
+    });
+    map.on('workerjobstart', (e) => {
         inFlightStart.set(e.id, performance.now());
         logEvent(`<span class="start">[start#${e.id}]</span> ${e.label} (${e.datasetVertexCount.toLocaleString()} verts)`);
-      });
-      map.on('workerjobend', (e) => {
+    });
+    map.on('workerjobend', (e) => {
         inFlightStart.delete(e.id);
         if (e.ok) {
-          logEvent(`<span class="ok">[end#${e.id}]</span> ✓ ${e.durationMs.toFixed(0)}ms`);
-        } else {
-          logEvent(`<span class="err">[end#${e.id}]</span> ✗ ${e.errorMessage} (${e.durationMs.toFixed(0)}ms)`);
+            logEvent(`<span class="ok">[end#${e.id}]</span> ✓ ${e.durationMs.toFixed(0)}ms`);
         }
-      });
-      logEvent(`Emap rebuilt: useWorker=${useWorker}${useWorker === 'auto' ? ` threshold=${workerThreshold}` : ''}`);
-    }
-
-    function refreshStats() {
-      const src = map?.getSource(SOURCE_ID);
-      const ds = src?.getDataset();
-      if (!ds) {
+        else {
+            logEvent(`<span class="err">[end#${e.id}]</span> ✗ ${e.errorMessage} (${e.durationMs.toFixed(0)}ms)`);
+        }
+    });
+    logEvent(`Emap rebuilt: useWorker=${useWorker}${useWorker === 'auto' ? ` threshold=${workerThreshold}` : ''}`);
+}
+function refreshStats() {
+    const src = map?.getSource(SOURCE_ID);
+    const ds = src?.getDataset();
+    if (!ds) {
         stats.textContent = 'layers: -, arcs: -, vertices: -';
         return;
-      }
-      const arcCount = ds.arcs?.size?.() ?? 0;
-      const vertCount = ds.arcs?.getPointCount?.() ?? 0;
-      stats.textContent = `layers: ${ds.layers.length}, arcs: ${arcCount}, vertices: ${vertCount.toLocaleString()}`;
     }
-
-    async function reloadCurrentFile() {
-      if (!lastFile || !lastFileBytes) {
-        for (const b of allOpsBtns) b.disabled = true;
+    const arcCount = ds.arcs?.size?.() ?? 0;
+    const vertCount = ds.arcs?.getPointCount?.() ?? 0;
+    stats.textContent = `layers: ${ds.layers.length}, arcs: ${arcCount}, vertices: ${vertCount.toLocaleString()}`;
+}
+async function reloadCurrentFile() {
+    if (!lastFile || !lastFileBytes) {
+        for (const b of allOpsBtns)
+            b.disabled = true;
         refreshStats();
         return;
-      }
-      const source = new TopologySource(SOURCE_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Load initial data before registration: await setData, then addSource and setExtent.
-      try {
+    }
+    const source = new TopologySource(SOURCE_ID);
+    if (map.getSource(SOURCE_ID))
+        map.removeSource(SOURCE_ID);
+    // Load initial data before registration: await setData, then addSource and setExtent.
+    try {
         await source.setData({ filename: lastFile.name, content: lastFileBytes });
         await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
-        for (const b of allOpsBtns) b.disabled = false;
+        for (const b of allOpsBtns)
+            b.disabled = false;
         refreshStats();
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         logEvent(`<span class="err">[error]</span> ${err?.message ?? err}`);
-      }
     }
-
-    buildMap();
-    rebuildBtn.addEventListener('click', () => {
-      buildMap();
-      reloadCurrentFile();
-    });
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+}
+await buildMap();
+rebuildBtn.addEventListener('click', async () => {
+    await buildMap();
+    await reloadCurrentFile();
+});
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         lastFile = file;
         lastFileBytes = new Uint8Array(ev.target.result);
-        reloadCurrentFile();
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    function pickPolygonLayer() {
-      const ds = map.getSource(SOURCE_ID)?.getDataset();
-      return ds?.layers?.find((l) => l.geometry_type === 'polygon')?.name;
+        await reloadCurrentFile();
+    };
+    reader.readAsArrayBuffer(file);
+});
+function pickPolygonLayer() {
+    const ds = map.getSource(SOURCE_ID)?.getDataset();
+    return ds?.layers?.find((l) => l.geometry_type === 'polygon')?.name;
+}
+function pickAllPolygonLayers() {
+    const ds = map.getSource(SOURCE_ID)?.getDataset();
+    return ds?.layers?.filter((l) => l.geometry_type === 'polygon').map((l) => l.name) ?? [];
+}
+dissolveBtn.addEventListener('click', async () => {
+    const t = pickPolygonLayer();
+    if (!t) {
+        alert('未找到多边形图层');
+        return;
     }
-    function pickAllPolygonLayers() {
-      const ds = map.getSource(SOURCE_ID)?.getDataset();
-      return ds?.layers?.filter((l) => l.geometry_type === 'polygon').map((l) => l.name) ?? [];
+    const t0 = performance.now();
+    const result = await map.ops.dissolveLayer({ source: SOURCE_ID, target: t });
+    logEvent(`Dissolve(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+    refreshStats();
+});
+simplifyBtn.addEventListener('click', async () => {
+    const t = pickPolygonLayer();
+    const t0 = performance.now();
+    const result = await map.ops.simplifyLayer({ source: SOURCE_ID, target: t, percentage: 5 });
+    logEvent(`Simplify(${t}, 5%) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+    refreshStats();
+});
+unionBtn.addEventListener('click', async () => {
+    const ts = pickAllPolygonLayers();
+    if (ts.length < 2) {
+        alert('需要至少 2 个多边形图层');
+        return;
     }
-
-    dissolveBtn.addEventListener('click', async () => {
-      const t = pickPolygonLayer();
-      if (!t) { alert('未找到多边形图层'); return; }
-      const t0 = performance.now();
-      const result = await map.ops.dissolveLayer({ source: SOURCE_ID, target: t });
-      logEvent(`Dissolve(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
-      refreshStats();
-    });
-    simplifyBtn.addEventListener('click', async () => {
-      const t = pickPolygonLayer();
-      const t0 = performance.now();
-      const result = await map.ops.simplifyLayer({ source: SOURCE_ID, target: t, percentage: 5 });
-      logEvent(`Simplify(${t}, 5%) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
-      refreshStats();
-    });
-    unionBtn.addEventListener('click', async () => {
-      const ts = pickAllPolygonLayers();
-      if (ts.length < 2) { alert('需要至少 2 个多边形图层'); return; }
-      const t0 = performance.now();
-      const result = await map.ops.unionLayers({ source: SOURCE_ID, targets: ts });
-      logEvent(`Union(${ts.length} layers) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
-      refreshStats();
-    });
-    cleanBtn.addEventListener('click', async () => {
-      const t = pickPolygonLayer();
-      const t0 = performance.now();
-      const result = await map.ops.cleanLayer({ source: SOURCE_ID, target: t });
-      logEvent(`Clean(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
-      refreshStats();
-    });
-
-    cancelBtn.addEventListener('click', () => {
-      const inFlightCount = inFlightStart.size;
-      map.cancelWorkerJobs();
-      logEvent(`<span class="err">cancelWorkerJobs() — abandoned ${inFlightCount} job(s)</span>`);
-    });
-
-    clearLogBtn.addEventListener('click', () => {
-      eventLog.textContent = '';
-    });
-    await autoLoadExampleFixtures('web-worker');
-  </script>
+    const t0 = performance.now();
+    const result = await map.ops.unionLayers({ source: SOURCE_ID, targets: ts });
+    logEvent(`Union(${ts.length} layers) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+    refreshStats();
+});
+cleanBtn.addEventListener('click', async () => {
+    const t = pickPolygonLayer();
+    const t0 = performance.now();
+    const result = await map.ops.cleanLayer({ source: SOURCE_ID, target: t });
+    logEvent(`Clean(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+    refreshStats();
+});
+cancelBtn.addEventListener('click', () => {
+    const inFlightCount = inFlightStart.size;
+    map.cancelWorkerJobs();
+    logEvent(`<span class="err">cancelWorkerJobs() — abandoned ${inFlightCount} job(s)</span>`);
+});
+clearLogBtn.addEventListener('click', () => {
+    eventLog.textContent = '';
+});
+await autoLoadExampleFixtures('web-worker');
+</script>
 </body>
 
 </html>

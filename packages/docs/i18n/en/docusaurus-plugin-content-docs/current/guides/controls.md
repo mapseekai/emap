@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: Controls
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreOverlayServiceBase","MapLibreOverlayResourceService","MapLibreOverlayStyleService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+api: ["BasemapControl", "BasemapOptions", "BasemapStyle", "BoxSelectControl", "BoxSelectControlOptions", "Control", "ControlPosition", "DrawFeatureControl", "DrawFeatureControlOptions", "EditToolbar", "EditToolbarOptions", "Emap", "GetScaleMetricsOptions", "HistoryControl", "HistoryControlOptions", "LassoSelectControl", "LassoSelectControlOptions", "LayerChangeEvent", "LayerChangeReason", "LayerControl", "MapLibreBasemapService", "MapLibreIntegrationOptions", "MapLibreOverlayService", "MapLibreOverlayServiceBase", "MapLibreOverlayResourceService", "MapLibreOverlayStyleService", "MapLibreServiceChangeEvent", "MapLibreServiceChangeReason", "MapLibreServiceErrorEvent", "MapLibreServiceEventMap", "MapLibreServiceManager", "MapLibreServiceState", "MapOptions", "MeasureControl", "MeasureControlOptions", "MeasureHandler", "MeasurementMode", "MeasureOptions", "MeasureResult", "NavigationControl", "NavigationOptions", "ScaleCalculationMethod", "ScaleControl", "ScaleControlOptions", "ScaleControlStyle", "ScaleMetrics", "ScaleViewMetrics", "SimplifyControl", "SimplifyControlOptions", "StatusControl", "StatusOptions", "VertexEditControl", "VertexEditControlOptions"]
 examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","measurement","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Controls
@@ -21,11 +21,11 @@ import '@mapseekai/emap/style.css';
 import { HistoryControl, NavigationControl, ScaleControl } from '@mapseekai/emap';
 
 const navigation = new NavigationControl({ showHome: true });
-map.addControl(navigation, 'top-left');
-map.addControl(new HistoryControl(), 'top-right');
-map.addControl(new ScaleControl(), 'bottom-left');
+await map.addControl(navigation, 'top-left');
+await map.addControl(new HistoryControl(), 'top-right');
+await map.addControl(new ScaleControl(), 'bottom-left');
 
-map.removeControl(navigation);
+await map.removeControl(navigation);
 ```
 
 Positions are `top-left`, `top-right`, `bottom-left`, and `bottom-right`.
@@ -48,11 +48,11 @@ Positions are `top-left`, `top-right`, `bottom-left`, and `bottom-right`.
 Drawing and measurement controls need their own options:
 
 ```ts
-map.addControl(
+await map.addControl(
   new DrawFeatureControl({ source: 'parcels', sourceLayer: 'lots', type: 'polygon' }),
   'top-left',
 );
-map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
+await map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
 ```
 
 When removed, a control cleans up its DOM and listeners. A control that enables a handler also disables that handler when it is removed.

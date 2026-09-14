@@ -1,0 +1,487 @@
+import type { ArcCutPoint, MapshaperAdapter } from '../../../integrations/mapshaper/adapter';
+import type { MapshaperDataset, PathShape } from '../../../shared/types/mapshaper-types';
+import {
+  arcEndpoints,
+  coordinateKey,
+  cross,
+  normalizeConsecutiveCoordinates,
+  segmentIntersection,
+  segmentsConflict,
+  shapeSegments,
+  unsignedArcId,
+  type Coordinate,
+} from './geometry-2d';
+import { SplitGeometryValidationError } from './split-selected-error';
+
+export interface Contact {
+  point: [number, number];
+  targetDist: number;
+  lineDist: number;
+}
+
+type TargetSegment = {
+  a: Coordinate;
+  b: Coordinate;
+  startDist: number;
+  endDist: number;
+  cutIndex: number;
+};
+
+const CONTACT_EPSILON = Number.EPSILON * 64;
+
+function distance(a: Coordinate, b: Coordinate): number {
+  return Math.hypot(b[0] - a[0], b[1] - a[1]);
+}
+
+function isSamePoint(a: Coordinate, b: Coordinate): boolean {
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+function targetSegments(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): TargetSegment[] {
+  const segments: TargetSegment[] = [];
+  let targetDist = 0;
+  for (const signedArcId of part) {
+    const iterator = arcs.getArcIter(unsignedArcId(signedArcId));
+    const points: Coordinate[] = [];
+    while (iterator.hasNext()) points.push([iterator.x, iterator.y]);
+    if (signedArcId < 0) points.reverse();
+    for (let index = 1; index < points.length; index++) {
+      const a = points[index - 1]!;
+      const b = points[index]!;
+      const length = distance(a, b);
+      const vertexData = arcs.getVertexData!();
+      const arcOffset = vertexData.ii[unsignedArcId(signedArcId)]!;
+      const cutIndex = arcOffset + (signedArcId < 0 ? points.length - index - 1 : index - 1);
+      segments.push({ a, b, startDist: targetDist, endDist: targetDist + length, cutIndex });
+      targetDist += length;
+    }
+  }
+  return segments;
+}
+
+function lineDistanceAt(
+  line: readonly Coordinate[],
+  segmentIndex: number,
+  point: Coordinate,
+): number {
+  let result = 0;
+  for (let index = 1; index <= segmentIndex; index++)
+    result += distance(line[index - 1]!, line[index]!);
+  return result + distance(line[segmentIndex]!, point);
+}
+
+function isTransverseAtTargetVertex(
+  segments: readonly TargetSegment[],
+  segmentIndex: number,
+  line: readonly Coordinate[],
+  lineStart: Coordinate,
+  lineEnd: Coordinate,
+  point: Coordinate,
+): boolean {
+  const target = segments[segmentIndex]!;
+  const closed = segments.length > 1 && isSamePoint(segments[0]!.a, segments.at(-1)!.b);
+  const previous = isSamePoint(point, target.a)
+    ? (segments[segmentIndex - 1] ?? (closed ? segments.at(-1) : undefined))
+    : target;
+  const next = isSamePoint(point, target.b)
+    ? (segments[segmentIndex + 1] ?? (closed ? segments[0] : undefined))
+    : target;
+  if (!previous || !next) return false;
+  const collinearWithPrevious =
+    Math.abs(cross(lineStart, lineEnd, previous.a)) <= CONTACT_EPSILON &&
+    Math.abs(cross(lineStart, lineEnd, previous.b)) <= CONTACT_EPSILON;
+  const collinearWithNext =
+    Math.abs(cross(lineStart, lineEnd, next.a)) <= CONTACT_EPSILON &&
+    Math.abs(cross(lineStart, lineEnd, next.b)) <= CONTACT_EPSILON;
+  if (collinearWithPrevious || collinearWithNext) return false;
+  const lineVertex = line.findIndex((candidate) => isSamePoint(candidate, point));
+  if (lineVertex > 0 && lineVertex < line.length - 1) {
+    const before = cross(previous.a, next.b, line[lineVertex - 1]!);
+    const after = cross(previous.a, next.b, line[lineVertex + 1]!);
+    if (before * after >= 0) return false;
+  }
+  return cross(lineStart, lineEnd, previous.a) * cross(lineStart, lineEnd, next.b) < 0;
+}
+
+export function collectLineContacts(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+  line: readonly Coordinate[],
+  adapter: MapshaperAdapter,
+): Contact[] {
+  const contacts = new Map<string, Contact>();
+  const segments = targetSegments(part, arcs);
+  const add = (point: Coordinate, targetDist: number, lineDist: number) => {
+    const key = coordinateKey(point);
+    const existing = contacts.get(key);
+    if (!existing || targetDist < existing.targetDist)
+      contacts.set(key, { point: [point[0], point[1]], targetDist, lineDist });
+  };
+
+  for (let targetIndex = 0; targetIndex < segments.length; targetIndex++) {
+    const target = segments[targetIndex]!;
+    for (let lineIndex = 1; lineIndex < line.length; lineIndex++) {
+      const c = line[lineIndex - 1]!;
+      const d = line[lineIndex]!;
+      const point = segmentIntersection(target.a, target.b, c, d);
+      if (!point) continue;
+      const targetAtVertex = isSamePoint(point, target.a) || isSamePoint(point, target.b);
+      if (targetAtVertex && !isTransverseAtTargetVertex(segments, targetIndex, line, c, d, point))
+        continue;
+      const targetLength = target.endDist - target.startDist;
+      add(
+        point,
+        target.startDist + Math.min(targetLength, distance(target.a, point)),
+        lineDistanceAt(line, lineIndex - 1, point),
+      );
+    }
+  }
+
+  for (const linePoint of [line[0]!, line[line.length - 1]!]) {
+    let lineDist =
+      linePoint === line[0]
+        ? 0
+        : line.slice(1).reduce((sum, point, index) => sum + distance(line[index]!, point), 0);
+    for (const target of segments) {
+      const closest = adapter.findClosestPointOnSeg(
+        linePoint[0],
+        linePoint[1],
+        target.a[0],
+        target.a[1],
+        target.b[0],
+        target.b[1],
+        0,
+      );
+      const scale = Math.max(
+        1,
+        ...linePoint.map(Math.abs),
+        ...target.a.map(Math.abs),
+        ...target.b.map(Math.abs),
+      );
+      if (
+        (linePoint[0] - closest[0]) ** 2 + (linePoint[1] - closest[1]) ** 2 >
+        (scale * CONTACT_EPSILON) ** 2
+      )
+        continue;
+      const targetLength = target.endDist - target.startDist;
+      add(
+        closest,
+        target.startDist + Math.min(targetLength, distance(target.a, closest)),
+        lineDist,
+      );
+    }
+  }
+
+  return [...contacts.values()].sort((left, right) => left.targetDist - right.targetDist);
+}
+
+export function clipLineBetween(
+  line: readonly Coordinate[],
+  fromDist: number,
+  toDist: number,
+): Coordinate[] {
+  if (toDist < fromDist) {
+    const length = line
+      .slice(1)
+      .reduce((total, point, index) => total + distance(line[index]!, point), 0);
+    return clipLineBetween([...line].reverse(), length - fromDist, length - toDist);
+  }
+  const clipped: Coordinate[] = [];
+  let travelled = 0;
+  for (let index = 1; index < line.length; index++) {
+    const a = line[index - 1]!;
+    const b = line[index]!;
+    const length = distance(a, b);
+    const next = travelled + length;
+    if (length > 0 && next >= fromDist && travelled <= toDist) {
+      const start = Math.max(fromDist, travelled);
+      const end = Math.min(toDist, next);
+      const vertexEpsilon = Math.max(1, Math.abs(travelled), Math.abs(next)) * CONTACT_EPSILON;
+      const at = (offset: number): Coordinate => {
+        // Snap to the segment's endpoints when the clip boundary lands on a
+        // vertex: the lerp is an ulp off and would emit near-duplicate
+        // vertices that downstream reads as self-intersections.
+        if (Math.abs(offset - travelled) <= vertexEpsilon) return [a[0], a[1]];
+        if (Math.abs(offset - next) <= vertexEpsilon) return [b[0], b[1]];
+        return [
+          a[0] + ((b[0] - a[0]) * (offset - travelled)) / length,
+          a[1] + ((b[1] - a[1]) * (offset - travelled)) / length,
+        ];
+      };
+      clipped.push(at(start), at(end));
+    }
+    travelled = next;
+  }
+  return normalizeConsecutiveCoordinates(clipped);
+}
+
+function cutPointsForContacts(
+  contacts: readonly Contact[],
+  segments: readonly TargetSegment[],
+): ArcCutPoint[] {
+  return contacts.flatMap((contact) => {
+    const segment = segments.find(
+      (candidate) =>
+        contact.targetDist >= candidate.startDist && contact.targetDist <= candidate.endDist,
+    );
+    return segment ? [{ x: contact.point[0], y: contact.point[1], i: segment.cutIndex }] : [];
+  });
+}
+
+function clipLineThroughContacts(
+  line: readonly Coordinate[],
+  contacts: readonly Contact[],
+  first: Contact,
+  last: Contact,
+): Coordinate[] {
+  const low = Math.min(first.lineDist, last.lineDist);
+  const high = Math.max(first.lineDist, last.lineDist);
+  const ordered = contacts
+    .filter((contact) => contact.lineDist >= low && contact.lineDist <= high)
+    .sort((left, right) =>
+      first.lineDist <= last.lineDist
+        ? left.lineDist - right.lineDist
+        : right.lineDist - left.lineDist,
+    );
+  const clipped: Coordinate[] = [];
+  for (let index = 1; index < ordered.length; index++) {
+    const section = clipLineBetween(line, ordered[index - 1]!.lineDist, ordered[index]!.lineDist);
+    clipped.push(...(clipped.length ? section.slice(1) : section));
+  }
+  return normalizeConsecutiveCoordinates(clipped);
+}
+
+function partArcIndexes(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+  first: Coordinate,
+  last: Coordinate,
+): { firstEnd: number; lastStart: number } | null {
+  const firstEnd = part.findIndex((arc) => isSamePoint(arcEndpoints(arcs, arc)[1], first));
+  const lastStart = part.findIndex((arc) => isSamePoint(arcEndpoints(arcs, arc)[0], last));
+  return firstEnd === -1 || lastStart === -1 ? null : { firstEnd, lastStart };
+}
+
+function hasSelfConflict(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): boolean {
+  const segments = shapeSegments([part.slice()], arcs);
+  const closed = segments.length > 1 && isSamePoint(segments[0]![0], segments.at(-1)![1]);
+  for (let left = 0; left < segments.length; left++) {
+    for (let right = left + 1; right < segments.length; right++) {
+      if (right === left + 1 || (closed && left === 0 && right === segments.length - 1)) continue;
+      if (segmentsConflict(...segments[left]!, ...segments[right]!)) return true;
+    }
+  }
+  return false;
+}
+
+function hasCoordinateSelfConflict(points: readonly Coordinate[]): boolean {
+  for (let left = 1; left < points.length; left++) {
+    for (let right = left + 2; right < points.length; right++) {
+      if (left === 1 && right === points.length - 1 && isSamePoint(points[0]!, points.at(-1)!))
+        continue;
+      if (segmentsConflict(points[left - 1]!, points[left]!, points[right - 1]!, points[right]!))
+        return true;
+    }
+  }
+  return false;
+}
+
+export function reshapeSelectedPolylines(
+  dataset: MapshaperDataset,
+  layerIndex: number,
+  selectedIds: ReadonlySet<number>,
+  line: readonly Coordinate[],
+  adapter: MapshaperAdapter,
+): Array<{ featureId: number; shape: PathShape }> {
+  const arcs = dataset.arcs;
+  const layer = dataset.layers[layerIndex];
+  if (!arcs || !layer?.shapes) throw new Error('Selected layer has no path geometry');
+  const normalizedLine = normalizeConsecutiveCoordinates(line);
+  const planned = new Map<
+    number,
+    Array<{ partIndex: number; first: Contact; last: Contact; clipped: Coordinate[] }>
+  >();
+  const cutPoints: ArcCutPoint[] = [];
+
+  for (const featureId of selectedIds) {
+    const shape = layer.shapes[featureId] as PathShape | null;
+    if (!shape) continue;
+    const featurePlans: Array<{
+      partIndex: number;
+      first: Contact;
+      last: Contact;
+      clipped: Coordinate[];
+    }> = [];
+    const featureCutPoints: ArcCutPoint[] = [];
+    let invalidFeature = false;
+    for (let partIndex = 0; partIndex < shape.length; partIndex++) {
+      const part = shape[partIndex]!;
+      const contacts = collectLineContacts(part, arcs, normalizedLine, adapter);
+      if (contacts.length < 2) continue;
+      const first = contacts[0]!;
+      const last = contacts.at(-1)!;
+      const clipped = clipLineThroughContacts(normalizedLine, contacts, first, last);
+      if (
+        clipped.length < 2 ||
+        distance(clipped[0]!, clipped.at(-1)!) === 0 ||
+        hasCoordinateSelfConflict(clipped)
+      ) {
+        invalidFeature = true;
+        break;
+      }
+      featureCutPoints.push(...cutPointsForContacts(contacts, targetSegments(part, arcs)));
+      featurePlans.push({ partIndex, first, last, clipped });
+    }
+    if (!invalidFeature && featurePlans.length) {
+      planned.set(featureId, featurePlans);
+      cutPoints.push(...featureCutPoints);
+    }
+  }
+  if (!planned.size) return [];
+
+  adapter.insertCutPoints(dataset, cutPoints);
+  const results: Array<{ featureId: number; shape: PathShape }> = [];
+  for (const [featureId, plans] of planned) {
+    const shape = layer.shapes[featureId] as PathShape;
+    const reshaped = shape.map((part) => [...part]);
+    const featureArcStart = arcs.size();
+    let accepted = true;
+    for (const plan of plans) {
+      const part = reshaped[plan.partIndex]!;
+      const indexes = partArcIndexes(part, arcs, plan.first.point, plan.last.point);
+      if (!indexes) {
+        accepted = false;
+        break;
+      }
+      const closed = isSamePoint(
+        arcEndpoints(arcs, part[0]!)[0],
+        arcEndpoints(arcs, part.at(-1)!)[1],
+      );
+      if (!closed) {
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of plan.clipped) adapter.appendVertex(arcs, [point[0], point[1]]);
+        const candidate = [
+          ...part.slice(0, indexes.firstEnd + 1),
+          newArc,
+          ...part.slice(indexes.lastStart),
+        ];
+        if (
+          adapter.getShapePerimeter([candidate], arcs) === 0 ||
+          hasSelfConflict(candidate, arcs)
+        ) {
+          accepted = false;
+          break;
+        }
+        reshaped[plan.partIndex] = candidate;
+        continue;
+      }
+
+      const firstArc = arcs.size();
+      adapter.appendEmptyArc(arcs);
+      for (const point of plan.clipped) adapter.appendVertex(arcs, [point[0], point[1]]);
+      const candidateA = [
+        firstArc,
+        ...part.slice(indexes.lastStart),
+        ...part.slice(0, indexes.firstEnd + 1),
+      ];
+      const validA =
+        adapter.getShapePerimeter([candidateA], arcs) > 0 && !hasSelfConflict(candidateA, arcs);
+
+      const secondArc = arcs.size();
+      adapter.appendEmptyArc(arcs);
+      for (const point of [...plan.clipped].reverse())
+        adapter.appendVertex(arcs, [point[0], point[1]]);
+      const candidateB = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), secondArc];
+      const validB =
+        adapter.getShapePerimeter([candidateB], arcs) > 0 && !hasSelfConflict(candidateB, arcs);
+      if (!validA && !validB) {
+        accepted = false;
+        break;
+      }
+      if (validA && !validB) {
+        adapter.deleteLastArc(arcs);
+        reshaped[plan.partIndex] = candidateA;
+        continue;
+      }
+      if (!validA && validB) {
+        adapter.deleteLastArc(arcs);
+        adapter.deleteLastArc(arcs);
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of [...plan.clipped].reverse())
+          adapter.appendVertex(arcs, [point[0], point[1]]);
+        reshaped[plan.partIndex] = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), newArc];
+        continue;
+      }
+
+      const spanA = shapeSegments([part.slice(indexes.firstEnd + 1, indexes.lastStart)], arcs);
+      const spanB = shapeSegments(
+        [[...part.slice(indexes.lastStart), ...part.slice(0, indexes.firstEnd + 1)]],
+        arcs,
+      );
+      const score = (replacement: readonly Coordinate[], span: Array<[Coordinate, Coordinate]>) => {
+        const replacementStart = replacement[0]!;
+        const replacementEnd = replacement.at(-1)!;
+        const spanStart = span[0]![0];
+        const spanEnd = span.at(-1)![1];
+        return (
+          (replacementEnd[0] - replacementStart[0]) * (spanEnd[0] - spanStart[0]) +
+          (replacementEnd[1] - replacementStart[1]) * (spanEnd[1] - spanStart[1])
+        );
+      };
+      if (score(plan.clipped, spanA) >= score([...plan.clipped].reverse(), spanB)) {
+        adapter.deleteLastArc(arcs);
+        reshaped[plan.partIndex] = candidateA;
+      } else {
+        adapter.deleteLastArc(arcs);
+        adapter.deleteLastArc(arcs);
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of [...plan.clipped].reverse())
+          adapter.appendVertex(arcs, [point[0], point[1]]);
+        reshaped[plan.partIndex] = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), newArc];
+      }
+    }
+    if (!accepted) {
+      while (arcs.size() > featureArcStart) adapter.deleteLastArc(arcs);
+      continue;
+    }
+    results.push({ featureId, shape: reshaped });
+  }
+  return results;
+}
+
+/** Validate one polyline shape before passing it to legacy reshape geometry. */
+export function validatePolylineFeatureShape(
+  shape: PathShape | null | undefined,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  if (!shape || shape.length === 0 || shape.some((part) => part.length === 0)) {
+    throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+  }
+  for (const part of shape) {
+    for (const signedArcId of part) {
+      const arcId = unsignedArcId(signedArcId);
+      if (!Number.isSafeInteger(signedArcId) || arcId < 0 || arcId >= arcs.size()) {
+        throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+      }
+      const iterator = arcs.getArcIter(arcId);
+      let vertices = 0;
+      while (iterator.hasNext()) {
+        if (!Number.isFinite(iterator.x) || !Number.isFinite(iterator.y)) {
+          throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+        }
+        vertices += 1;
+      }
+      if (vertices < 2)
+        throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+    }
+  }
+}

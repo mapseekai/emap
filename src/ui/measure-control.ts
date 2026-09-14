@@ -1,6 +1,6 @@
-import type { MeasureOptions } from '../core/handlers/measure';
-import type { MeasurementMode } from '../geo/measurement';
-import type { ControlContext } from '../services/controls';
+import type { MeasureOptions } from '../engine/core/handlers/measure';
+import type { MeasurementMode } from '../domain/geo/measurement';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 

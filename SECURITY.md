@@ -30,7 +30,7 @@ filter strings, or join expressions from end users or third-party
 sources — can opt in:
 
 ```ts
-const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
+const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
 
 // or, to flip at runtime
 map.setExpressionPolicy('trusted');

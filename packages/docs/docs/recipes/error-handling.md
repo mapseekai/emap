@@ -5,7 +5,7 @@ title: 错误处理
 api: ["Emap", "OpResult", "OpError"]
 examples: ["check-geometry", "duckdb-buffer", "duckdb-query"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 错误处理

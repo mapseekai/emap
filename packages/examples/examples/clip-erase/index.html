@@ -53,140 +53,138 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
-
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'cliperase-source';
-    const fileInput = document.getElementById('file-input');
-    const targetSel = document.getElementById('target');
-    const maskSel = document.getElementById('mask');
-    const clipBtn = document.getElementById('clip-btn');
-    const eraseBtn = document.getElementById('erase-btn');
-    const clearBtn = document.getElementById('clear-files-btn');
-    const status = document.getElementById('status');
-
-    /** 累计的所有上传文件 (filename -> Uint8Array)。多次添加合并。 */
-    const uploaded = new Map();
-
-    function readFile(file) {
-      return new Promise((resolve, reject) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'cliperase-source';
+const fileInput = document.getElementById('file-input');
+const targetSel = document.getElementById('target');
+const maskSel = document.getElementById('mask');
+const clipBtn = document.getElementById('clip-btn');
+const eraseBtn = document.getElementById('erase-btn');
+const clearBtn = document.getElementById('clear-files-btn');
+const status = document.getElementById('status');
+/** 累计的所有上传文件 (filename -> Uint8Array)。多次添加合并。 */
+const uploaded = new Map();
+function readFile(file) {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);
-      });
-    }
-
-    function populateLayerOptions(source) {
-      const layers = source.getLayers();
-      const target = document.getElementById('target');
-      const mask = document.getElementById('mask');
-      target.innerHTML = '';
-      mask.innerHTML = '';
-      layers.forEach((lyr, i) => {
+    });
+}
+function populateLayerOptions(source) {
+    const layers = source.getLayers();
+    const target = document.getElementById('target');
+    const mask = document.getElementById('mask');
+    target.innerHTML = '';
+    mask.innerHTML = '';
+    layers.forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         target.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
         if (lyr?.geometry_type === 'polygon') {
-          mask.appendChild(new Option(name, name));
+            mask.appendChild(new Option(name, name));
         }
-      });
-      const enable = layers.length >= 2 && mask.options.length >= 1;
-      clipBtn.disabled = !enable;
-      eraseBtn.disabled = !enable;
-    }
-
-    async function reimportAll() {
-      if (uploaded.size === 0) {
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+    });
+    const enable = layers.length >= 2 && mask.options.length >= 1;
+    clipBtn.disabled = !enable;
+    eraseBtn.disabled = !enable;
+}
+async function reimportAll() {
+    if (uploaded.size === 0) {
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         targetSel.innerHTML = '';
         maskSel.innerHTML = '';
         clipBtn.disabled = true;
         eraseBtn.disabled = true;
         status.textContent = '已清空,等待上传文件';
         return;
-      }
-      status.textContent = `加载 ${uploaded.size} 个文件中...`;
-      const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
-      const source = new TopologySource(SOURCE_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Load initial data before registration: await setData, then addSource and setExtent.
-      // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
-      try {
+    }
+    status.textContent = `加载 ${uploaded.size} 个文件中...`;
+    const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+    const source = new TopologySource(SOURCE_ID);
+    if (map.getSource(SOURCE_ID))
+        map.removeSource(SOURCE_ID);
+    // Load initial data before registration: await setData, then addSource and setExtent.
+    // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
+    try {
         await source.setData(entries);
         await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         populateLayerOptions(source);
         const names = entries.map((e) => e.filename).join(', ');
         status.textContent = `已加载: ${names}。选择目标图层与蒙版,点击裁剪或擦除。`;
-      } catch (e) {
+    }
+    catch (e) {
         console.error(e);
         status.textContent = `加载失败: ${e?.message ?? e}`;
-      }
     }
-
-    fileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-      for (const f of files) {
+}
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0)
+        return;
+    for (const f of files) {
         try {
-          const content = await readFile(f);
-          uploaded.set(f.name, content);
-        } catch (err) {
-          console.error(`读取 ${f.name} 失败`, err);
+            const content = await readFile(f);
+            uploaded.set(f.name, content);
         }
-      }
-      // 让用户可以再次选择同一文件
-      fileInput.value = '';
-      await reimportAll();
-    });
-
-    clearBtn.addEventListener('click', async () => {
-      uploaded.clear();
-      await reimportAll();
-    });
-
-    async function runOp(op) {
-      const target = targetSel.value;
-      const mask = maskSel.value;
-      if (!target || !mask) return;
-      if (target === mask) {
+        catch (err) {
+            console.error(`读取 ${f.name} 失败`, err);
+        }
+    }
+    // 让用户可以再次选择同一文件
+    fileInput.value = '';
+    await reimportAll();
+});
+clearBtn.addEventListener('click', async () => {
+    uploaded.clear();
+    await reimportAll();
+});
+async function runOp(op) {
+    const target = targetSel.value;
+    const mask = maskSel.value;
+    if (!target || !mask)
+        return;
+    if (target === mask) {
         status.textContent = '目标和蒙版必须是不同的图层。';
         return;
-      }
-      status.textContent = `正在对 "${target}" 执行 ${op === 'clip' ? '裁剪' : '擦除'}...`;
-      clipBtn.disabled = true;
-      eraseBtn.disabled = true;
-      try {
+    }
+    status.textContent = `正在对 "${target}" 执行 ${op === 'clip' ? '裁剪' : '擦除'}...`;
+    clipBtn.disabled = true;
+    eraseBtn.disabled = true;
+    try {
         const result = op === 'clip'
-          ? await map.ops.clipLayer({ source: SOURCE_ID, target, mask })
-          : await map.ops.eraseLayer({ source: SOURCE_ID, target, mask });
+            ? await map.ops.clipLayer({ source: SOURCE_ID, target, mask })
+            : await map.ops.eraseLayer({ source: SOURCE_ID, target, mask });
         status.textContent = result.ok
-          ? `${op === 'clip' ? '裁剪' : '擦除'} "${target}" 完成,Ctrl+Z 撤销。`
-          : `${op === 'clip' ? '裁剪' : '擦除'} 失败 (请检查图层名称)。`;
+            ? `${op === 'clip' ? '裁剪' : '擦除'} "${target}" 完成,Ctrl+Z 撤销。`
+            : `${op === 'clip' ? '裁剪' : '擦除'} 失败 (请检查图层名称)。`;
         const src = map.getSource(SOURCE_ID);
-        if (src) populateLayerOptions(src);
-      } catch (err) {
+        if (src)
+            populateLayerOptions(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         clipBtn.disabled = false;
         eraseBtn.disabled = false;
-      }
     }
-
-    clipBtn.addEventListener('click', () => runOp('clip'));
-    eraseBtn.addEventListener('click', () => runOp('erase'));
-    await autoLoadExampleFixtures('clip-erase');
-  </script>
+}
+clipBtn.addEventListener('click', async () => await runOp('clip'));
+eraseBtn.addEventListener('click', async () => await runOp('erase'));
+await autoLoadExampleFixtures('clip-erase');
+</script>
 </body>
 
 </html>

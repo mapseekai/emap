@@ -5,7 +5,7 @@ title: Undo and redo
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Undo and redo
@@ -15,7 +15,7 @@ verifiedVersion: 0.9.1
 ## Add buttons and shortcuts
 
 ```ts
-map.addControl(new HistoryControl(), "top-right")
+await map.addControl(new HistoryControl(), "top-right")
 map.bindHistoryShortcuts()
 ```
 

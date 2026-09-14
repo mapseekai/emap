@@ -57,107 +57,105 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const fileInput = document.getElementById('file-input');
-    const snapshotInput = document.getElementById('snapshot-input');
-    const filenameInput = document.getElementById('filename');
-    const saveBtn = document.getElementById('save-btn');
-    const clearBtn = document.getElementById('clear-btn');
-    const status = document.getElementById('status');
-    const sourceList = document.getElementById('source-list');
-
-    /** Tracks every source ID we've registered so the UI can list them. */
-    const sourceIds = new Set();
-
-    function refreshSourceList() {
-      sourceList.innerHTML = '';
-      if (sourceIds.size === 0) {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const fileInput = document.getElementById('file-input');
+const snapshotInput = document.getElementById('snapshot-input');
+const filenameInput = document.getElementById('filename');
+const saveBtn = document.getElementById('save-btn');
+const clearBtn = document.getElementById('clear-btn');
+const status = document.getElementById('status');
+const sourceList = document.getElementById('source-list');
+/** Tracks every source ID we've registered so the UI can list them. */
+const sourceIds = new Set();
+function refreshSourceList() {
+    sourceList.innerHTML = '';
+    if (sourceIds.size === 0) {
         const e = document.createElement('span');
         e.className = 'empty';
         e.textContent = '(尚无数据源)';
         sourceList.appendChild(e);
-      } else {
+    }
+    else {
         for (const id of sourceIds) {
-          const src = map.getSource(id);
-          const layers = src?.getLayers?.() ?? [];
-          const span = document.createElement('span');
-          span.textContent = `${id} · ${layers.length} 图层`;
-          sourceList.appendChild(span);
+            const src = map.getSource(id);
+            const layers = src?.getLayers?.() ?? [];
+            const span = document.createElement('span');
+            span.textContent = `${id} · ${layers.length} 图层`;
+            sourceList.appendChild(span);
         }
-      }
-      saveBtn.disabled = sourceIds.size === 0;
-      clearBtn.disabled = sourceIds.size === 0;
     }
-
-    function uniqueSourceId(base) {
-      let id = base;
-      let n = 1;
-      while (map.getSource(id)) {
+    saveBtn.disabled = sourceIds.size === 0;
+    clearBtn.disabled = sourceIds.size === 0;
+}
+function uniqueSourceId(base) {
+    let id = base;
+    let n = 1;
+    while (map.getSource(id)) {
         id = `${base}-${n++}`;
-      }
-      return id;
     }
-
-    function fitFirstSource() {
-      const first = sourceIds.values().next().value;
-      if (!first) return;
-      const src = map.getSource(first);
-      if (src?.getExtent) map.setExtent(src.getExtent());
-    }
-
-    function readFile(file) {
-      return new Promise((resolve, reject) => {
+    return id;
+}
+function fitFirstSource() {
+    const first = sourceIds.values().next().value;
+    if (!first)
+        return;
+    const src = map.getSource(first);
+    if (src?.getExtent)
+        map.setExtent(src.getExtent());
+}
+function readFile(file) {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);
-      });
-    }
-
-    fileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-      for (const file of files) {
-        try {
-          const content = await readFile(file);
-          const baseId = file.name.replace(/\.[^.]+$/, '') || 'source';
-          const id = uniqueSourceId(baseId);
-          status.textContent = `加载 ${file.name} 为源 "${id}"...`;
-          const source = new TopologySource(id);
-          // Load initial data before registration: await setData, then addSource.
-          await source.setData({ filename: file.name, content });
-          await map.addSource(id, source);
-          sourceIds.add(id);
-          refreshSourceList();
-          fitFirstSource();
-        } catch (err) {
-          console.error(err);
-          status.textContent = `加载 ${file.name} 失败: ${err?.message ?? err}`;
-        }
-      }
-      fileInput.value = '';
-      status.textContent = `当前 ${sourceIds.size} 个源,可保存为快照。`;
     });
-
-    snapshotInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在恢复快照 ${file.name}...`;
-      try {
+}
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0)
+        return;
+    for (const file of files) {
+        try {
+            const content = await readFile(file);
+            const baseId = file.name.replace(/\.[^.]+$/, '') || 'source';
+            const id = uniqueSourceId(baseId);
+            status.textContent = `加载 ${file.name} 为源 "${id}"...`;
+            const source = new TopologySource(id);
+            // Load initial data before registration: await setData, then addSource.
+            await source.setData({ filename: file.name, content });
+            await map.addSource(id, source);
+            sourceIds.add(id);
+            refreshSourceList();
+            fitFirstSource();
+        }
+        catch (err) {
+            console.error(err);
+            status.textContent = `加载 ${file.name} 失败: ${err?.message ?? err}`;
+        }
+    }
+    fileInput.value = '';
+    status.textContent = `当前 ${sourceIds.size} 个源,可保存为快照。`;
+});
+snapshotInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在恢复快照 ${file.name}...`;
+    try {
         // Replace existing sources with snapshot contents
         for (const id of Array.from(sourceIds)) {
-          map.removeSource(id);
-          sourceIds.delete(id);
+            map.removeSource(id);
+            sourceIds.delete(id);
         }
         const bytes = await readFile(file);
         const restored = await map.loadSnapshot(bytes);
@@ -165,49 +163,51 @@
         refreshSourceList();
         fitFirstSource();
         status.textContent = `已恢复 ${restored.length} 个源: ${restored.join(', ')}`;
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = `恢复失败: ${err?.message ?? err}`;
-      }
-      snapshotInput.value = '';
-    });
-
-    saveBtn.addEventListener('click', async () => {
-      if (sourceIds.size === 0) return;
-      const name = (filenameInput.value.trim() || 'workspace.msx').replace(/\.+$/, '');
-      const filename = name.endsWith('.msx') ? name : `${name}.msx`;
-      status.textContent = `正在打包 ${sourceIds.size} 个源到 ${filename}...`;
-      saveBtn.disabled = true;
-      try {
+    }
+    snapshotInput.value = '';
+});
+saveBtn.addEventListener('click', async () => {
+    if (sourceIds.size === 0)
+        return;
+    const name = (filenameInput.value.trim() || 'workspace.msx').replace(/\.+$/, '');
+    const filename = name.endsWith('.msx') ? name : `${name}.msx`;
+    status.textContent = `正在打包 ${sourceIds.size} 个源到 ${filename}...`;
+    saveBtn.disabled = true;
+    try {
         const blob = await map.exportSnapshot();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = filename;
+        a.href = url;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         status.textContent = `已下载 ${filename} (${(blob.size / 1024).toFixed(1)} KB,${sourceIds.size} 个源)。`;
-      } catch (err) {
+    }
+    catch (err) {
         status.textContent = `导出失败: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         saveBtn.disabled = false;
-      }
-    });
-
-    clearBtn.addEventListener('click', () => {
-      for (const id of Array.from(sourceIds)) {
+    }
+});
+clearBtn.addEventListener('click', () => {
+    for (const id of Array.from(sourceIds)) {
         map.removeSource(id);
-      }
-      sourceIds.clear();
-      refreshSourceList();
-      status.textContent = '已清空全部源。';
-    });
-
+    }
+    sourceIds.clear();
     refreshSourceList();
-    await autoLoadExampleFixtures('snapshot');
-  </script>
+    status.textContent = '已清空全部源。';
+});
+refreshSourceList();
+await autoLoadExampleFixtures('snapshot');
+</script>
 </body>
 
 </html>

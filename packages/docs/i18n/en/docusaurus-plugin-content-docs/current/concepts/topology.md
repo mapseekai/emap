@@ -2,10 +2,10 @@
 id: topology
 slug: /concepts/topology
 title: Topology model
-api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape","TopologySource","ArcCollection","MapshaperDataset"]
+api: ["ReadonlyArcCollection", "ReadonlyArcVertexData", "ReadonlyCoord2", "ReadonlyDataTable", "ReadonlyFeatureShape", "ReadonlyMapshaperDataset", "ReadonlyMapshaperLayer", "ReadonlyNumericArray", "ReadonlyPathPart", "ReadonlyPathShape", "ReadonlyPointShape", "TopologySource", "ArcCollection", "MapshaperDataset"]
 examples: ["rebuild-topology","vertex-editing","simplify"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Topology model

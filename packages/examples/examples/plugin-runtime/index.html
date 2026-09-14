@@ -3,279 +3,86 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap 示例 - Plugin Runtime / GIS Harness</title>
-  <style>
-    .runtime-panel { width: min(620px, calc(100vw - 80px)) !important; }
-    .runtime-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .runtime-metric { padding: 8px; border: 1px solid var(--emap-example-border); background: var(--emap-example-muted); }
-    .runtime-metric strong { display: block; font-size: 18px; line-height: 1.2; }
-    .runtime-metric span { color: var(--emap-example-muted-foreground); font-size: 10px; }
-    .runtime-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 12px; margin-top: 12px; }
-    .runtime-card { min-width: 0; padding: 10px; border: 1px solid var(--emap-example-border); }
-    .runtime-card h2 { margin: 0 0 8px; }
-    .runtime-list { max-height: 260px; overflow: auto; border: 1px solid var(--emap-example-border); }
-    .runtime-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--emap-example-border); cursor: pointer; }
-    .runtime-row:last-child { border-bottom: 0; }
-    .runtime-row[data-selected="true"] { background: var(--emap-example-selection); }
-    .runtime-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .runtime-status { font-size: 10px; text-transform: uppercase; }
-  </style>
-</head><body class="emap-example-with-floating-header">
+  <title>Emap 示例 — Cordis Runtime / GIS Harness</title>
+  <link rel="stylesheet" href="/src/cordis-runtime-demo.css" />
+</head>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录">
-      <img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span>
-    </a>
-    <strong>Plugin Runtime / GIS Harness</strong>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>Cordis Runtime / GIS Harness</strong>
   </div>
   <div id="map" tabindex="0"></div>
-
   <details class="emap-example-workbench runtime-panel panel" open>
-    <summary><h1>Plugin Runtime / GIS Harness</h1></summary>
+    <summary><h1>Cordis 原生插件运行时</h1></summary>
     <div class="emap-example-workbench-body">
+      <p id="runtime-proof" class="emap-example-status" aria-live="polite">正在启动 Cordis Context…</p>
+      <div class="runtime-metrics">
+        <div><strong id="metric-plugins">0</strong><span>Native Fibers</span></div>
+        <div><strong id="metric-active">0</strong><span>ACTIVE</span></div>
+        <div><strong id="metric-capabilities">0</strong><span>Capabilities</span></div>
+        <div><strong id="metric-formats">0</strong><span>扩展格式组</span></div>
+      </div>
       <section class="emap-example-section">
-        <p class="emap-example-hint">这里直接读取当前 Emap 实例的 PluginRuntime、Service Registry、Format Registry 和 Capability Registry。</p>
-        <div class="runtime-metrics">
-          <div class="runtime-metric"><strong id="metric-plugins">0</strong><span>Plugins</span></div>
-          <div class="runtime-metric"><strong id="metric-active">0</strong><span>Active</span></div>
-          <div class="runtime-metric"><strong id="metric-capabilities">0</strong><span>Capabilities</span></div>
-          <div class="runtime-metric"><strong id="metric-formats">0</strong><span>Formats</span></div>
-        </div>
-      </section>
-
-      <section class="emap-example-section">
-        <h2>可选 Provider / Feature</h2>
+        <h2>动态安装 Provider</h2>
         <div class="emap-example-row">
-          <button id="install-maplibre" type="button">Install MapLibre</button>
-          <button id="install-arrow" type="button">Install Arrow formats</button>
-          <button id="install-duckdb" type="button">Install DuckDB + capabilities</button>
-          <button id="refresh" type="button">Refresh</button>
+          <button id="install-maplibre" type="button">安装 MapLibre</button>
+          <button id="install-arrow" type="button">安装 Arrow</button>
+          <button id="install-duckdb" type="button">安装 DuckDB 与工具</button>
+          <button id="refresh" type="button">刷新</button>
         </div>
-        <p id="service-state" class="emap-example-status"></p>
+        <p id="service-state" class="emap-example-hint"></p>
+        <p class="emap-example-hint">安装 Provider 不等于启动底图或数据库。Arrow 扩展格式组为 0 时，GeoJSON 等内置格式仍可用。</p>
       </section>
-
       <section class="emap-example-section runtime-grid">
         <div class="runtime-card">
-          <h2>Plugin Graph</h2>
+          <h2>原生 Fiber 列表</h2>
+          <label for="plugin-search">按名称搜索</label>
+          <input id="plugin-search" type="search" placeholder="drag-pan / provider / capability" />
           <div id="plugin-list" class="runtime-list"></div>
         </div>
         <div class="runtime-card">
-          <h2>Selected Plugin</h2>
-          <div class="emap-example-field"><label>ID</label><code id="selected-id">-</code></div>
-          <div class="emap-example-field"><label>Status</label><code id="selected-status">-</code></div>
-          <div class="emap-example-field"><label>Requires</label><pre id="selected-requires">-</pre></div>
-          <div class="emap-example-field"><label>Provides</label><pre id="selected-provides">-</pre></div>
-          <button id="toggle-plugin" type="button" disabled>Disable / Enable</button>
+          <h2>选中插件与依赖</h2>
+          <code id="selected-id">—</code>
+          <p id="selected-status">—</p>
+          <label>inject → Provider</label><pre id="selected-requires"></pre>
+          <label>已提供服务</label><pre id="selected-provides"></pre>
+          <label>原生 effects</label><pre id="selected-effects"></pre>
+          <div class="emap-example-row">
+            <button id="dispose-plugin" type="button" disabled>Dispose</button>
+            <button id="reinstall-plugin" type="button" disabled>重新安装</button>
+            <button id="restart-plugin" type="button" disabled>Restart</button>
+          </div>
         </div>
       </section>
-
+      <section class="emap-example-section">
+        <h2>Preset 装配对比</h2>
+        <div id="preset-summary" class="runtime-presets"></div>
+        <p class="emap-example-hint">四个实例分别通过 Emap.create() 创建。headless / empty 不创建地图 Canvas。</p>
+      </section>
       <section class="emap-example-section runtime-grid">
         <div class="runtime-card">
-          <h2>Preset comparison</h2>
-          <div id="preset-summary" class="emap-example-status"></div>
-        </div>
-        <div class="runtime-card">
-          <h2>Capability search</h2>
-          <div class="emap-example-field">
-            <label for="capability-search">Search</label>
-            <input id="capability-search" type="search" value="buffer" placeholder="buffer / select / project" />
-          </div>
+          <h2>Capability 查询</h2>
+          <label for="capability-search">按能力搜索</label>
+          <input id="capability-search" type="search" value="buffer" />
           <div id="capability-list" class="runtime-list"></div>
         </div>
+        <div class="runtime-card">
+          <h2>真实调用</h2>
+          <button id="invoke-read" type="button">Agent 读取当前 CRS</button>
+          <pre id="capability-result">view.getCRS → ViewService</pre>
+          <label for="file-input">替换地图示例数据</label>
+          <input id="file-input" type="file" accept=".geojson,.json" />
+          <p id="fixture-state" class="emap-example-hint"></p>
+        </div>
       </section>
-      <p id="action-state" class="emap-example-status" data-state="ready">Editor preset 已由 PluginRuntime 装配。选择 drag-pan 后禁用，可直接在地图上验证拖拽失效。</p>
+      <p id="action-state" class="emap-example-status" aria-live="polite">等待地图就绪</p>
+      <p class="emap-example-hint">选中 drag-pan，Dispose 后在右侧地图拖动；重新安装后应恢复。这里展示的是 Cordis 原生卸载和重装，不模拟旧 disable/enable 状态。</p>
     </div>
   </details>
-
   <script type="module">
-    import { loadExampleRuntime } from '/src/example-runtime.ts';
-    import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-    import { duckDbCapabilityPlugins, duckDbPlugin, DuckDbService } from '@mapseekai/emap/duckdb';
-    import { mapLibrePlugin, MapLibreService } from '@mapseekai/emap/maplibre';
-    import { CapabilityService, FormatService } from '@mapseekai/emap/services';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource } = emap;
-    const map = new Emap({ container: 'map', preset: 'editor' });
-    map.addControl(new emap.NavigationControl(), 'top-left');
-
-    const pluginList = document.getElementById('plugin-list');
-    const selectedId = document.getElementById('selected-id');
-    const selectedStatus = document.getElementById('selected-status');
-    const selectedRequires = document.getElementById('selected-requires');
-    const selectedProvides = document.getElementById('selected-provides');
-    const togglePlugin = document.getElementById('toggle-plugin');
-    const serviceState = document.getElementById('service-state');
-    const actionState = document.getElementById('action-state');
-    const capabilitySearch = document.getElementById('capability-search');
-    const capabilityList = document.getElementById('capability-list');
-    const safeToggle = (id) =>
-      id.startsWith('feature.interaction.') ||
-      id === 'provider.maplibre' ||
-      id === 'feature.format.arrow' ||
-      id === 'provider.duckdb' ||
-      id.startsWith('capability.duckdb.');
-    let selectedPluginId = 'feature.interaction.drag-pan';
-
-    function pluginKind(id) {
-      if (id.startsWith('provider.')) return 'Provider';
-      if (id.startsWith('capability.')) return 'Capability';
-      if (id.startsWith('feature.')) return 'Feature';
-      return 'Plugin';
-    }
-
-    function renderCapabilities() {
-      const query = capabilitySearch.value.trim();
-      const items = query ? map.capabilities.search(query) : map.capabilities.list();
-      capabilityList.replaceChildren();
-      for (const capability of items.slice(0, 40)) {
-        const row = document.createElement('div');
-        row.className = 'runtime-row';
-        const name = document.createElement('code');
-        name.textContent = capability.id;
-        const effects = document.createElement('span');
-        effects.className = 'runtime-status';
-        effects.textContent = capability.effects.join(',');
-        row.append(name, effects);
-        capabilityList.append(row);
-      }
-      if (items.length === 0) capabilityList.textContent = 'No matching capabilities';
-    }
-
-    function renderSelected(inspections) {
-      const selected = inspections.find((item) => item.id === selectedPluginId) ?? inspections[0];
-      if (!selected) return;
-      selectedPluginId = selected.id;
-      selectedId.textContent = selected.id;
-      selectedStatus.textContent = selected.status;
-      selectedRequires.textContent = selected.requires.length ? selected.requires.join('\n') : '(none)';
-      selectedProvides.textContent = selected.provides.length ? selected.provides.join('\n') : '(none)';
-      togglePlugin.disabled = !safeToggle(selected.id) || !['active', 'disabled'].includes(selected.status);
-      togglePlugin.textContent = selected.status === 'disabled' ? 'Enable plugin' : 'Disable plugin';
-    }
-
-    function refreshRuntime() {
-      const inspections = map.runtime.inspect();
-      document.getElementById('metric-plugins').textContent = String(inspections.length);
-      document.getElementById('metric-active').textContent = String(inspections.filter((item) => item.status === 'active').length);
-      document.getElementById('metric-capabilities').textContent = String(map.capabilities.list().length);
-      document.getElementById('metric-formats').textContent = String(map.formats.list().length);
-
-      serviceState.textContent = [
-        `FormatService ${map.services.has(FormatService) ? '✓' : '✗'}`,
-        `CapabilityService ${map.services.has(CapabilityService) ? '✓' : '✗'}`,
-        `MapLibre ${map.services.has(MapLibreService) ? '✓' : '✗'}`,
-        `DuckDB ${map.services.has(DuckDbService) ? '✓' : '✗'}`,
-      ].join(' · ');
-
-      pluginList.replaceChildren();
-      for (const item of inspections) {
-        const row = document.createElement('div');
-        row.className = 'runtime-row';
-        row.dataset.selected = String(item.id === selectedPluginId);
-        const name = document.createElement('code');
-        name.textContent = `${pluginKind(item.id)} · ${item.id}`;
-        const status = document.createElement('span');
-        status.className = 'runtime-status';
-        status.textContent = item.status;
-        row.append(name, status);
-        row.addEventListener('click', () => { selectedPluginId = item.id; refreshRuntime(); });
-        pluginList.append(row);
-      }
-      renderSelected(inspections);
-      renderCapabilities();
-      updateInstallButtons(inspections);
-    }
-
-    function updateInstallButtons(inspections) {
-      const ids = new Set(inspections.map((item) => item.id));
-      document.getElementById('install-maplibre').disabled = ids.has('provider.maplibre');
-      document.getElementById('install-arrow').disabled = ids.has('feature.format.arrow');
-      document.getElementById('install-duckdb').disabled = ids.has('provider.duckdb');
-    }
-
-    togglePlugin.addEventListener('click', () => {
-      const selected = map.runtime.inspect().find((item) => item.id === selectedPluginId);
-      if (!selected) return;
-      try {
-        if (selected.status === 'disabled') map.runtime.enable(selected.id);
-        else map.runtime.disable(selected.id);
-        actionState.dataset.state = 'ready';
-        actionState.textContent = `${selected.id}: ${selected.status === 'disabled' ? 'enabled' : 'disabled'}`;
-      } catch (error) {
-        actionState.dataset.state = 'error';
-        actionState.textContent = error?.message ?? String(error);
-      }
-      refreshRuntime();
-    });
-
-    document.getElementById('install-maplibre').addEventListener('click', () => {
-      map.use(mapLibrePlugin);
-      selectedPluginId = 'provider.maplibre';
-      actionState.textContent = 'MapLibre Provider 已动态安装；核心 Emap 在安装前并不持有 MapLibreService。';
-      refreshRuntime();
-    });
-
-    document.getElementById('install-arrow').addEventListener('click', () => {
-      map.use(arrowFormatsPlugin);
-      selectedPluginId = 'feature.format.arrow';
-      actionState.textContent = 'Arrow / GeoParquet format feature 已安装；Format Registry 数量已更新。';
-      refreshRuntime();
-    });
-
-    document.getElementById('install-duckdb').addEventListener('click', () => {
-      map.runtime.mount([duckDbPlugin(), ...duckDbCapabilityPlugins]);
-      selectedPluginId = 'provider.duckdb';
-      actionState.textContent = 'DuckDB Provider 与全部 DuckDB Capability 已安装；WASM runtime 仍保持 lazy。';
-      refreshRuntime();
-    });
-
-    document.getElementById('refresh').addEventListener('click', refreshRuntime);
-    capabilitySearch.addEventListener('input', renderCapabilities);
-
-    async function renderPresetSummary() {
-      const headless = new Emap({ preset: 'headless' });
-      const empty = new Emap({ preset: 'empty' });
-      const editorCount = map.runtime.inspect().length;
-      const headlessCount = headless.runtime.inspect().length;
-      const emptyCount = empty.runtime.inspect().length;
-      document.getElementById('preset-summary').textContent =
-        `editor=${editorCount} plugins · headless=${headlessCount} plugins · empty=${emptyCount} plugins`;
-      await Promise.all([headless.dispose(), empty.dispose()]);
-    }
-
-    async function loadFixture() {
-      const response = await fetch('/mapseekai/emap/examples/fixtures/task-6-polygons.geojson');
-      if (!response.ok) throw new Error(`Fixture HTTP ${response.status}`);
-      const source = new TopologySource('runtime-demo');
-      const content = new Uint8Array(await response.arrayBuffer());
-      await source.setData({ filename: 'task-6-polygons.geojson', content });
-      await map.addSource('runtime-demo', source);
-      const layer = source.getLayers()[0];
-      if (layer) {
-        const sourceLayer = String(layer.name ?? layer.id ?? 'layer-0');
-        map.addLayer({
-          id: 'runtime-demo-fill',
-          source: 'runtime-demo',
-          'source-layer': sourceLayer,
-          type: 'fill',
-          paint: { 'fill-color': '#2f7d5b', 'fill-opacity': 0.28 },
-        });
-        map.addLayer({
-          id: 'runtime-demo-line',
-          source: 'runtime-demo',
-          'source-layer': sourceLayer,
-          type: 'line',
-          paint: { 'line-color': '#215b42', 'line-width': 2 },
-        });
-      }
-      map.setExtent(source.getExtent());
-    }
-
-    await loadFixture();
-    await renderPresetSummary();
-    refreshRuntime();
-    window.addEventListener('resize', () => map.resize());
-    window.addEventListener('pagehide', () => { void map.dispose(); }, { once: true });
+    import { mountCordisRuntimeDemo } from '/src/cordis-runtime-demo.ts';
+    await mountCordisRuntimeDemo();
   </script>
 </body>
 </html>

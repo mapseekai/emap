@@ -55,7 +55,7 @@ Give the map container an explicit size:
 import { Emap, TopologySource } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   expressionPolicy: 'disabled',
 });
@@ -89,7 +89,7 @@ map.setExtent(source.getExtent());
 Dispose the instance when its host view is removed:
 
 ```ts
-map.remove();
+await map.dispose();
 ```
 
 ## Loading Local Data
@@ -187,7 +187,7 @@ map.addLayer({
 Copy the worker and vendor bundles to URLs reachable by the page, then enable worker routing:
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   useWorker: 'auto',
   workerUrl: '/assets/emap-worker.js',
@@ -217,7 +217,7 @@ Mount the Arrow codec plugin on the workspace explicitly:
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
@@ -255,7 +255,7 @@ Register MapLibre services by mounting `mapLibrePlugin`, then configuring `EmapO
 ```ts
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   plugins: [mapLibrePlugin],
   mapLibre: {
@@ -278,6 +278,7 @@ The integration owns MapLibre source/layer registration, revision cancellation, 
 
 - [Installation](packages/docs/docs/getting-started/installation.md)
 - [Core concepts](packages/docs/docs/concepts/emap.md)
+- [Architecture and source layout](packages/docs/docs/concepts/architecture.md)
 - [Editing](packages/docs/docs/guides/editing.md)
 - [Styling](packages/docs/docs/guides/styling.md)
 - [Worker execution](packages/docs/docs/guides/worker.md)
@@ -288,31 +289,46 @@ The integration owns MapLibre source/layer registration, revision cancellation, 
 
 ## Architecture
 
-The public `Emap` class is the façade. Internally, responsibilities are separated by durable state and failure semantics:
+`Emap` is the public façade. Internally, the repository is organized into six first-level responsibility zones so runtime composition, engine hot paths, domain state, integrations, UI, and shared declarations are visually distinct:
+
+```text
+src/
+├── domain/          # GIS source/geometry/edit/validation domain
+├── engine/          # Map execution, interaction, rendering, worker, built-in providers
+├── runtime/         # Native Cordis context/services/plugins/presets/AI capabilities
+├── integrations/    # Mapshaper, MapLibre, Arrow, DuckDB
+├── ui/              # Controls, icons, CSS, theme
+├── shared/          # Ambient declarations and cross-layer type boundaries
+└── index.ts         # Explicit root public API
+```
+
+The runtime uses upstream `cordis@4.0.0-rc.10` directly. `map.ctx` is the native `Context`; services use Context declaration merging and `ctx.provide()`, features/providers use native `inject/apply/effect`, and lifecycle is represented by native `Fiber`. There is no custom PluginRuntime, service registry, or compatibility graph.
+
+The main execution flow remains direct and GIS-oriented:
 
 ```text
 DOM pointer input
-  → HandlerManager and editing handlers
-  → validated edit plan or dataset operation
-  → EditCommand / operation runner
+  → engine/core handlers
+  → validated edit plan or engine/map operation
+  → domain EditCommand / operation runner
   → source version checks, history, transaction, selection
-  → source data event
+  → render invalidation
   → RenderScheduler
-  → layer renderer and CanvasPainter
+  → layer renderer / CanvasPainter
 ```
 
-Key boundaries:
+Important boundaries:
 
-- `src/source/` owns import, export, ZIP limits, CRS metadata, and display-arc lifecycle.
-- `src/adapter/mapshaper-adapter.ts` is the only normal runtime bridge to `mapshaper.internal.*`.
-- `src/map/ops/` contains independently testable dataset and selection operations.
-- `src/edit/commands/` owns reversible live mutations.
-- `src/renderer/` owns Canvas drawing and edit overlays.
-- `src/core/handlers/` owns browser interaction state.
-- `src/arrow/` and `src/duckdb/` implement optional data and analysis entry points.
-- `src/map/maplibre-service-manager.ts` owns online-service resources and asynchronous rollback.
+- `src/domain/source/` owns imported topology, CRS metadata, format-bound source state, and display-arc lifecycle.
+- `src/domain/edit/commands/` owns reversible live data changes; `src/domain/geo/` owns coordinate/projection math.
+- `src/engine/map/ops/` owns mapshaper-backed operation orchestration; `src/engine/core/handlers/` owns browser interaction; `src/engine/rendering/` owns Canvas rendering.
+- `src/runtime/` owns Cordis composition only: service contracts, providers, feature plugins, presets, and AI capability registration.
+- `src/integrations/mapshaper/adapter.ts` is the normal bridge to `mapshaper.internal.*`; MapLibre, Arrow, and DuckDB are explicit integration boundaries.
+- Public package subpaths (`/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`, `/maplibre`, `/arrow`, `/duckdb`) are stable package entry points and do not mirror internal folders one-for-one.
 
-Geometry edits and attribute edits use separate monotonic version counters. Worker and asynchronous operations compare both before committing.
+Unit tests are colocated as `foo.ts` + `foo.test.ts`, with at most one unit test file per implementation. Cross-module regression/integration tests live under `test/integration/`; browser, package/build, type-contract, docs, examples, and security checks live in their dedicated `test/` subdirectories. `test-layout:check` and `typecheck:contracts` enforce this layout.
+
+See [Current architecture and source layout](packages/docs/docs/concepts/architecture.md), [ADR 0009](docs/decisions/0009-native-cordis.md), and [ADR 0010](docs/decisions/0010-source-and-test-layout.md).
 
 ## Development
 
@@ -323,12 +339,20 @@ Node.js 22.18–24
 pnpm 11.15.1
 ```
 
-Install and run the main checks:
+Install dependencies, then select checks relevant to the change from this command
+catalog. This is not a mandatory sequence for every task; see
+[verification rules](AGENTS.md#verification). Release preparation requires the
+complete gate in the [release checklist](docs/release-checklist.md).
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run format:check
 pnpm run typecheck
+pnpm run typecheck:contracts
+pnpm run typecheck:examples
+pnpm run test-layout:check
+pnpm run architecture:check
+pnpm run capabilities:check
 pnpm run test:run
 pnpm run test:duckdb
 pnpm run build
@@ -347,9 +371,9 @@ pnpm run docs:dev
 
 Generated TypeDoc files under `packages/docs/static/api/` are intentionally ignored. `api:build`, `docs:build`, and `docs:verify` regenerate them.
 
-DuckDB integration suites run under `pnpm run test:duckdb`, which sets `DUCKDB_WASM_INTEGRATION=1` across `src/duckdb`.
+DuckDB integration suites run under `pnpm run test:duckdb`, which sets `DUCKDB_WASM_INTEGRATION=1` across `src/integrations/duckdb` and `test/integration/duckdb`.
 
-Before changing a mapshaper-backed operation, update its effect classification in `src/map/ops/_runner.ts` and verify history, selection, worker, and stale-operation behavior. See [AGENTS.md](AGENTS.md) for repository rules.
+For mapshaper-backed operation changes, follow [code conventions](AGENTS.md#hard-rules--code-conventions) and verify affected history, selection, worker, and stale-operation behavior.
 
 ## Security
 

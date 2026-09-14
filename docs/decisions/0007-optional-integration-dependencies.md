@@ -18,3 +18,4 @@ The core Canvas and topology editor can run without Arrow, Parquet, or DuckDB-Wa
 ## Consequences
 
 Core-only consumers no longer install Arrow, Parquet, or DuckDB-Wasm through the normal dependency graph. Consumers of `@mapseekai/emap/arrow` or `@mapseekai/emap/duckdb` must install the corresponding peers explicitly. MapLibre remains installed until a breaking, documented API boundary change can move it out of the root surface safely.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

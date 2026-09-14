@@ -2,10 +2,10 @@
 id: file-upload
 slug: /recipes/file-upload
 title: File upload
-api: ["TopologySource.fromBytes","TopologySource","TopologySourceFromBytesOptions"]
+api: ["TopologySource.fromBytes", "TopologySource", "TopologySourceFromBytesOptions"]
 examples: ["flatgeobuf-viewer", "geoparquet-viewer", "getting-started/points"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # File upload

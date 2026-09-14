@@ -1,0 +1,75 @@
+import './formats';
+import './capabilities';
+import '../plugins/interactions/context';
+import type { EventDispatcher } from '../../engine/core/events';
+import type { AttributeOps } from '../../engine/map/attribute-ops';
+import type { EditSessions } from '../../engine/map/edit-sessions';
+import type { EmapHostInternal } from '../../engine/map/emap-host';
+import type { MapLibreServiceManager } from '../../integrations/maplibre/maplibre-service';
+import type { MapshaperOps } from '../../engine/map/mapshaper-ops';
+import type { CacheContract } from './contracts/cache';
+import type { ControlsContract } from './contracts/controls';
+import type { DocumentContract } from './contracts/document';
+import type { EditStateContract } from './contracts/edit-state';
+import type { ExecutionContract } from './contracts/execution';
+import type { HistoryContract } from './contracts/history';
+import type { InteractionContract } from './contracts/interaction';
+import type { LayerContract } from './contracts/layers';
+import type { MutationContract } from './contracts/mutation';
+import type { PainterFactoryContract } from './contracts/painter-factory';
+import type { PolicyContract } from './contracts/policy';
+import type { ProjectionContract } from './contracts/projection';
+import type { QueryContract } from './contracts/query';
+import type { RenderContract } from './contracts/render';
+import type { RoutingContract } from './contracts/routing';
+import type { ScaleContract } from './contracts/scale';
+import type { SelectionContract } from './contracts/selection';
+import type { ShortcutsContract } from './contracts/shortcuts';
+import type { RenderSignalsContract } from './contracts/signals';
+import type { SnapshotContract } from './contracts/snapshot';
+import type { SourceContract } from './contracts/source';
+import type { SurfaceContract } from './contracts/surface';
+import type { ValidationContract } from './contracts/validation';
+import type { ViewContract } from './contracts/view';
+import type { SourceFactoryContract } from './source-factory';
+import type { ControlContext } from './controls';
+import type { EmapOptions } from './options';
+
+/** Native Cordis service contracts; no emap-specific service container. */
+declare module 'cordis' {
+  interface Context {
+    document: DocumentContract;
+    view: ViewContract;
+    cache: CacheContract;
+    layers: LayerContract;
+    selection: SelectionContract;
+    history: HistoryContract;
+    source: SourceContract;
+    editState: EditStateContract;
+    policy: PolicyContract;
+    execution: ExecutionContract;
+    render: RenderContract;
+    surface: SurfaceContract;
+    controls: ControlsContract;
+    query: QueryContract;
+    routing: RoutingContract;
+    interaction: InteractionContract;
+    shortcuts: ShortcutsContract;
+    validation: ValidationContract;
+    snapshot: SnapshotContract;
+    projection: ProjectionContract;
+    mutation: MutationContract;
+    scale: ScaleContract;
+    painterFactory: PainterFactoryContract;
+    mapEvents: EventDispatcher;
+    signals: RenderSignalsContract;
+    host: EmapHostInternal;
+    sourceFactory: SourceFactoryContract;
+    controlContext: ControlContext;
+    options: EmapOptions;
+    ops: Pick<MapshaperOps, keyof MapshaperOps>;
+    editSession: Pick<EditSessions, keyof EditSessions>;
+    attributes: Pick<AttributeOps, keyof AttributeOps>;
+    mapLibre: MapLibreServiceManager;
+  }
+}

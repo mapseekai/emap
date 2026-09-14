@@ -1,11 +1,11 @@
-import type { LayerSpecification } from '../map/layer';
+import type { LayerSpecification } from '../engine/map/layer';
 import type {
   MapLibreOverlayService,
   MapLibreOverlayServiceBase,
   MapLibreServiceErrorEvent,
   MapLibreServiceManager,
-} from '../map/maplibre-service';
-import type { ControlContext } from '../services/controls';
+} from '../integrations/maplibre/maplibre-service';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 

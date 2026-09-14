@@ -1,9 +1,9 @@
-import type { BoxSelectHandlerOptions, BoxSelectStyle } from '../core/handlers/box-select';
-import type { ModifierCombo } from '../core/handlers/select-mode';
-import type { ControlContext } from '../services/controls';
+import type { BoxSelectHandlerOptions, BoxSelectStyle } from '../engine/core/handlers/box-select';
+import type { ModifierCombo } from '../engine/core/handlers/select-mode';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 
-export type { BoxSelectStyle } from '../core/handlers/box-select';
+export type { BoxSelectStyle } from '../engine/core/handlers/box-select';
 
 export interface BoxSelectControlOptions {
   /**

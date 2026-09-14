@@ -1,4 +1,4 @@
-import type { ControlContext } from '../services/controls';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { DrawFeatureControl } from './draw-feature-control';
 import { VertexEditControl } from './vertex-edit-control';

@@ -32,69 +32,60 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
-    import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource } = emap;
-
-    const map = new Emap({
-      container: "map",
-    });
-
-    const releaseFormat = installFlatGeobufFormat(emap, map.formats);
-    window.addEventListener('pagehide', releaseFormat, { once: true });
-    map.addControl(new emap.NavigationControl(), "top-left");
-    installExampleMapUi(map, emap);
-
-    const fileInput = document.getElementById("file-input");
-    const status = document.getElementById("status");
-
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      status.textContent = `处理 ${file.name} 中...`;
-
-      try {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const map = await Emap.create({
+    container: "map",
+});
+const releaseFormat = installFlatGeobufFormat(emap, map.formats);
+window.addEventListener('pagehide', releaseFormat, { once: true });
+await map.addControl(new emap.NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById("file-input");
+const status = document.getElementById("status");
+fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `处理 ${file.name} 中...`;
+    try {
         const reader = new FileReader();
         reader.onload = async (event) => {
-          const content = new Uint8Array(event.target.result);
-          const source = new TopologySource("fgb-source", { formats: map.formats });
-
-          if (map.getSource("fgb-source")) {
-            map.removeSource("fgb-source");
-          }
-
-          try {
-            await source.setData({ filename: file.name, content });
-            await map.addSource("fgb-source", source);
-            map.setExtent(source.getExtent());
-            const ds = source.getDataset();
-            const featureCount = ds?.layers?.reduce(
-              (n, l) => n + (l.shapes?.length ?? l.data?.size?.() ?? 0),
-              0,
-            );
-            status.textContent =
-              `当前: ${file.name} (${featureCount ?? '?'} 要素, CRS ${source.getCRS()})`;
-          } catch (err) {
-            console.error(err);
-            status.textContent = `处理文件出错: ${err?.message ?? err}`;
-          }
+            const content = new Uint8Array(event.target.result);
+            const source = new TopologySource("fgb-source", { formats: map.formats });
+            if (map.getSource("fgb-source")) {
+                map.removeSource("fgb-source");
+            }
+            try {
+                await source.setData({ filename: file.name, content });
+                await map.addSource("fgb-source", source);
+                map.setExtent(source.getExtent());
+                const ds = source.getDataset();
+                const featureCount = ds?.layers?.reduce((n, l) => n + (l.shapes?.length ?? l.data?.size?.() ?? 0), 0);
+                status.textContent =
+                    `当前: ${file.name} (${featureCount ?? '?'} 要素, CRS ${source.getCRS()})`;
+            }
+            catch (err) {
+                console.error(err);
+                status.textContent = `处理文件出错: ${err?.message ?? err}`;
+            }
         };
         reader.readAsArrayBuffer(file);
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = "处理文件出错";
-      }
-    });
-
-    window.addEventListener("resize", () => {
-      map.resize();
-    });
-    await autoLoadExampleFixtures('flatgeobuf-viewer');
-  </script>
+    }
+});
+window.addEventListener("resize", () => {
+    map.resize();
+});
+await autoLoadExampleFixtures('flatgeobuf-viewer');
+</script>
 </body>
 
 </html>

@@ -1,105 +1,137 @@
 ---
 id: plugins
 slug: /guides/plugins
-title: Plugin architecture and AI Capability
-api: ["AttributeService", "CapabilityAuthorization", "CapabilityAuthorizer", "CapabilityCallContext", "CapabilityDefinition", "CapabilityDescriptor", "CapabilityEffect", "CapabilityInvocation", "CapabilityOrigin", "CapabilityRegistry", "CapabilityRegistryContract", "CapabilityRun", "CapabilityService", "Cleanup", "ControlContext", "ControlsContract", "ControlsService", "DuckDbProcessing", "DuckDbProcessingService", "DuckDbRuntimeOptions", "DuckDbRuntimeScope", "DuckDbService", "EditSessionService", "EditStateContract", "EditStateService", "EffectScope", "EmapOptions", "EventService", "ExecutionContract", "ExecutionService", "FeatureReadContext", "FormatRegistry", "FormatRegistryContract", "FormatService", "HandlerRegistration", "HistoryContract", "HistoryService", "InputSchema", "InteractionContract", "InteractionService", "LayerContract", "LayerService", "MapLibreServiceDefinition", "MapshaperProcessingService", "MutationContract", "MutationService", "Plugin", "PluginContext", "PluginInspection", "PluginRuntime", "PluginStatus", "PolicyContract", "PolicyService", "PresetName", "ProjectionContract", "ProjectionService", "QueryContract", "QueryService", "RenderContract", "RenderService", "ScaleContract", "ScaleService", "SelectionContract", "SelectionService", "ServiceKey", "ServiceRegistry", "ServiceResolver", "ShortcutsContract", "ShortcutsService", "SnapshotContract", "SnapshotService", "SourceContract", "SourceService", "SurfaceContract", "SurfaceService", "ValidationContract", "ValidationService", "ViewContract", "ViewService", "arrowFormatsPlugin", "attributeCapabilityPlugins", "attributesPlugin", "autoCompletePolygonPlugin", "basemapControlPlugin", "boxSelectPlugin", "cachePlugin", "canvasPainterPlugin", "capabilitiesPlugin", "clickSelectPlugin", "controlContextPlugin", "controlPlugin", "controlsPlugin", "describeAgentTools", "documentPlugin", "dragPanPlugin", "drawFeaturePlugin", "duckDbCapabilityPlugins", "duckDbPlugin", "editCapabilityPlugins", "editSessionsPlugin", "editStatePlugin", "editorControlPlugins", "editorPreset", "eventsPlugin", "executionPlugin", "formatPlugin", "formatsPlugin", "headlessPreset", "historyPlugin", "interactionPlugin", "invokeAgentTool", "lassoSelectPlugin", "layersPlugin", "mapLibrePlugin", "mapshaperCapabilityPlugins", "mapshaperProcessingPlugin", "measurePlugin", "mutationPlugin", "operationHostPlugin", "partEditPlugin", "policyPlugin", "projectionPlugin", "queryPlugin", "renderPlugin", "renderSignalsPlugin", "reshapeFeaturePlugin", "resolvePlugins", "ringEditPlugin", "routingPlugin", "scalePlugin", "scrollZoomPlugin", "selectionPlugin", "serviceKey", "shortcutsPlugin", "snapshotPlugin", "sourcePlugin", "splitFeaturePlugin", "summarizeCapabilityResult", "surfacePlugin", "topologySourceFactoryPlugin", "topologyValidationPlugin", "transformFeaturePlugin", "validateCapabilityInput", "validationPlugin", "validatorPlugin", "vertexEditPlugin", "viewPlugin", "viewerControlPlugins", "viewerPreset", "workspaceCapabilityPlugins"]
-examples: ["getting-started/geojson-viewer", "export-formats", "online-map-services"]
+title: Native Cordis plugins and AI capabilities
+api: ["AffineDelta", "CacheContract", "CapabilityAuthorization", "CapabilityAuthorizer", "CapabilityCallContext", "CapabilityDefinition", "CapabilityDescriptor", "CapabilityEffect", "CapabilityInvocation", "CapabilityOrigin", "CapabilityRegistry", "CapabilityRegistryContract", "CapabilityRun", "Context", "ControlContext", "ControlsContract", "DocumentContract", "DuckDbProcessing", "DuckDbRuntimeOptions", "DuckDbRuntimeScope", "EditStateContract", "EmapOptions", "ExecutionContract", "FeatureReadContext", "FormatRegistry", "FormatRegistryContract", "HandlerRegistration", "HistoryContract", "InputSchema", "InteractionContract", "LayerContract", "MapLibreService", "MapLibreServiceDefinition", "MutationContract", "PainterFactoryContract", "PolicyContract", "PresetName", "ProjectionContract", "QueryContract", "RenderAction", "RenderContract", "RenderSignalsContract", "RoutingContract", "ScaleContract", "SelectionContract", "ShortcutsContract", "SnapshotContract", "SourceContract", "SourceFactoryContract", "SurfaceContract", "ValidationContract", "ViewContract", "arrowFormatsPlugin", "attributeCapabilityPlugins", "attributesPlugin", "autoCompletePolygonPlugin", "basemapControlPlugin", "boxSelectPlugin", "cachePlugin", "canvasPainterPlugin", "capabilitiesPlugin", "clickSelectPlugin", "controlContextPlugin", "controlPlugin", "controlsPlugin", "describeAgentTools", "documentPlugin", "dragPanPlugin", "drawFeaturePlugin", "duckDbCapabilityPlugins", "duckDbPlugin", "editCapabilityPlugins", "editSessionsPlugin", "editStatePlugin", "editorControlPlugins", "editorPreset", "eventsPlugin", "executionPlugin", "formatPlugin", "formatsPlugin", "headlessPreset", "historyPlugin", "inspectContext", "inspectServices", "interactionPlugin", "invokeAgentTool", "lassoSelectPlugin", "layersPlugin", "mapLibrePlugin", "mapshaperCapabilityPlugins", "mapshaperProcessingPlugin", "measurePlugin", "mutationPlugin", "operationHostPlugin", "partEditPlugin", "policyPlugin", "projectionPlugin", "queryPlugin", "renderPlugin", "renderSignalsPlugin", "reshapeFeaturePlugin", "resolvePlugins", "ringEditPlugin", "routingPlugin", "scalePlugin", "scrollZoomPlugin", "selectionPlugin", "settleContext", "shortcutsPlugin", "snapshotPlugin", "sourcePlugin", "splitFeaturePlugin", "summarizeCapabilityResult", "surfacePlugin", "topologySourceFactoryPlugin", "topologyValidationPlugin", "transformFeaturePlugin", "validateCapabilityInput", "validationPlugin", "validatorPlugin", "vertexEditPlugin", "viewPlugin", "viewerControlPlugins", "viewerPreset", "workspaceCapabilityPlugins"]
+examples: ["plugin-runtime", "export-formats", "online-map-services"]
 stability: experimental
-verifiedVersion: 0.11.2
+verifiedVersion: unreleased
 ---
 
-# Plugin architecture and AI Capability
+# Native Cordis plugins and AI capabilities
 
-emap is organized into five runtime layers: Kernel, Service, Provider, Feature Plugin, and AI Capability. `Emap` remains the stable façade; extensions compose typed services instead of subclassing Emap or reading private fields.
+This branch uses the exact official upstream package `cordis@4.0.0-rc.10`, a release candidate rather than a stable-release guarantee. The custom runtime, service tokens and effect scope have been removed. `map.ctx` is a native Cordis `Context`; emap does not keep a second dependency graph or plugin state machine.
 
-## Kernel and services
+## Initialization and disposal
 
-`PluginRuntime` owns dependency resolution, atomic mount rollback, waiting, disable/enable, and teardown. `EffectScope` owns event subscriptions, registry entries, and asynchronous resource cleanup. `ServiceKey` identities are stable across bundles, while every runtime keeps an instance-local `ServiceRegistry`.
-
-Declare hard dependencies in `requires`. Use declared `optional` services for replaceable backends; the runtime reconciles consumers when a provider appears, disappears, or returns. Do not retain an optional service as an undeclared permanent dependency.
+Native plugin loading is asynchronous. Await initialization before accessing GIS services:
 
 ```ts
-import { serviceKey, type Plugin } from '@mapseekai/emap/kernel';
+import { Emap } from '@mapseekai/emap';
+const map = await Emap.create({ container: 'map', preset: 'editor' });
+await map.controls.add('navigation');
+console.log(map.ctx.view.getCRS());
+await map.dispose();
+```
 
-const SearchService = serviceKey<{ search(q: string): string[] }>('example.search');
-const searchPlugin: Plugin = {
-  id: 'example.search',
-  provides: [SearchService],
-  setup(ctx) {
-    ctx.provide(SearchService, { search: q => [q] });
+Alternatively, construct a map and await `map.ready`. Constructor completion does not mean services are active. `remove()` requests teardown; `dispose()` waits for native Cordis disposal. Wait before reusing the container. Cleanup failures use the native Cordis logger instead of the previous kernel's aggregate-error contract.
+
+## Native plugin and service contracts
+
+Services use standard TypeScript declaration merging, not custom Symbol tokens:
+
+```ts
+import type { Plugin } from 'cordis';
+
+declare module 'cordis' {
+  interface Context {
+    counter: { value: number };
+  }
+}
+const counterPlugin: Plugin.Object = {
+  name: 'demo.counter',
+  apply(ctx) { ctx.provide('counter', { value: 1 }); },
+};
+const readerPlugin: Plugin.Object = {
+  name: 'demo.reader',
+  inject: ['counter'],
+  apply(ctx) { console.log(ctx.counter.value); },
+};
+const reader = map.ctx.plugin(readerPlugin);
+const provider = await map.ctx.plugin(counterPlugin);
+await reader.await();
+await provider.dispose(); // The reader becomes PENDING through Cordis.
+await map.ctx.plugin(counterPlugin); // It reactivates when the service returns.
+```
+
+Native function plugins and `Service` subclasses also work directly. Declare hard dependencies with `inject` and consume typed properties. Query optional services with `ctx.get('mapLibre')`; a lookup is not a hard dependency and should not be cached as a permanently valid object.
+
+Use native `Fiber.dispose()`, reinstallation through `ctx.plugin()`, `Fiber.restart()` and `Fiber.update(config)`. There is no emulated ID-based disable/enable API. Presets use plugin names for explicit overrides; Cordis itself identifies instances by callback and Fiber, and its multi-instance semantics remain intact.
+
+## Effects and asynchronous resources
+
+Use a native generator effect to ensure consumers stop before their resource is closed:
+
+```ts
+const plugin: Plugin.Object = {
+  name: 'demo.resource',
+  apply(ctx) {
+    ctx.effect(function* () {
+      const resource = acquireResource();
+      yield () => resource.close();
+      yield ctx.provide('resource', resource);
+    });
   },
 };
 ```
 
-## Providers and feature plugins
+The group releases in reverse order: revoke the service and await its consumers, then close the resource. `ctx.on()` subscriptions participate in the same native lifecycle. Existing GIS object events remain on `ctx.mapEvents`, an ordinary domain EventDispatcher rather than a plugin scheduler.
 
-Providers own state or external resources such as Canvas, workers, the format registry, Mapshaper, DuckDB, and MapLibre. Feature plugins consume services to register interactions, control factories, validators, or capabilities. Built-in interactions and controls use the same lifecycle as third-party plugins.
+Asynchronous GIS operations use AbortControllers registered as native effects to prevent stale commits. Cancellation does not forcibly interrupt every synchronous GIS algorithm. Control instances are native child plugins: `map.addControl()`, `map.removeControl()` and `map.controls.add()` return promises.
 
-The `editor` preset preserves the editing experience, `viewer` omits modal editing features, `headless` has no DOM/Canvas dependency, and `empty` installs only instance options. Use `plugins` to replace a plugin with the same ID or `excludePlugins` to remove one explicitly.
+## Responsibilities
 
-```ts
-import { Emap } from '@mapseekai/emap';
-import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+| Layer | Responsibility |
+| --- | --- |
+| Kernel | Upstream Cordis Context, Registry, Fiber, Service, events, effects and isolation. |
+| Service | Context augmentation and explicit domain contracts in `src/runtime/services/`. |
+| Provider | Document, Canvas, camera, history, Mapshaper, topology, Worker and codec implementations. |
+| Feature Plugin | Interactions, control factories, validators and capability contributions. |
+| AI Capability | Domain tool schemas, discovery, host authorization, bounded run records and summaries; not another plugin kernel. |
 
-const map = new Emap({
-  container: 'map',
-  plugins: [mapLibrePlugin],
-});
+Existing algorithms and authoritative GIS data structures are reused. Rendering and pointer hot paths do not pass through JSON or an agent. `src/runtime/context/` contains native re-exports, read-only diagnostics, a native-transition waiter and effect-owned cancellation; it does not schedule dependencies.
 
-map.controls.add('navigation');
-map.controls.add('layers');
-```
+## Presets and optional providers
 
-MapLibre is an explicit optional provider. Passing `mapLibre` options without installing `mapLibrePlugin` fails immediately instead of loading a hidden dependency.
-
-## Formats, Arrow, and DuckDB
-
-Format registration is instance-scoped and reversible. Importing the Arrow/GeoParquet entry point no longer mutates global format state; optional codecs are owned by the workspace that mounts them.
+`editor` supplies modal editing interactions; `viewer` retains processing without those handlers; `headless` creates no DOM or Canvas; `empty` only installs options. Override a preset with a same-name native plugin. `excludePlugins` contains names. Missing mandatory services reject `map.ready`.
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-
-const map = new Emap({ preset: 'headless', plugins: [arrowFormatsPlugin] });
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+import { duckDbPlugin, duckDbCapabilityPlugins } from '@mapseekai/emap/duckdb';
+const map = await Emap.create({
+  container: 'map',
+  plugins: [mapLibrePlugin, arrowFormatsPlugin, duckDbPlugin(), ...duckDbCapabilityPlugins],
+});
 const source = new TopologySource('upload', { formats: map.formats });
 await source.setData({ filename: 'roads.arrow', content: bytes });
 await map.addSource('upload', source);
 ```
 
-A detached `TopologySource` owns its own format registry. If an optional format must be decoded before `addSource()`, pass the target workspace's `map.formats`. Third-party codecs can use `formatPlugin(codec)` or explicit `registerFormat(map.formats, codec)` and retain the returned disposer.
+Codec registrations remain instance-local with no import-time registration. DuckDB initializes lazily. Supplied runtimes are borrowed unless `owned: true`; factory-created runtimes are owned. MapLibre stays an optional peer and needs service configuration before a basemap initializes.
 
-DuckDB low-level functions take an explicit runtime. `duckDbPlugin()` lazily owns one runtime for a workspace. Injected runtimes are borrowed by default and are closed only when `owned: true` transfers ownership.
-
-```ts
-import { duckDbPlugin, duckDbCapabilityPlugins } from '@mapseekai/emap/duckdb';
-
-const map = new Emap({
-  preset: 'headless',
-  plugins: [duckDbPlugin(), ...duckDbCapabilityPlugins],
-});
-```
-
-## AI Capability
-
-`map.capabilities` is a machine-discoverable catalog shared by UI, workflows, and agents. Capabilities wrap existing domain services instead of reimplementing GIS operations. Arguments pass bounded JSON-schema validation, asynchronous execution re-checks lifecycle and source freshness, and bounded run history stores metadata rather than complete input data.
-
-Agent-originated calls are read-only by default. Document, selection, view, or external side effects require the host's `authorizeCapability` policy. That policy is trusted application configuration and cannot be enabled by model-generated tool arguments.
+## Agent access
 
 ```ts
-const map = new Emap({
-  preset: 'headless',
-  authorizeCapability: request =>
-    request.origin !== 'agent' ||
-    request.capability.effects.every(effect => effect === 'read'),
-});
-
-const candidates = map.capabilities.search('buffer distance');
+import { describeAgentTools, invokeAgentTool } from '@mapseekai/emap/ai';
+const tools = describeAgentTools(map.capabilities);
+const result = await invokeAgentTool(map.capabilities, 'view.getCRS', {});
+console.log(result.content);
+// Keep result.value local for UI or workflow use.
 ```
 
-`@mapseekai/emap/ai` exposes provider-neutral tool descriptions and invocation adapters. It deliberately contains no model SDK, API-key handling, or network transport. `invokeAgentTool()` returns a small model-facing `content` summary while keeping the complete `value` local to UI or workflow code.
+Agent calls are read-only by default. Mutating document, selection, view or external state requires the host's `authorizeCapability` policy; model arguments cannot grant authorization. Existing geometry, CRS, freshness and transaction checks still apply. Run records are bounded metadata, not persistent event sourcing.
 
-## Lifecycle and trust boundary
+## Inspect the actual runtime
 
-Consumers unregister before providers release their resources. An unloaded editing provider cancels an uncommitted drag preview; scoped Mapshaper operations cannot commit after their owner is revoked; stale format/capability disposers cannot remove replacement registrations. `map.remove()` starts teardown; `await map.dispose()` waits for asynchronous cleanup and surfaces cleanup failures.
+```ts
+import { inspectContext, inspectServices, settleContext } from '@mapseekai/emap/context';
+console.table(inspectContext(map.ctx));
+console.table(inspectServices(map.ctx));
+await settleContext(map.ctx);
+```
 
-The plugin system is not a sandbox for hostile JavaScript. Install trusted plugin code. Capability validation and agent authorization protect the tool-invocation boundary, not arbitrary code execution.
+The **Cordis Runtime / GIS Harness** example displays the pinned version, `Context.is(map.ctx)`, native Fiber states, service providers, effects, optional-module installation/disposal and four presets. The diagnostic helpers do not maintain shadow runtime state.
+
+ESM output leaves `cordis` external so the application and emap share one library instance. Script-tag output bundles Cordis and exports `emap.Context`; use native `Context.is()` across different bundles instead of class-reference identity.

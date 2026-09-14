@@ -27,40 +27,38 @@
     </details>
 
     <script type="module">
-      import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      const emap = await loadExampleRuntime();
-      const { Emap, TopologySource } = emap;
-      const SOURCE_ID = 'topojson-source';
-      const map = new Emap({ container: 'map' });
-      map.addControl(new emap.NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const fileInput = document.getElementById('file-input');
-      const status = document.getElementById('status');
-
-      fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        status.textContent = `处理 ${file.name} 中...`;
-        const content = new Uint8Array(await file.arrayBuffer());
-        const source = new TopologySource(SOURCE_ID);
-
-        try {
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = `当前: ${file.name}`;
-        } catch (error) {
-          console.error(error);
-          status.textContent = `处理文件出错: ${error?.message ?? error}`;
-        }
-      });
-
-      window.addEventListener('resize', () => map.resize());
-      await autoLoadExampleFixtures('getting-started/topojson-viewer');
-    </script>
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const SOURCE_ID = 'topojson-source';
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById('file-input');
+const status = document.getElementById('status');
+fileInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `处理 ${file.name} 中...`;
+    const content = new Uint8Array(await file.arrayBuffer());
+    const source = new TopologySource(SOURCE_ID);
+    try {
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
+        await source.setData({ filename: file.name, content });
+        await map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        status.textContent = `当前: ${file.name}`;
+    }
+    catch (error) {
+        console.error(error);
+        status.textContent = `处理文件出错: ${error?.message ?? error}`;
+    }
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('getting-started/topojson-viewer');
+</script>
   </body>
 </html>

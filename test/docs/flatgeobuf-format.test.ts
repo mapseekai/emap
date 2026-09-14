@@ -5,8 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TopologySource } from '../../src/source/topology-source';
-import { FormatRegistry } from '../../src/source/format-registry';
+import { TopologySource } from '../../src/domain/source/topology-source';
+import { FormatRegistry } from '../../src/domain/source/format-registry';
 import { getDefaultMapshaperAdapter } from '../../src/index';
 import { installFlatGeobufFormat } from '../../packages/examples/src/flatgeobuf-format';
 

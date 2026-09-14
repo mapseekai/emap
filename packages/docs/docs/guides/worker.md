@@ -2,10 +2,10 @@
 id: worker
 slug: /guides/worker
 title: Web Worker
-api: ["Emap","MapOptions","MapshaperWorkerPool","MapshaperWorkerPoolOptions"]
+api: ["Emap", "MapOptions", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Web Worker
@@ -17,7 +17,7 @@ Emap 可将 dataset-replace 操作放到 Web Worker 执行，使主线程在长�
 在创建地图时设置 `useWorker`：
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   useWorker: 'auto',
   workerThreshold: 50_000,
@@ -62,10 +62,10 @@ const workerPool = new MapshaperWorkerPool({
   poolSize: 2,
 });
 
-const map = new Emap({ container: 'map', useWorker: true, workerPool });
+const map = await Emap.create({ container: 'map', useWorker: true, workerPool });
 ```
 
-地图独占管理传入的 `workerPool`，并在 `map.remove()` 时销毁它。不要把同一个池传给多个地图。
+地图独占管理传入的 `workerPool`，并在 Cordis 卸载过程中销毁它；使用 `await map.dispose()` 等待释放完成。不要把同一个池传给多个地图。
 
 ## 可运行示例
 

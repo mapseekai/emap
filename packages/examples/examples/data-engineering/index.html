@@ -97,127 +97,130 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'data-eng-source';
-    const targetSel = document.getElementById('target');
-    const status = document.getElementById('status');
-
-    const dropBtn = document.getElementById('drop-btn');
-    const sortBtn = document.getElementById('sort-btn');
-    const uniqBtn = document.getElementById('uniq-btn');
-    const ffBtn = document.getElementById('ff-btn');
-    const rfBtn = document.getElementById('rf-btn');
-    const allBtns = [dropBtn, sortBtn, uniqBtn, ffBtn, rfBtn];
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'data-eng-source';
+const targetSel = document.getElementById('target');
+const status = document.getElementById('status');
+const dropBtn = document.getElementById('drop-btn');
+const sortBtn = document.getElementById('sort-btn');
+const uniqBtn = document.getElementById('uniq-btn');
+const ffBtn = document.getElementById('ff-btn');
+const rfBtn = document.getElementById('rf-btn');
+const allBtns = [dropBtn, sortBtn, uniqBtn, ffBtn, rfBtn];
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      const enabled = source.getLayers().length > 0;
-      allBtns.forEach((b) => { b.disabled = !enabled; });
-    }
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    const enabled = source.getLayers().length > 0;
+    allBtns.forEach((b) => { b.disabled = !enabled; });
+}
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    function refreshAfterOp() {
-      const src = map.getSource(SOURCE_ID);
-      if (src) populate(src);
-    }
-
-    function wrap(btn, runner) {
-      btn.addEventListener('click', async () => {
+        catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+function refreshAfterOp() {
+    const src = map.getSource(SOURCE_ID);
+    if (src)
+        populate(src);
+}
+function wrap(btn, runner) {
+    btn.addEventListener('click', async () => {
         const target = targetSel.value;
-        if (!target) return;
+        if (!target)
+            return;
         status.textContent = '执行中...';
         allBtns.forEach((b) => { b.disabled = true; });
         try {
-          const result = await runner(target);
-          status.textContent =
-            result !== false && result.ok ? '完成。Ctrl+Z 撤销。' : '失败 (检查参数)。';
-        } catch (err) {
-          status.textContent = `错误: ${err?.message ?? err}`;
-          console.error(err);
-        } finally {
-          refreshAfterOp();
+            const result = await runner(target);
+            status.textContent =
+                result !== false && result.ok ? '完成。Ctrl+Z 撤销。' : '失败 (检查参数)。';
         }
-      });
-    }
-
-    wrap(dropBtn, (target) => map.ops.dropLayer({ source: SOURCE_ID, target }));
-
-    wrap(sortBtn, (target) => {
-      const expression = document.getElementById('sort-expr').value.trim();
-      if (!expression) return false;
-      const descending = document.getElementById('sort-desc').checked;
-      return map.ops.sortFeatures({ source: SOURCE_ID, target, expression, descending });
+        catch (err) {
+            status.textContent = `错误: ${err?.message ?? err}`;
+            console.error(err);
+        }
+        finally {
+            refreshAfterOp();
+        }
     });
-
-    wrap(uniqBtn, (target) => {
-      const expression = document.getElementById('uniq-expr').value.trim();
-      if (!expression) return false;
-      const opts = { source: SOURCE_ID, target, expression };
-      const maxRaw = document.getElementById('uniq-max').value.trim();
-      if (maxRaw) {
+}
+wrap(dropBtn, (target) => map.ops.dropLayer({ source: SOURCE_ID, target }));
+wrap(sortBtn, (target) => {
+    const expression = document.getElementById('sort-expr').value.trim();
+    if (!expression)
+        return false;
+    const descending = document.getElementById('sort-desc').checked;
+    return map.ops.sortFeatures({ source: SOURCE_ID, target, expression, descending });
+});
+wrap(uniqBtn, (target) => {
+    const expression = document.getElementById('uniq-expr').value.trim();
+    if (!expression)
+        return false;
+    const opts = { source: SOURCE_ID, target, expression };
+    const maxRaw = document.getElementById('uniq-max').value.trim();
+    if (maxRaw) {
         const n = Number(maxRaw);
-        if (!Number.isNaN(n) && n > 0) opts.maxCount = n;
-      }
-      if (document.getElementById('uniq-invert').checked) opts.invert = true;
-      return map.ops.uniqueFeatures(opts);
-    });
-
-    wrap(ffBtn, (target) => {
-      const raw = document.getElementById('ff-fields').value.trim();
-      if (!raw) return false;
-      const fields = raw.split(',').map((s) => s.trim()).filter(Boolean);
-      const invert = document.getElementById('ff-invert').checked;
-      return map.ops.filterFields({ source: SOURCE_ID, target, fields, invert });
-    });
-
-    wrap(rfBtn, (target) => {
-      const raw = document.getElementById('rf-map').value.trim();
-      if (!raw) return false;
-      const mapping = {};
-      for (const pair of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+        if (!Number.isNaN(n) && n > 0)
+            opts.maxCount = n;
+    }
+    if (document.getElementById('uniq-invert').checked)
+        opts.invert = true;
+    return map.ops.uniqueFeatures(opts);
+});
+wrap(ffBtn, (target) => {
+    const raw = document.getElementById('ff-fields').value.trim();
+    if (!raw)
+        return false;
+    const fields = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    const invert = document.getElementById('ff-invert').checked;
+    return map.ops.filterFields({ source: SOURCE_ID, target, fields, invert });
+});
+wrap(rfBtn, (target) => {
+    const raw = document.getElementById('rf-map').value.trim();
+    if (!raw)
+        return false;
+    const mapping = {};
+    for (const pair of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
         const [k, v] = pair.split('=').map((s) => s.trim());
-        if (k && v) mapping[k] = v;
-      }
-      return map.ops.renameFields({ source: SOURCE_ID, target, mapping });
-    });
-    await autoLoadExampleFixtures('data-engineering');
-  </script>
+        if (k && v)
+            mapping[k] = v;
+    }
+    return map.ops.renameFields({ source: SOURCE_ID, target, mapping });
+});
+await autoLoadExampleFixtures('data-engineering');
+</script>
 </body>
 
 </html>

@@ -1,5 +1,5 @@
-import { AffineTransform } from '../../src/geo/transform';
-import { CanvasPainter } from '../../src/renderer/canvas-painter';
+import { AffineTransform } from '../../src/domain/geo/transform';
+import { CanvasPainter } from '../../src/engine/rendering/canvas-painter';
 
 interface CanvasPainterHarnessOptions {
   width?: number;

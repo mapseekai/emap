@@ -25,15 +25,16 @@ for (const file of production) {
   visit(ast);
   const edges = [];
   for (const specifier of imports) {
-    if (file.startsWith('src/kernel/') && !specifier.startsWith('./')) violations.push(`${file}: kernel dependency ${specifier}`);
-    if (file.startsWith('src/plugins/') && /(?:^|\/)map\/map$/.test(specifier)) violations.push(`${file}: feature depends on Emap`);
+    if (specifier.includes('/kernel/') || specifier.endsWith('/kernel')) violations.push(`${file}: deleted custom kernel import ${specifier}`);
+    if (file.startsWith('src/runtime/plugins/') && /(?:^|\/)map\/map$/.test(specifier)) violations.push(`${file}: feature depends on Emap`);
     if (!specifier.startsWith('.')) continue;
     const base = path.normalize(path.join(path.dirname(file), specifier));
     const target = [base + '.ts', path.join(base, 'index.ts')].find(candidate => fs.existsSync(candidate));
     if (target) edges.push(target);
   }
-  if (file.startsWith('src/services/') && /from\s+['"][^'"]*providers\//.test(source)) violations.push(`${file}: contract imports provider implementation`);
-  if (file.startsWith('src/kernel/') && /\b(document|window|HTMLElement|HTMLCanvasElement)\b/.test(output)) violations.push(`${file}: kernel depends on browser UI`);
+  if (file.startsWith('src/runtime/services/') && /from\s+['"][^'"]*providers\//.test(source)) violations.push(`${file}: contract imports provider implementation`);
+  if (/\b(class (PluginRuntime|ServiceRegistry|EffectScope)|serviceKey\s*\(|ctx\.scope|ctx\.defer|ctx\.optional)\b/.test(output)) violations.push(`${file}: custom plugin runtime was reintroduced`);
+  if (/\b(?:PluginRuntime|EffectScope|ServiceRegistry|ServiceKey|ServiceResolver|serviceKey)\b/.test(output)) violations.push(`${file}: removed custom runtime API`);
   graph.set(file, edges);
 }
 
@@ -50,9 +51,30 @@ function walk(file, stack) {
 for (const file of graph.keys()) walk(file, []);
 for (const cycle of cycles) violations.push(`Runtime import cycle: ${cycle.join(' -> ')}`);
 
-const formatSource = fs.readFileSync('src/source/format-registry.ts', 'utf8');
+const allowedTopLevel = new Set(['domain', 'engine', 'runtime', 'integrations', 'ui', 'shared']);
+for (const entry of fs.readdirSync('src', { withFileTypes: true })) {
+  if (entry.isDirectory() && !allowedTopLevel.has(entry.name)) {
+    violations.push(`Unexpected src top-level directory: ${entry.name}`);
+  }
+}
+
+if (fs.existsSync('src/kernel')) violations.push('The custom kernel directory must be removed');
+const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+if (manifest.dependencies?.cordis !== '4.0.0-rc.10') violations.push('Cordis must remain pinned to the validated upstream version');
+for (const [file] of graph) {
+  if (
+    !file.startsWith('src/runtime/providers/') &&
+    !file.startsWith('src/engine/providers/') &&
+    !file.startsWith('src/runtime/plugins/') &&
+    !file.startsWith('src/integrations/')
+  )
+    continue;
+  const source = fs.readFileSync(file, 'utf8');
+  if (/\bsetup\s*\(ctx/.test(source)) violations.push(`${file}: legacy plugin entry point`);
+}
+const formatSource = fs.readFileSync('src/domain/source/format-registry.ts', 'utf8');
 if (formatSource.includes("Symbol.for('emap.formatRegistry')")) violations.push('Format registry still has process-global mutable state');
-if (/\b(setDuckDbRuntime|getDuckDbRuntime|injectedRuntime)\b/.test(fs.readFileSync('src/duckdb/runtime.ts', 'utf8'))) violations.push('DuckDB still has a global runtime');
+if (/\b(setDuckDbRuntime|getDuckDbRuntime|injectedRuntime)\b/.test(fs.readFileSync('src/integrations/duckdb/runtime.ts', 'utf8'))) violations.push('DuckDB still has a global runtime');
 const reachable = new Set();
 function visitEntry(file) {
   if (reachable.has(file)) return;
@@ -60,7 +82,7 @@ function visitEntry(file) {
   for (const dependency of graph.get(file) ?? []) visitEntry(dependency);
 }
 visitEntry('src/index.ts');
-for (const forbidden of ['src/providers/maplibre/plugin.ts', 'src/arrow/index.ts', 'src/duckdb/index.ts']) {
+for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts']) {
   if (reachable.has(forbidden)) violations.push(`Default entry eagerly imports optional provider: ${forbidden}`);
 }
 const inventory = JSON.parse(fs.readFileSync('docs/plans/plugin-migration-inventory.json', 'utf8'));

@@ -1,9 +1,12 @@
-import type { LassoSelectHandlerOptions, LassoSelectStyle } from '../core/handlers/lasso-select';
-import type { ControlContext } from '../services/controls';
+import type {
+  LassoSelectHandlerOptions,
+  LassoSelectStyle,
+} from '../engine/core/handlers/lasso-select';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 
-export type { LassoSelectStyle } from '../core/handlers/lasso-select';
-export { featureMatchesLasso, pointInPolygon } from '../core/handlers/select-geometry';
+export type { LassoSelectStyle } from '../engine/core/handlers/lasso-select';
+export { featureMatchesLasso, pointInPolygon } from '../engine/core/handlers/select-geometry';
 
 export interface LassoSelectControlOptions {
   /**

@@ -2,10 +2,10 @@
 id: installation
 slug: /getting-started/installation
 title: Installation
-api: ["Emap","TopologySource"]
+api: ["Emap", "TopologySource"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Installation
@@ -75,7 +75,7 @@ Import this entry point before the first GeoArrow or GeoParquet read or write:
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```

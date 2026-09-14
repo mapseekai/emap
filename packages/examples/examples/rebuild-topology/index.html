@@ -67,137 +67,138 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'rebuild-source';
-    const dxInput = document.getElementById('dx');
-    const dyInput = document.getElementById('dy');
-    const translateBtn = document.getElementById('translate-btn');
-    const snapInput = document.getElementById('snap');
-    const noSnapInput = document.getElementById('no-snap');
-    const rebuildFlagInput = document.getElementById('rebuild-flag');
-    const rebuildBtn = document.getElementById('rebuild-btn');
-    const stats = document.getElementById('stats');
-    const status = document.getElementById('status');
-
-    function refreshStats() {
-      const src = map.getSource(SOURCE_ID);
-      const ds = src?.getDataset();
-      if (!ds) {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'rebuild-source';
+const dxInput = document.getElementById('dx');
+const dyInput = document.getElementById('dy');
+const translateBtn = document.getElementById('translate-btn');
+const snapInput = document.getElementById('snap');
+const noSnapInput = document.getElementById('no-snap');
+const rebuildFlagInput = document.getElementById('rebuild-flag');
+const rebuildBtn = document.getElementById('rebuild-btn');
+const stats = document.getElementById('stats');
+const status = document.getElementById('status');
+function refreshStats() {
+    const src = map.getSource(SOURCE_ID);
+    const ds = src?.getDataset();
+    if (!ds) {
         stats.textContent = 'arcs: -, vertices: -';
         return;
-      }
-      const arcCount = ds.arcs?.size?.() ?? 0;
-      const vertexCount = ds.arcs?.getPointCount?.() ?? 0;
-      const layerCount = ds.layers?.length ?? 0;
-      stats.textContent = `layers: ${layerCount}, arcs: ${arcCount}, vertices: ${vertexCount}`;
     }
-
-    function refreshButtons() {
-      const ds = map.getSource(SOURCE_ID)?.getDataset();
-      const hasArcs = !!ds?.arcs;
-      rebuildBtn.disabled = !hasArcs;
-    }
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    const arcCount = ds.arcs?.size?.() ?? 0;
+    const vertexCount = ds.arcs?.getPointCount?.() ?? 0;
+    const layerCount = ds.layers?.length ?? 0;
+    stats.textContent = `layers: ${layerCount}, arcs: ${arcCount}, vertices: ${vertexCount}`;
+}
+function refreshButtons() {
+    const ds = map.getSource(SOURCE_ID)?.getDataset();
+    const hasArcs = !!ds?.arcs;
+    rebuildBtn.disabled = !hasArcs;
+}
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          refreshStats();
-          refreshButtons();
-          translateBtn.disabled = false;
-          status.textContent = `已加载 ${file.name}。点击要素选中,然后 "平移所选" 或直接 "重建拓扑"。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `错误: ${err?.message ?? err}`;
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            refreshStats();
+            refreshButtons();
+            translateBtn.disabled = false;
+            status.textContent = `已加载 ${file.name}。点击要素选中,然后 "平移所选" 或直接 "重建拓扑"。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    map.on('click', (e) => {
-      // Tap to toggle selection at the click position
-      const features = map.queryFeatures(e.point, { radius: 6 });
-      if (!features?.length) return;
-      const f = features[0];
-      map.select([{ source: f.source, layer: f.layer, id: f.id }], 'toggle');
-      status.textContent = `已选: ${map.getSelection().length} 个要素`;
-    });
-
-    // Highlight every selected feature whenever the selection changes.
-    map.on('selectionchange', (ev) => {
-      if (ev.selected.length === 0) {
+        catch (err) {
+            console.error(err);
+            status.textContent = `错误: ${err?.message ?? err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+map.on('click', (e) => {
+    // Tap to toggle selection at the click position
+    const features = map.queryFeatures(e.point, { radius: 6 });
+    if (!features?.length)
+        return;
+    const f = features[0];
+    map.select([{ source: f.source, layer: f.layer, id: f.id }], 'toggle');
+    status.textContent = `已选: ${map.getSelection().length} 个要素`;
+});
+// Highlight every selected feature whenever the selection changes.
+map.on('selectionchange', (ev) => {
+    if (ev.selected.length === 0) {
         map.clearHighlightedFeatures();
-      } else {
+    }
+    else {
         map.setHighlightedFeatures(ev.selected, { color: '#1e88e5', width: 3 });
-      }
-    });
-
-    translateBtn.addEventListener('click', () => {
-      const dx = Number(dxInput.value);
-      const dy = Number(dyInput.value);
-      if (Number.isNaN(dx) || Number.isNaN(dy)) {
+    }
+});
+translateBtn.addEventListener('click', () => {
+    const dx = Number(dxInput.value);
+    const dy = Number(dyInput.value);
+    if (Number.isNaN(dx) || Number.isNaN(dy)) {
         status.textContent = 'dx / dy 必须是数字。';
         return;
-      }
-      if (map.getSelection().length === 0) {
+    }
+    if (map.getSelection().length === 0) {
         status.textContent = '请先点击要素选中。';
         return;
-      }
-      const ok = map.editSession.translateSelected(dx, dy);
-      refreshStats();
-      status.textContent = ok
+    }
+    const ok = map.editSession.translateSelected(dx, dy);
+    refreshStats();
+    status.textContent = ok
         ? `已平移所选 (Δ ${dx}, ${dy})。可能产生新的交叉,点击 "重建拓扑" 修复。`
         : '平移失败。';
-    });
-
-    rebuildBtn.addEventListener('click', async () => {
-      const opts = { source: SOURCE_ID };
-      const sn = snapInput.value.trim();
-      if (sn && !Number.isNaN(Number(sn))) opts.snapInterval = Number(sn);
-      if (noSnapInput.checked) opts.noSnap = true;
-      if (rebuildFlagInput.checked) opts.rebuildTopology = true;
-      const before = stats.textContent;
-      status.textContent = '正在重建拓扑...';
-      rebuildBtn.disabled = true;
-      try {
+});
+rebuildBtn.addEventListener('click', async () => {
+    const opts = { source: SOURCE_ID };
+    const sn = snapInput.value.trim();
+    if (sn && !Number.isNaN(Number(sn)))
+        opts.snapInterval = Number(sn);
+    if (noSnapInput.checked)
+        opts.noSnap = true;
+    if (rebuildFlagInput.checked)
+        opts.rebuildTopology = true;
+    const before = stats.textContent;
+    status.textContent = '正在重建拓扑...';
+    rebuildBtn.disabled = true;
+    try {
         const result = await map.ops.rebuildTopology(opts);
         refreshStats();
         const after = stats.textContent;
         status.textContent = result.ok
-          ? `已重建。${before} → ${after}。Ctrl+Z 撤销。`
-          : '重建失败。';
-      } catch (err) {
+            ? `已重建。${before} → ${after}。Ctrl+Z 撤销。`
+            : '重建失败。';
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         rebuildBtn.disabled = false;
         refreshButtons();
-      }
-    });
-
-    refreshStats();
-    await autoLoadExampleFixtures('rebuild-topology');
-  </script>
+    }
+});
+refreshStats();
+await autoLoadExampleFixtures('rebuild-topology');
+</script>
 </body>
 
 </html>

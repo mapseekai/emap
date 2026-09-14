@@ -55,7 +55,7 @@ emap 面向现代浏览器，TypeScript 使用打包器解析方式：
 import { Emap, TopologySource } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   expressionPolicy: 'disabled',
 });
@@ -89,7 +89,7 @@ map.setExtent(source.getExtent());
 宿主页面销毁时释放地图实例：
 
 ```ts
-map.remove();
+await map.dispose();
 ```
 
 ## 加载本地数据
@@ -185,7 +185,7 @@ map.addLayer({
 将 Worker 和 vendor 文件部署到页面可访问路径，然后启用 Worker 路由：
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   useWorker: 'auto',
   workerUrl: '/assets/emap-worker.js',
@@ -215,7 +215,7 @@ pnpm add parquet-wasm # 仅 GeoParquet
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
@@ -253,7 +253,7 @@ const result = await attributeFilter(source.getDataset()!, {
 ```ts
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   plugins: [mapLibrePlugin],
   mapLibre: {
@@ -276,6 +276,7 @@ const map = new Emap({
 
 - [安装与第一张地图](packages/docs/docs/getting-started/installation.md)
 - [Emap 核心概念](packages/docs/docs/concepts/emap.md)
+- [技术架构与源码组织](packages/docs/docs/concepts/architecture.md)
 - [编辑指南](packages/docs/docs/guides/editing.md)
 - [样式指南](packages/docs/docs/guides/styling.md)
 - [Worker 指南](packages/docs/docs/guides/worker.md)
@@ -286,31 +287,46 @@ const map = new Emap({
 
 ## 架构
 
-公共 `Emap` 类是统一门面，内部按状态所有权和失败语义划分：
+公共 `Emap` 类保持统一门面。仓库内部现在只保留六个一级职责区，让运行时组合、引擎热路径、GIS 领域状态、第三方集成、UI 和共享声明在目录上直接区分：
+
+```text
+src/
+├── domain/          # GIS Source / Geometry / Edit / Validation 领域
+├── engine/          # 地图执行、交互、渲染、Worker、内置 Provider
+├── runtime/         # 原生 Cordis Context / Service / Plugin / Preset / AI Capability
+├── integrations/    # Mapshaper / MapLibre / Arrow / DuckDB
+├── ui/              # 控件、图标、CSS、主题
+├── shared/          # Ambient 声明与跨层类型边界
+└── index.ts         # 显式根公共 API
+```
+
+运行时直接使用官方 `cordis@4.0.0-rc.10`。`map.ctx` 就是原生 `Context`；服务通过 Context declaration merging 与 `ctx.provide()` 定义，Feature/Provider 使用原生 `inject / apply / effect`，生命周期使用原生 `Fiber`。项目不存在自研 PluginRuntime、ServiceRegistry 或第二套兼容依赖图。
+
+主要执行路径仍然是直接的 GIS 热路径：
 
 ```text
 DOM 指针输入
-  → HandlerManager 与编辑 Handler
-  → 已校验编辑计划或数据集操作
-  → EditCommand / operation runner
+  → engine/core Handler
+  → 已校验编辑计划或 engine/map Operation
+  → domain EditCommand / operation runner
   → Source 版本、历史、事务、选择状态
-  → source data 事件
+  → 渲染失效
   → RenderScheduler
-  → layer renderer 与 CanvasPainter
+  → layer renderer / CanvasPainter
 ```
 
-主要边界：
+关键边界：
 
-- `src/source/`：导入导出、ZIP 限制、CRS 元数据和 DisplayArcs 生命周期。
-- `src/adapter/mapshaper-adapter.ts`：业务代码访问 `mapshaper.internal.*` 的统一边界。
-- `src/map/ops/`：可独立测试的数据集与选择操作。
-- `src/edit/commands/`：可逆的实时数据修改。
-- `src/renderer/`：Canvas 绘制与编辑叠加层。
-- `src/core/handlers/`：浏览器交互状态。
-- `src/arrow/` 与 `src/duckdb/`：可选数据与分析入口。
-- `src/map/maplibre-service-manager.ts`：在线服务资源与异步回滚。
+- `src/domain/source/`：拓扑数据、CRS、格式绑定 Source 状态和 DisplayArcs 生命周期。
+- `src/domain/edit/commands/`：可逆数据修改；`src/domain/geo/`：坐标、投影和测量数学。
+- `src/engine/map/ops/`：Mapshaper 支持的数据操作编排；`src/engine/core/handlers/`：浏览器交互；`src/engine/rendering/`：Canvas 渲染。
+- `src/runtime/`：只负责 Cordis 组合，包括 Service 契约、Provider、Feature Plugin、Preset 和 AI Capability 注册。
+- `src/integrations/mapshaper/adapter.ts`：访问 `mapshaper.internal.*` 的正常边界；MapLibre、Arrow、DuckDB 都有独立 integration 边界。
+- `/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`、`/maplibre`、`/arrow`、`/duckdb` 是稳定 package subpath，不要求与内部目录一一对应。
 
-几何编辑和属性编辑使用各自独立的单调版本计数器。Worker 与异步操作在提交前同时比较两者。
+单元测试严格使用 `foo.ts` + `foo.test.ts` 同目录同名，一个实现文件最多一个单元测试文件。跨模块回归/集成测试进入 `test/integration/`；浏览器、构建、类型契约、文档、示例、安全测试分别进入 `test/` 对应目录。`test-layout:check` 和 `typecheck:contracts` 自动约束这套规则。
+
+完整说明见 [当前技术架构与源码组织](packages/docs/docs/concepts/architecture.md)、[ADR 0009](docs/decisions/0009-native-cordis.md) 和 [ADR 0010](docs/decisions/0010-source-and-test-layout.md)。
 
 ## 开发
 
@@ -321,12 +337,18 @@ Node.js 22.18–24
 pnpm 11.15.1
 ```
 
-安装并运行主要检查：
+安装依赖后，从以下命令目录中选择与本次改动相关的检查；并非每个任务都要依次运行全部命令。
+见 [验证规则](AGENTS.md#verification)。发布准备仍需通过 [发布清单](docs/release-checklist.md) 中的完整验证。
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run format:check
 pnpm run typecheck
+pnpm run typecheck:contracts
+pnpm run typecheck:examples
+pnpm run test-layout:check
+pnpm run architecture:check
+pnpm run capabilities:check
 pnpm run test:run
 pnpm run test:duckdb
 pnpm run build
@@ -345,9 +367,9 @@ pnpm run docs:dev
 
 `packages/docs/static/api/` 下由 TypeDoc 生成的文件被有意忽略，`api:build`、`docs:build` 和 `docs:verify` 会重新生成。
 
-DuckDB 集成套件通过 `pnpm run test:duckdb` 运行，该命令对 `src/duckdb` 全目录设置 `DUCKDB_WASM_INTEGRATION=1`。
+DuckDB 集成套件通过 `pnpm run test:duckdb` 运行，该命令对 `src/integrations/duckdb` 与 `test/integration/duckdb` 全目录设置 `DUCKDB_WASM_INTEGRATION=1`。
 
-修改 mapshaper 支持的操作前，先更新它在 `src/map/ops/_runner.ts` 中的效果分类，并验证历史、选择、Worker 和过期操作行为。仓库规则见 [AGENTS.md](AGENTS.md)。
+修改 mapshaper 支持的操作时，遵循 [代码约定](AGENTS.md#hard-rules--code-conventions)，并验证受影响的历史、选择、Worker 和过期操作行为。
 
 ## 安全
 

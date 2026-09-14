@@ -2,10 +2,10 @@
 id: coordinates-crs
 slug: /concepts/coordinates-crs
 title: 坐标与 CRS
-api: ["AffineTransform","AnimationOptions","Bounds","CameraOptions","DEFAULT_CRS","Emap","FitBoundsOptions","FlyToOptions","inferFromPrj","normalizeCrsString","Projection","resolveDatasetCRS","setDatasetCrsMetadata","Viewport"]
+api: ["AffineTransform", "AnimationOptions", "Bounds", "CameraOptions", "DEFAULT_CRS", "Emap", "FitBoundsOptions", "FlyToOptions", "inferFromPrj", "normalizeCrsString", "Projection", "resolveDatasetCRS", "setDatasetCrsMetadata", "Viewport"]
 examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.9.2
+verifiedVersion: unreleased
 ---
 
 # 坐标与 CRS

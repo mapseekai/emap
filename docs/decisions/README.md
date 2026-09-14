@@ -11,5 +11,8 @@ This directory preserves the durable decisions that were previously mixed with c
 | [0005](0005-attribute-driven-fill-styling.md) | Separate attribute invalidation from geometry edits and render fill styles in buckets |
 | [0006](0006-public-api-surface.md) | Keep root exports explicit and prevent accidental API growth |
 | [0007](0007-optional-integration-dependencies.md) | Make Arrow, Parquet, and DuckDB-Wasm optional peers while retaining MapLibre compatibility |
+| [0008](0008-everything-plugin.md) | Introduce the Everything-as-a-Plugin migration (kernel portion superseded by ADR 0009) |
+| [0009](0009-native-cordis.md) | Replace the custom plugin kernel with upstream Cordis |
+| [0010](0010-source-and-test-layout.md) | Organize source by six responsibility zones and tests by scope |
 
 ADRs record why the implementation has its current shape. They are not task lists and do not represent unfinished work.

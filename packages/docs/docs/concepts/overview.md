@@ -2,13 +2,16 @@
 id: overview
 slug: /concepts/overview
 title: 核心概念
-api: ["Emap","TopologySource","LayerSpecification"]
+api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 核心概念
+
+> 想了解代码和插件如何组织，请先看 [当前技术架构与源码组织](/concepts/architecture)。
+
 
 `@mapseekai/emap` 是浏览器中的 Canvas 地图与地理数据编辑库。应用创建一个 `Emap`，导入 `TopologySource`，再用渲染图层声明数据如何显示。数据、显示和交互分别由不同对象管理。
 
@@ -32,7 +35,7 @@ verifiedVersion: 0.9.1
 
 | 层级 | 负责什么 | 常用入口 |
 | --- | --- | --- |
-| `Emap` | 容器、相机、图层顺序、交互和地图状态 | `new Emap(...)` |
+| `Emap` | 容器、相机、图层顺序、交互和地图状态 | `await Emap.create(...)` |
 | source | 导入后的 dataset 及其 CRS、范围和拓扑 | `TopologySource` |
 | source layer | dataset 内的一组几何和属性 | `source-layer` |
 | render layer | 绘制类型、样式和显示顺序 | `map.addLayer(...)` |
@@ -44,7 +47,7 @@ verifiedVersion: 0.9.1
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
 
-const map = new Emap({ container: 'map' });
+const map = await Emap.create({ container: 'map' });
 const source = await TopologySource.fromUrl('main', '/data/roads.geojson');
 
 await map.addSource('main', source);

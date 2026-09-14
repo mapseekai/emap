@@ -65,97 +65,92 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    // 通过 Ctrl+Z 恢复被删除的要素
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const fileInput = document.getElementById('file-input');
-    const clearBtn = document.getElementById('clear-btn');
-    const deleteBtn = document.getElementById('delete-btn');
-    const status = document.getElementById('status');
-    const info = document.getElementById('info');
-    const mapContainer = map.getCanvasContainer();
-
-    let activeSource = null;
-    const SOURCE_ID = 'select-source';
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+// 通过 Ctrl+Z 恢复被删除的要素
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const fileInput = document.getElementById('file-input');
+const clearBtn = document.getElementById('clear-btn');
+const deleteBtn = document.getElementById('delete-btn');
+const status = document.getElementById('status');
+const info = document.getElementById('info');
+const mapContainer = map.getCanvasContainer();
+let activeSource = null;
+const SOURCE_ID = 'select-source';
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         activeSource = source;
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            status.textContent = `已加载 ${file.name}`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    // 选择变化时同步面板和高亮图层
-    map.on('selectionchange', (ev) => {
-      const refs = ev.selected;
-      info.textContent = refs.length
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+// 选择变化时同步面板和高亮图层
+map.on('selectionchange', (ev) => {
+    const refs = ev.selected;
+    info.textContent = refs.length
         ? `${refs.length} 个要素\n` + JSON.stringify(refs, null, 2)
         : '(无)';
-
-      if (refs.length === 0) {
+    if (refs.length === 0) {
         map.clearHighlightedFeatures();
-      } else {
+    }
+    else {
         map.setHighlightedFeatures(refs, { color: '#1e88e5', width: 3 });
-      }
-
-      clearBtn.disabled = refs.length === 0;
-      deleteBtn.disabled = refs.length === 0;
-
-      // 控制台显示 added / removed 增量
-      console.log('selectionchange', { added: ev.added, removed: ev.removed });
-    });
-
-    mapContainer.addEventListener('click', (e) => {
-      if (!activeSource) return;
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length) {
-        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+    }
+    clearBtn.disabled = refs.length === 0;
+    deleteBtn.disabled = refs.length === 0;
+    // 控制台显示 added / removed 增量
+    console.log('selectionchange', { added: ev.added, removed: ev.removed });
+});
+mapContainer.addEventListener('click', (e) => {
+    if (!activeSource)
         return;
-      }
-      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
-      map.select(features, { mode });
-    });
-
-    clearBtn.addEventListener('click', () => map.clearSelection());
-
-    deleteBtn.addEventListener('click', () => {
-      const count = map.getSelection().length;
-      const ok = map.deleteSelected();
-      if (ok) {
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const features = map.queryFeatures(point);
+    if (!features.length) {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey)
+            map.clearSelection();
+        return;
+    }
+    const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+    map.select(features, { mode });
+});
+clearBtn.addEventListener('click', () => map.clearSelection());
+deleteBtn.addEventListener('click', () => {
+    const count = map.getSelection().length;
+    const ok = map.deleteSelected();
+    if (ok) {
         status.textContent = `已删除 ${count} 个要素,Ctrl+Z 撤销。`;
-      }
-    });
-    await autoLoadExampleFixtures('feature-selection');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('feature-selection');
+</script>
 </body>
 
 </html>

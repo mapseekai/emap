@@ -44,249 +44,227 @@
       </div>
     </details>
     <script type="module">
-      import { installExampleMapUi } from '/src/example-runtime.ts';
-      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      import {
-        closeDuckDbRuntime,
-        createDuckDbRuntimeFromJsDelivr,
-        duckDbAttributeFilterLayer,
-        attributeFilter,
-
-        validateDuckDbSelectSql,
-      } from '@mapseekai/emap/duckdb';
-
-      const emap = await loadExampleRuntime();
-
-      const { Emap, TopologySource, NavigationControl } = emap;
-
-      const SOURCE_ID = "duckdb-query-input";
-      const OUTPUT_ID = "duckdb-query-output";
-
-      const map = new Emap({ container: "map" });
-      map.addControl(new NavigationControl(), "top-left");
-      installExampleMapUi(map, emap);
-
-      const fileInput = document.getElementById("file");
-      const targetSelect = document.getElementById("target");
-      const entrypointSelect = document.getElementById("entrypoint");
-      const outputLayerInput = document.getElementById("output-layer");
-      const sqlInput = document.getElementById("sql");
-      const runButton = document.getElementById("run");
-      const status = document.getElementById("status");
-
-      let inputDataset;
-      let runtimePromise;
-      const contextSources = new Map();
-
-      function getLayerId(layer, index) {
-        return String(layer?.name || layer?.id || `layer-${index}`);
-      }
-
-      function removeSourceWithLayers(id) {
-        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
-          map.removeLayer(layer.id);
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+import { closeDuckDbRuntime, createDuckDbRuntimeFromJsDelivr, duckDbAttributeFilterLayer, attributeFilter, validateDuckDbSelectSql, } from '@mapseekai/emap/duckdb';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const SOURCE_ID = "duckdb-query-input";
+const OUTPUT_ID = "duckdb-query-output";
+const map = await Emap.create({ container: "map" });
+await map.addControl(new NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById("file");
+const targetSelect = document.getElementById("target");
+const entrypointSelect = document.getElementById("entrypoint");
+const outputLayerInput = document.getElementById("output-layer");
+const sqlInput = document.getElementById("sql");
+const runButton = document.getElementById("run");
+const status = document.getElementById("status");
+let inputDataset;
+let runtimePromise;
+const contextSources = new Map();
+function getLayerId(layer, index) {
+    return String(layer?.name || layer?.id || `layer-${index}`);
+}
+function removeSourceWithLayers(id) {
+    for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+        map.removeLayer(layer.id);
+    }
+    if (map.getSource(id))
+        map.removeSource(id);
+}
+function addDisplayLayers(sourceId, source, prefix, colors) {
+    source.getLayers().forEach((layer, index) => {
+        const sourceLayer = getLayerId(layer, index);
+        const baseId = `${prefix}-${index}`;
+        if (layer?.geometry_type === "polygon") {
+            map.addLayer({
+                id: `${baseId}-fill`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "fill",
+                paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+            });
+            map.addLayer({
+                id: `${baseId}-line`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "line",
+                paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
         }
-        if (map.getSource(id)) map.removeSource(id);
-      }
-
-      function addDisplayLayers(sourceId, source, prefix, colors) {
-        source.getLayers().forEach((layer, index) => {
-          const sourceLayer = getLayerId(layer, index);
-          const baseId = `${prefix}-${index}`;
-          if (layer?.geometry_type === "polygon") {
+        else if (layer?.geometry_type === "polyline") {
             map.addLayer({
-              id: `${baseId}-fill`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "fill",
-              paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+                id: `${baseId}-line`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "line",
+                paint: { "line-color": colors.line, "line-width": colors.lineWidth },
             });
+        }
+        else if (layer?.geometry_type === "point") {
             map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "line",
-              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+                id: `${baseId}-point`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "circle",
+                paint: {
+                    "circle-color": colors.line,
+                    "circle-radius": colors.pointRadius,
+                    "circle-stroke-color": "#ffffff",
+                    "circle-stroke-width": 1,
+                },
             });
-          } else if (layer?.geometry_type === "polyline") {
-            map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "line",
-              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
-            });
-          } else if (layer?.geometry_type === "point") {
-            map.addLayer({
-              id: `${baseId}-point`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "circle",
-              paint: {
-                "circle-color": colors.line,
-                "circle-radius": colors.pointRadius,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1,
-              },
-            });
-          }
-        });
-      }
-
-      async function addDatasetSource(id, dataset, prefix, colors) {
-        const source = new TopologySource(id);
-        removeSourceWithLayers(id);
-        await source.replaceDataset(dataset);
-        await map.addSource(id, source);
-        addDisplayLayers(id, source, prefix, colors);
-        return source;
-      }
-
-      function populateTargetLayers(source) {
-        targetSelect.innerHTML = "";
-        source.getLayers().forEach((layer, index) => {
-          targetSelect.appendChild(
-            new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? "?"})`, String(index)),
-          );
-        });
-        const enabled = targetSelect.options.length > 0;
-        targetSelect.disabled = !enabled;
-        runButton.disabled = !enabled;
-      }
-
-      function selectedLayerIndex() {
-        return Number(targetSelect.value);
-      }
-
-      function selectedLayer() {
-        return inputDataset?.layers?.[selectedLayerIndex()];
-      }
-
-      function selectedLayerFields() {
-        const layer = selectedLayer();
-        if (!layer?.data) return [];
-        return layer.data.getFields?.() ?? Object.keys(layer.data.getRecordAt?.(0) ?? {});
-      }
-
-      function validateSql() {
-        validateDuckDbSelectSql(sqlInput.value, {
-          availableColumns: selectedLayerFields(),
-          physicalTableName: "input_preview",
-          rowIdColumn: "__emap_rowid",
-        });
-      }
-
-      async function getRuntime() {
-        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-
-          return runtime;
-        });
-        return runtimePromise;
-      }
-
-      const inputMapOpSource = { getDataset: () => inputDataset };
-      const mapOpContext = {
-        getSource(id) {
-          if (id === SOURCE_ID) return inputDataset ? inputMapOpSource : undefined;
-          return contextSources.get(id);
-        },
-        setSourceDataset(id, dataset) {
-          contextSources.set(id, { getDataset: () => dataset });
-        },
-      };
-
-      fileInput.addEventListener("change", async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        runButton.disabled = true;
-        status.textContent = `正在加载 ${file.name}...`;
-        try {
-          const source = new TopologySource(SOURCE_ID);
-          const content = new Uint8Array(await file.arrayBuffer());
-          removeSourceWithLayers(OUTPUT_ID);
-          removeSourceWithLayers(SOURCE_ID);
-          await source.setData({ filename: file.name, content });
-          inputDataset = source.getDataset();
-          if (!inputDataset) throw new Error("文件未生成可用 dataset");
-          await map.addSource(SOURCE_ID, source);
-          addDisplayLayers(SOURCE_ID, source, "duckdb-query-input", {
+        }
+    });
+}
+async function addDatasetSource(id, dataset, prefix, colors) {
+    const source = new TopologySource(id);
+    removeSourceWithLayers(id);
+    await source.replaceDataset(dataset);
+    await map.addSource(id, source);
+    addDisplayLayers(id, source, prefix, colors);
+    return source;
+}
+function populateTargetLayers(source) {
+    targetSelect.innerHTML = "";
+    source.getLayers().forEach((layer, index) => {
+        targetSelect.appendChild(new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? "?"})`, String(index)));
+    });
+    const enabled = targetSelect.options.length > 0;
+    targetSelect.disabled = !enabled;
+    runButton.disabled = !enabled;
+}
+function selectedLayerIndex() {
+    return Number(targetSelect.value);
+}
+function selectedLayer() {
+    return inputDataset?.layers?.[selectedLayerIndex()];
+}
+function selectedLayerFields() {
+    const layer = selectedLayer();
+    if (!layer?.data)
+        return [];
+    return layer.data.getFields?.() ?? Object.keys(layer.data.getRecordAt?.(0) ?? {});
+}
+function validateSql() {
+    validateDuckDbSelectSql(sqlInput.value, {
+        availableColumns: selectedLayerFields(),
+        physicalTableName: "input_preview",
+        rowIdColumn: "__emap_rowid",
+    });
+}
+async function getRuntime() {
+    runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        return runtime;
+    });
+    return runtimePromise;
+}
+const inputMapOpSource = { getDataset: () => inputDataset };
+const mapOpContext = {
+    getSource(id) {
+        if (id === SOURCE_ID)
+            return inputDataset ? inputMapOpSource : undefined;
+        return contextSources.get(id);
+    },
+    setSourceDataset(id, dataset) {
+        contextSources.set(id, { getDataset: () => dataset });
+    },
+};
+fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file)
+        return;
+    runButton.disabled = true;
+    status.textContent = `正在加载 ${file.name}...`;
+    try {
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(OUTPUT_ID);
+        removeSourceWithLayers(SOURCE_ID);
+        await source.setData({ filename: file.name, content });
+        inputDataset = source.getDataset();
+        if (!inputDataset)
+            throw new Error("文件未生成可用 dataset");
+        await map.addSource(SOURCE_ID, source);
+        addDisplayLayers(SOURCE_ID, source, "duckdb-query-input", {
             fill: "#dbeafe",
             fillOpacity: 0.48,
             line: "#1d4ed8",
             lineWidth: 1.5,
             pointRadius: 4,
-          });
-          populateTargetLayers(source);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}，选择图层并运行受限 SELECT。`;
-        } catch (err) {
-          console.error(err);
-          inputDataset = undefined;
-          targetSelect.innerHTML = "";
-          targetSelect.disabled = true;
-          status.textContent = `加载失败: ${err?.message ?? err}`;
-        } finally {
-          runButton.disabled = !inputDataset || targetSelect.options.length === 0;
-        }
-      });
-
-      runButton.addEventListener("click", async () => {
-        if (!inputDataset) {
-          status.textContent = "请先上传数据文件。";
-          return;
-        }
-        runButton.disabled = true;
-        status.textContent = "DuckDB-Wasm 正在运行 SELECT...";
-        try {
-          validateSql();
-          const runtime = await getRuntime();
-          const opts = {
+        });
+        populateTargetLayers(source);
+        map.setExtent(source.getExtent());
+        status.textContent = `已加载 ${file.name}，选择图层并运行受限 SELECT。`;
+    }
+    catch (err) {
+        console.error(err);
+        inputDataset = undefined;
+        targetSelect.innerHTML = "";
+        targetSelect.disabled = true;
+        status.textContent = `加载失败: ${err?.message ?? err}`;
+    }
+    finally {
+        runButton.disabled = !inputDataset || targetSelect.options.length === 0;
+    }
+});
+runButton.addEventListener("click", async () => {
+    if (!inputDataset) {
+        status.textContent = "请先上传数据文件。";
+        return;
+    }
+    runButton.disabled = true;
+    status.textContent = "DuckDB-Wasm 正在运行 SELECT...";
+    try {
+        validateSql();
+        const runtime = await getRuntime();
+        const opts = {
             inputLayer: selectedLayerIndex(),
             sql: sqlInput.value,
             outputLayer: outputLayerInput.value.trim() || "duckdb_query_result",
-          };
-          let resultDataset;
-          if (entrypointSelect.value === "mapop") {
+        };
+        let resultDataset;
+        if (entrypointSelect.value === "mapop") {
             const result = await duckDbAttributeFilterLayer(mapOpContext, {
-              src: SOURCE_ID,
-              ...opts,
-              output: { sourceId: OUTPUT_ID },
-              runtime,
+                src: SOURCE_ID,
+                ...opts,
+                output: { sourceId: OUTPUT_ID },
+                runtime,
             });
-            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            if (!result.ok)
+                throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
-          } else {
+        }
+        else {
             resultDataset = await attributeFilter(inputDataset, opts, runtime);
-          }
-          const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
+        }
+        const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
             fill: "#fef3c7",
             fillOpacity: 0.56,
             line: "#b45309",
             lineWidth: 2.25,
             pointRadius: 5,
-          });
-          map.setExtent(outputSource.getExtent());
-          const count = resultDataset.layers.reduce(
-            (total, layer) => total + (layer?.shapes?.length ?? 0),
-            0,
-          );
-          status.textContent = `查询完成，输出 ${resultDataset.layers.length} 个图层，${count} 个要素。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `查询失败: ${err?.message ?? err}`;
-        } finally {
-          runButton.disabled = !inputDataset || targetSelect.options.length === 0;
-        }
-      });
-
-      window.addEventListener("resize", () => map.resize());
-      window.addEventListener("pagehide", () => {
-        void (
-          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
-        );
-      });
-      await autoLoadExampleFixtures('duckdb-query');
-    </script>
+        });
+        map.setExtent(outputSource.getExtent());
+        const count = resultDataset.layers.reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
+        status.textContent = `查询完成，输出 ${resultDataset.layers.length} 个图层，${count} 个要素。`;
+    }
+    catch (err) {
+        console.error(err);
+        status.textContent = `查询失败: ${err?.message ?? err}`;
+    }
+    finally {
+        runButton.disabled = !inputDataset || targetSelect.options.length === 0;
+    }
+});
+window.addEventListener("resize", () => map.resize());
+window.addEventListener("pagehide", () => {
+    void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+});
+await autoLoadExampleFixtures('duckdb-query');
+</script>
   </body>
 </html>

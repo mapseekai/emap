@@ -30,11 +30,11 @@
       "import": "./dist/emap.mjs"
     },
     "./arrow": {
-      "types": "./dist/arrow/index.d.ts",
+      "types": "./dist/integrations/arrow/index.d.ts",
       "import": "./dist/emap-arrow.mjs"
     },
     "./duckdb": {
-      "types": "./dist/duckdb/index.d.ts",
+      "types": "./dist/integrations/duckdb/index.d.ts",
       "import": "./dist/emap-duckdb.mjs",
       "default": "./dist/emap-duckdb.mjs"
     },
@@ -49,38 +49,38 @@
     "./dist/emap-arrow.js": "./dist/emap-arrow.js",
     "./dist/emap-arrow.mjs": "./dist/emap-arrow.mjs",
     "./package.json": "./package.json",
-    "./kernel": {
-      "types": "./dist/kernel/index.d.ts",
-      "import": "./dist/emap-kernel.mjs"
+    "./context": {
+      "types": "./dist/runtime/context/index.d.ts",
+      "import": "./dist/emap-context.mjs"
     },
     "./services": {
-      "types": "./dist/services/index.d.ts",
+      "types": "./dist/runtime/services/index.d.ts",
       "import": "./dist/emap-services.mjs"
     },
     "./providers": {
-      "types": "./dist/providers/index.d.ts",
+      "types": "./dist/runtime/providers/index.d.ts",
       "import": "./dist/emap-providers.mjs"
     },
     "./plugins": {
-      "types": "./dist/plugins/index.d.ts",
+      "types": "./dist/runtime/plugins/index.d.ts",
       "import": "./dist/emap-plugins.mjs"
     },
     "./presets": {
-      "types": "./dist/presets/index.d.ts",
+      "types": "./dist/runtime/presets/index.d.ts",
       "import": "./dist/emap-presets.mjs"
     },
     "./ai": {
-      "types": "./dist/ai/index.d.ts",
+      "types": "./dist/runtime/ai/index.d.ts",
       "import": "./dist/emap-ai.mjs"
     },
     "./maplibre": {
-      "types": "./dist/providers/maplibre/index.d.ts",
+      "types": "./dist/integrations/maplibre/index.d.ts",
       "import": "./dist/emap-maplibre.mjs"
     }
   },
   "sideEffects": [
     "*.css",
-    "./src/shim.ts",
+    "./src/integrations/mapshaper/browser-shim.ts",
     "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs",
     "./dist/emap-arrow.js"
@@ -113,14 +113,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:bundle": "vitest run src/build/bundle-self-contained.test.ts src/build/package-exports.test.ts",
+    "test:bundle": "vitest run test/build/bundle-self-contained.test.ts test/build/package-exports.test.ts",
     "bundle:smoke": "node scripts/check-bundle-smoke.mjs",
     "test:rendering": "pnpm run build && node scripts/check-audit-rendering.mjs",
     "browser:install": "playwright install --with-deps chrome firefox webkit",
     "test:browser": "pnpm run examples:build && playwright test",
     "test:browser:chrome": "pnpm run examples:build && playwright test --project=chrome",
     "browser:check": "playwright test && node scripts/check-audit-rendering.mjs --all-browsers",
-    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb",
+    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/integrations/duckdb test/integration/duckdb",
     "audit:prod": "node scripts/audit-production-dependencies.mjs",
     "security:audit": "pnpm run audit:prod",
     "api:check-surface": "node scripts/check-public-api-surface.mjs",
@@ -136,12 +136,15 @@
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",
     "docs:check-api": "node scripts/check-docs-api.mjs",
     "examples:check": "node scripts/check-examples.mjs",
-    "docs:verify": "npm run typecheck && npm run api:check-surface && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
-    "release:verify": "npm run format:check && npm run typecheck && npm run api:check-surface && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check && npm run browser:check && pnpm pack --dry-run && npm run audit:prod",
+    "docs:verify": "npm run typecheck && npm run typecheck:contracts && npm run typecheck:examples && npm run test-layout:check && npm run api:check-surface && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
+    "release:verify": "npm run format:check && npm run typecheck && npm run typecheck:contracts && npm run typecheck:examples && npm run test-layout:check && npm run api:check-surface && npm run architecture:check && npm run capabilities:check && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check && npm run browser:check && pnpm pack --dry-run && npm run audit:prod",
     "prepublishOnly": "npm run release:verify",
     "capabilities:generate": "node scripts/generate-capability-schemas.mjs",
     "capabilities:check": "node scripts/generate-capability-schemas.mjs --check",
-    "architecture:check": "node scripts/check-plugin-architecture.mjs"
+    "architecture:check": "node scripts/check-plugin-architecture.mjs",
+    "typecheck:contracts": "tsc -p tsconfig.type-tests.json --noEmit",
+    "test-layout:check": "node scripts/check-test-layout.mjs",
+    "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit"
   },
   "keywords": [
     "mapshaper",
@@ -176,6 +179,7 @@
     "apache-arrow": "^17.0.0",
     "esbuild": "^0.25.12",
     "jsdom": "^29.1.0",
+    "maplibre-gl": "^6.4.1",
     "parquet-wasm": "^0.7.1",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
@@ -183,11 +187,11 @@
     "typedoc": "^0.28.0",
     "typescript": "^5.0.0",
     "vite": "^7.3.6",
-    "vitest": "^4.1.9",
-    "maplibre-gl": "^6.4.1"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@tmcw/togeojson": "^5.8.1",
+    "cordis": "4.0.0-rc.10",
     "fflate": "^0.8.3",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
@@ -198,8 +202,8 @@
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
     "apache-arrow": "^17.0.0",
-    "parquet-wasm": "^0.7.1",
-    "maplibre-gl": "^6.4.1"
+    "maplibre-gl": "^6.4.1",
+    "parquet-wasm": "^0.7.1"
   },
   "peerDependenciesMeta": {
     "@duckdb/duckdb-wasm": {

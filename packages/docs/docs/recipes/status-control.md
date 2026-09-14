@@ -5,7 +5,7 @@ title: 状态控件
 api: ["Emap", "StatusControl", "StatusOptions"]
 examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 状态控件
@@ -15,7 +15,7 @@ verifiedVersion: 0.9.1
 ## 添加状态控件
 
 ```ts
-map.addControl(
+await map.addControl(
   new StatusControl({
     showMousePos: true,
     showEPSG: true,

@@ -33,71 +33,71 @@
     </div>
   </details>
   <script type="module">
-    import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    map.addControl(new HistoryControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'point-style-source';
-    const LAYER_ID = 'point-style';
-    const COLORS = ['#fee5d9', '#fcae91', '#fb6a4a', '#de2d26', '#a50f15'];
-    const NULL_COLOR = '#eeeeee';
-    const fileInput = document.getElementById('file-input');
-    const fieldSelect = document.getElementById('field');
-    const applyButton = document.getElementById('apply');
-    const status = document.getElementById('status');
-    let target = '';
-
-    function currentLayer() {
-      const source = map.getSource(SOURCE_ID);
-      return source?.getLayers().find((layer, i) => (layer?.name || layer?.id || `layer-${i}`) === target) ?? null;
-    }
-
-    function addStyledLayer(expression = null, shape = null) {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      const layer = { id: LAYER_ID, type: 'circle', source: SOURCE_ID, 'source-layer': target };
-      if (expression) {
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await map.addControl(new HistoryControl(), 'top-left');
+await installExampleMapUi(map, emap);
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'point-style-source';
+const LAYER_ID = 'point-style';
+const COLORS = ['#fee5d9', '#fcae91', '#fb6a4a', '#de2d26', '#a50f15'];
+const NULL_COLOR = '#eeeeee';
+const fileInput = document.getElementById('file-input');
+const fieldSelect = document.getElementById('field');
+const applyButton = document.getElementById('apply');
+const status = document.getElementById('status');
+let target = '';
+function currentLayer() {
+    const source = map.getSource(SOURCE_ID);
+    return source?.getLayers().find((layer, i) => (layer?.name || layer?.id || `layer-${i}`) === target) ?? null;
+}
+function addStyledLayer(expression = null, shape = null) {
+    if (map.getLayer(LAYER_ID))
+        map.removeLayer(LAYER_ID);
+    const layer = { id: LAYER_ID, type: 'circle', source: SOURCE_ID, 'source-layer': target };
+    if (expression) {
         layer.paint = { 'circle-color': expression, 'circle-radius': 9 };
-        if (shape) layer.paint['circle-shape'] = shape;
-      } else {
+        if (shape)
+            layer.paint['circle-shape'] = shape;
+    }
+    else {
         layer.styleSource = 'mapshaper';
         layer.paint = { 'circle-radius': 9 };
-      }
-      map.addLayer(layer);
     }
-
-    function buildShapeExpression(field) {
-      const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return ['match', ['get', 'group'], 'a', 'circle', 'b', 'star', 'square'];
-      return ['step', ['get', field], 'circle', min + (max - min) / 3, 'star', min + ((max - min) * 2) / 3, 'square'];
-    }
-
-    function buildExpression(field) {
-      const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return ['match', ['get', 'group'], 'a', '#e41a1c', 'b', '#377eb8', '#4daf4a'];
-      return ['interpolate', 'linear', ['get', field], min, COLORS[0], max, COLORS[COLORS.length - 1]];
-    }
-
-    async function applyStyle() {
-      const field = fieldSelect.value;
-      if (!target || !field) return;
-      const mode = document.querySelector('input[name="mode"]:checked').value;
-      if (mode === 'expression' || mode === 'shape') {
+    map.addLayer(layer);
+}
+function buildShapeExpression(field) {
+    const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max)
+        return ['match', ['get', 'group'], 'a', 'circle', 'b', 'star', 'square'];
+    return ['step', ['get', field], 'circle', min + (max - min) / 3, 'star', min + ((max - min) * 2) / 3, 'square'];
+}
+function buildExpression(field) {
+    const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max)
+        return ['match', ['get', 'group'], 'a', '#e41a1c', 'b', '#377eb8', '#4daf4a'];
+    return ['interpolate', 'linear', ['get', field], min, COLORS[0], max, COLORS[COLORS.length - 1]];
+}
+async function applyStyle() {
+    const field = fieldSelect.value;
+    if (!target || !field)
+        return;
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    if (mode === 'expression' || mode === 'shape') {
         const shape = mode === 'shape' ? buildShapeExpression(field) : null;
         addStyledLayer(buildExpression(field), shape);
         status.textContent = `已应用 circle-color 属性表达式：${field}${shape ? `，circle-shape 分档：${field}` : ''}`;
         return;
-      }
-      const result = await map.ops.classifyFeatures({
+    }
+    const result = await map.ops.classifyFeatures({
         source: SOURCE_ID,
         target,
         field,
@@ -106,54 +106,55 @@
         colors: COLORS,
         nullValue: NULL_COLOR,
         saveAs: 'fill',
-      });
-      if (!result.ok) {
+    });
+    if (!result.ok) {
         status.textContent = `分级失败：${result.error?.message ?? '未知错误'}`;
         return;
-      }
-      addStyledLayer();
-      status.textContent = `已按 ${field} 烘焙 fill，共 ${result.value.featureCount} 个点。Ctrl+Z 可撤销。`;
     }
-
-    function populate(source) {
-      const pointLayers = source.getLayers().filter((layer) => layer?.geometry_type === 'point');
-      const layer = pointLayers[0];
-      if (!layer) {
+    addStyledLayer();
+    status.textContent = `已按 ${field} 烘焙 fill，共 ${result.value.featureCount} 个点。Ctrl+Z 可撤销。`;
+}
+async function populate(source) {
+    const pointLayers = source.getLayers().filter((layer) => layer?.geometry_type === 'point');
+    const layer = pointLayers[0];
+    if (!layer) {
         status.textContent = '此文件没有 point 图层';
         applyButton.disabled = true;
         return;
-      }
-      target = layer.name || layer.id || 'layer-0';
-      const records = layer.data?.getRecords?.() ?? [];
-      fieldSelect.innerHTML = '';
-      Object.keys(records[0] || {}).forEach((field) => fieldSelect.appendChild(new Option(field, field)));
-      fieldSelect.value = Object.hasOwn(records[0] || {}, 'value') ? 'value' : fieldSelect.value;
-      applyButton.disabled = false;
-      applyStyle();
     }
-
-    fileInput.addEventListener('change', (event) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async (loadEvent) => {
+    target = layer.name || layer.id || 'layer-0';
+    const records = layer.data?.getRecords?.() ?? [];
+    fieldSelect.innerHTML = '';
+    Object.keys(records[0] || {}).forEach((field) => fieldSelect.appendChild(new Option(field, field)));
+    fieldSelect.value = Object.hasOwn(records[0] || {}, 'value') ? 'value' : fieldSelect.value;
+    applyButton.disabled = false;
+    await applyStyle();
+}
+fileInput.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file)
+        return;
+    const reader = new FileReader();
+    reader.onload = async (loadEvent) => {
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         try {
-          await source.setData({ filename: file.name, content: new Uint8Array(loadEvent.target.result) });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-        } catch (error) {
-          status.textContent = `错误：${error?.message ?? error}`;
+            await source.setData({ filename: file.name, content: new Uint8Array(loadEvent.target.result) });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            await populate(source);
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-    applyButton.addEventListener('click', applyStyle);
-    document.querySelectorAll('input[name="mode"]').forEach((radio) => radio.addEventListener('change', applyStyle));
-    fieldSelect.addEventListener('change', applyStyle);
-    await autoLoadExampleFixtures('attribute-styling-point');
-  </script>
+        catch (error) {
+            status.textContent = `错误：${error?.message ?? error}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+applyButton.addEventListener('click', applyStyle);
+document.querySelectorAll('input[name="mode"]').forEach((radio) => radio.addEventListener('change', applyStyle));
+fieldSelect.addEventListener('change', applyStyle);
+await autoLoadExampleFixtures('attribute-styling-point');
+</script>
 </body>
 </html>

@@ -9,8 +9,8 @@
 //   new SimplifyControl({ source: 's1' })                  // simplify whole source
 //   new SimplifyControl({ source: 's1', target: 'parks' }) // simplify single layer
 
-import type { SimplifyMethod } from '../map/types';
-import type { ControlContext } from '../services/controls';
+import type { SimplifyMethod } from '../engine/map/types';
+import type { ControlContext } from '../runtime/services/controls';
 import { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 

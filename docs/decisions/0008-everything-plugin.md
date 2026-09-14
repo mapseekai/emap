@@ -1,3 +1,5 @@
+> Superseded at the kernel level by [ADR 0009](0009-native-cordis.md). This document records the historical custom-runtime design, not the current API.
+
 # ADR 0008: 全量插件化与五层运行时
 
 - 状态：实施中

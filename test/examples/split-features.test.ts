@@ -2,12 +2,10 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { FeatureRef } from '../../src/map/types';
-
+import type { FeatureRef } from '../../src/engine/map/types';
 interface SelectionEvent {
   selected: FeatureRef[];
 }
-
 async function executeSplitFeaturesExample() {
   const html = await readFile(
     resolve('packages/examples/examples/split-features/index.html'),
@@ -24,11 +22,15 @@ async function executeSplitFeaturesExample() {
   const originalBody = document.body.innerHTML;
   document.head.innerHTML = parsed.head.innerHTML;
   document.body.innerHTML = parsed.body.innerHTML;
-
   let selection: FeatureRef[] = [];
   const selectionListeners: Array<(event: SelectionEvent) => void> = [];
   const errorListeners: Array<(event: { error: Error }) => void> = [];
-  const sources = new Map<string, { getLayers: () => unknown[] }>();
+  const sources = new Map<
+    string,
+    {
+      getLayers: () => unknown[];
+    }
+  >();
   const splitFeature = {
     setOptions: vi.fn(),
     enable: vi.fn(),
@@ -42,10 +44,17 @@ async function executeSplitFeaturesExample() {
     },
     addControl: vi.fn(),
     addLayer: vi.fn(),
-    addSource: vi.fn(async (id: string, source: { getLayers: () => unknown[] }) => {
-      if (sources.has(id)) throw new Error(`duplicate source ${id}`);
-      sources.set(id, source);
-    }),
+    addSource: vi.fn(
+      async (
+        id: string,
+        source: {
+          getLayers: () => unknown[];
+        },
+      ) => {
+        if (sources.has(id)) throw new Error(`duplicate source ${id}`);
+        sources.set(id, source);
+      },
+    ),
     bindHistoryShortcuts: vi.fn(),
     clearHighlightedFeatures: vi.fn(),
     clearSelection: vi.fn(),
@@ -83,7 +92,16 @@ async function executeSplitFeaturesExample() {
     select: vi.fn(),
     setExtent: vi.fn(),
     setHighlightedFeatures: vi.fn(),
-    on: (type: string, listener: (event: SelectionEvent | { error: Error }) => void) => {
+    on: (
+      type: string,
+      listener: (
+        event:
+          | SelectionEvent
+          | {
+              error: Error;
+            },
+      ) => void,
+    ) => {
       if (type === 'selectionchange')
         selectionListeners.push(listener as (event: SelectionEvent) => void);
       if (type === 'error') errorListeners.push(listener as (event: { error: Error }) => void);
@@ -91,6 +109,9 @@ async function executeSplitFeaturesExample() {
   };
   const runtime = {
     Emap: class {
+      static async create(...args: any[]) {
+        return new this(...args);
+      }
       constructor() {
         return map;
       }
@@ -111,7 +132,6 @@ async function executeSplitFeaturesExample() {
   const installExampleMapUi = vi.fn();
   const autoLoadExampleFixtures = vi.fn(async () => {});
   const loadExampleRuntime = vi.fn(async () => runtime);
-
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
@@ -135,18 +155,30 @@ async function executeSplitFeaturesExample() {
     document.body.innerHTML = originalBody;
     throw error;
   }
-
   return {
     map,
     splitFeature,
-    emitError(error: Error | { kind: string; reason?: string; message?: string }) {
+    emitError(
+      error:
+        | Error
+        | {
+            kind: string;
+            reason?: string;
+            message?: string;
+          },
+    ) {
       for (const listener of errorListeners) listener({ error: error as Error });
     },
     emitSelection(next: FeatureRef[]) {
       selection = next;
       for (const listener of selectionListeners) listener({ selected: next });
     },
-    async replaceFiles(files: Array<{ name: string; arrayBuffer: () => Promise<ArrayBuffer> }>) {
+    async replaceFiles(
+      files: Array<{
+        name: string;
+        arrayBuffer: () => Promise<ArrayBuffer>;
+      }>,
+    ) {
       const input = document.querySelector<HTMLInputElement>('#file-input')!;
       const previouslyAdded = map.addSource.mock.calls.length;
       Object.defineProperty(input, 'files', { configurable: true, value: files });
@@ -161,15 +193,12 @@ async function executeSplitFeaturesExample() {
     },
   };
 }
-
 function ref(id: number, layer: string, source = 'source'): FeatureRef {
   return { source, layer, id };
 }
-
 function fixtureFile(name: string) {
   return { arrayBuffer: async () => new ArrayBuffer(0), name };
 }
-
 describe('split-features example', () => {
   it('uses source layer metadata for handler gating and surfaces errors', async () => {
     const result = await executeSplitFeaturesExample();
@@ -180,36 +209,30 @@ describe('split-features example', () => {
       const clearButton = document.querySelector<HTMLButtonElement>('#clear-selection')!;
       const cancelButton = document.querySelector<HTMLButtonElement>('#cancel-split')!;
       const status = document.querySelector<HTMLElement>('#status')!;
-
       expect(enableButton.disabled).toBe(true);
       expect(result.map.clickSelect.enable).toHaveBeenCalledTimes(1);
       pointButton.click();
       expect(result.splitFeature.setOptions).toHaveBeenLastCalledWith({ cutterType: 'point' });
       lineButton.click();
       expect(result.splitFeature.setOptions).toHaveBeenLastCalledWith({ cutterType: 'polyline' });
-
       result.emitSelection([ref(4, 'roads')]);
       expect(enableButton.disabled).toBe(false);
       enableButton.click();
       expect(result.splitFeature.enable).toHaveBeenCalledTimes(1);
-
       clearButton.click();
       expect(result.map.clearSelection).toHaveBeenCalledTimes(1);
       expect(result.splitFeature.disable).toHaveBeenCalledTimes(1);
       cancelButton.click();
       expect(result.splitFeature.disable).toHaveBeenCalledTimes(2);
-
       result.emitSelection([ref(5, 'parcels')]);
       expect(pointButton.disabled).toBe(true);
       expect(lineButton.disabled).toBe(false);
       expect(enableButton.disabled).toBe(false);
-
       result.emitSelection([ref(6, 'layer-3')]);
       expect(enableButton.disabled).toBe(false);
       result.emitSelection([ref(4, 'roads'), ref(5, 'parcels')]);
       expect(enableButton.disabled).toBe(true);
       expect(status.textContent).toContain('同一数据源、同一图层');
-
       result.emitSelection([ref(6, 'roads'), ref(7, 'roads')]);
       expect(status.textContent).toContain('已选中 2 个拆分结果');
       result.emitError(new Error('split failed'));
@@ -218,7 +241,6 @@ describe('split-features example', () => {
       expect(status.textContent).toContain('Point cutter is not on a selected path');
       expect(status.textContent).not.toContain('[object Object]');
       expect(result.map.clearHighlightedFeatures).toHaveBeenCalled();
-
       result.splitFeature.enable.mockImplementationOnce(() => {
         throw new Error('cannot start');
       });
@@ -230,7 +252,6 @@ describe('split-features example', () => {
       result.dispose();
     }
   });
-
   it('replaces owned fixture sources before loading another file selection', async () => {
     const result = await executeSplitFeaturesExample();
     try {

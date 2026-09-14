@@ -1,0 +1,19 @@
+.runtime-panel { width: min(650px, calc(100vw - 80px)) !important; }
+.runtime-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.runtime-metrics > div { padding: 10px; border: 1px solid var(--emap-example-border); background: var(--emap-example-muted); }
+.runtime-metrics strong { display: block; font-size: 20px; }
+.runtime-metrics span { font-size: 10px; color: var(--emap-example-muted-foreground); }
+.runtime-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.runtime-card { min-width: 0; padding: 10px; border: 1px solid var(--emap-example-border); }
+.runtime-card label { display: block; margin: 9px 0 5px; font-size: 11px; color: var(--emap-example-muted-foreground); }
+.runtime-list { max-height: 260px; overflow: auto; margin-top: 8px; }
+.runtime-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; padding: 7px 6px !important; text-align: left; }
+.runtime-row[data-selected="true"] { background: var(--emap-example-selection); }
+.runtime-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-row span { font-size: 10px; color: var(--emap-example-muted-foreground); }
+.runtime-card pre, #selected-id { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
+.runtime-card pre { max-height: 170px; overflow: auto; }
+.runtime-presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.runtime-presets > div { padding: 8px; background: var(--emap-example-muted); font-size: 11px; }
+#runtime-proof[data-state="ready"] { border-left-color: var(--emap-example-primary); }
+@media (max-width: 700px) { .runtime-grid { grid-template-columns: 1fr; } }

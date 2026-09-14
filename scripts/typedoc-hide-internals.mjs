@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { Comment, CommentTag, Converter, ReflectionKind } from 'typedoc';
 
 const DOCS_ROOT = 'packages/docs/docs';
-const INTERNAL_MAP_HOST_SOURCE = 'src/map/map.ts';
+const INTERNAL_MAP_HOST_SOURCE = 'src/engine/map/map.ts';
 const INTERNAL_HOST_MEMBER = /\b_[A-Za-z][A-Za-z0-9]*\b/g;
 
 function textPart(text) {

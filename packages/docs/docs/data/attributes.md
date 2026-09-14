@@ -2,10 +2,10 @@
 id: attributes
 slug: /data/attributes
 title: 属性
-api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions","CreateLayerOptions","LayerFieldDefinition"]
+api: ["Emap", "Feature", "ApplyExpressionOptions", "JoinTableOptions", "CreateLayerOptions", "LayerFieldDefinition"]
 examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 属性
@@ -149,7 +149,7 @@ map.attributes.removeField({
 `map.ops` 的表达式、`where` 和 `calc` 选项遵守 `expressionPolicy`。默认值为 `'disabled'`；只对由应用控制的表达式设置 `'trusted'`。
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   expressionPolicy: 'trusted',
 });

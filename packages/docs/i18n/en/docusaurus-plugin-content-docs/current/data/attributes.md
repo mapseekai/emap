@@ -2,10 +2,10 @@
 id: attributes
 slug: /data/attributes
 title: Attributes
-api: ["Emap","Feature","ApplyExpressionOptions","JoinTableOptions","CreateLayerOptions","LayerFieldDefinition"]
+api: ["Emap", "Feature", "ApplyExpressionOptions", "JoinTableOptions", "CreateLayerOptions", "LayerFieldDefinition"]
 examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Attributes
@@ -150,7 +150,7 @@ map.attributes.removeField({
 Expression, `where`, and `calc` options on `map.ops` obey `expressionPolicy`. Its default is `'disabled'`; set `'trusted'` only for expressions controlled by the application.
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: 'map',
   expressionPolicy: 'trusted',
 });

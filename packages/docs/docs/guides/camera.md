@@ -2,10 +2,10 @@
 id: camera
 slug: /guides/camera
 title: 相机
-api: ["Emap","Bounds","Viewport","CameraOptions","AnimationOptions","FlyToOptions","FitBoundsOptions"]
+api: ["Emap", "Bounds", "Viewport", "CameraOptions", "AnimationOptions", "FlyToOptions", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer","crs-switch"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 相机

@@ -9,11 +9,11 @@ import { chromium } from '@playwright/test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const bundle = await build({
   stdin: { contents: [
-    "export { CanvasPainter } from './src/renderer/canvas-painter';",
-    "export { Viewport } from './src/geo/viewport';",
-    "export { renderLayers } from './src/map/layer-renderer';",
-    "export { FilterResolver } from './src/map/filter-resolver';",
-    "export { StyleResolver } from './src/map/style-resolver';",
+    "export { CanvasPainter } from './src/engine/rendering/canvas-painter';",
+    "export { Viewport } from './src/domain/geo/viewport';",
+    "export { renderLayers } from './src/engine/map/layer-renderer';",
+    "export { FilterResolver } from './src/engine/map/filter-resolver';",
+    "export { StyleResolver } from './src/engine/map/style-resolver';",
   ].join('\n'), resolveDir: root, loader: 'ts' },
   bundle: true, platform: 'browser', format: 'iife', globalName: 'PointLodTest',
   write: false, logLevel: 'silent',

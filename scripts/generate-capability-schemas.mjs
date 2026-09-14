@@ -51,7 +51,7 @@ function schema(type, seen = new Set()) {
 }
 
 const catalogs = {};
-for (const [file, name] of [['src/map/mapshaper-ops.ts', 'MapshaperOps'], ['src/map/attribute-ops.ts', 'AttributeOps'], ['src/map/edit-sessions.ts', 'EditSessions'], ['src/providers/workspace/layers.ts', 'LayerServiceImpl'], ['src/providers/workspace/source.ts', 'SourceServiceImpl'], ['src/providers/workspace/projection.ts', 'ProjectionServiceImpl'], ['src/providers/workspace/view.ts', 'ViewServiceImpl'], ['src/providers/workspace/selection.ts', 'SelectionServiceImpl'], ['src/providers/workspace/history.ts', 'HistoryServiceImpl'], ['src/providers/workspace/query.ts', 'QueryServiceImpl']]) {
+for (const [file, name] of [['src/engine/map/mapshaper-ops.ts', 'MapshaperOps'], ['src/engine/map/attribute-ops.ts', 'AttributeOps'], ['src/engine/map/edit-sessions.ts', 'EditSessions'], ['src/engine/providers/workspace/layers.ts', 'LayerServiceImpl'], ['src/engine/providers/workspace/source.ts', 'SourceServiceImpl'], ['src/engine/providers/workspace/projection.ts', 'ProjectionServiceImpl'], ['src/engine/providers/workspace/view.ts', 'ViewServiceImpl'], ['src/engine/providers/workspace/selection.ts', 'SelectionServiceImpl'], ['src/engine/providers/workspace/history.ts', 'HistoryServiceImpl'], ['src/engine/providers/workspace/query.ts', 'QueryServiceImpl']]) {
   const source = program.getSourceFile(file);
   const cls = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === name);
   const catalog = {};
@@ -75,7 +75,7 @@ for (const [file, name] of [['src/map/mapshaper-ops.ts', 'MapshaperOps'], ['src/
   }
   catalogs[name] = catalog;
 }
-const target = 'src/plugins/capabilities/generated-schemas.ts';
+const target = 'src/runtime/plugins/capabilities/generated-schemas.ts';
 const output = '// Generated from the public operation signatures by scripts/generate-capability-schemas.mjs.\n// Do not edit manually; run pnpm capabilities:generate.\nimport type { InputSchema } from \'../../services/capabilities\';\n\nexport const operationSchemas = ' + JSON.stringify(catalogs, null, 2) + ' as const satisfies Record<string, Record<string, { parameters: readonly string[]; flatten: boolean; inputSchema: InputSchema }>>;\n';
 const formatted = execFileSync('node_modules/.bin/biome', ['format', '--stdin-file-path=' + target], { input: output, encoding: 'utf8' });
 if (process.argv.includes('--check')) {

@@ -64,42 +64,38 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'merge-source';
-    const fileInput = document.getElementById('file-input');
-    const clearBtn = document.getElementById('clear-files-btn');
-    const layerList = document.getElementById('layer-list');
-    const nameInput = document.getElementById('name');
-    const forceInput = document.getElementById('force');
-    const flattenInput = document.getElementById('flatten');
-    const btn = document.getElementById('btn');
-    const status = document.getElementById('status');
-
-    /** filename -> Uint8Array (累计) */
-    const uploaded = new Map();
-
-    function readFile(file) {
-      return new Promise((resolve, reject) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'merge-source';
+const fileInput = document.getElementById('file-input');
+const clearBtn = document.getElementById('clear-files-btn');
+const layerList = document.getElementById('layer-list');
+const nameInput = document.getElementById('name');
+const forceInput = document.getElementById('force');
+const flattenInput = document.getElementById('flatten');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+/** filename -> Uint8Array (累计) */
+const uploaded = new Map();
+function readFile(file) {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);
-      });
-    }
-
-    function refreshLayerList(source) {
-      layerList.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+    });
+}
+function refreshLayerList(source) {
+    layerList.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         const id = `layer-${i}`;
         const label = document.createElement('label');
@@ -110,93 +106,99 @@
         input.id = id;
         input.dataset.layerName = name;
         input.addEventListener('change', () => {
-          label.classList.toggle('active', input.checked);
-          updateButton();
+            label.classList.toggle('active', input.checked);
+            updateButton();
         });
         label.appendChild(input);
         layerList.appendChild(label);
-      });
-      updateButton();
-    }
-
-    function selectedTargets() {
-      return Array.from(layerList.querySelectorAll('input:checked')).map((el) => el.dataset.layerName);
-    }
-
-    function updateButton() {
-      btn.disabled = selectedTargets().length < 2;
-    }
-
-    async function reimportAll() {
-      if (uploaded.size === 0) {
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+    });
+    updateButton();
+}
+function selectedTargets() {
+    return Array.from(layerList.querySelectorAll('input:checked')).map((el) => el.dataset.layerName);
+}
+function updateButton() {
+    btn.disabled = selectedTargets().length < 2;
+}
+async function reimportAll() {
+    if (uploaded.size === 0) {
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         layerList.innerHTML = '';
         btn.disabled = true;
         status.textContent = '已清空,等待上传文件';
         return;
-      }
-      status.textContent = `加载 ${uploaded.size} 个文件中...`;
-      const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
-      const source = new TopologySource(SOURCE_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Load initial data before registration: await setData, then addSource and setExtent.
-      try {
+    }
+    status.textContent = `加载 ${uploaded.size} 个文件中...`;
+    const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+    const source = new TopologySource(SOURCE_ID);
+    if (map.getSource(SOURCE_ID))
+        map.removeSource(SOURCE_ID);
+    // Load initial data before registration: await setData, then addSource and setExtent.
+    try {
         await source.setData(entries);
         await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         refreshLayerList(source);
         status.textContent = `已加载 ${uploaded.size} 个文件。勾选 ≥ 2 个图层后点击 "合并"。`;
-      } catch (e) {
+    }
+    catch (e) {
         console.error(e);
         status.textContent = `加载失败: ${e.error?.message ?? e}`;
-      }
     }
-
-    fileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-      for (const f of files) {
+}
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0)
+        return;
+    for (const f of files) {
         try {
-          uploaded.set(f.name, await readFile(f));
-        } catch (err) {
-          console.error(`读取 ${f.name} 失败`, err);
+            uploaded.set(f.name, await readFile(f));
         }
-      }
-      fileInput.value = '';
-      await reimportAll();
-    });
-
-    clearBtn.addEventListener('click', async () => {
-      uploaded.clear();
-      await reimportAll();
-    });
-
-    btn.addEventListener('click', async () => {
-      const targets = selectedTargets();
-      if (targets.length < 2) return;
-      const opts = { source: SOURCE_ID, targets };
-      const nm = nameInput.value.trim();
-      if (nm) opts.name = nm;
-      if (forceInput.checked) opts.force = true;
-      if (flattenInput.checked) opts.flatten = true;
-      status.textContent = `正在合并 ${targets.length} 个图层...`;
-      btn.disabled = true;
-      try {
+        catch (err) {
+            console.error(`读取 ${f.name} 失败`, err);
+        }
+    }
+    fileInput.value = '';
+    await reimportAll();
+});
+clearBtn.addEventListener('click', async () => {
+    uploaded.clear();
+    await reimportAll();
+});
+btn.addEventListener('click', async () => {
+    const targets = selectedTargets();
+    if (targets.length < 2)
+        return;
+    const opts = { source: SOURCE_ID, targets };
+    const nm = nameInput.value.trim();
+    if (nm)
+        opts.name = nm;
+    if (forceInput.checked)
+        opts.force = true;
+    if (flattenInput.checked)
+        opts.flatten = true;
+    status.textContent = `正在合并 ${targets.length} 个图层...`;
+    btn.disabled = true;
+    try {
         const result = await map.ops.mergeLayers(opts);
         status.textContent = result.ok
-          ? `已合并 ${targets.join(' / ')},Ctrl+Z 撤销。`
-          : '合并失败 (跨几何类型时勾选 force,或检查图层名)。';
+            ? `已合并 ${targets.join(' / ')},Ctrl+Z 撤销。`
+            : '合并失败 (跨几何类型时勾选 force,或检查图层名)。';
         const src = map.getSource(SOURCE_ID);
-        if (src) refreshLayerList(src);
-      } catch (err) {
+        if (src)
+            refreshLayerList(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         updateButton();
-      }
-    });
-    await autoLoadExampleFixtures('merge-layers');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('merge-layers');
+</script>
 </body>
 
 </html>

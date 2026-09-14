@@ -10,15 +10,15 @@ describe('TypeDoc configuration', () => {
   it('builds every supported public entry point and excludes @internal declarations', () => {
     expect(config.entryPoints).toEqual([
       'src/index.ts',
-      'src/arrow/index.ts',
-      'src/duckdb/index.ts',
-      'src/kernel/index.ts',
-      'src/services/index.ts',
-      'src/providers/index.ts',
-      'src/plugins/index.ts',
-      'src/presets/index.ts',
-      'src/ai/index.ts',
-      'src/providers/maplibre/index.ts',
+      'src/integrations/arrow/index.ts',
+      'src/integrations/duckdb/index.ts',
+      'src/runtime/context/index.ts',
+      'src/runtime/services/index.ts',
+      'src/runtime/providers/index.ts',
+      'src/runtime/plugins/index.ts',
+      'src/runtime/presets/index.ts',
+      'src/runtime/ai/index.ts',
+      'src/integrations/maplibre/index.ts',
     ]);
     expect(config.excludeInternal).toBe(true);
     expect(config.treatWarningsAsErrors).toBe(true);

@@ -2,13 +2,16 @@
 id: overview
 slug: /concepts/overview
 title: Concepts overview
-api: ["Emap","TopologySource","LayerSpecification"]
+api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Concepts overview
+
+> For repository/runtime layering, start with the [current architecture and source layout](/concepts/architecture).
+
 
 `@mapseekai/emap` is a browser Canvas map and geospatial-data editing library. An application creates an `Emap`, imports a `TopologySource`, and declares how data is drawn with render layers. Separate objects own data, presentation, and interaction.
 
@@ -32,7 +35,7 @@ Browser container
 
 | Level | Owns | Common entry point |
 | --- | --- | --- |
-| `Emap` | Container, camera, layer order, interaction, and map state | `new Emap(...)` |
+| `Emap` | Container, camera, layer order, interaction, and map state | `await Emap.create(...)` |
 | source | Imported dataset plus its CRS, extent, and topology | `TopologySource` |
 | source layer | One set of geometry and attributes in a dataset | `source-layer` |
 | render layer | Draw type, style, and display order | `map.addLayer(...)` |
@@ -44,7 +47,7 @@ One source layer can supply several render layers. For example, a `fill` layer d
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
 
-const map = new Emap({ container: 'map' });
+const map = await Emap.create({ container: 'map' });
 const source = await TopologySource.fromUrl('main', '/data/roads.geojson');
 
 await map.addSource('main', source);

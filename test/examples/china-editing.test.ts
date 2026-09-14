@@ -3,12 +3,12 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { examples } from '../../docs-meta/examples';
-
 const TOPOJSON_URL = 'https://geojson.cn/api/china/1.6.3/china.topo.json';
 const GEOJSON_URL = 'https://geojson.cn/api/china/1.6.3/china.json';
-
-type SourceInput = { filename: string; content: Uint8Array };
-
+type SourceInput = {
+  filename: string;
+  content: Uint8Array;
+};
 async function executeChinaEditingExample() {
   const html = await readFile(
     resolve('packages/examples/examples/china-editing/index.html'),
@@ -17,7 +17,6 @@ async function executeChinaEditingExample() {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   const moduleScript = parsed.querySelector<HTMLScriptElement>('script[type="module"]');
   if (!moduleScript?.textContent) throw new Error('china-editing module script is missing');
-
   const script = moduleScript.textContent.replace(
     /^\s*import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];\s*$/gm,
     '',
@@ -26,29 +25,23 @@ async function executeChinaEditingExample() {
   const originalBody = document.body.innerHTML;
   document.head.innerHTML = parsed.head.innerHTML;
   document.body.innerHTML = parsed.body.innerHTML;
-
   const requests: string[] = [];
   const failedUrls = new Set<string>();
   const sourceInputs: SourceInput[] = [];
   const sources = new Map<string, FakeTopologySource>();
   const removedSourceIds: string[] = [];
-
   class FakeTopologySource {
     readonly id: string;
-
     constructor(id: string) {
       this.id = id;
     }
-
     async setData(input: SourceInput): Promise<void> {
       sourceInputs.push(input);
     }
-
     getExtent(): [number, number, number, number] {
       return [73, 18, 135, 54];
     }
   }
-
   const map = {
     addControl: vi.fn(),
     addSource: vi.fn(async (id: string, source: FakeTopologySource) => {
@@ -64,6 +57,9 @@ async function executeChinaEditingExample() {
   };
   const runtime = {
     Emap: class {
+      static async create(...args: any[]) {
+        return new this(...args);
+      }
       constructor() {
         return map;
       }
@@ -85,7 +81,6 @@ async function executeChinaEditingExample() {
       headers: { 'Content-Type': 'application/json' },
     });
   });
-
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
@@ -102,7 +97,6 @@ async function executeChinaEditingExample() {
     document.body.innerHTML = originalBody;
     throw error;
   }
-
   return {
     requests,
     failedUrls,
@@ -117,7 +111,6 @@ async function executeChinaEditingExample() {
     },
   };
 }
-
 describe('china editing online datasets', () => {
   it('loads the smaller TopoJSON dataset by default', async () => {
     const result = await executeChinaEditingExample();
@@ -133,17 +126,14 @@ describe('china editing online datasets', () => {
       result.dispose();
     }
   });
-
   it('switches the editable source to online GeoJSON', async () => {
     const result = await executeChinaEditingExample();
     try {
       const selector = document.querySelector<HTMLSelectElement>('#online-source');
       expect(selector).not.toBeNull();
       const firstSource = result.sources.get('china-editing-source');
-
       selector!.value = 'geojson';
       selector!.dispatchEvent(new Event('change', { bubbles: true }));
-
       await vi.waitFor(() =>
         expect(result.sourceInputs[result.sourceInputs.length - 1]?.filename).toBe('china.json'),
       );
@@ -155,7 +145,6 @@ describe('china editing online datasets', () => {
       result.dispose();
     }
   });
-
   it('keeps the current editable source when an online replacement fails', async () => {
     const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const result = await executeChinaEditingExample();
@@ -164,10 +153,8 @@ describe('china editing online datasets', () => {
       expect(selector).not.toBeNull();
       const firstSource = result.sources.get('china-editing-source');
       result.failedUrls.add(GEOJSON_URL);
-
       selector!.value = 'geojson';
       selector!.dispatchEvent(new Event('change', { bubbles: true }));
-
       await vi.waitFor(() =>
         expect(document.querySelector('#status')?.textContent).toContain('503'),
       );
@@ -179,7 +166,6 @@ describe('china editing online datasets', () => {
       reportError.mockRestore();
     }
   });
-
   it('declares no local fixture dependency', () => {
     expect(examples.find((example) => example.id === 'china-editing')?.fixtures).toEqual([]);
   });

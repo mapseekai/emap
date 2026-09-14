@@ -121,381 +121,365 @@
   </details>
 
   <script type="module">
-    import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource } = emap;
-
-    const services = [
-      {
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const services = [
+    {
         id: 'osm',
         name: 'OpenStreetMap',
         role: 'basemap',
         style: {
-          version: 8,
-          sources: {
-            osm: {
-              type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
+            version: 8,
+            sources: {
+                osm: {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                },
             },
-          },
-          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+            layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
         },
-      },
-      {
+    },
+    {
         id: 'carto-light',
         name: 'Carto Light',
         role: 'basemap',
         style: {
-          version: 8,
-          sources: {
-            carto: {
-              type: 'raster',
-              tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
-              tileSize: 256,
+            version: 8,
+            sources: {
+                carto: {
+                    type: 'raster',
+                    tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                },
             },
-          },
-          layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+            layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
         },
-      },
-      {
+    },
+    {
         id: 'states-wms',
         name: 'WMS states',
         role: 'overlay',
         visible: true,
         sources: {
-          'states-wms': {
-            type: 'raster',
-            tiles: [
-              'https://ahocevar.com/geoserver/wms?service=WMS&request=GetMap&layers=topp:states&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
-            ],
-            tileSize: 256,
-          },
+            'states-wms': {
+                type: 'raster',
+                tiles: [
+                    'https://ahocevar.com/geoserver/wms?service=WMS&request=GetMap&layers=topp:states&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
+                ],
+                tileSize: 256,
+            },
         },
         layers: [
-          {
-            id: 'states-wms-layer',
-            type: 'raster',
-            source: 'states-wms',
-            paint: { 'raster-opacity': 0.45 },
-          },
+            {
+                id: 'states-wms-layer',
+                type: 'raster',
+                source: 'states-wms',
+                paint: { 'raster-opacity': 0.45 },
+            },
         ],
-      },
-      {
+    },
+    {
         id: 'openfreemap-bright',
         name: 'OpenFreeMap Bright',
         role: 'overlay',
         visible: false,
         style: 'https://tiles.openfreemap.org/styles/bright',
-      },
-      {
+    },
+    {
         id: 'usgs-imagery',
         name: 'USGS imagery',
         role: 'overlay',
         visible: true,
         sources: {
-          'usgs-imagery': {
-            type: 'raster',
-            tiles: [
-              'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
-            ],
-            tileSize: 256,
-          },
+            'usgs-imagery': {
+                type: 'raster',
+                tiles: [
+                    'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
+                ],
+                tileSize: 256,
+            },
         },
         layers: [
-          {
-            id: 'usgs-imagery-layer',
-            type: 'raster',
-            source: 'usgs-imagery',
-            paint: { 'raster-opacity': 0.3 },
-          },
+            {
+                id: 'usgs-imagery-layer',
+                type: 'raster',
+                source: 'usgs-imagery',
+                paint: { 'raster-opacity': 0.3 },
+            },
         ],
-      },
-    ];
-
-    const map = new Emap({ plugins: [mapLibrePlugin],
-      container: 'map',
-      mapLibre: { services, defaultBasemap: 'osm' },
-    });
-    map.addControl(new emap.NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new emap.LayerControl(), 'top-right');
-
-    const SOURCE_ID = 'business-data';
-    const LAYER_ID = 'business-polygons';
-    const fileInput = document.getElementById('file-input');
-    const status = document.getElementById('status');
-    const CUSTOM_SERVICE_IDS = {
-      wms: 'custom-wms',
-      wmts: 'custom-wmts',
-      xyz: 'custom-xyz',
-      tms: 'custom-tms',
-      vector: 'custom-vector',
-      style: 'custom-style',
-    };
-    const customServiceForm = document.getElementById('custom-service-form');
-    const customServiceType = document.getElementById('custom-service-type');
-    const customServiceName = document.getElementById('custom-service-name');
-    const customServiceHint = document.getElementById('custom-service-hint');
-    const customWmsUrl = document.getElementById('custom-wms-url');
-    const customWmsLayers = document.getElementById('custom-wms-layers');
-    const customTileTemplate = document.getElementById('custom-tile-template');
-    const customVectorSourceLayer = document.getElementById('custom-vector-source-layer');
-    const customVectorRenderType = document.getElementById('custom-vector-render-type');
-    const customStyleMode = document.getElementById('custom-style-mode');
-    const customStyleInput = document.getElementById('custom-style-input');
-    const customServiceSubmit = document.getElementById('custom-service-submit');
-    const customServiceGroups = document.querySelectorAll(
-      '[data-service-type], [data-service-types]',
-    );
-    const registeredCustomServiceIds = new Set();
-    const customServiceHints = {
-      wms: '输入 WMS 服务地址和图层名；页面会创建 EPSG:3857 的透明 PNG 叠加层。',
-      wmts: '输入完整的 WMTS {z}/{x}/{y} 瓦片模板；页面不会请求 Capabilities。',
-      xyz: '输入完整的 XYZ {z}/{x}/{y} 瓦片模板；行坐标从顶部开始。',
-      tms: '输入完整的 TMS {z}/{x}/{y} 瓦片模板；MapLibre 会反转行坐标。',
-      vector: '输入矢量瓦片模板、source-layer 和渲染类型。',
-      style: '输入 MapLibre Style URL 或粘贴完整的 Style JSON；Style 将作为叠加层启用。',
-    };
-
-    function updateCustomServiceFields() {
-      const type = customServiceType.value;
-      for (const group of customServiceGroups) {
+    },
+];
+const map = await Emap.create({ plugins: [mapLibrePlugin],
+    container: 'map',
+    mapLibre: { services, defaultBasemap: 'osm' },
+});
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new emap.LayerControl(), 'top-right');
+const SOURCE_ID = 'business-data';
+const LAYER_ID = 'business-polygons';
+const fileInput = document.getElementById('file-input');
+const status = document.getElementById('status');
+const CUSTOM_SERVICE_IDS = {
+    wms: 'custom-wms',
+    wmts: 'custom-wmts',
+    xyz: 'custom-xyz',
+    tms: 'custom-tms',
+    vector: 'custom-vector',
+    style: 'custom-style',
+};
+const customServiceForm = document.getElementById('custom-service-form');
+const customServiceType = document.getElementById('custom-service-type');
+const customServiceName = document.getElementById('custom-service-name');
+const customServiceHint = document.getElementById('custom-service-hint');
+const customWmsUrl = document.getElementById('custom-wms-url');
+const customWmsLayers = document.getElementById('custom-wms-layers');
+const customTileTemplate = document.getElementById('custom-tile-template');
+const customVectorSourceLayer = document.getElementById('custom-vector-source-layer');
+const customVectorRenderType = document.getElementById('custom-vector-render-type');
+const customStyleMode = document.getElementById('custom-style-mode');
+const customStyleInput = document.getElementById('custom-style-input');
+const customServiceSubmit = document.getElementById('custom-service-submit');
+const customServiceGroups = document.querySelectorAll('[data-service-type], [data-service-types]');
+const registeredCustomServiceIds = new Set();
+const customServiceHints = {
+    wms: '输入 WMS 服务地址和图层名；页面会创建 EPSG:3857 的透明 PNG 叠加层。',
+    wmts: '输入完整的 WMTS {z}/{x}/{y} 瓦片模板；页面不会请求 Capabilities。',
+    xyz: '输入完整的 XYZ {z}/{x}/{y} 瓦片模板；行坐标从顶部开始。',
+    tms: '输入完整的 TMS {z}/{x}/{y} 瓦片模板；MapLibre 会反转行坐标。',
+    vector: '输入矢量瓦片模板、source-layer 和渲染类型。',
+    style: '输入 MapLibre Style URL 或粘贴完整的 Style JSON；Style 将作为叠加层启用。',
+};
+function updateCustomServiceFields() {
+    const type = customServiceType.value;
+    for (const group of customServiceGroups) {
         const types = group.dataset.serviceTypes ?? group.dataset.serviceType ?? '';
         const active = types.split(' ').includes(type);
         group.hidden = !active;
         for (const field of group.querySelectorAll('input, select, textarea')) {
-          field.disabled = !active;
+            field.disabled = !active;
         }
-      }
-      customServiceHint.textContent = customServiceHints[type];
-      customServiceSubmit.textContent =
+    }
+    customServiceHint.textContent = customServiceHints[type];
+    customServiceSubmit.textContent =
         type === 'style' ? '添加 / 更新 Style 叠加层' : `添加 / 更新 ${type.toUpperCase()}`;
-    }
-
-    function requireHttpUrl(value, label) {
-      let url;
-      try {
+}
+function requireHttpUrl(value, label) {
+    let url;
+    try {
         url = new URL(value);
-      } catch {
+    }
+    catch {
         throw new Error(`${label}必须是有效 URL`);
-      }
-      if (url.protocol !== 'http:' && url.protocol !== 'https:')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:')
         throw new Error(`${label}必须使用 http 或 https`);
-      return url;
-    }
-
-    function requireTileTemplate(value, label) {
-      requireHttpUrl(value, label);
-      if (!['{z}', '{x}', '{y}'].every((token) => value.includes(token)))
+    return url;
+}
+function requireTileTemplate(value, label) {
+    requireHttpUrl(value, label);
+    if (!['{z}', '{x}', '{y}'].every((token) => value.includes(token)))
         throw new Error(`${label}必须包含 {z}、{x} 和 {y}`);
-      return value;
-    }
-
-    function createRasterOverlay(id, name, tileTemplate, scheme) {
-      const source = { type: 'raster', tiles: [tileTemplate], tileSize: 256 };
-      if (scheme) source.scheme = scheme;
-      return {
+    return value;
+}
+function createRasterOverlay(id, name, tileTemplate, scheme) {
+    const source = { type: 'raster', tiles: [tileTemplate], tileSize: 256 };
+    if (scheme)
+        source.scheme = scheme;
+    return {
         id,
         name,
         role: 'overlay',
         visible: true,
         sources: {
-          [id]: source,
+            [id]: source,
         },
         layers: [
-          {
-            id: `${id}-layer`,
-            type: 'raster',
-            source: id,
-            paint: { 'raster-opacity': 0.55 },
-          },
+            {
+                id: `${id}-layer`,
+                type: 'raster',
+                source: id,
+                paint: { 'raster-opacity': 0.55 },
+            },
         ],
-      };
-    }
-
-    function createWmsTileTemplate(endpoint, layerName) {
-      const url = requireHttpUrl(endpoint, 'WMS 地址');
-      url.hash = '';
-      url.searchParams.set('service', 'WMS');
-      url.searchParams.set('request', 'GetMap');
-      url.searchParams.set('layers', layerName);
-      url.searchParams.set('styles', '');
-      url.searchParams.set('format', 'image/png');
-      url.searchParams.set('transparent', 'true');
-      url.searchParams.set('version', '1.1.1');
-      url.searchParams.set('srs', 'EPSG:3857');
-      return `${url.toString()}&bbox={bbox-epsg-3857}&width=256&height=256`;
-    }
-
-    function createVectorOverlay(name, tileTemplate, sourceLayer, renderType) {
-      const paint = {
+    };
+}
+function createWmsTileTemplate(endpoint, layerName) {
+    const url = requireHttpUrl(endpoint, 'WMS 地址');
+    url.hash = '';
+    url.searchParams.set('service', 'WMS');
+    url.searchParams.set('request', 'GetMap');
+    url.searchParams.set('layers', layerName);
+    url.searchParams.set('styles', '');
+    url.searchParams.set('format', 'image/png');
+    url.searchParams.set('transparent', 'true');
+    url.searchParams.set('version', '1.1.1');
+    url.searchParams.set('srs', 'EPSG:3857');
+    return `${url.toString()}&bbox={bbox-epsg-3857}&width=256&height=256`;
+}
+function createVectorOverlay(name, tileTemplate, sourceLayer, renderType) {
+    const paint = {
         fill: { 'fill-color': '#0f766e', 'fill-opacity': 0.5 },
         line: { 'line-color': '#0f766e', 'line-width': 2 },
         circle: { 'circle-color': '#0f766e', 'circle-radius': 4 },
-      };
-      const id = CUSTOM_SERVICE_IDS.vector;
-      return {
+    };
+    const id = CUSTOM_SERVICE_IDS.vector;
+    return {
         id,
         name,
         role: 'overlay',
         visible: true,
         sources: {
-          [id]: { type: 'vector', tiles: [tileTemplate] },
+            [id]: { type: 'vector', tiles: [tileTemplate] },
         },
         layers: [
-          {
-            id: `${id}-layer`,
-            type: renderType,
-            source: id,
-            'source-layer': sourceLayer,
-            paint: paint[renderType],
-          },
+            {
+                id: `${id}-layer`,
+                type: renderType,
+                source: id,
+                'source-layer': sourceLayer,
+                paint: paint[renderType],
+            },
         ],
-      };
-    }
-
-    function parseStyle() {
-      const value = customStyleInput.value.trim();
-      if (!value) throw new Error('Style 数据不能为空');
-      if (customStyleMode.value === 'url') {
+    };
+}
+function parseStyle() {
+    const value = customStyleInput.value.trim();
+    if (!value)
+        throw new Error('Style 数据不能为空');
+    if (customStyleMode.value === 'url') {
         requireHttpUrl(value, 'Style URL');
         return value;
-      }
-      let style;
-      try {
+    }
+    let style;
+    try {
         style = JSON.parse(value);
-      } catch {
+    }
+    catch {
         throw new Error('Style JSON 必须是有效 JSON');
-      }
-      if (
-        !style ||
+    }
+    if (!style ||
         Array.isArray(style) ||
         style.version !== 8 ||
         !style.sources ||
         Array.isArray(style.sources) ||
         typeof style.sources !== 'object' ||
-        !Array.isArray(style.layers)
-      ) {
+        !Array.isArray(style.layers)) {
         throw new Error('Style JSON 必须包含 version: 8、对象 sources 和数组 layers');
-      }
-      return style;
     }
-
-    function createCustomService() {
-      const type = customServiceType.value;
-      const name = customServiceName.value.trim();
-      if (type === 'wms') {
+    return style;
+}
+function createCustomService() {
+    const type = customServiceType.value;
+    const name = customServiceName.value.trim();
+    if (type === 'wms') {
         const endpoint = customWmsUrl.value.trim();
         const layerName = customWmsLayers.value.trim();
-        if (!endpoint || !layerName) throw new Error('WMS 地址和图层名不能为空');
-        return createRasterOverlay(
-          CUSTOM_SERVICE_IDS.wms,
-          name || `WMS: ${layerName}`,
-          createWmsTileTemplate(endpoint, layerName),
-        );
-      }
-      if (type === 'wmts') {
+        if (!endpoint || !layerName)
+            throw new Error('WMS 地址和图层名不能为空');
+        return createRasterOverlay(CUSTOM_SERVICE_IDS.wms, name || `WMS: ${layerName}`, createWmsTileTemplate(endpoint, layerName));
+    }
+    if (type === 'wmts') {
         const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'WMTS 瓦片模板');
         return createRasterOverlay(CUSTOM_SERVICE_IDS.wmts, name || 'WMTS', tileTemplate);
-      }
-      if (type === 'xyz') {
+    }
+    if (type === 'xyz') {
         const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'XYZ 瓦片模板');
         return createRasterOverlay(CUSTOM_SERVICE_IDS.xyz, name || 'XYZ', tileTemplate, 'xyz');
-      }
-      if (type === 'tms') {
+    }
+    if (type === 'tms') {
         const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'TMS 瓦片模板');
         return createRasterOverlay(CUSTOM_SERVICE_IDS.tms, name || 'TMS', tileTemplate, 'tms');
-      }
-      if (type === 'vector') {
+    }
+    if (type === 'vector') {
         const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), '矢量瓦片模板');
         const sourceLayer = customVectorSourceLayer.value.trim();
-        if (!sourceLayer) throw new Error('矢量切片 source-layer 不能为空');
-        return createVectorOverlay(
-          name || 'Vector tiles',
-          tileTemplate,
-          sourceLayer,
-          customVectorRenderType.value,
-        );
-      }
-      return {
+        if (!sourceLayer)
+            throw new Error('矢量切片 source-layer 不能为空');
+        return createVectorOverlay(name || 'Vector tiles', tileTemplate, sourceLayer, customVectorRenderType.value);
+    }
+    return {
         id: CUSTOM_SERVICE_IDS.style,
         name: name || 'MapLibre Style overlay',
         role: 'overlay',
         visible: true,
         style: parseStyle(),
-      };
-    }
-
-    let hasBusinessLayer = false;
-
-    async function loadBusinessLayer(file) {
-      fileInput.disabled = true;
-      status.textContent = `正在加载 ${file.name}…`;
-      try {
+    };
+}
+let hasBusinessLayer = false;
+async function loadBusinessLayer(file) {
+    fileInput.disabled = true;
+    status.textContent = `正在加载 ${file.name}…`;
+    try {
         if (hasBusinessLayer) {
-          map.removeLayer(LAYER_ID);
-          map.removeSource(SOURCE_ID);
+            map.removeLayer(LAYER_ID);
+            map.removeSource(SOURCE_ID);
         }
         const source = new TopologySource(SOURCE_ID);
         const content = new Uint8Array(await file.arrayBuffer());
         await source.setData({ filename: file.name, content });
         await map.addSource(SOURCE_ID, source);
         map.addLayer({
-          id: LAYER_ID,
-          type: 'fill',
-          source: SOURCE_ID,
-          paint: {
-            'fill-color': '#e76f51',
-            'fill-opacity': 0.5,
-            'fill-outline-color': '#8f2d1d',
-          },
+            id: LAYER_ID,
+            type: 'fill',
+            source: SOURCE_ID,
+            paint: {
+                'fill-color': '#e76f51',
+                'fill-opacity': 0.5,
+                'fill-outline-color': '#8f2d1d',
+            },
         });
         map.setExtent(source.getExtent());
         hasBusinessLayer = true;
         status.textContent = `${file.name} 已加载；右上角可切换底图和叠加层。`;
-      } catch (error) {
+    }
+    catch (error) {
         console.error(error);
         status.textContent = `加载失败: ${error?.message ?? error}`;
-      } finally {
-        fileInput.disabled = false;
-      }
     }
-
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      if (file) void loadBusinessLayer(file);
-    });
-    customServiceType.addEventListener('change', updateCustomServiceFields);
-    updateCustomServiceFields();
-    customServiceForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      customServiceSubmit.disabled = true;
-      try {
+    finally {
+        fileInput.disabled = false;
+    }
+}
+fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (file)
+        void await loadBusinessLayer(file);
+});
+customServiceType.addEventListener('change', updateCustomServiceFields);
+updateCustomServiceFields();
+customServiceForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    customServiceSubmit.disabled = true;
+    try {
         const service = createCustomService();
         if (registeredCustomServiceIds.has(service.id)) {
-          await map.mapLibreServices.updateService(service.id, service);
-        } else {
-          await map.mapLibreServices.addService(service);
-          registeredCustomServiceIds.add(service.id);
+            await map.mapLibreServices.updateService(service.id, service);
         }
-        if (service.role === 'basemap') await map.mapLibreServices.setBasemap(service.id);
+        else {
+            await map.mapLibreServices.addService(service);
+            registeredCustomServiceIds.add(service.id);
+        }
+        if (service.role === 'basemap')
+            await map.mapLibreServices.setBasemap(service.id);
         status.textContent = `${service.name} 已添加；右上角可控制显示。`;
-      } catch (error) {
+    }
+    catch (error) {
         console.error(error);
         status.textContent = `添加服务失败: ${error?.message ?? error}`;
-      } finally {
+    }
+    finally {
         customServiceSubmit.disabled = false;
-      }
-    });
-
-    window.addEventListener('resize', () => map.resize());
-
-    await autoLoadExampleFixtures('online-map-services');
-  </script>
+    }
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('online-map-services');
+</script>
 </body>
 
 </html>

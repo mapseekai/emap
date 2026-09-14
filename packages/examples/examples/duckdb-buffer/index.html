@@ -43,235 +43,206 @@
     </details>
 
     <script type="module">
-      import { installExampleMapUi } from '/src/example-runtime.ts';
-      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      import {
-        buffer,
-        closeDuckDbRuntime,
-        createDuckDbRuntimeFromJsDelivr,
-
-      } from '@mapseekai/emap/duckdb';
-
-      const emap = await loadExampleRuntime();
-
-      const { Emap, TopologySource, NavigationControl } = emap;
-
-      const SOURCE_ID = 'duckdb-input';
-      const OUTPUT_ID = 'duckdb-buffered';
-
-      const map = new Emap({ container: 'map' });
-      map.addControl(new NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const fileInput = document.getElementById('file');
-      const targetSelect = document.getElementById('target');
-      const runBtn = document.getElementById('run');
-      const crsInput = document.getElementById('crs');
-      const distanceInput = document.getElementById('distance');
-      const allowGeographicInput = document.getElementById('allow-geographic');
-      const status = document.getElementById('status');
-
-      let inputDataset;
-      let uploadedFileName = '';
-      let runtimePromise;
-
-      function getLayerId(layer, index) {
-        return String(layer?.name || layer?.id || `layer-${index}`);
-      }
-
-      function removeSourceWithLayers(id) {
-        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
-          map.removeLayer(layer.id);
-        }
-        if (map.getSource(id)) map.removeSource(id);
-      }
-
-      function addDisplayLayers(sourceId, source, prefix, colors) {
-        const layers = source.getLayers();
-        for (let i = 0; i < layers.length; i++) {
-          const layer = layers[i];
-          const sourceLayer = getLayerId(layer, i);
-          const baseId = `${prefix}-${i}`;
-
-          if (layer?.geometry_type === 'polygon') {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+import { buffer, closeDuckDbRuntime, createDuckDbRuntimeFromJsDelivr, } from '@mapseekai/emap/duckdb';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const SOURCE_ID = 'duckdb-input';
+const OUTPUT_ID = 'duckdb-buffered';
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById('file');
+const targetSelect = document.getElementById('target');
+const runBtn = document.getElementById('run');
+const crsInput = document.getElementById('crs');
+const distanceInput = document.getElementById('distance');
+const allowGeographicInput = document.getElementById('allow-geographic');
+const status = document.getElementById('status');
+let inputDataset;
+let uploadedFileName = '';
+let runtimePromise;
+function getLayerId(layer, index) {
+    return String(layer?.name || layer?.id || `layer-${index}`);
+}
+function removeSourceWithLayers(id) {
+    for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+        map.removeLayer(layer.id);
+    }
+    if (map.getSource(id))
+        map.removeSource(id);
+}
+function addDisplayLayers(sourceId, source, prefix, colors) {
+    const layers = source.getLayers();
+    for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        const sourceLayer = getLayerId(layer, i);
+        const baseId = `${prefix}-${i}`;
+        if (layer?.geometry_type === 'polygon') {
             map.addLayer({
-              id: `${baseId}-fill`,
-              source: sourceId,
-              'source-layer': sourceLayer,
-              type: 'fill',
-              paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity },
+                id: `${baseId}-fill`,
+                source: sourceId,
+                'source-layer': sourceLayer,
+                type: 'fill',
+                paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity },
             });
             map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              'source-layer': sourceLayer,
-              type: 'line',
-              paint: { 'line-color': colors.line, 'line-width': colors.lineWidth },
+                id: `${baseId}-line`,
+                source: sourceId,
+                'source-layer': sourceLayer,
+                type: 'line',
+                paint: { 'line-color': colors.line, 'line-width': colors.lineWidth },
             });
-          } else if (layer?.geometry_type === 'polyline') {
+        }
+        else if (layer?.geometry_type === 'polyline') {
             map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              'source-layer': sourceLayer,
-              type: 'line',
-              paint: { 'line-color': colors.line, 'line-width': colors.lineWidth },
+                id: `${baseId}-line`,
+                source: sourceId,
+                'source-layer': sourceLayer,
+                type: 'line',
+                paint: { 'line-color': colors.line, 'line-width': colors.lineWidth },
             });
-          } else if (layer?.geometry_type === 'point') {
+        }
+        else if (layer?.geometry_type === 'point') {
             map.addLayer({
-              id: `${baseId}-point`,
-              source: sourceId,
-              'source-layer': sourceLayer,
-              type: 'circle',
-              paint: { 'circle-color': colors.line, 'circle-radius': colors.pointRadius },
+                id: `${baseId}-point`,
+                source: sourceId,
+                'source-layer': sourceLayer,
+                type: 'circle',
+                paint: { 'circle-color': colors.line, 'circle-radius': colors.pointRadius },
             });
-          }
         }
-      }
-
-      function populateTargetLayers(source) {
-        targetSelect.innerHTML = '';
-        const layers = source.getLayers();
-        for (let i = 0; i < layers.length; i++) {
-          const layer = layers[i];
-          const id = getLayerId(layer, i);
-          const label = `${id} (${layer?.geometry_type ?? '?'})`;
-          targetSelect.appendChild(new Option(label, id));
-        }
-        const enabled = layers.length > 0;
-        targetSelect.disabled = !enabled;
-        runBtn.disabled = !enabled;
-      }
-
-      async function addDatasetSource(id, dataset) {
-        const source = new TopologySource(id);
-        removeSourceWithLayers(id);
-        await source.replaceDataset(dataset);
-        await map.addSource(id, source);
-        return source;
-      }
-
-      function applyInputCrs() {
-        const crs = crsInput.value.trim();
-        if (inputDataset && crs) {
-          inputDataset.info = { ...inputDataset.info, crs_string: crs };
-        }
-      }
-
-      async function getRuntime() {
-        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-
-          return runtime;
-        });
-        return runtimePromise;
-      }
-
-      fileInput.addEventListener('change', async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-
-        runBtn.disabled = true;
-        targetSelect.disabled = true;
-        status.textContent = `正在加载 ${file.name}...`;
-
-        try {
-          const source = new TopologySource(SOURCE_ID);
-          const content = new Uint8Array(await file.arrayBuffer());
-
-          removeSourceWithLayers(OUTPUT_ID);
-          removeSourceWithLayers(SOURCE_ID);
-          await source.setData({ filename: file.name, content });
-
-          inputDataset = source.getDataset();
-          uploadedFileName = file.name;
-          if (!inputDataset) throw new Error('文件未生成可用 dataset');
-          applyInputCrs();
-
-          await map.addSource(SOURCE_ID, source);
-          addDisplayLayers(SOURCE_ID, source, 'duckdb-input', {
+    }
+}
+function populateTargetLayers(source) {
+    targetSelect.innerHTML = '';
+    const layers = source.getLayers();
+    for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        const id = getLayerId(layer, i);
+        const label = `${id} (${layer?.geometry_type ?? '?'})`;
+        targetSelect.appendChild(new Option(label, id));
+    }
+    const enabled = layers.length > 0;
+    targetSelect.disabled = !enabled;
+    runBtn.disabled = !enabled;
+}
+async function addDatasetSource(id, dataset) {
+    const source = new TopologySource(id);
+    removeSourceWithLayers(id);
+    await source.replaceDataset(dataset);
+    await map.addSource(id, source);
+    return source;
+}
+function applyInputCrs() {
+    const crs = crsInput.value.trim();
+    if (inputDataset && crs) {
+        inputDataset.info = { ...inputDataset.info, crs_string: crs };
+    }
+}
+async function getRuntime() {
+    runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        return runtime;
+    });
+    return runtimePromise;
+}
+fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file)
+        return;
+    runBtn.disabled = true;
+    targetSelect.disabled = true;
+    status.textContent = `正在加载 ${file.name}...`;
+    try {
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(OUTPUT_ID);
+        removeSourceWithLayers(SOURCE_ID);
+        await source.setData({ filename: file.name, content });
+        inputDataset = source.getDataset();
+        uploadedFileName = file.name;
+        if (!inputDataset)
+            throw new Error('文件未生成可用 dataset');
+        applyInputCrs();
+        await map.addSource(SOURCE_ID, source);
+        addDisplayLayers(SOURCE_ID, source, 'duckdb-input', {
             fill: '#dbeafe',
             fillOpacity: 0.55,
             line: '#1d4ed8',
             lineWidth: 1.5,
             pointRadius: 4,
-          });
-          populateTargetLayers(source);
-          map.setExtent(source.getExtent());
-
-          const featureCount = source
+        });
+        populateTargetLayers(source);
+        map.setExtent(source.getExtent());
+        const featureCount = source
             .getLayers()
             .reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
-          status.textContent = `已加载 ${file.name}，${source.getLayers().length} 个图层，${featureCount} 个要素。`;
-        } catch (err) {
-          console.error(err);
-          inputDataset = undefined;
-          uploadedFileName = '';
-          targetSelect.innerHTML = '';
-          status.textContent = `加载失败: ${err?.message ?? err}`;
-        } finally {
-          runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
-          targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
-        }
-      });
-
-      runBtn.addEventListener('click', async () => {
-        const distance = Number(distanceInput.value);
-        if (!inputDataset) {
-          status.textContent = '请先上传数据文件。';
-          return;
-        }
-        if (!Number.isFinite(distance) || distance <= 0) {
-          status.textContent = '请输入大于 0 的缓冲半径。';
-          return;
-        }
-
-        runBtn.disabled = true;
-        fileInput.disabled = true;
-        targetSelect.disabled = true;
-        status.textContent = 'DuckDB-Wasm 正在处理 ST_Buffer...';
-
-        try {
-          const targetLayer = targetSelect.value || undefined;
-          const runtime = await getRuntime();
-          applyInputCrs();
-          const result = await buffer(
-            inputDataset,
-            {
-              layer: targetLayer,
-              distance,
-              outputLayer: targetLayer ? `${targetLayer}_buffer` : 'duckdb_buffered',
-              failOnGeographicCrs: !allowGeographicInput.checked,
-            },
-            runtime,
-          );
-          const source = await addDatasetSource(OUTPUT_ID, result);
-          addDisplayLayers(OUTPUT_ID, source, 'duckdb-output', {
+        status.textContent = `已加载 ${file.name}，${source.getLayers().length} 个图层，${featureCount} 个要素。`;
+    }
+    catch (err) {
+        console.error(err);
+        inputDataset = undefined;
+        uploadedFileName = '';
+        targetSelect.innerHTML = '';
+        status.textContent = `加载失败: ${err?.message ?? err}`;
+    }
+    finally {
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+        targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
+    }
+});
+runBtn.addEventListener('click', async () => {
+    const distance = Number(distanceInput.value);
+    if (!inputDataset) {
+        status.textContent = '请先上传数据文件。';
+        return;
+    }
+    if (!Number.isFinite(distance) || distance <= 0) {
+        status.textContent = '请输入大于 0 的缓冲半径。';
+        return;
+    }
+    runBtn.disabled = true;
+    fileInput.disabled = true;
+    targetSelect.disabled = true;
+    status.textContent = 'DuckDB-Wasm 正在处理 ST_Buffer...';
+    try {
+        const targetLayer = targetSelect.value || undefined;
+        const runtime = await getRuntime();
+        applyInputCrs();
+        const result = await buffer(inputDataset, {
+            layer: targetLayer,
+            distance,
+            outputLayer: targetLayer ? `${targetLayer}_buffer` : 'duckdb_buffered',
+            failOnGeographicCrs: !allowGeographicInput.checked,
+        }, runtime);
+        const source = await addDatasetSource(OUTPUT_ID, result);
+        addDisplayLayers(OUTPUT_ID, source, 'duckdb-output', {
             fill: '#f97316',
             fillOpacity: 0.35,
             line: '#ea580c',
             lineWidth: 2,
             pointRadius: 4,
-          });
-
-          map.setExtent(source.getExtent());
-          status.textContent = `已基于 ${uploadedFileName} / ${targetLayer ?? '默认图层'} 生成 ${distance} 单位缓冲区。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `处理失败: ${err?.message ?? err}`;
-        } finally {
-          fileInput.disabled = false;
-          runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
-          targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
-        }
-      });
-
-      window.addEventListener('resize', () => map.resize());
-      window.addEventListener('pagehide', () => {
-        void (
-          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
-        );
-      });
-      await autoLoadExampleFixtures('duckdb-buffer');
-    </script>
+        });
+        map.setExtent(source.getExtent());
+        status.textContent = `已基于 ${uploadedFileName} / ${targetLayer ?? '默认图层'} 生成 ${distance} 单位缓冲区。`;
+    }
+    catch (err) {
+        console.error(err);
+        status.textContent = `处理失败: ${err?.message ?? err}`;
+    }
+    finally {
+        fileInput.disabled = false;
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+        targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
+    }
+});
+window.addEventListener('resize', () => map.resize());
+window.addEventListener('pagehide', () => {
+    void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+});
+await autoLoadExampleFixtures('duckdb-buffer');
+</script>
   </body>
 </html>

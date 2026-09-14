@@ -57,226 +57,222 @@
       </div>
     </details>
     <script type="module">
-      import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
-      import {
-        closeDuckDbRuntime,
-        createDuckDbRuntimeFromJsDelivr,
-        duckDbToolbox,
 
-      } from '@mapseekai/emap/duckdb';
-
-      const emap = await loadExampleRuntime();
-      const { Emap, TopologySource, NavigationControl } = emap;
-      const INPUT_SOURCE_ID = 'duckdb-toolbox-input';
-      const MASK_SOURCE_ID = 'duckdb-toolbox-mask';
-      const OUTPUT_SOURCE_ID = 'duckdb-toolbox-output';
-      const map = new Emap({ container: 'map' });
-      map.addControl(new NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const inputFile = document.getElementById('input-file');
-      const maskFile = document.getElementById('mask-file');
-      const inputLayerSelect = document.getElementById('input-layer');
-      const maskLayerSelect = document.getElementById('mask-layer');
-      const searchInput = document.getElementById('search');
-      const toolSelect = document.getElementById('tool');
-      const description = document.getElementById('tool-description');
-      const toolInputs = document.getElementById('tool-inputs');
-      const paramsInput = document.getElementById('params');
-      const runButton = document.getElementById('run');
-      const status = document.getElementById('status');
-      let inputDataset;
-      let maskDataset;
-      let runtimePromise;
-
-      function getLayerId(layer, index) {
-        return String(layer?.name || layer?.id || `layer-${index}`);
-      }
-
-      function removeSourceWithLayers(id) {
-        for (const layer of map.getLayers().filter((layer) => layer.source === id)) map.removeLayer(layer.id);
-        if (map.getSource(id)) map.removeSource(id);
-      }
-
-      function addDisplayLayers(sourceId, source, prefix, colors) {
-        source.getLayers().forEach((layer, index) => {
-          const sourceLayer = getLayerId(layer, index);
-          const baseId = `${prefix}-${index}`;
-          if (layer?.geometry_type === 'polygon') {
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+import { closeDuckDbRuntime, createDuckDbRuntimeFromJsDelivr, duckDbToolbox, } from '@mapseekai/emap/duckdb';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const INPUT_SOURCE_ID = 'duckdb-toolbox-input';
+const MASK_SOURCE_ID = 'duckdb-toolbox-mask';
+const OUTPUT_SOURCE_ID = 'duckdb-toolbox-output';
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const inputFile = document.getElementById('input-file');
+const maskFile = document.getElementById('mask-file');
+const inputLayerSelect = document.getElementById('input-layer');
+const maskLayerSelect = document.getElementById('mask-layer');
+const searchInput = document.getElementById('search');
+const toolSelect = document.getElementById('tool');
+const description = document.getElementById('tool-description');
+const toolInputs = document.getElementById('tool-inputs');
+const paramsInput = document.getElementById('params');
+const runButton = document.getElementById('run');
+const status = document.getElementById('status');
+let inputDataset;
+let maskDataset;
+let runtimePromise;
+function getLayerId(layer, index) {
+    return String(layer?.name || layer?.id || `layer-${index}`);
+}
+function removeSourceWithLayers(id) {
+    for (const layer of map.getLayers().filter((layer) => layer.source === id))
+        map.removeLayer(layer.id);
+    if (map.getSource(id))
+        map.removeSource(id);
+}
+function addDisplayLayers(sourceId, source, prefix, colors) {
+    source.getLayers().forEach((layer, index) => {
+        const sourceLayer = getLayerId(layer, index);
+        const baseId = `${prefix}-${index}`;
+        if (layer?.geometry_type === 'polygon') {
             map.addLayer({ id: `${baseId}-fill`, source: sourceId, 'source-layer': sourceLayer, type: 'fill', paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity } });
             map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
-          } else if (layer?.geometry_type === 'polyline') {
+        }
+        else if (layer?.geometry_type === 'polyline') {
             map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
-          } else if (layer?.geometry_type === 'point') {
+        }
+        else if (layer?.geometry_type === 'point') {
             map.addLayer({ id: `${baseId}-point`, source: sourceId, 'source-layer': sourceLayer, type: 'circle', paint: { 'circle-color': colors.line, 'circle-radius': colors.pointRadius, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 } });
-          }
-        });
-      }
-
-      async function addDatasetSource(id, dataset, prefix, colors) {
-        const source = new TopologySource(id);
-        removeSourceWithLayers(id);
-        await source.replaceDataset(dataset);
-        await map.addSource(id, source);
-        addDisplayLayers(id, source, prefix, colors);
-        return source;
-      }
-
-      function populateLayerSelect(select, dataset) {
-        select.innerHTML = '';
-        dataset?.layers?.forEach((layer, index) => select.appendChild(new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? '?'})`, String(index))));
-        select.disabled = select.options.length === 0;
-      }
-
-      function selectedTool() {
-        return duckDbToolbox.get(toolSelect.value);
-      }
-
-      function parameterValue(parameter) {
-        if (parameter.default !== undefined) return parameter.default;
-        if (!parameter.required) return undefined;
-        if (parameter.type === 'number') return parameter.exclusiveMinimum !== undefined ? parameter.exclusiveMinimum + 1 : parameter.minimum ?? 0;
-        if (parameter.type === 'boolean') return false;
-        if (parameter.type === 'enum') return parameter.enumValues?.[0] ?? '';
-        if (parameter.type === 'string[]') return ['field'];
-        if (parameter.type === 'object[]') return [{}];
-        return 'field';
-      }
-
-      function updateToolDetails() {
-        const tool = selectedTool();
-        if (!tool) {
-          description.textContent = '没有匹配的工具。';
-          toolInputs.textContent = '';
-          paramsInput.value = '{}';
-          updateRunState();
-          return;
         }
-        description.textContent = tool.description;
-        toolInputs.textContent = tool.inputs.map((input) => `${input.name}${input.required ? '（必需）' : '（可选）'}`).join('、') || '无';
-        paramsInput.value = JSON.stringify(Object.fromEntries(tool.parameters.map((parameter) => [parameter.name, parameterValue(parameter)]).filter(([, value]) => value !== undefined)), null, 2);
+    });
+}
+async function addDatasetSource(id, dataset, prefix, colors) {
+    const source = new TopologySource(id);
+    removeSourceWithLayers(id);
+    await source.replaceDataset(dataset);
+    await map.addSource(id, source);
+    addDisplayLayers(id, source, prefix, colors);
+    return source;
+}
+function populateLayerSelect(select, dataset) {
+    select.innerHTML = '';
+    dataset?.layers?.forEach((layer, index) => select.appendChild(new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? '?'})`, String(index))));
+    select.disabled = select.options.length === 0;
+}
+function selectedTool() {
+    return duckDbToolbox.get(toolSelect.value);
+}
+function parameterValue(parameter) {
+    if (parameter.default !== undefined)
+        return parameter.default;
+    if (!parameter.required)
+        return undefined;
+    if (parameter.type === 'number')
+        return parameter.exclusiveMinimum !== undefined ? parameter.exclusiveMinimum + 1 : parameter.minimum ?? 0;
+    if (parameter.type === 'boolean')
+        return false;
+    if (parameter.type === 'enum')
+        return parameter.enumValues?.[0] ?? '';
+    if (parameter.type === 'string[]')
+        return ['field'];
+    if (parameter.type === 'object[]')
+        return [{}];
+    return 'field';
+}
+function updateToolDetails() {
+    const tool = selectedTool();
+    if (!tool) {
+        description.textContent = '没有匹配的工具。';
+        toolInputs.textContent = '';
+        paramsInput.value = '{}';
         updateRunState();
-      }
-
-      function renderTools(query = '') {
-        const tools = query.trim() ? duckDbToolbox.search(query) : duckDbToolbox.list();
-        toolSelect.innerHTML = '';
-        for (const tool of tools) toolSelect.appendChild(new Option(`${tool.id} — ${tool.title}`, tool.id));
-        toolSelect.disabled = tools.length === 0;
-        updateToolDetails();
-      }
-
-      function updateRunState() {
-        const tool = selectedTool();
-        runButton.disabled = !inputDataset || !tool || tool.inputs.length > 1 && !maskDataset || inputLayerSelect.options.length === 0;
-      }
-
-      async function getRuntime() {
-        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-
-          return runtime;
-        });
-        return runtimePromise;
-      }
-
-      async function loadDatasetFromFile(file, sourceId, prefix, colors) {
-        const source = new TopologySource(sourceId);
-        const content = new Uint8Array(await file.arrayBuffer());
-        removeSourceWithLayers(sourceId);
-        await source.setData({ filename: file.name, content });
-        const dataset = source.getDataset();
-        if (!dataset) throw new Error(`${file.name} 未生成可用 dataset`);
-        await map.addSource(sourceId, source);
-        addDisplayLayers(sourceId, source, prefix, colors);
-        return { dataset, source };
-      }
-
-      inputFile.addEventListener('change', async () => {
-        const file = inputFile.files?.[0];
-        if (!file) return;
-        runButton.disabled = true;
-        removeSourceWithLayers(OUTPUT_SOURCE_ID);
-        status.textContent = `正在加载输入数据 ${file.name}...`;
-        try {
-          const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, 'duckdb-toolbox-input', { fill: '#dbeafe', fillOpacity: 0.42, line: '#1d4ed8', lineWidth: 1.5, pointRadius: 4 });
-          inputDataset = dataset;
-          populateLayerSelect(inputLayerSelect, dataset);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载输入数据 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          inputDataset = undefined;
-          populateLayerSelect(inputLayerSelect, undefined);
-          status.textContent = `输入数据加载失败: ${err?.message ?? err}`;
-        } finally {
-          updateRunState();
-        }
-      });
-
-      maskFile.addEventListener('change', async () => {
-        const file = maskFile.files?.[0];
-        if (!file) return;
-        runButton.disabled = true;
-        removeSourceWithLayers(OUTPUT_SOURCE_ID);
-        status.textContent = `正在加载 mask 数据 ${file.name}...`;
-        try {
-          const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, 'duckdb-toolbox-mask', { fill: '#fecdd3', fillOpacity: 0.36, line: '#be123c', lineWidth: 2, pointRadius: 4 });
-          maskDataset = dataset;
-          populateLayerSelect(maskLayerSelect, dataset);
-          status.textContent = `已加载 mask 数据 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          maskDataset = undefined;
-          populateLayerSelect(maskLayerSelect, undefined);
-          status.textContent = `Mask 数据加载失败: ${err?.message ?? err}`;
-        } finally {
-          updateRunState();
-        }
-      });
-
-      searchInput.addEventListener('input', () => renderTools(searchInput.value));
-      toolSelect.addEventListener('change', updateToolDetails);
-
-      runButton.addEventListener('click', async () => {
-        const tool = selectedTool();
-        if (!tool || !inputDataset || tool.inputs.length > 1 && !maskDataset) {
-          status.textContent = '请先上传工具所需的数据。';
-          return;
-        }
-        runButton.disabled = true;
-        status.textContent = `DuckDB-Wasm 正在运行 ${tool.title}...`;
-        try {
-          const params = JSON.parse(paramsInput.value);
-          if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('参数 JSON 必须是对象。');
-          // 工具只处理单个图层：按下拉选择把输入裁成单层数据集（保留 arcs/info）
-          const layerAt = (dataset, select) => {
+        return;
+    }
+    description.textContent = tool.description;
+    toolInputs.textContent = tool.inputs.map((input) => `${input.name}${input.required ? '（必需）' : '（可选）'}`).join('、') || '无';
+    paramsInput.value = JSON.stringify(Object.fromEntries(tool.parameters.map((parameter) => [parameter.name, parameterValue(parameter)]).filter(([, value]) => value !== undefined)), null, 2);
+    updateRunState();
+}
+function renderTools(query = '') {
+    const tools = query.trim() ? duckDbToolbox.search(query) : duckDbToolbox.list();
+    toolSelect.innerHTML = '';
+    for (const tool of tools)
+        toolSelect.appendChild(new Option(`${tool.id} — ${tool.title}`, tool.id));
+    toolSelect.disabled = tools.length === 0;
+    updateToolDetails();
+}
+function updateRunState() {
+    const tool = selectedTool();
+    runButton.disabled = !inputDataset || !tool || tool.inputs.length > 1 && !maskDataset || inputLayerSelect.options.length === 0;
+}
+async function getRuntime() {
+    runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        return runtime;
+    });
+    return runtimePromise;
+}
+async function loadDatasetFromFile(file, sourceId, prefix, colors) {
+    const source = new TopologySource(sourceId);
+    const content = new Uint8Array(await file.arrayBuffer());
+    removeSourceWithLayers(sourceId);
+    await source.setData({ filename: file.name, content });
+    const dataset = source.getDataset();
+    if (!dataset)
+        throw new Error(`${file.name} 未生成可用 dataset`);
+    await map.addSource(sourceId, source);
+    addDisplayLayers(sourceId, source, prefix, colors);
+    return { dataset, source };
+}
+inputFile.addEventListener('change', async () => {
+    const file = inputFile.files?.[0];
+    if (!file)
+        return;
+    runButton.disabled = true;
+    removeSourceWithLayers(OUTPUT_SOURCE_ID);
+    status.textContent = `正在加载输入数据 ${file.name}...`;
+    try {
+        const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, 'duckdb-toolbox-input', { fill: '#dbeafe', fillOpacity: 0.42, line: '#1d4ed8', lineWidth: 1.5, pointRadius: 4 });
+        inputDataset = dataset;
+        populateLayerSelect(inputLayerSelect, dataset);
+        map.setExtent(source.getExtent());
+        status.textContent = `已加载输入数据 ${file.name}。`;
+    }
+    catch (err) {
+        console.error(err);
+        inputDataset = undefined;
+        populateLayerSelect(inputLayerSelect, undefined);
+        status.textContent = `输入数据加载失败: ${err?.message ?? err}`;
+    }
+    finally {
+        updateRunState();
+    }
+});
+maskFile.addEventListener('change', async () => {
+    const file = maskFile.files?.[0];
+    if (!file)
+        return;
+    runButton.disabled = true;
+    removeSourceWithLayers(OUTPUT_SOURCE_ID);
+    status.textContent = `正在加载 mask 数据 ${file.name}...`;
+    try {
+        const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, 'duckdb-toolbox-mask', { fill: '#fecdd3', fillOpacity: 0.36, line: '#be123c', lineWidth: 2, pointRadius: 4 });
+        maskDataset = dataset;
+        populateLayerSelect(maskLayerSelect, dataset);
+        status.textContent = `已加载 mask 数据 ${file.name}。`;
+    }
+    catch (err) {
+        console.error(err);
+        maskDataset = undefined;
+        populateLayerSelect(maskLayerSelect, undefined);
+        status.textContent = `Mask 数据加载失败: ${err?.message ?? err}`;
+    }
+    finally {
+        updateRunState();
+    }
+});
+searchInput.addEventListener('input', () => renderTools(searchInput.value));
+toolSelect.addEventListener('change', updateToolDetails);
+runButton.addEventListener('click', async () => {
+    const tool = selectedTool();
+    if (!tool || !inputDataset || tool.inputs.length > 1 && !maskDataset) {
+        status.textContent = '请先上传工具所需的数据。';
+        return;
+    }
+    runButton.disabled = true;
+    status.textContent = `DuckDB-Wasm 正在运行 ${tool.title}...`;
+    try {
+        const params = JSON.parse(paramsInput.value);
+        if (!params || typeof params !== 'object' || Array.isArray(params))
+            throw new Error('参数 JSON 必须是对象。');
+        // 工具只处理单个图层：按下拉选择把输入裁成单层数据集（保留 arcs/info）
+        const layerAt = (dataset, select) => {
             const index = Number(select.value);
             const layer = dataset?.layers?.[index];
             return layer ? { ...dataset, layers: [layer] } : dataset;
-          };
-          const inputs = Object.fromEntries(
-            tool.inputs.map((input, index) => [input.name, index === 0 ? layerAt(inputDataset, inputLayerSelect) : layerAt(maskDataset, maskLayerSelect)]),
-          );
-          const runtime = await getRuntime();
-          const resultDataset = await duckDbToolbox.execute(tool.id, { inputs, params, runtime });
-          const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-toolbox-output', { fill: '#fef3c7', fillOpacity: 0.58, line: '#b45309', lineWidth: 2.5, pointRadius: 5 });
-          map.setExtent(outputSource.getExtent());
-          const count = resultDataset.layers.reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
-          status.textContent = `${tool.title} 完成，输出 ${count} 个要素。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `${tool.title} 失败: ${err?.message ?? err}`;
-        } finally {
-          updateRunState();
-        }
-      });
-
-      window.addEventListener('resize', () => map.resize());
-      window.addEventListener('pagehide', () => {
-        void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
-      });
-      renderTools();
-      await autoLoadExampleFixtures('duckdb-toolbox');
-    </script>
+        };
+        const inputs = Object.fromEntries(tool.inputs.map((input, index) => [input.name, index === 0 ? layerAt(inputDataset, inputLayerSelect) : layerAt(maskDataset, maskLayerSelect)]));
+        const runtime = await getRuntime();
+        const resultDataset = await duckDbToolbox.execute(tool.id, { inputs, params, runtime });
+        const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-toolbox-output', { fill: '#fef3c7', fillOpacity: 0.58, line: '#b45309', lineWidth: 2.5, pointRadius: 5 });
+        map.setExtent(outputSource.getExtent());
+        const count = resultDataset.layers.reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
+        status.textContent = `${tool.title} 完成，输出 ${count} 个要素。`;
+    }
+    catch (err) {
+        console.error(err);
+        status.textContent = `${tool.title} 失败: ${err?.message ?? err}`;
+    }
+    finally {
+        updateRunState();
+    }
+});
+window.addEventListener('resize', () => map.resize());
+window.addEventListener('pagehide', () => {
+    void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+});
+renderTools();
+await autoLoadExampleFixtures('duckdb-toolbox');
+</script>
   </body>
 </html>

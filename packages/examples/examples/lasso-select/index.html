@@ -58,108 +58,103 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    // Box + lasso are named handlers on the map (P2c). Switching is one
-    // disable-then-enable pair; the handlers are mutually exclusive
-    // (boxSelect.enable() throws if lassoSelect is enabled, and vice
-    // versa) — we always disable the other first.
-    // Alternative for toolbar-button surfaces:
-    //   map.addControl(new BoxSelectControl()) / new LassoSelectControl()
-    map.boxSelect.enable();   // Start with rect active.
-
-    const SOURCE_ID = 'lasso-demo-source';
-    const status = document.getElementById('status');
-    const selectedList = document.getElementById('selected-list');
-    const clearBtn = document.getElementById('clear-btn');
-    const deleteBtn = document.getElementById('delete-btn');
-    const toolBoxBtn = document.getElementById('tool-box');
-    const toolLassoBtn = document.getElementById('tool-lasso');
-
-    function refreshSelected() {
-      const sel = map.getSelection();
-      selectedList.textContent = `已选: ${sel.length}` + (sel.length > 0
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+// Box + lasso are named handlers on the map (P2c). Switching is one
+// disable-then-enable pair; the handlers are mutually exclusive
+// (boxSelect.enable() throws if lassoSelect is enabled, and vice
+// versa) — we always disable the other first.
+// Alternative for toolbar-button surfaces:
+//   map.addControl(new BoxSelectControl()) / new LassoSelectControl()
+map.boxSelect.enable(); // Start with rect active.
+const SOURCE_ID = 'lasso-demo-source';
+const status = document.getElementById('status');
+const selectedList = document.getElementById('selected-list');
+const clearBtn = document.getElementById('clear-btn');
+const deleteBtn = document.getElementById('delete-btn');
+const toolBoxBtn = document.getElementById('tool-box');
+const toolLassoBtn = document.getElementById('tool-lasso');
+function refreshSelected() {
+    const sel = map.getSelection();
+    selectedList.textContent = `已选: ${sel.length}` + (sel.length > 0
         ? ' — ' + sel.slice(0, 8).map((r) => `${r.layer}#${r.id}`).join(', ') + (sel.length > 8 ? ' …' : '')
         : '');
-      clearBtn.disabled = sel.length === 0;
-      deleteBtn.disabled = sel.length === 0;
-
-      if (sel.length === 0) {
+    clearBtn.disabled = sel.length === 0;
+    deleteBtn.disabled = sel.length === 0;
+    if (sel.length === 0) {
         map.clearHighlightedFeatures();
-      } else {
+    }
+    else {
         map.setHighlightedFeatures(sel, { color: '#1e88e5', width: 3 });
-      }
     }
-
-    map.on('selectionchange', refreshSelected);
-
-    function pickTool(name) {
-      try {
+}
+map.on('selectionchange', refreshSelected);
+function pickTool(name) {
+    try {
         if (name === 'box') {
-          // Disable the OTHER first so boxSelect.enable() doesn't trip
-          // the mutual-exclusivity throw.
-          map.lassoSelect.disable();
-          map.boxSelect.enable();
-          toolBoxBtn.classList.add('active');
-          toolLassoBtn.classList.remove('active');
-          status.textContent = '矩形选择 — Shift+拖拽画矩形';
-        } else {
-          map.boxSelect.disable();
-          map.lassoSelect.enable();
-          toolBoxBtn.classList.remove('active');
-          toolLassoBtn.classList.add('active');
-          status.textContent = '套索选择 — Shift+拖拽画自由曲线';
+            // Disable the OTHER first so boxSelect.enable() doesn't trip
+            // the mutual-exclusivity throw.
+            map.lassoSelect.disable();
+            map.boxSelect.enable();
+            toolBoxBtn.classList.add('active');
+            toolLassoBtn.classList.remove('active');
+            status.textContent = '矩形选择 — Shift+拖拽画矩形';
         }
-      } catch (err) {
-        status.textContent = '切换失败: ' + (err && err.message ? err.message : String(err));
-      }
+        else {
+            map.boxSelect.disable();
+            map.lassoSelect.enable();
+            toolBoxBtn.classList.remove('active');
+            toolLassoBtn.classList.add('active');
+            status.textContent = '套索选择 — Shift+拖拽画自由曲线';
+        }
     }
-
-    toolBoxBtn.addEventListener('click', () => pickTool('box'));
-    toolLassoBtn.addEventListener('click', () => pickTool('lasso'));
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    catch (err) {
+        status.textContent = '切换失败: ' + (err && err.message ? err.message : String(err));
+    }
+}
+toolBoxBtn.addEventListener('click', () => pickTool('box'));
+toolLassoBtn.addEventListener('click', () => pickTool('lasso'));
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}。Shift+拖拽框选/套索。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            status.textContent = `已加载 ${file.name}。Shift+拖拽框选/套索。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    clearBtn.addEventListener('click', () => map.clearSelection());
-    deleteBtn.addEventListener('click', () => {
-      const ok = map.deleteSelected();
-      status.textContent = ok ? '已删除选中要素 (Ctrl+Z 撤销)。' : '删除失败。';
-    });
-
-    refreshSelected();
-    await autoLoadExampleFixtures('lasso-select');
-  </script>
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+clearBtn.addEventListener('click', () => map.clearSelection());
+deleteBtn.addEventListener('click', () => {
+    const ok = map.deleteSelected();
+    status.textContent = ok ? '已删除选中要素 (Ctrl+Z 撤销)。' : '删除失败。';
+});
+refreshSelected();
+await autoLoadExampleFixtures('lasso-select');
+</script>
 </body>
 
 </html>

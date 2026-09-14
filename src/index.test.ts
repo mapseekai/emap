@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as emap from './index';
-import { DragPanHandler as NewDragPan } from './core/handlers/drag-pan';
+import { DragPanHandler as NewDragPan } from './engine/core/handlers/drag-pan';
 
 describe('public export surface (DX P1 additions)', () => {
   it('exports HandlerManager and the new handler classes', () => {

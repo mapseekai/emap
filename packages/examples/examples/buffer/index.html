@@ -71,104 +71,114 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'buf-source';
-    const fileInput = document.getElementById('file-input');
-    const targetSel = document.getElementById('target');
-    const radiusInput = document.getElementById('radius');
-    const capSel = document.getElementById('cap');
-    const bufBtn = document.getElementById('buffer-btn');
-    const status = document.getElementById('status');
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'buf-source';
+const fileInput = document.getElementById('file-input');
+const targetSel = document.getElementById('target');
+const radiusInput = document.getElementById('radius');
+const capSel = document.getElementById('cap');
+const bufBtn = document.getElementById('buffer-btn');
+const status = document.getElementById('status');
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      bufBtn.disabled = source.getLayers().length === 0;
-    }
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    bufBtn.disabled = source.getLayers().length === 0;
+}
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。选择目标图层与半径,再点击 "生成缓冲区"。`;
-        } catch (err) {
-          console.error(err);
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。选择目标图层与半径,再点击 "生成缓冲区"。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    function readNumber(id) {
-      const raw = document.getElementById(id).value.trim();
-      if (!raw) return undefined;
-      const n = Number(raw);
-      return Number.isFinite(n) ? n : undefined;
-    }
-
-    bufBtn.addEventListener('click', async () => {
-      const target = targetSel.value;
-      if (!target) return;
-      const raw = radiusInput.value.trim();
-      if (!raw) return;
-      const radius = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
-      const opts = { source: SOURCE_ID, target, radius };
-      if (capSel.value) opts.capStyle = capSel.value;
-      const vertices = readNumber('vertices');
-      if (vertices !== undefined) opts.vertices = vertices;
-      const arcQuality = readNumber('arc-quality');
-      if (arcQuality !== undefined) opts.arcQuality = arcQuality;
-      const typeVal = document.getElementById('type').value;
-      if (typeVal) opts.type = typeVal;
-      if (document.getElementById('planar').checked) opts.planar = true;
-      if (document.getElementById('v2').checked) opts.v2 = true;
-      status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
-      bufBtn.disabled = true;
-      try {
+        catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+function readNumber(id) {
+    const raw = document.getElementById(id).value.trim();
+    if (!raw)
+        return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+}
+bufBtn.addEventListener('click', async () => {
+    const target = targetSel.value;
+    if (!target)
+        return;
+    const raw = radiusInput.value.trim();
+    if (!raw)
+        return;
+    const radius = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
+    const opts = { source: SOURCE_ID, target, radius };
+    if (capSel.value)
+        opts.capStyle = capSel.value;
+    const vertices = readNumber('vertices');
+    if (vertices !== undefined)
+        opts.vertices = vertices;
+    const arcQuality = readNumber('arc-quality');
+    if (arcQuality !== undefined)
+        opts.arcQuality = arcQuality;
+    const typeVal = document.getElementById('type').value;
+    if (typeVal)
+        opts.type = typeVal;
+    if (document.getElementById('planar').checked)
+        opts.planar = true;
+    if (document.getElementById('v2').checked)
+        opts.v2 = true;
+    status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
+    bufBtn.disabled = true;
+    try {
         const result = await map.ops.bufferLayer(opts);
         console.log('bufferLayer result:', result);
         if (result.ok) {
-          status.textContent = `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。`;
-        } else {
-          const e = result.error;
-          status.textContent = `生成失败: ${e.kind}${e.field ? ' field=' + e.field : ''}${e.reason ? ' (' + e.reason + ')' : ''}${e.cause ? ' cause=' + (e.cause.message || e.cause) : ''}`;
-          console.error('bufferLayer error:', e);
+            status.textContent = `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。`;
+        }
+        else {
+            const e = result.error;
+            status.textContent = `生成失败: ${e.kind}${e.field ? ' field=' + e.field : ''}${e.reason ? ' (' + e.reason + ')' : ''}${e.cause ? ' cause=' + (e.cause.message || e.cause) : ''}`;
+            console.error('bufferLayer error:', e);
         }
         const src = map.getSource(SOURCE_ID);
-        if (src) populate(src);
-      } catch (err) {
+        if (src)
+            populate(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         bufBtn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('buffer');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('buffer');
+</script>
 </body>
 
 </html>

@@ -35,123 +35,144 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'rotscale-source';
-    const status = document.getElementById('status');
-
-    map.on('selectionchange', (e) => {
-      if (e.selected.length === 0) map.clearHighlightedFeatures();
-      else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
-    });
-
-    const fileInput = document.getElementById('file-input');
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'rotscale-source';
+const status = document.getElementById('status');
+map.on('selectionchange', (e) => {
+    if (e.selected.length === 0)
+        map.clearHighlightedFeatures();
+    else
+        map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+});
+const fileInput = document.getElementById('file-input');
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          // Enable the transform handler only AFTER the map/data is ready
-          // (mirrors how the vertexEdit/drawFeature examples enable theirs).
-          map.clickSelect.enable();
-          map.transformFeature.enable();
-          setMode('t');
-          status.textContent = `已加载 ${file.name}。单击选中,在已选要素上按住拖动变换,T/R/S 切换模式。`;
-          document.getElementById('map').focus();
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            // Enable the transform handler only AFTER the map/data is ready
+            // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+            map.clickSelect.enable();
+            map.transformFeature.enable();
+            setMode('t');
+            status.textContent = `已加载 ${file.name}。单击选中,在已选要素上按住拖动变换,T/R/S 切换模式。`;
+            document.getElementById('map').focus();
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    // ── Migration note ────────────────────────────────────────────────
-    // The old hand-wired recipe (pixelToMap + window capture-phase
-    // mousedown/move/up + beginTranslateSession/beginAffineSession +
-    // rotateMatrix/scaleMatrix delta math + manual selection /
-    // Esc/right-click cancel) is now TWO modal-coexisting handlers
-    // (spec §15.11 "Option A"):
-    //
-    //   map.clickSelect.enable();                              // selection
-    //   map.transformFeature.setOptions({ mode: 'rotate' });   // or 'translate' | 'scale'
-    //   map.transformFeature.enable();                         // drag
-    //
-    // clickSelect owns selection: click = replace, shift+click = add,
-    // click on empty space = clear. transformFeature owns NO selection
-    // logic — it press-drags an ALREADY-selected feature: pointerdown
-    // over a selected feature opens the matching editSession; drag
-    // streams the delta (translate dx/dy, or rotate/scale matrix vs the
-    // session origin); pointerup commits one undo entry; Escape cancels.
-    // So the flow is: click to select, then press-drag a selected
-    // feature to transform the whole selection. The T/R/S switcher below
-    // is just a call to setOptions — no session bookkeeping. The
-    // headless map.editSession step-nudge API is unchanged.
-    // ──────────────────────────────────────────────────────────────────
-
-    let mode = 't';   // 't' = translate, 'r' = rotate, 's' = scale (for UI/status)
-
-    function modeLabel() {
-      return mode === 'r' ? '旋转' : mode === 's' ? '缩放' : '平移';
-    }
-
-    // Single switcher: maps the t/r/s UI state onto the handler's mode.
-    function setMode(m) { // 't' | 'r' | 's'
-      mode = m;
-      map.transformFeature.setOptions({
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+// ── Migration note ────────────────────────────────────────────────
+// The old hand-wired recipe (pixelToMap + window capture-phase
+// mousedown/move/up + beginTranslateSession/beginAffineSession +
+// rotateMatrix/scaleMatrix delta math + manual selection /
+// Esc/right-click cancel) is now TWO modal-coexisting handlers
+// (spec §15.11 "Option A"):
+//
+//   map.clickSelect.enable();                              // selection
+//   map.transformFeature.setOptions({ mode: 'rotate' });   // or 'translate' | 'scale'
+//   map.transformFeature.enable();                         // drag
+//
+// clickSelect owns selection: click = replace, shift+click = add,
+// click on empty space = clear. transformFeature owns NO selection
+// logic — it press-drags an ALREADY-selected feature: pointerdown
+// over a selected feature opens the matching editSession; drag
+// streams the delta (translate dx/dy, or rotate/scale matrix vs the
+// session origin); pointerup commits one undo entry; Escape cancels.
+// So the flow is: click to select, then press-drag a selected
+// feature to transform the whole selection. The T/R/S switcher below
+// is just a call to setOptions — no session bookkeeping. The
+// headless map.editSession step-nudge API is unchanged.
+// ──────────────────────────────────────────────────────────────────
+let mode = 't'; // 't' = translate, 'r' = rotate, 's' = scale (for UI/status)
+function modeLabel() {
+    return mode === 'r' ? '旋转' : mode === 's' ? '缩放' : '平移';
+}
+// Single switcher: maps the t/r/s UI state onto the handler's mode.
+function setMode(m) {
+    mode = m;
+    map.transformFeature.setOptions({
         mode: m === 't' ? 'translate' : m === 'r' ? 'rotate' : 'scale',
-      });
-      status.textContent = `模式: ${modeLabel()}(在要素上按住拖动,Esc 取消)。`;
+    });
+    status.textContent = `模式: ${modeLabel()}(在要素上按住拖动,Esc 取消)。`;
+}
+// T/R/S mode switcher (same keys/labels as before — only the handler
+// wiring changed: each key now just calls setMode()).
+window.addEventListener('keydown', (e) => {
+    if (e.key === 't' || e.key === 'T')
+        setMode('t');
+    else if (e.key === 'r' || e.key === 'R')
+        setMode('r');
+    else if (e.key === 's' || e.key === 'S')
+        setMode('s');
+});
+// Keyboard step nudge stays available (headless editSession API,
+// unchanged by the handler).
+document.getElementById('map').addEventListener('keydown', (e) => {
+    const fine = e.shiftKey;
+    const stride = fine ? 1 : 10;
+    const angle = fine ? 1 : 5;
+    const scaleStep = fine ? 1.02 : 1.1;
+    let dx = 0, dy = 0;
+    if (e.key === 'ArrowLeft')
+        dx = -stride;
+    else if (e.key === 'ArrowRight')
+        dx = stride;
+    else if (e.key === 'ArrowUp')
+        dy = stride;
+    else if (e.key === 'ArrowDown')
+        dy = -stride;
+    if (dx || dy) {
+        e.preventDefault();
+        map.editSession.translateSelected(dx, dy);
+        return;
     }
-
-    // T/R/S mode switcher (same keys/labels as before — only the handler
-    // wiring changed: each key now just calls setMode()).
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 't' || e.key === 'T') setMode('t');
-      else if (e.key === 'r' || e.key === 'R') setMode('r');
-      else if (e.key === 's' || e.key === 'S') setMode('s');
-    });
-
-    // Keyboard step nudge stays available (headless editSession API,
-    // unchanged by the handler).
-    document.getElementById('map').addEventListener('keydown', (e) => {
-      const fine = e.shiftKey;
-      const stride = fine ? 1 : 10;
-      const angle = fine ? 1 : 5;
-      const scaleStep = fine ? 1.02 : 1.1;
-
-      let dx = 0, dy = 0;
-      if (e.key === 'ArrowLeft') dx = -stride;
-      else if (e.key === 'ArrowRight') dx = stride;
-      else if (e.key === 'ArrowUp') dy = stride;
-      else if (e.key === 'ArrowDown') dy = -stride;
-      if (dx || dy) { e.preventDefault(); map.editSession.translateSelected(dx, dy); return; }
-
-      if (e.key === '[') { e.preventDefault(); map.editSession.rotateSelected(-angle); return; }
-      if (e.key === ']') { e.preventDefault(); map.editSession.rotateSelected(angle); return; }
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); map.editSession.scaleSelected(scaleStep); return; }
-      if (e.key === '-' || e.key === '_') { e.preventDefault(); map.editSession.scaleSelected(1 / scaleStep); return; }
-    });
-    await autoLoadExampleFixtures('feature-rotate-scale');
-  </script>
+    if (e.key === '[') {
+        e.preventDefault();
+        map.editSession.rotateSelected(-angle);
+        return;
+    }
+    if (e.key === ']') {
+        e.preventDefault();
+        map.editSession.rotateSelected(angle);
+        return;
+    }
+    if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        map.editSession.scaleSelected(scaleStep);
+        return;
+    }
+    if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        map.editSession.scaleSelected(1 / scaleStep);
+        return;
+    }
+});
+await autoLoadExampleFixtures('feature-rotate-scale');
+</script>
 </body>
 
 </html>

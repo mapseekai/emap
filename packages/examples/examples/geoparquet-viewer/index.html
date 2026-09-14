@@ -37,102 +37,88 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import {
-      autoLoadExampleFixtures,
-      loadExampleArrow,
-      loadExampleRuntime,
-    } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const emapArrow = await loadExampleArrow();
-    await emapArrow.initParquetWasm();
-    document.getElementById('status').textContent = '上传 .parquet / .arrow 文件开始';
-    document.getElementById('file-input').disabled = false;
-
-    const { Emap, TopologySource } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.use(emapArrow.arrowFormatsPlugin);
-    map.addControl(new emap.NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-
-    const fileInput = document.getElementById('file-input');
-    const formatSelect = document.getElementById('format');
-    const exportBtn = document.getElementById('export-btn');
-    const status = document.getElementById('status');
-
-    const SOURCE_ID = 'parquet-source';
-    let activeSource = null;
-
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      status.textContent = `处理 ${file.name} 中...`;
-      exportBtn.disabled = true;
-
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleArrow, loadExampleRuntime, } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const emapArrow = await loadExampleArrow();
+await emapArrow.initParquetWasm();
+document.getElementById('status').textContent = '上传 .parquet / .arrow 文件开始';
+document.getElementById('file-input').disabled = false;
+const { Emap, TopologySource } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.ctx.plugin(emapArrow.arrowFormatsPlugin);
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById('file-input');
+const formatSelect = document.getElementById('format');
+const exportBtn = document.getElementById('export-btn');
+const status = document.getElementById('status');
+const SOURCE_ID = 'parquet-source';
+let activeSource = null;
+fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `处理 ${file.name} 中...`;
+    exportBtn.disabled = true;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID, { formats: map.formats });
-
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         activeSource = source;
-
         try {
-          // setData 识别 .parquet/.arrow 扩展名并调用 formats 模块注册的插件。
-          // Arrow 格式已通过 map.use(arrowFormatsPlugin) 显式注册。
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-
-          const layer = source.getDataset()?.layers?.[0];
-          const featureCount = layer?.shapes?.length ?? 0;
-          const geomType = layer?.geometry_type ?? '未知';
-          status.textContent = `${file.name} — ${featureCount} 个要素（${geomType}）`;
-          exportBtn.disabled = false;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `处理失败: ${err.message || err}`;
+            // setData 识别 .parquet/.arrow 扩展名并调用 formats 模块注册的插件。
+            // Arrow 格式已通过 map.ctx.plugin(arrowFormatsPlugin) 显式注册。
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            const layer = source.getDataset()?.layers?.[0];
+            const featureCount = layer?.shapes?.length ?? 0;
+            const geomType = layer?.geometry_type ?? '未知';
+            status.textContent = `${file.name} — ${featureCount} 个要素（${geomType}）`;
+            exportBtn.disabled = false;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    exportBtn.addEventListener('click', async () => {
-      if (!activeSource) return;
-      const format = formatSelect.value;
-      status.textContent = `正在导出为 ${format}...`;
-      exportBtn.disabled = true;
-
-      try {
+        catch (err) {
+            console.error(err);
+            status.textContent = `处理失败: ${err.message || err}`;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+exportBtn.addEventListener('click', async () => {
+    if (!activeSource)
+        return;
+    const format = formatSelect.value;
+    status.textContent = `正在导出为 ${format}...`;
+    exportBtn.disabled = true;
+    try {
         const blob = await activeSource.export({ format });
-
         const extMap = { geoparquet: '.parquet', geoarrow: '.arrow', geojson: '.geojson' };
         const filename = 'export' + (extMap[format] ?? '.' + format);
-
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        a.remove();
+        await a.dispose();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-
         status.textContent = `已导出 ${blob.size} 字节 → ${filename}`;
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = `导出失败: ${err.message || err}`;
-      } finally {
+    }
+    finally {
         exportBtn.disabled = false;
-      }
-    });
-
-    window.addEventListener('resize', () => map.resize());
-    await autoLoadExampleFixtures('geoparquet-viewer');
-  </script>
+    }
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('geoparquet-viewer');
+</script>
 </body>
 
 </html>

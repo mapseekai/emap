@@ -2,8 +2,8 @@ import type {
   MapLibreBasemapService,
   MapLibreServiceErrorEvent,
   MapLibreServiceManager,
-} from '../map/maplibre-service';
-import type { ControlContext } from '../services/controls';
+} from '../integrations/maplibre/maplibre-service';
+import type { ControlContext } from '../runtime/services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
@@ -80,6 +80,8 @@ function isAbortError(error: unknown): boolean {
 }
 
 export class BasemapControl implements Control {
+  readonly inject = ['mapLibre'];
+
   private readonly _legacyStyles: readonly BasemapStyle[];
   private readonly _defaultStyle: string | undefined;
   private readonly _hasLegacyOptions: boolean;

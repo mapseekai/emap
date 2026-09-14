@@ -2,10 +2,10 @@
 id: formats
 slug: /data/formats
 title: Data formats
-api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter","TopologySource","ExportOptions"]
+api: ["buildGeoMetadata", "crsStringToProjjson", "DatasetFormatPlugin", "decodeWkb", "detectGeometryColumn", "Emap", "ExportedFormatFile", "exportGeoArrow", "ExportGeoArrowOptions", "exportGeoParquet", "ExportGeoParquetOptions", "fromArrowTable", "FromArrowTableOptions", "GeoColumnMetadata", "GeoEncoding", "GeoMetadata", "GeometryColumnInfo", "importGeoArrow", "ImportGeoArrowOptions", "importGeoParquet", "ImportGeoParquetOptions", "initParquetWasm", "InitParquetWasmOptions", "ParquetWasmModule", "ParquetWasmTable", "parseGeoMetadata", "projjsonToCrsString", "registerArrowFormats", "registerFormat", "setArrowTable", "setParquetWasm", "toArrowTable", "toArrowTableFromSource", "ToArrowTableOptions", "TopologySource.export", "TopologySource.fromBytes", "TopologySource.fromUrl", "WkbGeometry", "WkbWriter", "TopologySource", "ExportOptions"]
 examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Data formats
@@ -66,7 +66,7 @@ Import the optional entry point before importing, exporting, or interoperating w
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```

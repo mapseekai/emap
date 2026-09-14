@@ -30,74 +30,65 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const {
-      Emap,
-      TopologySource,
-      NavigationControl,
-      HistoryControl,
-      EditToolbar,
-      VertexEditControl,
-      DrawFeatureControl,
-    } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-
-    // 在地图容器上绑定快捷键,无需先点击按钮就能 Ctrl+Z
-    map.bindHistoryShortcuts();
-    document.getElementById('map').focus();
-
-    map.on('historychange', (e) => {
-      document.getElementById('last-action').textContent =
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl, EditToolbar, VertexEditControl, DrawFeatureControl, } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+// 在地图容器上绑定快捷键,无需先点击按钮就能 Ctrl+Z
+map.bindHistoryShortcuts();
+document.getElementById('map').focus();
+map.on('historychange', (e) => {
+    document.getElementById('last-action').textContent =
         e.label ? `最近操作: ${e.label}` : '';
-    });
-
-    const fileInput = document.getElementById('file-input');
-    const status = document.getElementById('status');
-    const SOURCE_ID = 'undo-source';
-    let editToolbar = null;
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+});
+const fileInput = document.getElementById('file-input');
+const status = document.getElementById('status');
+const SOURCE_ID = 'undo-source';
+let editToolbar = null;
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = '试试: 平移 / 绘制 / 拖动顶点 / 右键顶点删除,然后 Ctrl+Z 撤销。';
-          map.clearHistory();
-          if (editToolbar) map.removeControl(editToolbar);
-          editToolbar = new EditToolbar({
-            controls: [
-              new VertexEditControl(),
-              new DrawFeatureControl({ source: SOURCE_ID, type: 'polyline' }),
-              new DrawFeatureControl({ source: SOURCE_ID, type: 'polygon' }),
-              new DrawFeatureControl({ source: SOURCE_ID, type: 'point' }),
-            ],
-          });
-          map.addControl(editToolbar, 'top-left');
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            status.textContent = '试试: 平移 / 绘制 / 拖动顶点 / 右键顶点删除,然后 Ctrl+Z 撤销。';
+            map.clearHistory();
+            if (editToolbar)
+                await map.removeControl(editToolbar);
+            editToolbar = new EditToolbar({
+                controls: [
+                    new VertexEditControl(),
+                    new DrawFeatureControl({ source: SOURCE_ID, type: 'polyline' }),
+                    new DrawFeatureControl({ source: SOURCE_ID, type: 'polygon' }),
+                    new DrawFeatureControl({ source: SOURCE_ID, type: 'point' }),
+                ],
+            });
+            await map.addControl(editToolbar, 'top-left');
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-    await autoLoadExampleFixtures('undo-redo');
-  </script>
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+await autoLoadExampleFixtures('undo-redo');
+</script>
 </body>
 
 </html>

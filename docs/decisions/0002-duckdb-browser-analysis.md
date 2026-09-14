@@ -20,3 +20,4 @@ Some spatial workflows benefit from SQL, GeoParquet, Arrow, and DuckDB spatial f
 ## Consequences
 
 Core maps do not pay the DuckDB-Wasm cost. Applications must deliberately initialize or inject a runtime, and each supported SQL or spatial capability needs an explicit typed contract and integration test.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

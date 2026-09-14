@@ -2,10 +2,10 @@
 id: faq
 slug: /reference/faq
 title: FAQ
-api: ["Emap","MapOptions","TopologySource","SourceLoadError"]
+api: ["Emap", "MapOptions", "TopologySource", "SourceLoadError"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # FAQ

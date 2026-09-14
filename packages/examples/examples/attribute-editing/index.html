@@ -110,34 +110,30 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'attr-source';
-    const fileInput = document.getElementById('file-input');
-    const status = document.getElementById('status');
-    const propsDiv = document.getElementById('props');
-    const schemaPanel = document.getElementById('schema-panel');
-    const mapContainer = map.getCanvasContainer();
-
-    let activeRef = null;
-    let activeTarget = null; // 当前选中要素所在的图层名
-
-    function renderProps(feature) {
-      activeRef = { source: feature.source, layer: feature.layer, id: feature.id };
-      activeTarget = feature.layer;
-      const props = feature.properties || {};
-      propsDiv.innerHTML = '';
-      Object.entries(props).forEach(([key, value]) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'attr-source';
+const fileInput = document.getElementById('file-input');
+const status = document.getElementById('status');
+const propsDiv = document.getElementById('props');
+const schemaPanel = document.getElementById('schema-panel');
+const mapContainer = map.getCanvasContainer();
+let activeRef = null;
+let activeTarget = null; // 当前选中要素所在的图层名
+function renderProps(feature) {
+    activeRef = { source: feature.source, layer: feature.layer, id: feature.id };
+    activeTarget = feature.layer;
+    const props = feature.properties || {};
+    propsDiv.innerHTML = '';
+    Object.entries(props).forEach(([key, value]) => {
         const row = document.createElement('div');
         row.className = 'row';
         const k = document.createElement('span');
@@ -146,90 +142,92 @@
         const v = document.createElement('input');
         v.value = value == null ? '' : String(value);
         v.addEventListener('change', () => {
-          // 数字字符串保持数字类型
-          let next = v.value;
-          if (/^-?\d+(\.\d+)?$/.test(next)) next = Number(next);
-          map.attributes.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
-          status.textContent = `${key} → ${v.value}`;
+            // 数字字符串保持数字类型
+            let next = v.value;
+            if (/^-?\d+(\.\d+)?$/.test(next))
+                next = Number(next);
+            map.attributes.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
+            status.textContent = `${key} → ${v.value}`;
         });
         row.appendChild(k);
         row.appendChild(v);
         propsDiv.appendChild(row);
-      });
-      schemaPanel.hidden = false;
-    }
-
-    function refreshActiveDisplay() {
-      if (!activeRef) return;
-      const hits = map.queryFeatures([0, 0], { layers: [activeRef.layer] });
-      const fresh = hits.find((h) => h.id === activeRef.id);
-      if (fresh) renderProps(fresh);
-    }
-
-    map.on('historychange', () => {
-      // undo / redo 时面板按当前值重渲染
-      refreshActiveDisplay();
     });
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    schemaPanel.hidden = false;
+}
+function refreshActiveDisplay() {
+    if (!activeRef)
+        return;
+    const hits = map.queryFeatures([0, 0], { layers: [activeRef.layer] });
+    const fresh = hits.find((h) => h.id === activeRef.id);
+    if (fresh)
+        renderProps(fresh);
+}
+map.on('historychange', () => {
+    // undo / redo 时面板按当前值重渲染
+    refreshActiveDisplay();
+});
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}。点击要素查看 / 编辑属性。`;
-        } catch (err) {
-          console.error(err);
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            status.textContent = `已加载 ${file.name}。点击要素查看 / 编辑属性。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    mapContainer.addEventListener('click', (e) => {
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length) {
+        catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+mapContainer.addEventListener('click', (e) => {
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const features = map.queryFeatures(point);
+    if (!features.length) {
         propsDiv.textContent = '(未命中要素)';
         return;
-      }
-      renderProps(features[0]);
-    });
-
-    document.getElementById('add-field-btn').addEventListener('click', () => {
-      const field = document.getElementById('add-field').value.trim();
-      if (!field || !activeTarget) return;
-      const ok = map.attributes.addField({ source: SOURCE_ID, target: activeTarget, field });
-      status.textContent = ok ? `已新增字段 "${field}",Ctrl+Z 撤销。` : '新增失败。';
-      refreshActiveDisplay();
-    });
-
-    document.getElementById('remove-btn').addEventListener('click', () => {
-      const field = document.getElementById('remove-field').value.trim();
-      if (!field || !activeTarget) return;
-      const ok = map.attributes.removeField({ source: SOURCE_ID, target: activeTarget, field });
-      status.textContent = ok ? `已删除字段 "${field}",Ctrl+Z 撤销。` : '删除失败。';
-      refreshActiveDisplay();
-    });
-
-    document.getElementById('rename-btn').addEventListener('click', () => {
-      const from = document.getElementById('rename-from').value.trim();
-      const to = document.getElementById('rename-to').value.trim();
-      if (!from || !to || !activeTarget) return;
-      const ok = map.attributes.renameField({ source: SOURCE_ID, target: activeTarget, from, to });
-      status.textContent = ok ? `已重命名 ${from} → ${to},Ctrl+Z 撤销。` : '重命名失败 (字段冲突)。';
-      refreshActiveDisplay();
-    });
-    await autoLoadExampleFixtures('attribute-editing');
-  </script>
+    }
+    renderProps(features[0]);
+});
+document.getElementById('add-field-btn').addEventListener('click', () => {
+    const field = document.getElementById('add-field').value.trim();
+    if (!field || !activeTarget)
+        return;
+    const ok = map.attributes.addField({ source: SOURCE_ID, target: activeTarget, field });
+    status.textContent = ok ? `已新增字段 "${field}",Ctrl+Z 撤销。` : '新增失败。';
+    refreshActiveDisplay();
+});
+document.getElementById('remove-btn').addEventListener('click', () => {
+    const field = document.getElementById('remove-field').value.trim();
+    if (!field || !activeTarget)
+        return;
+    const ok = map.attributes.removeField({ source: SOURCE_ID, target: activeTarget, field });
+    status.textContent = ok ? `已删除字段 "${field}",Ctrl+Z 撤销。` : '删除失败。';
+    refreshActiveDisplay();
+});
+document.getElementById('rename-btn').addEventListener('click', () => {
+    const from = document.getElementById('rename-from').value.trim();
+    const to = document.getElementById('rename-to').value.trim();
+    if (!from || !to || !activeTarget)
+        return;
+    const ok = map.attributes.renameField({ source: SOURCE_ID, target: activeTarget, from, to });
+    status.textContent = ok ? `已重命名 ${from} → ${to},Ctrl+Z 撤销。` : '重命名失败 (字段冲突)。';
+    refreshActiveDisplay();
+});
+await autoLoadExampleFixtures('attribute-editing');
+</script>
 </body>
 
 </html>

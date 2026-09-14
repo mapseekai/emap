@@ -23,3 +23,4 @@ Reshaping paths, moving multiple vertices, adding or deleting holes, filling hol
 ## Consequences
 
 The handlers remain thin interaction state machines while commands own reversible mutation. New editing tools must define their topology and validation contract explicitly rather than routing through a generic coordinate patch.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

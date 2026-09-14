@@ -40,50 +40,46 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const SOURCE_ID = 'snap-clear-source';
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    let sourceLayer = '';
-
-    async function loadExampleData(file) {
-      const source = new TopologySource(SOURCE_ID);
-      const content = new Uint8Array(await file.arrayBuffer());
-      if (map.getLayer('reference-line')) map.removeLayer('reference-line');
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      await source.setData({ filename: file.name, content });
-      await map.addSource(SOURCE_ID, source);
-      map.setExtent(source.getExtent());
-
-      const layer = source.getLayers()[0];
-      sourceLayer = layer?.name || '';
-      map.addLayer({
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const SOURCE_ID = 'snap-clear-source';
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+let sourceLayer = '';
+async function loadExampleData(file) {
+    const source = new TopologySource(SOURCE_ID);
+    const content = new Uint8Array(await file.arrayBuffer());
+    if (map.getLayer('reference-line'))
+        map.removeLayer('reference-line');
+    if (map.getSource(SOURCE_ID))
+        map.removeSource(SOURCE_ID);
+    await source.setData({ filename: file.name, content });
+    await map.addSource(SOURCE_ID, source);
+    map.setExtent(source.getExtent());
+    const layer = source.getLayers()[0];
+    sourceLayer = layer?.name || '';
+    map.addLayer({
         id: 'reference-line',
         type: 'line',
         source: SOURCE_ID,
         'source-layer': sourceLayer,
         paint: { 'line-color': '#1e88e5', 'line-width': 3 },
-      });
-      document.getElementById('status').textContent =
+    });
+    document.getElementById('status').textContent =
         `已加载 ${file.name}。开启绘制后，把鼠标靠近/远离参考线观察吸附点清理。`;
-    }
-
-    function readThreshold() {
-      const threshold = Number(document.getElementById('threshold').value) || 18;
-      return Math.max(1, threshold);
-    }
-
-    function applyDrawOptions() {
-      map.drawFeature.setOptions({
+}
+function readThreshold() {
+    const threshold = Number(document.getElementById('threshold').value) || 18;
+    return Math.max(1, threshold);
+}
+function applyDrawOptions() {
+    map.drawFeature.setOptions({
         source: SOURCE_ID,
         sourceLayer,
         type: 'polyline',
@@ -91,42 +87,40 @@
         snapToVertex: true,
         snapToEdge: true,
         drawColor: '#d81b60',
-      });
-    }
-
-    function enableDraw() {
-      applyDrawOptions();
-      map.drawFeature.enable();
-      document.getElementById('status').textContent =
+    });
+}
+function enableDraw() {
+    applyDrawOptions();
+    map.drawFeature.enable();
+    document.getElementById('status').textContent =
         `绘制已开启,当前吸附阈值 ${readThreshold()}px。靠近蓝色线会显示吸附标记,移远后标记应立即消失。`;
-      map.getCanvasContainer?.().focus?.();
-    }
-
-    document.getElementById('draw-line').addEventListener('click', enableDraw);
-    document.getElementById('threshold').addEventListener('input', () => {
-      applyDrawOptions();
-      document.getElementById('status').textContent =
+    map.getCanvasContainer?.().focus?.();
+}
+document.getElementById('draw-line').addEventListener('click', enableDraw);
+document.getElementById('threshold').addEventListener('input', () => {
+    applyDrawOptions();
+    document.getElementById('status').textContent =
         `已应用吸附阈值 ${readThreshold()}px。继续移动鼠标即可观察新的吸附距离。`;
-    });
-    document.getElementById('cancel').addEventListener('click', () => {
-      map.drawFeature.disable();
-      document.getElementById('status').textContent = '绘制已取消。';
-    });
-
-    document.getElementById('file-input').addEventListener('change', async (event) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      try {
+});
+document.getElementById('cancel').addEventListener('click', () => {
+    map.drawFeature.disable();
+    document.getElementById('status').textContent = '绘制已取消。';
+});
+document.getElementById('file-input').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file)
+        return;
+    try {
         await loadExampleData(file);
         enableDraw();
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         document.getElementById('status').textContent = '示例数据加载失败';
-      }
-    });
-
-    await autoLoadExampleFixtures('draw-snap-clear');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('draw-snap-clear');
+</script>
 </body>
 
 </html>

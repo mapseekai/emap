@@ -45,232 +45,216 @@
       </div>
     </details>
     <script type="module">
-      import { installExampleMapUi } from '/src/example-runtime.ts';
-      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-      import {
-        closeDuckDbRuntime,
-        createDuckDbGeoParquetQuerySource,
-        createDuckDbRuntimeFromJsDelivr,
-        duckDbGeoParquetQueryLayer,
-        queryGeoParquetWithDuckDb,
-
-      } from '@mapseekai/emap/duckdb';
-
-      const emap = await loadExampleRuntime();
-
-      const { Emap, TopologySource, NavigationControl } = emap;
-
-      const SOURCE_ID = "duckdb-geoparquet-bytes";
-      const OUTPUT_ID = "duckdb-geoparquet-output";
-
-      const map = new Emap({ container: "map" });
-      map.addControl(new NavigationControl(), "top-left");
-      installExampleMapUi(map, emap);
-
-      const fileInput = document.getElementById("file");
-      const entrypointSelect = document.getElementById("entrypoint");
-      const layerNameInput = document.getElementById("layer-name");
-      const geometryColumnInput = document.getElementById("geometry-column");
-      const sqlInput = document.getElementById("sql");
-      const runButton = document.getElementById("run");
-      const status = document.getElementById("status");
-
-      let geoParquetBytes;
-      let geoParquetQuerySource;
-      let geoParquetFileName = "";
-      let runtimePromise;
-      const contextSources = new Map();
-
-      function getLayerId(layer, index) {
-        return String(layer?.name || layer?.id || `layer-${index}`);
-      }
-
-      function removeSourceWithLayers(id) {
-        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
-          map.removeLayer(layer.id);
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+import { closeDuckDbRuntime, createDuckDbGeoParquetQuerySource, createDuckDbRuntimeFromJsDelivr, duckDbGeoParquetQueryLayer, queryGeoParquetWithDuckDb, } from '@mapseekai/emap/duckdb';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl } = emap;
+const SOURCE_ID = "duckdb-geoparquet-bytes";
+const OUTPUT_ID = "duckdb-geoparquet-output";
+const map = await Emap.create({ container: "map" });
+await map.addControl(new NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById("file");
+const entrypointSelect = document.getElementById("entrypoint");
+const layerNameInput = document.getElementById("layer-name");
+const geometryColumnInput = document.getElementById("geometry-column");
+const sqlInput = document.getElementById("sql");
+const runButton = document.getElementById("run");
+const status = document.getElementById("status");
+let geoParquetBytes;
+let geoParquetQuerySource;
+let geoParquetFileName = "";
+let runtimePromise;
+const contextSources = new Map();
+function getLayerId(layer, index) {
+    return String(layer?.name || layer?.id || `layer-${index}`);
+}
+function removeSourceWithLayers(id) {
+    for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+        map.removeLayer(layer.id);
+    }
+    if (map.getSource(id))
+        map.removeSource(id);
+}
+function addDisplayLayers(sourceId, source, prefix, colors) {
+    source.getLayers().forEach((layer, index) => {
+        const sourceLayer = getLayerId(layer, index);
+        const baseId = `${prefix}-${index}`;
+        if (layer?.geometry_type === "polygon") {
+            map.addLayer({
+                id: `${baseId}-fill`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "fill",
+                paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+            });
+            map.addLayer({
+                id: `${baseId}-line`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "line",
+                paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
         }
-        if (map.getSource(id)) map.removeSource(id);
-      }
-
-      function addDisplayLayers(sourceId, source, prefix, colors) {
-        source.getLayers().forEach((layer, index) => {
-          const sourceLayer = getLayerId(layer, index);
-          const baseId = `${prefix}-${index}`;
-          if (layer?.geometry_type === "polygon") {
+        else if (layer?.geometry_type === "polyline") {
             map.addLayer({
-              id: `${baseId}-fill`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "fill",
-              paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+                id: `${baseId}-line`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "line",
+                paint: { "line-color": colors.line, "line-width": colors.lineWidth },
             });
+        }
+        else if (layer?.geometry_type === "point") {
             map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "line",
-              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+                id: `${baseId}-point`,
+                source: sourceId,
+                "source-layer": sourceLayer,
+                type: "circle",
+                paint: {
+                    "circle-color": colors.line,
+                    "circle-radius": colors.pointRadius,
+                    "circle-stroke-color": "#ffffff",
+                    "circle-stroke-width": 1,
+                },
             });
-          } else if (layer?.geometry_type === "polyline") {
-            map.addLayer({
-              id: `${baseId}-line`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "line",
-              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
-            });
-          } else if (layer?.geometry_type === "point") {
-            map.addLayer({
-              id: `${baseId}-point`,
-              source: sourceId,
-              "source-layer": sourceLayer,
-              type: "circle",
-              paint: {
-                "circle-color": colors.line,
-                "circle-radius": colors.pointRadius,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1,
-              },
-            });
-          }
-        });
-      }
-
-      async function addDatasetSource(id, dataset) {
-        const source = new TopologySource(id);
-        removeSourceWithLayers(id);
-        await source.replaceDataset(dataset);
-        await map.addSource(id, source);
-        addDisplayLayers(id, source, "duckdb-geoparquet-output", {
-          fill: "#dcfce7",
-          fillOpacity: 0.52,
-          line: "#15803d",
-          lineWidth: 2.25,
-          pointRadius: 5,
-        });
-        return source;
-      }
-
-      async function getRuntime() {
-        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-
-          return runtime;
-        });
-        return runtimePromise;
-      }
-
-      function hasGeoParquetInput() {
-        return Boolean(geoParquetBytes || geoParquetQuerySource);
-      }
-
-      async function closeGeoParquetQuerySource() {
-        const source = geoParquetQuerySource;
-        geoParquetQuerySource = undefined;
-        if (source) await source.close();
-      }
-
-      async function getGeoParquetQuerySource(runtime) {
-        if (geoParquetQuerySource) return geoParquetQuerySource;
-        if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
-        // 保留 bytes：direct 入口 queryGeoParquetWithDuckDb 每次都要原始数据
-        geoParquetQuerySource = await createDuckDbGeoParquetQuerySource(geoParquetBytes, runtime);
+        }
+    });
+}
+async function addDatasetSource(id, dataset) {
+    const source = new TopologySource(id);
+    removeSourceWithLayers(id);
+    await source.replaceDataset(dataset);
+    await map.addSource(id, source);
+    addDisplayLayers(id, source, "duckdb-geoparquet-output", {
+        fill: "#dcfce7",
+        fillOpacity: 0.52,
+        line: "#15803d",
+        lineWidth: 2.25,
+        pointRadius: 5,
+    });
+    return source;
+}
+async function getRuntime() {
+    runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        return runtime;
+    });
+    return runtimePromise;
+}
+function hasGeoParquetInput() {
+    return Boolean(geoParquetBytes || geoParquetQuerySource);
+}
+async function closeGeoParquetQuerySource() {
+    const source = geoParquetQuerySource;
+    geoParquetQuerySource = undefined;
+    if (source)
+        await source.close();
+}
+async function getGeoParquetQuerySource(runtime) {
+    if (geoParquetQuerySource)
         return geoParquetQuerySource;
-      }
-
-      const inputMapOpSource = {
-        getBytes: () => geoParquetBytes,
-        getDataset: () => null,
-        getGeoParquetQuerySource: () => geoParquetQuerySource,
-      };
-      const mapOpContext = {
-        getSource(id) {
-          if (id === SOURCE_ID) return hasGeoParquetInput() ? inputMapOpSource : undefined;
-          return contextSources.get(id);
-        },
-        setSourceDataset(id, dataset) {
-          contextSources.set(id, { getDataset: () => dataset });
-        },
-      };
-
-      async function runGeoParquetQuery() {
-        if (!hasGeoParquetInput()) {
-          status.textContent = "请先上传 GeoParquet 文件。";
-          return;
-        }
-        runButton.disabled = true;
-        status.textContent = "DuckDB-Wasm 正在查询 GeoParquet...";
-        try {
-          const runtime = await getRuntime();
-          const querySource = await getGeoParquetQuerySource(runtime);
-          const opts = {
+    if (!geoParquetBytes)
+        throw new Error("请先上传 GeoParquet 文件。");
+    // 保留 bytes：direct 入口 queryGeoParquetWithDuckDb 每次都要原始数据
+    geoParquetQuerySource = await createDuckDbGeoParquetQuerySource(geoParquetBytes, runtime);
+    return geoParquetQuerySource;
+}
+const inputMapOpSource = {
+    getBytes: () => geoParquetBytes,
+    getDataset: () => null,
+    getGeoParquetQuerySource: () => geoParquetQuerySource,
+};
+const mapOpContext = {
+    getSource(id) {
+        if (id === SOURCE_ID)
+            return hasGeoParquetInput() ? inputMapOpSource : undefined;
+        return contextSources.get(id);
+    },
+    setSourceDataset(id, dataset) {
+        contextSources.set(id, { getDataset: () => dataset });
+    },
+};
+async function runGeoParquetQuery() {
+    if (!hasGeoParquetInput()) {
+        status.textContent = "请先上传 GeoParquet 文件。";
+        return;
+    }
+    runButton.disabled = true;
+    status.textContent = "DuckDB-Wasm 正在查询 GeoParquet...";
+    try {
+        const runtime = await getRuntime();
+        const querySource = await getGeoParquetQuerySource(runtime);
+        const opts = {
             sql: sqlInput.value,
             layerName: layerNameInput.value.trim() || "duckdb_geoparquet_query",
             geometryColumn: geometryColumnInput.value.trim() || undefined,
-          };
-          let resultDataset;
-          if (entrypointSelect.value === "mapop") {
+        };
+        let resultDataset;
+        if (entrypointSelect.value === "mapop") {
             const result = await duckDbGeoParquetQueryLayer(mapOpContext, {
-              src: SOURCE_ID,
-              ...opts,
-              output: { sourceId: OUTPUT_ID },
-              runtime,
+                src: SOURCE_ID,
+                ...opts,
+                output: { sourceId: OUTPUT_ID },
+                runtime,
             });
-            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            if (!result.ok)
+                throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
-          } else if (entrypointSelect.value === "direct") {
-            if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
+        }
+        else if (entrypointSelect.value === "direct") {
+            if (!geoParquetBytes)
+                throw new Error("请先上传 GeoParquet 文件。");
             resultDataset = await queryGeoParquetWithDuckDb(geoParquetBytes, opts, runtime);
-          } else {
+        }
+        else {
             resultDataset = await querySource.query(opts);
-          }
-          const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset);
-          map.setExtent(outputSource.getExtent());
-          const count = resultDataset.layers.reduce(
-            (total, layer) => total + (layer?.shapes?.length ?? 0),
-            0,
-          );
-          status.textContent = `已查询 ${geoParquetFileName}，输出 ${count} 个要素。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = `查询失败: ${err?.message ?? err}`;
-        } finally {
-          runButton.disabled = !hasGeoParquetInput();
         }
-      }
-
-      fileInput.addEventListener("change", async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        runButton.disabled = true;
-        status.textContent = `正在读取 ${file.name}...`;
-        try {
-          await closeGeoParquetQuerySource().catch((err) => console.warn(err));
-          geoParquetBytes = new Uint8Array(await file.arrayBuffer());
-          geoParquetFileName = file.name;
-          contextSources.clear();
-          removeSourceWithLayers(OUTPUT_ID);
-          await runGeoParquetQuery();
-        } catch (err) {
-          console.error(err);
-          geoParquetBytes = undefined;
-          geoParquetQuerySource = undefined;
-          geoParquetFileName = "";
-          status.textContent = `读取失败: ${err?.message ?? err}`;
-        } finally {
-          runButton.disabled = !hasGeoParquetInput();
-        }
-      });
-
-      runButton.addEventListener("click", runGeoParquetQuery);
-
-      window.addEventListener("resize", () => map.resize());
-      window.addEventListener("pagehide", () => {
-        void closeGeoParquetQuerySource().finally(() =>
-          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime(),
-        );
-      });
-      await autoLoadExampleFixtures('duckdb-geoparquet-query');
-    </script>
+        const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset);
+        map.setExtent(outputSource.getExtent());
+        const count = resultDataset.layers.reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
+        status.textContent = `已查询 ${geoParquetFileName}，输出 ${count} 个要素。`;
+    }
+    catch (err) {
+        console.error(err);
+        status.textContent = `查询失败: ${err?.message ?? err}`;
+    }
+    finally {
+        runButton.disabled = !hasGeoParquetInput();
+    }
+}
+fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file)
+        return;
+    runButton.disabled = true;
+    status.textContent = `正在读取 ${file.name}...`;
+    try {
+        await (await closeGeoParquetQuerySource()).catch((err) => console.warn(err));
+        geoParquetBytes = new Uint8Array(await file.arrayBuffer());
+        geoParquetFileName = file.name;
+        contextSources.clear();
+        removeSourceWithLayers(OUTPUT_ID);
+        await runGeoParquetQuery();
+    }
+    catch (err) {
+        console.error(err);
+        geoParquetBytes = undefined;
+        geoParquetQuerySource = undefined;
+        geoParquetFileName = "";
+        status.textContent = `读取失败: ${err?.message ?? err}`;
+    }
+    finally {
+        runButton.disabled = !hasGeoParquetInput();
+    }
+});
+runButton.addEventListener("click", runGeoParquetQuery);
+window.addEventListener("resize", () => map.resize());
+window.addEventListener("pagehide", async () => {
+    void (await closeGeoParquetQuerySource()).finally(() => runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+});
+await autoLoadExampleFixtures('duckdb-geoparquet-query');
+</script>
   </body>
 </html>

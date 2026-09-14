@@ -24,3 +24,4 @@ Geometry edits and attribute edits invalidate different rendering work. Recomput
 ## Consequences
 
 Attribute styling remains opt-in and existing static paint behavior is unchanged. Supporting additional paint properties requires an explicit cache, validation, bucket, and invalidation design rather than extending the expression language implicitly.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

@@ -2,14 +2,14 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-
 interface EditModeEvent {
   mode: string;
 }
-
 function handler() {
   let enabled = false;
-  let options: { mode?: 'add' | 'delete' } = {};
+  let options: {
+    mode?: 'add' | 'delete';
+  } = {};
   return {
     enable: vi.fn(() => {
       enabled = true;
@@ -24,7 +24,6 @@ function handler() {
     getOptions: vi.fn(() => options),
   };
 }
-
 async function executeExample() {
   const html = await readFile(
     resolve('packages/examples/examples/reshape-ring-part/index.html'),
@@ -41,7 +40,6 @@ async function executeExample() {
   const originalBody = document.body.innerHTML;
   document.head.innerHTML = parsed.head.innerHTML;
   document.body.innerHTML = parsed.body.innerHTML;
-
   const editModeListeners: Array<(event: EditModeEvent) => void> = [];
   const errorListeners: Array<(event: { error: Error }) => void> = [];
   const reshapeFeature = handler();
@@ -54,7 +52,16 @@ async function executeExample() {
     clickSelect: handler(),
     addControl: vi.fn(),
     bindHistoryShortcuts: vi.fn(),
-    on: (type: string, listener: (event: EditModeEvent | { error: Error }) => void) => {
+    on: (
+      type: string,
+      listener: (
+        event:
+          | EditModeEvent
+          | {
+              error: Error;
+            },
+      ) => void,
+    ) => {
       if (type === 'editmodechange')
         editModeListeners.push(listener as (event: EditModeEvent) => void);
       if (type === 'error') errorListeners.push(listener as (event: { error: Error }) => void);
@@ -62,6 +69,9 @@ async function executeExample() {
   };
   const runtime = {
     Emap: class {
+      static async create(...args: any[]) {
+        return new this(...args);
+      }
       constructor() {
         return map;
       }
@@ -72,7 +82,6 @@ async function executeExample() {
   const installExampleMapUi = vi.fn();
   const autoLoadExampleFixtures = vi.fn(async () => {});
   const loadExampleRuntime = vi.fn(async () => runtime);
-
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
@@ -87,7 +96,6 @@ async function executeExample() {
     document.body.innerHTML = originalBody;
     throw error;
   }
-
   return {
     reshapeFeature,
     ringEdit,
@@ -105,7 +113,6 @@ async function executeExample() {
     },
   };
 }
-
 describe('reshape-ring-part example', () => {
   it('toggles advanced handlers, switches shared modes, and surfaces errors', async () => {
     const result = await executeExample();
@@ -116,13 +123,11 @@ describe('reshape-ring-part example', () => {
       const addPart = document.querySelector<HTMLButtonElement>('#add-part')!;
       const deletePart = document.querySelector<HTMLButtonElement>('#delete-part')!;
       const status = document.querySelector<HTMLElement>('#status')!;
-
       expect(result.autoLoadExampleFixtures).toHaveBeenCalledWith('reshape-ring-part');
       reshape.click();
       expect(result.reshapeFeature.enable).toHaveBeenCalledTimes(1);
       reshape.click();
       expect(result.reshapeFeature.disable).toHaveBeenCalledTimes(1);
-
       addRing.click();
       expect(result.ringEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'add' });
       expect(result.ringEdit.enable).toHaveBeenCalledTimes(1);
@@ -130,13 +135,11 @@ describe('reshape-ring-part example', () => {
       expect(result.ringEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'delete' });
       expect(result.ringEdit.disable).toHaveBeenCalledTimes(1);
       expect(result.ringEdit.enable).toHaveBeenCalledTimes(2);
-
       addPart.click();
       expect(result.partEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'add' });
       deletePart.click();
       expect(result.partEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'delete' });
       addRing.click();
-
       result.emitEditMode('ring');
       expect(addRing.classList).toContain('emap-example-primary-button');
       expect(deleteRing.classList).not.toContain('emap-example-primary-button');

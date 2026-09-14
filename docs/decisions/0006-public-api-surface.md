@@ -19,3 +19,4 @@
 ## Consequences
 
 The current root file remains intentionally explicit and reviewable instead of being mechanically shortened. CI prevents accidental expansion, while a future major release can move compatibility-only types to a dedicated subpath with a migration guide.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

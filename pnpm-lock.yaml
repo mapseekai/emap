@@ -19,6 +19,9 @@ importers:
       '@tmcw/togeojson':
         specifier: ^5.8.1
         version: 5.8.1(@types/geojson@7946.0.16)
+      cordis:
+        specifier: 4.0.0-rc.10
+        version: 4.0.0-rc.10
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -3200,6 +3203,18 @@ packages:
     peerDependencies:
       webpack: ^5.1.0
 
+  cordis@4.0.0-rc.10:
+    resolution: {integrity: sha512-xG90nPNQxR272cC4lR/m5LHevegIJvdddQBlKdEAdGz3n+zgH5lsgkg8o9fc2P3T/f+pO5D7FN1HZvkNBiABnw==}
+    hasBin: true
+    peerDependencies:
+      '@cordisjs/plugin-include': ^1.1.0
+      '@cordisjs/plugin-loader': ^1.0.0-rc.7
+    peerDependenciesMeta:
+      '@cordisjs/plugin-include':
+        optional: true
+      '@cordisjs/plugin-loader':
+        optional: true
+
   core-js-compat@3.49.0:
     resolution: {integrity: sha512-VQXt1jr9cBz03b331DFDCCP90b3fanciLkgiOoy8SBHy06gNf+vQ1A3WFLqG7I8TipYIKeYK9wxd0tUrvHcOZA==}
 
@@ -3217,6 +3232,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  cosmokit@1.8.1:
+    resolution: {integrity: sha512-PDBv4l90xZKrUsZ0vtoycgZpO/j4iFsqJXrAxsyBDsnQRI7ZMJXIjgDJsKNjd5L8jnVnnlrDCdhkFbTncgCVjQ==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -10999,6 +11017,11 @@ snapshots:
       serialize-javascript: 6.0.2
       webpack: 5.109.0(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.6))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(postcss@8.5.6)
 
+  cordis@4.0.0-rc.10:
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      cosmokit: 1.8.1
+
   core-js-compat@3.49.0:
     dependencies:
       browserslist: 4.28.1
@@ -11015,6 +11038,8 @@ snapshots:
       path-type: 4.0.0
     optionalDependencies:
       typescript: 5.9.3
+
+  cosmokit@1.8.1: {}
 
   cross-spawn@7.0.6:
     dependencies:

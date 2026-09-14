@@ -5,7 +5,7 @@ title: Performance
 api: ["Emap", "MapOptions", "SimplifyOptions"]
 examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Performance
@@ -15,7 +15,7 @@ Focus performance work in three places: route large data operations to a worker,
 ## Enable workers for large data operations
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: "map",
   useWorker: "auto",
   workerThreshold: 50_000,

@@ -104,116 +104,110 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, EditToolbar } = emap;
-
-    const map = new Emap({ container: "map" });
-
-    map.addControl(new emap.NavigationControl(), "top-left");
-    installExampleMapUi(map, emap);
-    map.addControl(new EditToolbar(), "top-left");
-
-    // vertex_moved 事件日志
-    const logEl = document.getElementById("event-log");
-    map.on("vertex_moved", (e) => {
-      const entry = document.createElement("div");
-      entry.className = "log-entry";
-      const coords = e.coords
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, EditToolbar } = emap;
+const map = await Emap.create({ container: "map" });
+await map.addControl(new emap.NavigationControl(), "top-left");
+await installExampleMapUi(map, emap);
+await map.addControl(new EditToolbar(), "top-left");
+// vertex_moved 事件日志
+const logEl = document.getElementById("event-log");
+map.on("vertex_moved", (e) => {
+    const entry = document.createElement("div");
+    entry.className = "log-entry";
+    const coords = e.coords
         ? `[${e.coords[0].toFixed(6)}, ${e.coords[1].toFixed(6)}]`
         : "?";
-      const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
-      entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
-      logEl.appendChild(entry);
-      logEl.scrollTop = logEl.scrollHeight;
-    });
-
-    const ONLINE_DATASETS = {
-      topojson: {
+    const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
+    entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+});
+const ONLINE_DATASETS = {
+    topojson: {
         label: "TopoJSON",
         url: "https://geojson.cn/api/china/1.6.3/china.topo.json",
         filename: "china.topo.json",
-      },
-      geojson: {
+    },
+    geojson: {
         label: "GeoJSON",
         url: "https://geojson.cn/api/china/1.6.3/china.json",
         filename: "china.json",
-      },
-    };
-    const SOURCE_ID = "china-editing-source";
-    const status = document.getElementById("status");
-    const overlay = document.getElementById("loading-overlay");
-    const loadingText = document.getElementById("loading-text");
-    const onlineSource = document.getElementById("online-source");
-    const fileInput = document.getElementById("file-input");
-    let currentSourceId = null;
-    let currentOnlineKind = null;
-
-    async function loadExampleData({ label, filename, read, onlineKind = null }) {
-      onlineSource.disabled = true;
-      fileInput.disabled = true;
-      loadingText.textContent = `正在加载 ${label}...`;
-      overlay.classList.remove("hidden");
-
-      try {
+    },
+};
+const SOURCE_ID = "china-editing-source";
+const status = document.getElementById("status");
+const overlay = document.getElementById("loading-overlay");
+const loadingText = document.getElementById("loading-text");
+const onlineSource = document.getElementById("online-source");
+const fileInput = document.getElementById("file-input");
+let currentSourceId = null;
+let currentOnlineKind = null;
+async function loadExampleData({ label, filename, read, onlineKind = null }) {
+    onlineSource.disabled = true;
+    fileInput.disabled = true;
+    loadingText.textContent = `正在加载 ${label}...`;
+    overlay.classList.remove("hidden");
+    try {
         const content = await read();
         const source = new TopologySource(SOURCE_ID);
         await source.setData({ filename, content });
-
-        if (currentSourceId) map.removeSource(currentSourceId);
+        if (currentSourceId)
+            map.removeSource(currentSourceId);
         await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         currentSourceId = SOURCE_ID;
         currentOnlineKind = onlineKind;
-
         const size = `${(content.byteLength / 1024).toFixed(1)} KB`;
         status.textContent = `${label}（${size}）已加载 — 点击 ✏ 编辑顶点`;
-      } catch (error) {
+    }
+    catch (error) {
         console.error(error);
-        if (currentOnlineKind) onlineSource.value = currentOnlineKind;
+        if (currentOnlineKind)
+            onlineSource.value = currentOnlineKind;
         status.textContent = `错误: ${error instanceof Error ? error.message : String(error)}`;
-      } finally {
+    }
+    finally {
         overlay.classList.add("hidden");
         onlineSource.disabled = false;
         fileInput.disabled = false;
-      }
     }
-
-    async function loadOnlineData(kind) {
-      const dataset = ONLINE_DATASETS[kind];
-      if (!dataset) throw new Error(`未知在线数据格式: ${kind}`);
-
-      await loadExampleData({
+}
+async function loadOnlineData(kind) {
+    const dataset = ONLINE_DATASETS[kind];
+    if (!dataset)
+        throw new Error(`未知在线数据格式: ${kind}`);
+    await loadExampleData({
         label: `在线 ${dataset.label}`,
         filename: dataset.filename,
         onlineKind: kind,
         read: async () => {
-          const response = await fetch(dataset.url);
-          if (!response.ok) {
-            throw new Error(`${dataset.label} 请求失败: ${response.status}`);
-          }
-          return new Uint8Array(await response.arrayBuffer());
+            const response = await fetch(dataset.url);
+            if (!response.ok) {
+                throw new Error(`${dataset.label} 请求失败: ${response.status}`);
+            }
+            return new Uint8Array(await response.arrayBuffer());
         },
-      });
-    }
-
-    onlineSource.addEventListener("change", () => {
-      void loadOnlineData(onlineSource.value);
     });
-    fileInput.addEventListener("change", () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
-      void loadExampleData({
+}
+onlineSource.addEventListener("change", async () => {
+    void await loadOnlineData(onlineSource.value);
+});
+fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file)
+        return;
+    void await loadExampleData({
         label: file.name,
         filename: file.name,
         read: async () => new Uint8Array(await file.arrayBuffer()),
-      });
     });
-
-    window.addEventListener("resize", () => map.resize());
-    await loadOnlineData(onlineSource.value);
-  </script>
+});
+window.addEventListener("resize", () => map.resize());
+await loadOnlineData(onlineSource.value);
+</script>
 </body>
 
 </html>

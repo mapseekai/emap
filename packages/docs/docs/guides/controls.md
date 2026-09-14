@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: 控件
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreOverlayServiceBase","MapLibreOverlayResourceService","MapLibreOverlayStyleService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+api: ["BasemapControl", "BasemapOptions", "BasemapStyle", "BoxSelectControl", "BoxSelectControlOptions", "Control", "ControlPosition", "DrawFeatureControl", "DrawFeatureControlOptions", "EditToolbar", "EditToolbarOptions", "Emap", "GetScaleMetricsOptions", "HistoryControl", "HistoryControlOptions", "LassoSelectControl", "LassoSelectControlOptions", "LayerChangeEvent", "LayerChangeReason", "LayerControl", "MapLibreBasemapService", "MapLibreIntegrationOptions", "MapLibreOverlayService", "MapLibreOverlayServiceBase", "MapLibreOverlayResourceService", "MapLibreOverlayStyleService", "MapLibreServiceChangeEvent", "MapLibreServiceChangeReason", "MapLibreServiceErrorEvent", "MapLibreServiceEventMap", "MapLibreServiceManager", "MapLibreServiceState", "MapOptions", "MeasureControl", "MeasureControlOptions", "MeasureHandler", "MeasurementMode", "MeasureOptions", "MeasureResult", "NavigationControl", "NavigationOptions", "ScaleCalculationMethod", "ScaleControl", "ScaleControlOptions", "ScaleControlStyle", "ScaleMetrics", "ScaleViewMetrics", "SimplifyControl", "SimplifyControlOptions", "StatusControl", "StatusOptions", "VertexEditControl", "VertexEditControlOptions"]
 examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","measurement","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 控件
@@ -21,11 +21,11 @@ import '@mapseekai/emap/style.css';
 import { HistoryControl, NavigationControl, ScaleControl } from '@mapseekai/emap';
 
 const navigation = new NavigationControl({ showHome: true });
-map.addControl(navigation, 'top-left');
-map.addControl(new HistoryControl(), 'top-right');
-map.addControl(new ScaleControl(), 'bottom-left');
+await map.addControl(navigation, 'top-left');
+await map.addControl(new HistoryControl(), 'top-right');
+await map.addControl(new ScaleControl(), 'bottom-left');
 
-map.removeControl(navigation);
+await map.removeControl(navigation);
 ```
 
 位置为 `top-left`、`top-right`、`bottom-left` 或 `bottom-right`。
@@ -48,11 +48,11 @@ map.removeControl(navigation);
 绘制和测量控件需要自己的选项：
 
 ```ts
-map.addControl(
+await map.addControl(
   new DrawFeatureControl({ source: 'parcels', sourceLayer: 'lots', type: 'polygon' }),
   'top-left',
 );
-map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
+await map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
 ```
 
 一个控件被移除时会清理其 DOM 和事件监听器；会启用 Handler 的控件也会关闭自己启用的 Handler。

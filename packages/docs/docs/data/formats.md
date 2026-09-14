@@ -2,10 +2,10 @@
 id: formats
 slug: /data/formats
 title: 数据格式
-api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter","TopologySource","ExportOptions"]
+api: ["buildGeoMetadata", "crsStringToProjjson", "DatasetFormatPlugin", "decodeWkb", "detectGeometryColumn", "Emap", "ExportedFormatFile", "exportGeoArrow", "ExportGeoArrowOptions", "exportGeoParquet", "ExportGeoParquetOptions", "fromArrowTable", "FromArrowTableOptions", "GeoColumnMetadata", "GeoEncoding", "GeoMetadata", "GeometryColumnInfo", "importGeoArrow", "ImportGeoArrowOptions", "importGeoParquet", "ImportGeoParquetOptions", "initParquetWasm", "InitParquetWasmOptions", "ParquetWasmModule", "ParquetWasmTable", "parseGeoMetadata", "projjsonToCrsString", "registerArrowFormats", "registerFormat", "setArrowTable", "setParquetWasm", "toArrowTable", "toArrowTableFromSource", "ToArrowTableOptions", "TopologySource.export", "TopologySource.fromBytes", "TopologySource.fromUrl", "WkbGeometry", "WkbWriter", "TopologySource", "ExportOptions"]
 examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 数据格式
@@ -66,12 +66,12 @@ Shapefile 应传入完整 ZIP。ZIP 至少包含 `.shp`，属性、索引和坐�
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
-map.use(arrowFormatsPlugin);
+await map.ctx.plugin(arrowFormatsPlugin);
 // For optional-format input loaded before addSource:
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```
 
-`map.use()` 为该地图实例注册 GeoParquet 和 GeoArrow 格式，单纯 import 不会注册。GeoParquet 首次使用时加载 `parquet-wasm`；也可以提供 WASM URL 或已初始化模块：
+`map.ctx.plugin(arrowFormatsPlugin)` 为该地图实例注册 GeoParquet 和 GeoArrow 格式，单纯 import 不会注册。GeoParquet 首次使用时加载 `parquet-wasm`；也可以提供 WASM URL 或已初始化模块：
 
 ```ts
 import { initParquetWasm, setParquetWasm } from '@mapseekai/emap/arrow';

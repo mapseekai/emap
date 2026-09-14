@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
       label: 'Concepts',
       items: [
         'concepts/overview',
+        'concepts/architecture',
         'concepts/emap',
         'concepts/source-layer',
         'concepts/topology',

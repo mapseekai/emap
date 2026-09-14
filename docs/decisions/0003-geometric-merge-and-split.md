@@ -24,3 +24,4 @@ Merging and splitting selected path features must preserve unrelated layers, sha
 ## Consequences
 
 The operation path is more deliberate than a direct mapshaper command, but unrelated layers remain stable and failures do not leave partial mutations. New selection-driven operations should reuse the same isolation and command boundary instead of introducing another whole-dataset shortcut.
+> Repository layout note (2026-09-14): source paths and test placement now follow [ADR 0010](0010-source-and-test-layout.md). The decision in this ADR remains valid; path examples should be interpreted through the current six-zone layout.

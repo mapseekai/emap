@@ -45,88 +45,88 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl, EditToolbar, DrawFeatureControl } = emap;
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'draw-snap-source';
-
-    // Toolbar with both polyline and polygon draw — both consume the same
-    // snap settings via re-creation when "应用吸附设置" is clicked.
-    let toolbar = null;
-    function buildDrawTools() {
-      const threshold = Number(document.getElementById('snap-threshold').value) || 12;
-      const snapToVertex = document.getElementById('snap-vertex').checked;
-      const snapToEdge = document.getElementById('snap-edge').checked;
-      map.vertexEdit.setOptions({ snapThreshold: threshold, snapToVertex, snapToEdge });
-
-      // Tear down the previous toolbar (and via EditToolbar, its child
-      // DrawFeatureControl instances). Skipping this leaves stale mouse
-      // listeners alive that ignore the latest snap settings.
-      if (toolbar) {
-        try { map.removeControl(toolbar); } catch (_) {}
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl, EditToolbar, DrawFeatureControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'draw-snap-source';
+// Toolbar with both polyline and polygon draw — both consume the same
+// snap settings via re-creation when "应用吸附设置" is clicked.
+let toolbar = null;
+async function buildDrawTools() {
+    const threshold = Number(document.getElementById('snap-threshold').value) || 12;
+    const snapToVertex = document.getElementById('snap-vertex').checked;
+    const snapToEdge = document.getElementById('snap-edge').checked;
+    map.vertexEdit.setOptions({ snapThreshold: threshold, snapToVertex, snapToEdge });
+    // Tear down the previous toolbar (and via EditToolbar, its child
+    // DrawFeatureControl instances). Skipping this leaves stale mouse
+    // listeners alive that ignore the latest snap settings.
+    if (toolbar) {
+        try {
+            await map.removeControl(toolbar);
+        }
+        catch (_) { }
         toolbar = null;
-      }
-
-      const drawPoly = new DrawFeatureControl({
+    }
+    const drawPoly = new DrawFeatureControl({
         source: SOURCE_ID, type: 'polygon',
         snapThreshold: threshold, snapToVertex, snapToEdge,
-      });
-      const drawLine = new DrawFeatureControl({
+    });
+    const drawLine = new DrawFeatureControl({
         source: SOURCE_ID, type: 'polyline',
         snapThreshold: threshold, snapToVertex, snapToEdge,
-      });
-      toolbar = new EditToolbar({ controls: [drawPoly, drawLine] });
-      map.addControl(toolbar, 'top-right');
-    }
-    buildDrawTools();
-
-    document.getElementById('apply-snap').addEventListener('click', buildDrawTools);
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const status = document.getElementById('status');
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    toolbar = new EditToolbar({ controls: [drawPoly, drawLine] });
+    await map.addControl(toolbar, 'top-right');
+}
+await buildDrawTools();
+document.getElementById('apply-snap').addEventListener('click', buildDrawTools);
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    const status = document.getElementById('status');
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}。选工具开始绘制,光标靠近已有顶点 / 边时会吸附。`;
-
-          const lyrs = source.getLayers?.() ?? [];
-        lyrs.forEach((lyr, i) => {
-          const id = `${lyr?.name || `layer-${i}`}-default`;
-          if (map.getLayer(id)) return;
-          if (lyr?.geometry_type === 'polygon' || lyr?.geometry_type === 'polyline') {
-            map.addLayer({ id, type: 'line', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'line-color': '#888', 'line-width': 1 } });
-          } else if (lyr?.geometry_type === 'point') {
-            map.addLayer({ id, type: 'circle', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'circle-color': '#888', 'circle-radius': 3 } });
-          }
-          });
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            status.textContent = `已加载 ${file.name}。选工具开始绘制,光标靠近已有顶点 / 边时会吸附。`;
+            const lyrs = source.getLayers?.() ?? [];
+            lyrs.forEach((lyr, i) => {
+                const id = `${lyr?.name || `layer-${i}`}-default`;
+                if (map.getLayer(id))
+                    return;
+                if (lyr?.geometry_type === 'polygon' || lyr?.geometry_type === 'polyline') {
+                    map.addLayer({ id, type: 'line', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'line-color': '#888', 'line-width': 1 } });
+                }
+                else if (lyr?.geometry_type === 'point') {
+                    map.addLayer({ id, type: 'circle', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'circle-color': '#888', 'circle-radius': 3 } });
+                }
+            });
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-    await autoLoadExampleFixtures('draw-snap-edge');
-  </script>
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+await autoLoadExampleFixtures('draw-snap-edge');
+</script>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
-import type { PointerMoveEvent } from '../core/pointer-event-dispatcher';
-import { normalizeCrsString } from '../geo/crs-resolver';
-import type { ControlContext } from '../services/controls';
+import type { PointerMoveEvent } from '../engine/core/pointer-event-dispatcher';
+import { normalizeCrsString } from '../domain/geo/crs-resolver';
+import type { ControlContext } from '../runtime/services/controls';
 import { Control } from './control';
 
 export interface StatusOptions {

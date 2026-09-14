@@ -5,7 +5,7 @@ title: 性能
 api: ["Emap", "MapOptions", "SimplifyOptions"]
 examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 性能
@@ -15,7 +15,7 @@ verifiedVersion: 0.9.1
 ## 为大型数据操作启用 Worker
 
 ```ts
-const map = new Emap({
+const map = await Emap.create({
   container: "map",
   useWorker: "auto",
   workerThreshold: 50_000,

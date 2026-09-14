@@ -2,13 +2,18 @@
 id: intro
 slug: /
 title: Emap Introduction
-api: ["Emap","LayerSpecification","TopologySource"]
+api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Emap
+
+## Current architecture
+
+See the [current architecture and source layout](/concepts/architecture) for the native Cordis runtime and the six `domain / engine / runtime / integrations / ui / shared` source zones.
+
 
 Emap is a browser-focused TypeScript library for map rendering, editing, and spatial data processing. It renders with Canvas 2D and manages data sources as mapshaper topology datasets. An application can load data, draw layers, edit features, run analysis operations, and export results in the frontend.
 

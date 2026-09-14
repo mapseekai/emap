@@ -2,10 +2,10 @@
 id: source-layer
 slug: /concepts/source-layer
 title: 数据源与图层
-api: ["CirclePaint","DatasetFormatPlugin","Emap","ExportedFormatFile","ExportFormat","ExportOptions","FillPaint","ITopologySource","LayerLayout","LayerPaint","LayerSpecification","LayerType","LinePaint","ReadySourceLoadPlan","registerFormat","ReplaceableTopologySource","resolvePointStyle","resolveStrokeStyle","SourceLoadAnswers","SourceLoadDiagnostic","SourceLoadDiagnosticCode","SourceLoadDraft","SourceLoadError","SourceLoadRequest","SourceLoadRequirement","SourceLoadSummary","SourcePreflightResult","TopologySource","TopologySource.fromBytes","TopologySource.fromUrl","TopologySourceData","TopologySourceFromBytesOptions","TopologySourceInput","TopologySourceOptions","ZipExtractionLimits"]
+api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ZipExtractionLimits"]
 examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # 数据源与图层

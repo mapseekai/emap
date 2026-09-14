@@ -39,95 +39,86 @@
     </details>
 
     <script type="module">
-      import {
-        autoLoadExampleFixtures,
-        installExampleMapUi,
-        loadExampleArrow,
-        loadExampleRuntime,
-      } from '/src/example-runtime.ts';
-      import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
 
-      const emap = await loadExampleRuntime();
-      const emapArrow = await loadExampleArrow();
-      await emapArrow.initParquetWasm();
-
-      const { Emap, TopologySource } = emap;
-      const SOURCE_ID = 'export-source';
-      const extensions = {
-        geojson: '.geojson',
-        shapefile: '.zip',
-        topojson: '.topojson',
-        flatgeobuf: '.fgb',
-        geoparquet: '.parquet',
-        geoarrow: '.arrow',
-      };
-      const map = new Emap({ container: 'map' });
-      const releaseFormat = installFlatGeobufFormat(emap, map.formats);
-    window.addEventListener('pagehide', releaseFormat, { once: true });
-    map.use(emapArrow.arrowFormatsPlugin);
-    map.addControl(new emap.NavigationControl(), 'top-left');
-      installExampleMapUi(map, emap);
-
-      const fileInput = document.getElementById('file-input');
-      const formatSelect = document.getElementById('format');
-      const exportButton = document.getElementById('export-btn');
-      const status = document.getElementById('status');
-      let activeSource = null;
-
-      fileInput.disabled = false;
-      status.textContent = '上传数据后选择导出格式';
-
-      fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        exportButton.disabled = true;
-        status.textContent = `处理 ${file.name} 中...`;
-        const source = new TopologySource(SOURCE_ID, { formats: map.formats });
-
-        try {
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          activeSource = source;
-          exportButton.disabled = false;
-          status.textContent = `当前: ${file.name}`;
-        } catch (error) {
-          console.error(error);
-          status.textContent = `处理文件出错: ${error?.message ?? error}`;
-        }
-      });
-
-      exportButton.addEventListener('click', async () => {
-        if (!activeSource) return;
-
-        const format = formatSelect.value;
-        exportButton.disabled = true;
-        status.textContent = `正在导出为 ${format}...`;
-
-        try {
-          const blob = await activeSource.export({ format });
-          const filename = `export${extensions[format]}`;
-          const url = URL.createObjectURL(blob);
-          const download = document.createElement('a');
-          download.href = url;
-          download.download = filename;
-          document.body.appendChild(download);
-          download.click();
-          download.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-          status.textContent = `已导出 ${blob.size} 字节 → ${filename}`;
-        } catch (error) {
-          console.error(error);
-          status.textContent = `导出失败: ${error?.message ?? error}`;
-        } finally {
-          exportButton.disabled = false;
-        }
-      });
-
-      window.addEventListener('resize', () => map.resize());
-      await autoLoadExampleFixtures('export-formats');
-    </script>
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleArrow, loadExampleRuntime, } from '/src/example-runtime.ts';
+import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
+const emap = await loadExampleRuntime();
+const emapArrow = await loadExampleArrow();
+await emapArrow.initParquetWasm();
+const { Emap, TopologySource } = emap;
+const SOURCE_ID = 'export-source';
+const extensions = {
+    geojson: '.geojson',
+    shapefile: '.zip',
+    topojson: '.topojson',
+    flatgeobuf: '.fgb',
+    geoparquet: '.parquet',
+    geoarrow: '.arrow',
+};
+const map = await Emap.create({ container: 'map' });
+const releaseFormat = installFlatGeobufFormat(emap, map.formats);
+window.addEventListener('pagehide', releaseFormat, { once: true });
+await map.ctx.plugin(emapArrow.arrowFormatsPlugin);
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById('file-input');
+const formatSelect = document.getElementById('format');
+const exportButton = document.getElementById('export-btn');
+const status = document.getElementById('status');
+let activeSource = null;
+fileInput.disabled = false;
+status.textContent = '上传数据后选择导出格式';
+fileInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file)
+        return;
+    exportButton.disabled = true;
+    status.textContent = `处理 ${file.name} 中...`;
+    const source = new TopologySource(SOURCE_ID, { formats: map.formats });
+    try {
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
+        await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
+        await map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        activeSource = source;
+        exportButton.disabled = false;
+        status.textContent = `当前: ${file.name}`;
+    }
+    catch (error) {
+        console.error(error);
+        status.textContent = `处理文件出错: ${error?.message ?? error}`;
+    }
+});
+exportButton.addEventListener('click', async () => {
+    if (!activeSource)
+        return;
+    const format = formatSelect.value;
+    exportButton.disabled = true;
+    status.textContent = `正在导出为 ${format}...`;
+    try {
+        const blob = await activeSource.export({ format });
+        const filename = `export${extensions[format]}`;
+        const url = URL.createObjectURL(blob);
+        const download = document.createElement('a');
+        download.href = url;
+        download.download = filename;
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        status.textContent = `已导出 ${blob.size} 字节 → ${filename}`;
+    }
+    catch (error) {
+        console.error(error);
+        status.textContent = `导出失败: ${error?.message ?? error}`;
+    }
+    finally {
+        exportButton.disabled = false;
+    }
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('export-formats');
+</script>
   </body>
 </html>

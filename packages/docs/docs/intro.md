@@ -2,13 +2,18 @@
 id: intro
 slug: /
 title: Emap 简介
-api: ["Emap","LayerSpecification","TopologySource"]
+api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.9.1
+verifiedVersion: unreleased
 ---
 
 # Emap
+
+## 当前架构
+
+源码与插件运行时的最新分层见 [当前技术架构与源码组织](/concepts/architecture)。Emap 直接使用原生 Cordis，源码按 `domain / engine / runtime / integrations / ui / shared` 六个职责区组织。
+
 
 Emap 是面向浏览器的 TypeScript 地图渲染、编辑和空间数据处理库。它使用 Canvas 2D 渲染，并以 mapshaper topology dataset 管理数据源。应用可以在前端加载数据、显示图层、编辑要素、运行分析操作并导出结果。
 

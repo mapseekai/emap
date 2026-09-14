@@ -621,43 +621,43 @@ export default defineConfig({
       },
       {
         find: '@mapseekai/emap/arrow',
-        replacement: fileURLToPath(new URL('../../src/arrow/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/integrations/arrow/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/duckdb',
-        replacement: fileURLToPath(new URL('../../src/duckdb/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/integrations/duckdb/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/style.css',
         replacement: fileURLToPath(new URL('../../src/ui/controls.css', import.meta.url)),
       },
       {
-        find: '@mapseekai/emap/kernel',
-        replacement: fileURLToPath(new URL('../../src/kernel/index.ts', import.meta.url)),
+        find: '@mapseekai/emap/context',
+        replacement: fileURLToPath(new URL('../../src/runtime/context/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/services',
-        replacement: fileURLToPath(new URL('../../src/services/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/runtime/services/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/providers',
-        replacement: fileURLToPath(new URL('../../src/providers/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/runtime/providers/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/plugins',
-        replacement: fileURLToPath(new URL('../../src/plugins/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/runtime/plugins/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/presets',
-        replacement: fileURLToPath(new URL('../../src/presets/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/runtime/presets/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/ai',
-        replacement: fileURLToPath(new URL('../../src/ai/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/runtime/ai/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap/maplibre',
-        replacement: fileURLToPath(new URL('../../src/providers/maplibre/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../src/integrations/maplibre/index.ts', import.meta.url)),
       },
       {
         find: '@mapseekai/emap',

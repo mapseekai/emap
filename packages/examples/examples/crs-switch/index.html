@@ -129,50 +129,44 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
-
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-
-    const SOURCE_ID = 'crs-demo';
-
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const status = document.getElementById('status');
-    const currentCrsEl = document.getElementById('current-crs');
-    const overlay = document.getElementById('loading-overlay');
-    const overlayText = document.getElementById('loading-text');
-    const buttons = Array.from(document.querySelectorAll('button[data-crs]'));
-    const fileInput = document.getElementById('file-input');
-    const reloadBtn = document.getElementById('btn-reload');
-
-    let activeKey = null;
-    let currentFile = null;
-
-    function showOverlay(msg) { overlayText.textContent = msg; overlay.classList.remove('hidden'); }
-    function hideOverlay() { overlay.classList.add('hidden'); }
-    function setBusy(busy) {
-      buttons.forEach((b) => { b.disabled = busy; });
-      reloadBtn.disabled = busy;
-    }
-    function setActive(key, label) {
-      activeKey = key;
-      currentCrsEl.textContent = label;
-      currentCrsEl.title = label;
-      buttons.forEach((b) => b.classList.toggle('active', b.dataset.key === key));
-    }
-
-    async function loadFresh(file) {
-      currentFile = file;
-      setBusy(true);
-      showOverlay(`加载 ${file.name}…`);
-      try {
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const SOURCE_ID = 'crs-demo';
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const status = document.getElementById('status');
+const currentCrsEl = document.getElementById('current-crs');
+const overlay = document.getElementById('loading-overlay');
+const overlayText = document.getElementById('loading-text');
+const buttons = Array.from(document.querySelectorAll('button[data-crs]'));
+const fileInput = document.getElementById('file-input');
+const reloadBtn = document.getElementById('btn-reload');
+let activeKey = null;
+let currentFile = null;
+function showOverlay(msg) { overlayText.textContent = msg; overlay.classList.remove('hidden'); }
+function hideOverlay() { overlay.classList.add('hidden'); }
+function setBusy(busy) {
+    buttons.forEach((b) => { b.disabled = busy; });
+    reloadBtn.disabled = busy;
+}
+function setActive(key, label) {
+    activeKey = key;
+    currentCrsEl.textContent = label;
+    currentCrsEl.title = label;
+    buttons.forEach((b) => b.classList.toggle('active', b.dataset.key === key));
+}
+async function loadFresh(file) {
+    currentFile = file;
+    setBusy(true);
+    showOverlay(`加载 ${file.name}…`);
+    try {
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         const source = new TopologySource(SOURCE_ID);
         const content = new Uint8Array(await file.arrayBuffer());
         await source.setData({ filename: file.name, content });
@@ -180,82 +174,88 @@
         map.setExtent(source.getExtent());
         const resolved = source.getCRS?.() ?? 'unknown';
         setActive('wgs84', `${resolved} (initial)`);
-
         // Resync pill + refit viewport whenever the dataset's CRS changes
         // through a path we didn't initiate (Ctrl+Z / Ctrl+Y / external ops).
         source.on('data', ({ reason }) => {
-          if (reason !== 'reproject' && reason !== 'replace') return;
-          map.setExtent(source.getExtent());
-          const crs = source.getCRS?.() ?? 'unknown';
-          // If a known button matches the new CRS, light it up. Otherwise
-          // just print the raw CRS (e.g. after undo into a custom proj4).
-          const match = buttons.find((b) => b.dataset.crs === crs);
-          setActive(match?.dataset.key ?? null, match?.dataset.label ?? crs);
+            if (reason !== 'reproject' && reason !== 'replace')
+                return;
+            map.setExtent(source.getExtent());
+            const crs = source.getCRS?.() ?? 'unknown';
+            // If a known button matches the new CRS, light it up. Otherwise
+            // just print the raw CRS (e.g. after undo into a custom proj4).
+            const match = buttons.find((b) => b.dataset.crs === crs);
+            setActive(match?.dataset.key ?? null, match?.dataset.label ?? crs);
         });
-
         status.textContent = '已加载。点击按钮切换坐标系。';
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = `加载失败: ${err?.message ?? err}`;
-      } finally {
+    }
+    finally {
         hideOverlay();
         setBusy(false);
-      }
     }
-
-    async function switchCRS(btn) {
-      const src = map.getSource(SOURCE_ID);
-      if (!src) { status.textContent = '请先加载数据。'; return; }
-      const crs = btn.dataset.crs;
-      const key = btn.dataset.key;
-      const label = btn.dataset.label;
-      if (activeKey === key) { status.textContent = `已是 ${label}。`; return; }
-
-      setBusy(true);
-      showOverlay(`投影中: → ${label}`);
-      const t0 = performance.now();
-      try {
+}
+async function switchCRS(btn) {
+    const src = map.getSource(SOURCE_ID);
+    if (!src) {
+        status.textContent = '请先加载数据。';
+        return;
+    }
+    const crs = btn.dataset.crs;
+    const key = btn.dataset.key;
+    const label = btn.dataset.label;
+    if (activeKey === key) {
+        status.textContent = `已是 ${label}。`;
+        return;
+    }
+    setBusy(true);
+    showOverlay(`投影中: → ${label}`);
+    const t0 = performance.now();
+    try {
         await map.reproject(crs);
         const ms = Math.round(performance.now() - t0);
         setActive(key, label);
         status.textContent = `已切换到 ${label} (${ms} ms)。Ctrl+Z 撤销。`;
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = `错误 (${label}): ${err?.message ?? err}`;
-      } finally {
+    }
+    finally {
         hideOverlay();
         setBusy(false);
-      }
     }
-
-    buttons.forEach((b) => b.addEventListener('click', () => switchCRS(b)));
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      if (file) void loadFresh(file);
-    });
-    reloadBtn.addEventListener('click', () => {
-      if (currentFile) void loadFresh(currentFile);
-    });
-
-    // Custom Gauss-Krüger central meridian. Builds a synthetic button on the fly
-    // so it reuses the same switchCRS pipeline (busy state, refit, error display).
-    document.getElementById('btn-gk-custom').addEventListener('click', () => {
-      const raw = document.getElementById('gk-lon').value.trim();
-      const lon = Number(raw);
-      if (!raw || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+}
+buttons.forEach((b) => b.addEventListener('click', async () => await switchCRS(b)));
+fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (file)
+        void await loadFresh(file);
+});
+reloadBtn.addEventListener('click', async () => {
+    if (currentFile)
+        void await loadFresh(currentFile);
+});
+// Custom Gauss-Krüger central meridian. Builds a synthetic button on the fly
+// so it reuses the same switchCRS pipeline (busy state, refit, error display).
+document.getElementById('btn-gk-custom').addEventListener('click', async () => {
+    const raw = document.getElementById('gk-lon').value.trim();
+    const lon = Number(raw);
+    if (!raw || !Number.isFinite(lon) || lon < -180 || lon > 180) {
         status.textContent = '请输入合法的中央经线 (-180 到 180)。';
         return;
-      }
-      const ghost = document.createElement('button');
-      ghost.dataset.key = `gk-custom-${lon}`;
-      ghost.dataset.label = `GK 自定义 / ${lon}°E`;
-      ghost.dataset.crs = `+proj=tmerc +lat_0=0 +lon_0=${lon} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
-      switchCRS(ghost);
-    });
-    window.addEventListener('resize', () => map.resize());
-
-    await autoLoadExampleFixtures('crs-switch');
-  </script>
+    }
+    const ghost = document.createElement('button');
+    ghost.dataset.key = `gk-custom-${lon}`;
+    ghost.dataset.label = `GK 自定义 / ${lon}°E`;
+    ghost.dataset.crs = `+proj=tmerc +lat_0=0 +lon_0=${lon} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
+    await switchCRS(ghost);
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('crs-switch');
+</script>
 </body>
 
 </html>

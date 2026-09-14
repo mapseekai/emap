@@ -2,12 +2,10 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { FeatureRef } from '../../src/map/types';
-
+import type { FeatureRef } from '../../src/engine/map/types';
 interface SelectionEvent {
   selected: FeatureRef[];
 }
-
 async function executeMergeSelectedExample() {
   const html = await readFile(
     resolve('packages/examples/examples/merge-selected/index.html'),
@@ -24,7 +22,6 @@ async function executeMergeSelectedExample() {
   const originalBody = document.body.innerHTML;
   document.head.innerHTML = parsed.head.innerHTML;
   document.body.innerHTML = parsed.body.innerHTML;
-
   let selection: FeatureRef[] = [];
   const selectionListeners: Array<(event: SelectionEvent) => void> = [];
   const properties: Record<number, Record<string, unknown>> = {
@@ -57,6 +54,9 @@ async function executeMergeSelectedExample() {
   };
   const runtime = {
     Emap: class {
+      static async create(...args: any[]) {
+        return new this(...args);
+      }
       constructor() {
         return map;
       }
@@ -68,7 +68,6 @@ async function executeMergeSelectedExample() {
   const installExampleMapUi = vi.fn();
   const autoLoadExampleFixtures = vi.fn(async () => {});
   const loadExampleRuntime = vi.fn(async () => runtime);
-
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
@@ -92,7 +91,6 @@ async function executeMergeSelectedExample() {
     document.body.innerHTML = originalBody;
     throw error;
   }
-
   return {
     mergeSelected,
     emitSelection(next: FeatureRef[]) {
@@ -105,11 +103,9 @@ async function executeMergeSelectedExample() {
     },
   };
 }
-
 function ref(id: number, source = 'source', layer = 'parcels'): FeatureRef {
   return { source, layer, id };
 }
-
 describe('merge-selected example attribute source', () => {
   it('lists same-layer selections and forwards the chosen FeatureRef', async () => {
     const result = await executeMergeSelectedExample();
@@ -119,7 +115,6 @@ describe('merge-selected example attribute source', () => {
       expect(select).not.toBeNull();
       expect(select?.disabled).toBe(true);
       expect(mergeButton?.disabled).toBe(true);
-
       result.emitSelection([ref(0), ref(1)]);
       expect(Array.from(select!.options, (option) => option.textContent)).toEqual([
         '要素 0 — A',
@@ -127,7 +122,6 @@ describe('merge-selected example attribute source', () => {
       ]);
       expect(select?.disabled).toBe(false);
       expect(mergeButton?.disabled).toBe(false);
-
       select!.value = select!.options[1].value;
       mergeButton!.click();
       await vi.waitFor(() =>
@@ -138,7 +132,6 @@ describe('merge-selected example attribute source', () => {
       result.dispose();
     }
   });
-
   it('preserves a selected source and disables mixed-layer merges', async () => {
     const result = await executeMergeSelectedExample();
     try {
@@ -146,11 +139,9 @@ describe('merge-selected example attribute source', () => {
       const mergeButton = document.querySelector<HTMLButtonElement>('#merge-btn')!;
       result.emitSelection([ref(0), ref(1)]);
       select.value = select.options[1].value;
-
       result.emitSelection([ref(1), ref(2)]);
       expect(select.value).toBe(select.options[0].value);
       expect(select.options[0].textContent).toBe('要素 1 — 河北省');
-
       result.emitSelection([ref(1), ref(2, 'source', 'other')]);
       expect(select.disabled).toBe(true);
       expect(mergeButton.disabled).toBe(true);

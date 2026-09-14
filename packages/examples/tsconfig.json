@@ -4,13 +4,48 @@
     "baseUrl": ".",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "types": ["vite/client"],
+    "types": [
+      "vite/client"
+    ],
     "paths": {
-      "@mapseekai/emap": ["../../src/index.ts"],
-      "@mapseekai/emap/arrow": ["../../src/arrow/index.ts"],
-      "@mapseekai/emap/duckdb": ["../../src/duckdb/index.ts"],
-      "@mapseekai/emap/style.css": ["../../src/types/style.css.d.ts"]
+      "@mapseekai/emap": [
+        "../../src/index.ts"
+      ],
+      "@mapseekai/emap/arrow": [
+        "../../src/integrations/arrow/index.ts"
+      ],
+      "@mapseekai/emap/duckdb": [
+        "../../src/integrations/duckdb/index.ts"
+      ],
+      "@mapseekai/emap/style.css": [
+        "../../src/shared/types/style.css.d.ts"
+      ],
+      "@mapseekai/emap/context": [
+        "../../src/runtime/context/index.ts"
+      ],
+      "@mapseekai/emap/services": [
+        "../../src/runtime/services/index.ts"
+      ],
+      "@mapseekai/emap/providers": [
+        "../../src/runtime/providers/index.ts"
+      ],
+      "@mapseekai/emap/plugins": [
+        "../../src/runtime/plugins/index.ts"
+      ],
+      "@mapseekai/emap/presets": [
+        "../../src/runtime/presets/index.ts"
+      ],
+      "@mapseekai/emap/ai": [
+        "../../src/runtime/ai/index.ts"
+      ],
+      "@mapseekai/emap/maplibre": [
+        "../../src/integrations/maplibre/index.ts"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "../../src/types/**/*.d.ts", "vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../src/shared/types/**/*.d.ts",
+    "vite.config.ts"
+  ]
 }

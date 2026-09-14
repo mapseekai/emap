@@ -525,8 +525,8 @@ const exampleDescriptions = {
     en: 'Searches DuckDB processing tools through duckDbToolbox and executes one with JSON parameters.',
   },
   'plugin-runtime': {
-    zh: '实时查看 PluginRuntime、Service 与 Capability 状态，并动态启停交互插件或安装 MapLibre、Arrow、DuckDB。',
-    en: 'Inspects PluginRuntime, services, and capabilities live while toggling interaction plugins or installing MapLibre, Arrow, and DuckDB.',
+    zh: '实时查看 Cordis Context、Fiber、Service 与 Capability 状态，并动态启停交互插件或安装 MapLibre、Arrow、DuckDB。',
+    en: 'Inspects native Cordis contexts, fibers, services, and capabilities live while toggling interaction plugins or installing MapLibre, Arrow, and DuckDB.',
   },
   'flatgeobuf-viewer': {
     zh: '通过 registerFormat 注册的 FlatGeobuf 插件加载 .fgb 文件，并从文件头读取坐标系。',
@@ -613,7 +613,7 @@ export const examples: readonly ExampleDefinition[] = [
     'Plugin Runtime / GIS Harness',
     'Plugin Runtime / GIS Harness',
     [docsPlugins, docsEmap],
-    'PluginRuntime',
+    'Context',
     ['plugins', 'runtime', 'services', 'capabilities', 'maplibre', 'duckdb', 'arrow'],
     [task6Fixture],
   ),

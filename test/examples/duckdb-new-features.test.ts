@@ -276,13 +276,13 @@ describe('DuckDB new feature examples', () => {
       'const loadVersion = ++targetLoadVersion;',
     );
     expect(html.slice(targetHandler, joinHandler)).toContain(
-      'if (loadVersion !== targetLoadVersion) return;',
+      'if (loadVersion !== targetLoadVersion)\n            return;',
     );
     expect(html.slice(targetHandler, joinHandler)).toContain('updateRunState();');
     expect(html.slice(joinHandler, runHandler)).toContain('joinDataset = undefined;');
     expect(html.slice(joinHandler, runHandler)).toContain('const loadVersion = ++joinLoadVersion;');
     expect(html.slice(joinHandler, runHandler)).toContain(
-      'if (loadVersion !== joinLoadVersion) return;',
+      'if (loadVersion !== joinLoadVersion)\n            return;',
     );
     expect(html.slice(joinHandler, runHandler)).toContain('updateRunState();');
 

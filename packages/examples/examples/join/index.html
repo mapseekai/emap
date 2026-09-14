@@ -70,121 +70,125 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    // Join supports `where=` / `calc=` expressions; opt in to evaluation.
-    // The library default is `'disabled'` for safety.
-    const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'join-source';
-    const targetSel = document.getElementById('target');
-    const csvInput = document.getElementById('csv');
-    const targetKeyInput = document.getElementById('target-key');
-    const sourceKeyInput = document.getElementById('source-key');
-    const fieldsInput = document.getElementById('fields');
-    const prefixInput = document.getElementById('prefix');
-    const unjoinedInput = document.getElementById('unjoined');
-    const btn = document.getElementById('btn');
-    const status = document.getElementById('status');
-    const attrs = document.getElementById('attrs');
-
-    function refreshAttrs() {
-      const src = map.getSource(SOURCE_ID);
-      const ds = src?.getDataset();
-      if (!ds) { attrs.textContent = ''; return; }
-      const layer = ds.layers.find((l) => l.name === targetSel.value) || ds.layers[0];
-      const records = layer?.data?.getRecords?.() ?? [];
-      const fields = layer?.data?.getFields?.() ?? Object.keys(records[0] ?? {});
-      const head = records.slice(0, 6);
-      attrs.textContent = head.length === 0
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+// Join supports `where=` / `calc=` expressions; opt in to evaluation.
+// The library default is `'disabled'` for safety.
+const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'join-source';
+const targetSel = document.getElementById('target');
+const csvInput = document.getElementById('csv');
+const targetKeyInput = document.getElementById('target-key');
+const sourceKeyInput = document.getElementById('source-key');
+const fieldsInput = document.getElementById('fields');
+const prefixInput = document.getElementById('prefix');
+const unjoinedInput = document.getElementById('unjoined');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+const attrs = document.getElementById('attrs');
+function refreshAttrs() {
+    const src = map.getSource(SOURCE_ID);
+    const ds = src?.getDataset();
+    if (!ds) {
+        attrs.textContent = '';
+        return;
+    }
+    const layer = ds.layers.find((l) => l.name === targetSel.value) || ds.layers[0];
+    const records = layer?.data?.getRecords?.() ?? [];
+    const fields = layer?.data?.getFields?.() ?? Object.keys(records[0] ?? {});
+    const head = records.slice(0, 6);
+    attrs.textContent = head.length === 0
         ? '(no records)'
         : [fields.join('\t'), ...head.map((r) => fields.map((f) => r[f]).join('\t'))].join('\n');
-    }
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+}
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      targetSel.disabled = source.getLayers().length === 0;
-      btn.disabled = false;
-      refreshAttrs();
-    }
-
-    targetSel.addEventListener('change', refreshAttrs);
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    targetSel.disabled = source.getLayers().length === 0;
+    btn.disabled = false;
+    refreshAttrs();
+}
+targetSel.addEventListener('change', refreshAttrs);
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。粘贴 CSV、配置键,然后 Join。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。粘贴 CSV、配置键,然后 Join。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    btn.addEventListener('click', async () => {
-      const target = targetSel.value;
-      const csv = csvInput.value;
-      const tk = targetKeyInput.value.trim();
-      const sk = sourceKeyInput.value.trim();
-      if (!target || !csv || !tk || !sk) {
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+btn.addEventListener('click', async () => {
+    const target = targetSel.value;
+    const csv = csvInput.value;
+    const tk = targetKeyInput.value.trim();
+    const sk = sourceKeyInput.value.trim();
+    if (!target || !csv || !tk || !sk) {
         status.textContent = '请填写目标图层、CSV、两个键。';
         return;
-      }
-      const opts = {
+    }
+    const opts = {
         source: SOURCE_ID, target,
         data: { csv },
         keys: [tk, sk],
-      };
-      const fl = fieldsInput.value.trim();
-      if (fl) opts.fields = fl.split(',').map((s) => s.trim()).filter(Boolean);
-      const pf = prefixInput.value.trim();
-      if (pf) opts.prefix = pf;
-      if (unjoinedInput.checked) opts.unjoined = true;
-
-      status.textContent = '正在 Join...';
-      btn.disabled = true;
-      try {
+    };
+    const fl = fieldsInput.value.trim();
+    if (fl)
+        opts.fields = fl.split(',').map((s) => s.trim()).filter(Boolean);
+    const pf = prefixInput.value.trim();
+    if (pf)
+        opts.prefix = pf;
+    if (unjoinedInput.checked)
+        opts.unjoined = true;
+    status.textContent = '正在 Join...';
+    btn.disabled = true;
+    try {
         const result = await map.ops.joinTable(opts);
         status.textContent = result.ok ? `已 Join 到 "${target}"。Ctrl+Z 撤销。` : 'Join 失败。';
         const src = map.getSource(SOURCE_ID);
-        if (src) populate(src);
-      } catch (err) {
+        if (src)
+            populate(src);
+    }
+    catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
-      } finally {
+    }
+    finally {
         btn.disabled = false;
-      }
-    });
-
-    map.on('error', (e) => {
-      status.textContent = `错误: ${e?.error?.message ?? e}`;
-    });
-    await autoLoadExampleFixtures('join');
-  </script>
+    }
+});
+map.on('error', (e) => {
+    status.textContent = `错误: ${e?.error?.message ?? e}`;
+});
+await autoLoadExampleFixtures('join');
+</script>
 </body>
 
 </html>

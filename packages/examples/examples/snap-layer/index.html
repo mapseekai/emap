@@ -55,123 +55,130 @@
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
-    const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    installExampleMapUi(map, emap);
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
-    const SOURCE_ID = 'snap-source';
-    const targetSel = document.getElementById('target');
-    const intervalInput = document.getElementById('interval');
-    const precisionInput = document.getElementById('precision');
-    const endpointsChk = document.getElementById('endpoints');
-    const btn = document.getElementById('btn');
-    const formatSel = document.getElementById('format');
-    const exportBtn = document.getElementById('export-btn');
-    const status = document.getElementById('status');
-    let activeSource = null;
-
-    function populate(source) {
-      targetSel.innerHTML = '';
-      source.getLayers().forEach((lyr, i) => {
+import { installExampleMapUi } from '/src/example-runtime.ts';
+import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'snap-source';
+const targetSel = document.getElementById('target');
+const intervalInput = document.getElementById('interval');
+const precisionInput = document.getElementById('precision');
+const endpointsChk = document.getElementById('endpoints');
+const btn = document.getElementById('btn');
+const formatSel = document.getElementById('format');
+const exportBtn = document.getElementById('export-btn');
+const status = document.getElementById('status');
+let activeSource = null;
+function populate(source) {
+    targetSel.innerHTML = '';
+    source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
-      });
-      const empty = source.getLayers().length === 0;
-      btn.disabled = empty;
-      exportBtn.disabled = empty;
-    }
-
-    document.getElementById('file-input').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    });
+    const empty = source.getLayers().length === 0;
+    btn.disabled = empty;
+    exportBtn.disabled = empty;
+}
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file)
+        return;
+    status.textContent = `正在加载 ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID))
+            map.removeSource(SOURCE_ID);
         activeSource = source;
         // Load initial data before registration: await setData, then addSource and setExtent.
         try {
-          await source.setData({ filename: file.name, content });
-          await map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          populate(source);
-          status.textContent = `已加载 ${file.name}。`;
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
+            await source.setData({ filename: file.name, content });
+            await map.addSource(SOURCE_ID, source);
+            map.setExtent(source.getExtent());
+            populate(source);
+            status.textContent = `已加载 ${file.name}。`;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    btn.addEventListener('click', async () => {
-      const target = targetSel.value;
-      if (!target) return;
-      const opts = { source: SOURCE_ID, target };
-      const intervalVal = intervalInput.value.trim();
-      if (intervalVal && !isNaN(Number(intervalVal))) opts.interval = Number(intervalVal);
-      const precisionVal = precisionInput.value.trim();
-      if (precisionVal && !isNaN(Number(precisionVal))) opts.precision = Number(precisionVal);
-      if (endpointsChk.checked) opts.endpoints = true;
-      // Snap 通常视觉上几乎无感(顶点合并是亚像素级),所以打印
-      // 顶点数差作为"是否真的发生了变化"的信号。
-      const before = map.getSource(SOURCE_ID)?.getArcs?.()?.getPointCount?.() ?? 0;
-      status.textContent = `正在吸附 ${target}...(顶点 ${before})`;
-      btn.disabled = true;
-      try {
+        catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+btn.addEventListener('click', async () => {
+    const target = targetSel.value;
+    if (!target)
+        return;
+    const opts = { source: SOURCE_ID, target };
+    const intervalVal = intervalInput.value.trim();
+    if (intervalVal && !isNaN(Number(intervalVal)))
+        opts.interval = Number(intervalVal);
+    const precisionVal = precisionInput.value.trim();
+    if (precisionVal && !isNaN(Number(precisionVal)))
+        opts.precision = Number(precisionVal);
+    if (endpointsChk.checked)
+        opts.endpoints = true;
+    // Snap 通常视觉上几乎无感(顶点合并是亚像素级),所以打印
+    // 顶点数差作为"是否真的发生了变化"的信号。
+    const before = map.getSource(SOURCE_ID)?.getArcs?.()?.getPointCount?.() ?? 0;
+    status.textContent = `正在吸附 ${target}...(顶点 ${before})`;
+    btn.disabled = true;
+    try {
         const result = await map.ops.snapLayer(opts);
         if (result.ok) {
-          const after = map.getSource(SOURCE_ID)?.getArcs?.()?.getPointCount?.() ?? 0;
-          const delta = before - after;
-          status.textContent =
-            `已吸附 ${target}: 顶点 ${before} → ${after}` +
-            (delta === 0 ? ' (未变化,试更大的容差)' : ` 合并 ${delta} 个,Ctrl+Z 撤销。`);
-        } else {
-          status.textContent = '吸附失败。';
+            const after = map.getSource(SOURCE_ID)?.getArcs?.()?.getPointCount?.() ?? 0;
+            const delta = before - after;
+            status.textContent =
+                `已吸附 ${target}: 顶点 ${before} → ${after}` +
+                    (delta === 0 ? ' (未变化,试更大的容差)' : ` 合并 ${delta} 个,Ctrl+Z 撤销。`);
         }
-      } finally {
+        else {
+            status.textContent = '吸附失败。';
+        }
+    }
+    finally {
         btn.disabled = false;
-      }
-    });
-
-    // 导出当前 source 的快照(包含 snap 后的几何),Ctrl+Z 撤销不影响已下载的文件。
-    exportBtn.addEventListener('click', async () => {
-      if (!activeSource) return;
-      const format = formatSel.value;
-      status.textContent = `正在导出为 ${format}...`;
-      exportBtn.disabled = true;
-      try {
+    }
+});
+// 导出当前 source 的快照(包含 snap 后的几何),Ctrl+Z 撤销不影响已下载的文件。
+exportBtn.addEventListener('click', async () => {
+    if (!activeSource)
+        return;
+    const format = formatSel.value;
+    status.textContent = `正在导出为 ${format}...`;
+    exportBtn.disabled = true;
+    try {
         const blob = await activeSource.export({ format });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download =
-          format === 'shapefile' ? 'snap-result.zip'
-            : format === 'topojson' ? 'snap-result.topojson'
-              : 'snap-result.geojson';
+            format === 'shapefile' ? 'snap-result.zip'
+                : format === 'topojson' ? 'snap-result.topojson'
+                    : 'snap-result.geojson';
         document.body.appendChild(a);
         a.click();
-        a.remove();
+        await a.dispose();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         status.textContent = `已导出 ${blob.size} 字节: ${a.download}`;
-      } catch (err) {
+    }
+    catch (err) {
         console.error(err);
         status.textContent = `导出失败: ${err.message || err}`;
-      } finally {
+    }
+    finally {
         exportBtn.disabled = false;
-      }
-    });
-    await autoLoadExampleFixtures('snap-layer');
-  </script>
+    }
+});
+await autoLoadExampleFixtures('snap-layer');
+</script>
 </body>
 
 </html>

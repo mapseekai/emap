@@ -1,3 +1,5 @@
+> Historical migration record for commit `fdd3e136`. The custom kernel described below has been removed; see [the native Cordis migration](cordis-native-migration.md) for current APIs.
+
 # emap 全量插件迁移说明
 
 - 工作分支：`refactor/everything-plugin`
@@ -19,12 +21,12 @@
 | 层 | 具体模块 | 责任与边界 |
 | --- | --- | --- |
 | Kernel | `src/kernel/`：PluginRuntime、ServiceRegistry、ServiceKey、EffectScope、依赖图、安装回滚、取消与释放 | 不依赖 GIS、DOM、Canvas、MapLibre、Arrow 或 DuckDB。共享 token 不等于共享可变状态。 |
-| Service | `src/services/`：document、source/source-factory、view、projection、scale、layers、cache、selection、query、history、edit-state、policy、execution、render、surface、interaction、routing、controls、validation、snapshot、formats、capabilities | 定义消费者可依赖的契约和 token；不从 provider 实现反向推导类型。当前数据领域依然是 mapshaper 拓扑，不宣称任意数据模型无需适配即可替换。 |
-| Provider | `src/providers/workspace/` 实现文档/视图/渲染等服务；`providers/mapshaper/`、`providers/topology/`、`providers/formats/`、`providers/capabilities/`；可选 `providers/maplibre/`、`src/arrow/`、`src/duckdb/`；Worker 位于 execution provider | 持有资源和状态、提供服务，释放由插件 scope 管理。Canvas provider 仍复用原 CanvasPainter/RenderScheduler；DuckDB 仍调用原 toolbox；不重写 GIS 算法。 |
-| Feature Plugin | `src/plugins/interactions/`：平移、滚轮、点击/框/套索选择、绘制、顶点、切割、重塑、自动补面、环、部件、测量、变换；`plugins/controls/`、`plugins/validation/` | 声明所需服务；动态注册交互、控件工厂或校验器。控件不再获得整个 Emap 实现。默认 preset 注册工厂但不会替应用添加控件。 |
-| AI Capability | `src/services/capabilities.ts`、`src/ai/`、`src/plugins/capabilities/`、`src/duckdb/capabilities.ts` | 描述、参数 schema、发现、宿主授权、调用、取消边界及有界执行记录。与 UI 复用同一领域操作，不包含模型 API、凭据或自动外发数据。 |
+| Service | `src/runtime/services/`：document、source/source-factory、view、projection、scale、layers、cache、selection、query、history、edit-state、policy、execution、render、surface、interaction、routing、controls、validation、snapshot、formats、capabilities | 定义消费者可依赖的契约和 token；不从 provider 实现反向推导类型。当前数据领域依然是 mapshaper 拓扑，不宣称任意数据模型无需适配即可替换。 |
+| Provider | `src/engine/providers/workspace/` 实现文档/视图/渲染等服务；`providers/mapshaper/`、`providers/topology/`、`providers/formats/`、`providers/capabilities/`；可选 `providers/maplibre/`、`src/integrations/arrow/`、`src/integrations/duckdb/`；Worker 位于 execution provider | 持有资源和状态、提供服务，释放由插件 scope 管理。Canvas provider 仍复用原 CanvasPainter/RenderScheduler；DuckDB 仍调用原 toolbox；不重写 GIS 算法。 |
+| Feature Plugin | `src/runtime/plugins/interactions/`：平移、滚轮、点击/框/套索选择、绘制、顶点、切割、重塑、自动补面、环、部件、测量、变换；`plugins/controls/`、`plugins/validation/` | 声明所需服务；动态注册交互、控件工厂或校验器。控件不再获得整个 Emap 实现。默认 preset 注册工厂但不会替应用添加控件。 |
+| AI Capability | `src/runtime/services/capabilities.ts`、`src/runtime/ai/`、`src/runtime/plugins/capabilities/`、`src/integrations/duckdb/capabilities.ts` | 描述、参数 schema、发现、宿主授权、调用、取消边界及有界执行记录。与 UI 复用同一领域操作，不包含模型 API、凭据或自动外发数据。 |
 
-`src/geo`、`src/types`、`src/edit/commands`、`src/map/ops`、`src/renderer` 等已有实现仍是可复用领域模块，归属于对应服务或 provider。这些目录没有被简单改名冒充插件化。
+`src/geo`、`src/types`、`src/domain/edit/commands`、`src/engine/map/ops`、`src/renderer` 等已有实现仍是可复用领域模块，归属于对应服务或 provider。这些目录没有被简单改名冒充插件化。
 
 ## 3. 装配与生命周期
 

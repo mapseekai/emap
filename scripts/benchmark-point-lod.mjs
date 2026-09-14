@@ -7,7 +7,7 @@ import { platform, arch, cpus } from 'node:os';
 
 const bundled = await build({
   stdin: {
-    contents: `export { PointLod } from './src/renderer/point-lod.ts'; export { AffineTransform } from './src/geo/transform.ts';`,
+    contents: `export { PointLod } from './src/engine/rendering/point-lod.ts'; export { AffineTransform } from './src/domain/geo/transform.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,
