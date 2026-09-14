@@ -1,3 +1,4 @@
+import { mapLibrePlugin } from '../../src/providers/maplibre/plugin';
 // @vitest-environment jsdom
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -164,8 +165,16 @@ async function executeOnlineMapServicesExample(
       'loadExampleRuntime',
       'document',
       'window',
+      'mapLibrePlugin',
       script,
-    )(installExampleMapUi, autoLoadExampleFixtures, loadExampleRuntime, document, fakeWindow);
+    )(
+      installExampleMapUi,
+      autoLoadExampleFixtures,
+      loadExampleRuntime,
+      document,
+      fakeWindow,
+      mapLibrePlugin,
+    );
     const customServiceSubmissions = customService
       ? Array.isArray(customService)
         ? customService

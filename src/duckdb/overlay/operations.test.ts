@@ -5,7 +5,7 @@ import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { toArrowTable } from '../../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../arrow/test-utils';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
-import { setDuckDbRuntime, type DuckDbConnection, type DuckDbRuntime } from '../runtime';
+import { type DuckDbConnection, type DuckDbRuntime } from '../runtime';
 import { difference, intersect } from './index';
 import { OVERLAY_OPERATIONS } from './_shared';
 
@@ -289,21 +289,33 @@ function firstRingCoordinateKeys(dataset: MapshaperDataset): string[] {
 }
 
 beforeAll(async () => {
-  setDuckDbRuntime(await getIntegrationRuntime());
+  await getIntegrationRuntime();
 });
 
 afterAll(async () => {
-  setDuckDbRuntime(null);
   await integrationRuntime?.close?.();
   integrationRuntime = undefined;
 });
+
+const bound = {
+  intersect: (
+    input: MapshaperDataset,
+    mask: MapshaperDataset,
+    options?: Parameters<typeof intersect>[2],
+  ) => intersect(input, mask, options, integrationRuntime),
+  difference: (
+    input: MapshaperDataset,
+    mask: MapshaperDataset,
+    options?: Parameters<typeof difference>[2],
+  ) => difference(input, mask, options, integrationRuntime),
+};
 
 describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
   it('clips polygon geometry with the mask, preserves input attributes, and inherits input CRS', async () => {
     const input = await polygonDataset('EPSG:26910');
     const mask = await integrationMaskDataset('EPSG:26910');
 
-    const result = await intersect(input, mask, {
+    const result = await bound.intersect(input, mask, {
       outputLayer: 'clipped_polygons',
     });
 
@@ -322,7 +334,7 @@ describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
     const input = await polygonDataset();
     const mask = await integrationMaskDataset();
 
-    const result = await difference(input, mask, {
+    const result = await bound.difference(input, mask, {
       outputLayer: 'erased_polygons',
     });
 
@@ -341,7 +353,7 @@ describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
     const input = await polygonDataset();
     const mask = await emptyMaskDataset();
 
-    const result = await intersect(input, mask, {
+    const result = await bound.intersect(input, mask, {
       outputLayer: 'empty_intersection',
     });
 
@@ -354,7 +366,7 @@ describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
     const input = await polygonDataset();
     const mask = await emptyMaskDataset();
 
-    const result = await difference(input, mask, {
+    const result = await bound.difference(input, mask, {
       outputLayer: 'empty_difference',
     });
 

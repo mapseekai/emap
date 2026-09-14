@@ -1,3 +1,11 @@
+import { InteractionService } from '../services/keys';
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 import { pointLodForPainter } from '../renderer/point-lod';
 import { HighlightManager } from './highlight-manager';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -46,7 +54,7 @@ function restoreRealMapshaper(): void {
 }
 
 function setPrivate(target: object, key: string, value: unknown): void {
-  Reflect.set(target, key, value);
+  fixtureSet(target, key, value);
 }
 
 /**
@@ -135,11 +143,11 @@ function parsedCmdsToCli(cmds: any): string {
 }
 
 function getPrivate(target: object, key: string): unknown {
-  return Reflect.get(target, key);
+  return fixtureGet(target, key);
 }
 
 function callPrivate(target: object, key: string, ...args: unknown[]): unknown {
-  const fn = Reflect.get(target, key);
+  const fn = (...values: unknown[]) => fixtureCall(target, key, ...values);
   if (typeof fn !== 'function') {
     throw new Error(`Expected ${key} to be a function`);
   }
@@ -184,7 +192,7 @@ function registerMockSource(
  */
 function createBareMap(): Emap {
   // Use Object.create to get an instance without calling the constructor
-  const map = Object.create(Emap.prototype);
+  const map = createTestMap();
   // Initialize essential private state that the layer management methods depend on
   setPrivate(map, '_sources', new globalThis.Map());
   setPrivate(map, '_sourceListeners', new globalThis.Map());
@@ -291,7 +299,7 @@ describe('split sketch source lifecycle', () => {
 
 describe('Emap rendering', () => {
   it('rebases fast navigation on a full frame rendered partway through a gesture', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const transform = new AffineTransform(2, -2, 40, 20);
     setPrivate(map, '_viewport', { transform });
     setPrivate(map, '_navSnapshotTransform', { mx: 1, my: -1, bx: 0, by: 0 });
@@ -326,7 +334,7 @@ describe('Emap rendering', () => {
   });
 
   it('preserves a first nav render request until the RAF callback runs', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const callbacks: FrameRequestCallback[] = [];
     const render = vi.fn();
     const navDelta = { tx: 12, ty: -4, sx: 1, sy: 1 };
@@ -358,7 +366,7 @@ describe('Emap rendering', () => {
   });
 
   it('upgrades a pending nav render request when a redraw is scheduled before RAF', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const callbacks: FrameRequestCallback[] = [];
     const render = vi.fn();
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -390,7 +398,7 @@ describe('Emap rendering', () => {
   });
 
   it('lets a new nav request replace a pending settle redraw during fast-nav', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const callbacks: FrameRequestCallback[] = [];
     const render = vi.fn();
     const navDelta = { tx: 6, ty: 3, sx: 1, sy: 1 };
@@ -424,7 +432,7 @@ describe('Emap rendering', () => {
   });
 
   it('does not let nav replace a normal pending redraw', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const callbacks: FrameRequestCallback[] = [];
     const render = vi.fn();
     const navDelta = { tx: 6, ty: 3, sx: 1, sy: 1 };
@@ -491,7 +499,7 @@ describe('Emap rendering', () => {
   });
 
   it('records full-frame timing without forcing a Canvas readback', () => {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     const order: string[] = [];
     const recordFrame = vi.fn(() => order.push('record'));
     const now = vi.spyOn(performance, 'now').mockReturnValueOnce(10).mockReturnValueOnce(35);
@@ -8629,7 +8637,7 @@ describe('Emap.remove() teardown', () => {
     fqClear: ReturnType<typeof vi.fn>;
     containerRemove: ReturnType<typeof vi.fn>;
   } {
-    const map = Object.create(Emap.prototype) as Emap;
+    const map = createTestMap() as Emap;
     setPrivate(map, '_listeners', {});
     const dragDestroy = vi.fn();
     const wheelDestroy = vi.fn();
@@ -8804,8 +8812,10 @@ describe('Emap.remove() teardown', () => {
       }),
     };
     const goodB = { onAdd: vi.fn(), onRemove: vi.fn() };
-    setPrivate(map, '_controls', [goodA, bad, goodB]);
-    setPrivate(map, '_controlContainers', new globalThis.Map());
+    for (const control of [goodA, bad, goodB]) {
+      control.onAdd.mockReturnValue({ style: {}, remove: vi.fn() });
+      map.addControl(control as any);
+    }
 
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
@@ -8843,9 +8853,7 @@ describe('Phase-6 integration', () => {
     setPrivate(map, '_activeTransaction', null);
     setPrivate(map, '_validators', new ValidatorRegistry());
     setPrivate(map, 'features', new FeatureAccessor(map as any));
-    // The constructor wires `historychange → _runAfterCommitValidators`.
-    // createBareMap bypasses that, so wire it manually here.
-    map.on('historychange', () => (map as any)._runAfterCommitValidators());
+    // The actual validation provider owns the history hook; do not install a second one.
 
     beforeDs = {
       layers: [
@@ -9156,27 +9164,34 @@ function flushPromises(): Promise<void> {
 
 describe('Emap edit-mode drag pan', () => {
   it('suspends drag pan for split mode and restores its prior enabled state on exit', () => {
-    const dragPan = { isEnabled: vi.fn(() => true), disable: vi.fn(), enable: vi.fn() };
-    const map = {
-      _dragPan: dragPan,
-      _dragPanSuspendedByEdit: false,
-      _dragPanEnabledBeforeEditSuspend: false,
+    const map = createTestMap();
+    const interaction = map.getService(InteractionService);
+    let enabled = true;
+    const dragPan = {
+      name: 'test-pan',
+      isEnabled: () => enabled,
+      disable: vi.fn(() => {
+        enabled = false;
+      }),
+      enable: vi.fn(() => {
+        enabled = true;
+      }),
+      setOptions() {},
+      getOptions: () => ({}),
+      handlePointer: () => 'passthrough' as const,
     };
-    type EditModeDragPanHost = typeof map;
-    type SyncEditModeDragPan = (this: EditModeDragPanHost, mode: 'none' | 'split') => void;
-    // Private runtime method under test; the public path is covered by handler-registry tests.
-    const syncEditModeDragPan = Reflect.get(
-      Emap.prototype,
-      '_syncEditModeDragPan',
-    ) as unknown as SyncEditModeDragPan;
-
-    syncEditModeDragPan.call(map, 'split');
+    interaction.register(dragPan, { roles: ['pan'] });
+    interaction.register(
+      { ...dragPan, name: 'test-split', isEnabled: () => false, disable() {}, enable() {} },
+      { mode: 'split', blocks: ['pan'] },
+    );
+    interaction.syncMode('split');
     expect(dragPan.disable).toHaveBeenCalledTimes(1);
-    expect(map._dragPanSuspendedByEdit).toBe(true);
-
-    syncEditModeDragPan.call(map, 'none');
+    expect(dragPan.isEnabled()).toBe(false);
+    interaction.syncMode('none');
     expect(dragPan.enable).toHaveBeenCalledTimes(1);
-    expect(map._dragPanSuspendedByEdit).toBe(false);
+    expect(dragPan.isEnabled()).toBe(true);
+    map.remove();
   });
 });
 describe('attribute-driven fill render (e2e)', () => {

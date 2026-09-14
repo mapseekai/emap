@@ -47,6 +47,7 @@ const docsEvents = '/docs/guides/events';
 const docsSelection = '/docs/guides/selection';
 const docsEditing = '/docs/guides/editing';
 const docsControls = '/docs/guides/controls';
+const docsPlugins = '/docs/guides/plugins';
 const docsWorker = '/docs/guides/worker';
 const docsFormats = '/docs/data/formats';
 const docsAttributes = '/docs/data/attributes';
@@ -523,6 +524,10 @@ const exampleDescriptions = {
     zh: '通过 duckDbToolbox 搜索并按 JSON 参数执行任意 DuckDB 处理工具。',
     en: 'Searches DuckDB processing tools through duckDbToolbox and executes one with JSON parameters.',
   },
+  'plugin-runtime': {
+    zh: '实时查看 PluginRuntime、Service 与 Capability 状态，并动态启停交互插件或安装 MapLibre、Arrow、DuckDB。',
+    en: 'Inspects PluginRuntime, services, and capabilities live while toggling interaction plugins or installing MapLibre, Arrow, and DuckDB.',
+  },
   'flatgeobuf-viewer': {
     zh: '通过 registerFormat 注册的 FlatGeobuf 插件加载 .fgb 文件，并从文件头读取坐标系。',
     en: 'Loads .fgb files through a FlatGeobuf plugin registered via registerFormat, reading the CRS from the file header.',
@@ -600,6 +605,16 @@ export const examples: readonly ExampleDefinition[] = [
     [docsFormats],
     'TopologySource.export',
     ['formats', 'export'],
+    [task6Fixture],
+  ),
+  recipe(
+    'plugin-runtime',
+    'map-data',
+    'Plugin Runtime / GIS Harness',
+    'Plugin Runtime / GIS Harness',
+    [docsPlugins, docsEmap],
+    'PluginRuntime',
+    ['plugins', 'runtime', 'services', 'capabilities', 'maplibre', 'duckdb', 'arrow'],
     [task6Fixture],
   ),
   recipe(

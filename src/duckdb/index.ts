@@ -2,8 +2,6 @@
 export { DuckDbOperationError } from './errors';
 export type { DuckDbOperationErrorKind } from './errors';
 export {
-  setDuckDbRuntime,
-  getDuckDbRuntime,
   closeDuckDbRuntime,
   quoteSqlString,
   createDuckDbRuntimeFromJsDelivr,
@@ -129,3 +127,9 @@ export type {
   DuckDbOverlayLayerOptions,
   DuckDbOverlayLayerResult,
 } from './map-operations';
+
+export { DuckDbRuntimeScope } from './runtime-scope';
+export type { DuckDbRuntimeOptions } from './runtime-scope';
+export { duckDbPlugin, DuckDbService, DuckDbProcessingService } from './plugin';
+export type { DuckDbProcessing } from './plugin';
+export { duckDbCapabilityPlugins } from './capabilities';

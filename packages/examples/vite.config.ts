@@ -632,6 +632,34 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../../src/ui/controls.css', import.meta.url)),
       },
       {
+        find: '@mapseekai/emap/kernel',
+        replacement: fileURLToPath(new URL('../../src/kernel/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/services',
+        replacement: fileURLToPath(new URL('../../src/services/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/providers',
+        replacement: fileURLToPath(new URL('../../src/providers/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/plugins',
+        replacement: fileURLToPath(new URL('../../src/plugins/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/presets',
+        replacement: fileURLToPath(new URL('../../src/presets/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/ai',
+        replacement: fileURLToPath(new URL('../../src/ai/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/maplibre',
+        replacement: fileURLToPath(new URL('../../src/providers/maplibre/index.ts', import.meta.url)),
+      },
+      {
         find: '@mapseekai/emap',
         replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
       },

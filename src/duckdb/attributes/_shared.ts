@@ -2,7 +2,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { isGeographicCrs } from '../../geo/crs-resolver';
 import { DuckDbOperationError } from '../errors';
 import { runAttributeTool, type AttributeOperation } from '../core/runners/attribute';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import type { AttributeOperationId, AttributeOptions } from './types';
 
 export interface AttributeOperationDefinition extends AttributeOperation {
@@ -85,7 +85,7 @@ export async function runAttribute(
   operationId: AttributeOperationId,
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   const operation = ATTRIBUTE_OPERATIONS[operationId];
   const failOnGeographicCrs = options.failOnGeographicCrs ?? true;

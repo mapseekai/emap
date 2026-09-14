@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Emap } from './map';
@@ -38,7 +45,7 @@ function dataset(value = 1): MapshaperDataset {
 }
 
 function bareMap() {
-  const map = Object.create(Emap.prototype) as Emap;
+  const map = createTestMap() as Emap;
   const history = new EditHistory();
   const highlights = { removeSource: vi.fn(), clear: vi.fn() };
   const state: Record<string, unknown> = {

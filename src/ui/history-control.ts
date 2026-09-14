@@ -1,6 +1,6 @@
-import { Control } from './control';
-import { Emap } from '../map/map';
 import type { HistoryStateSnapshot } from '../edit/edit-history';
+import type { ControlContext } from '../services/controls';
+import { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface HistoryControlOptions {
@@ -19,7 +19,7 @@ export interface HistoryControlOptions {
  * they always reflect `canUndo()` / `canRedo()` without polling.
  */
 export class HistoryControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _undoBtn: HTMLButtonElement | null = null;
   private _redoBtn: HTMLButtonElement | null = null;
@@ -30,7 +30,7 @@ export class HistoryControl implements Control {
     this._options = options;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-ctrl-group ${this._options.className || ''}`.trim();

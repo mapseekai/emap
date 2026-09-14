@@ -1,5 +1,5 @@
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
-import type { Emap } from '../map/map';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface VertexEditControlOptions {
@@ -8,7 +8,7 @@ export interface VertexEditControlOptions {
 }
 
 export class VertexEditControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
   private _opts: VertexEditControlOptions;
@@ -17,7 +17,7 @@ export class VertexEditControl implements Control {
     this._opts = options;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     if (this._opts.polygonFillColor !== undefined) {
       map.vertexEdit.setOptions({ polygonFillColor: this._opts.polygonFillColor });

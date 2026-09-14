@@ -1,3 +1,4 @@
+import type { FormatRegistryContract } from '../services/formats';
 // Internal host contract for feature managers (`MapshaperOps`,
 // `EditSessions`, `AttributeOps`). The managers used to take `_emap: any`
 // and reach into private fields by name; this interface declares exactly
@@ -15,6 +16,8 @@ import type { Selection } from './selection';
 import type { LayerRegistry } from './layer-registry';
 
 export interface EmapHostInternal {
+  /** Optional only for standalone operation fixtures; workspaces always provide it. */
+  readonly _formats?: FormatRegistryContract;
   // ---- mutable lifecycle flags ---------------------------------------
   /** `true` once `Emap.remove()` has been called. Async ops MUST check
    *  this before applying results. */

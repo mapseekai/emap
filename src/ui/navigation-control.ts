@@ -1,5 +1,5 @@
+import type { ControlContext } from '../services/controls';
 import { Control } from './control';
-import { Emap } from '../map/map';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface NavigationOptions {
@@ -9,7 +9,7 @@ export interface NavigationOptions {
 }
 
 export class NavigationControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _options: NavigationOptions;
 
@@ -21,7 +21,7 @@ export class NavigationControl implements Control {
     };
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-ctrl-group ${this._options.className || ''}`;

@@ -229,7 +229,9 @@ export type {
 } from './map/source-loading';
 // Format-plugin registry (the optional `@mapseekai/emap/arrow` bundle
 // registers GeoParquet / GeoArrow support through this; arrow-free).
-export { registerFormat } from './source/format-registry';
+export { FormatRegistry, registerFormat } from './source/format-registry';
+export { FormatService } from './services/formats';
+export type { FormatRegistryContract } from './services/formats';
 export type { DatasetFormatPlugin, ExportedFormatFile } from './source/format-registry';
 
 // ===========================================================================
@@ -426,3 +428,22 @@ export {
 export type { LassoSelectControlOptions, LassoSelectStyle } from './ui/lasso-select-control';
 export { SimplifyControl } from './ui/simplify-control';
 export type { SimplifyControlOptions } from './ui/simplify-control';
+
+export { PluginRuntime, EffectScope, serviceKey } from './kernel';
+export type {
+  Plugin,
+  PluginContext,
+  PluginInspection,
+  ServiceKey,
+  ServiceResolver,
+} from './kernel';
+export type { EmapOptions } from './services/options';
+export { CapabilityService } from './services/capabilities';
+export type {
+  CapabilityDescriptor,
+  CapabilityAuthorizer,
+  CapabilityRegistryContract,
+} from './services/capabilities';
+
+export type { FeatureReadContext } from './map/feature-accessor';
+export type { HandlerRegistration } from './core/handler-manager';

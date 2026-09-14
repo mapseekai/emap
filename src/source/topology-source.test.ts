@@ -4,7 +4,7 @@ import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../types/mapshaper-types';
-import { registerFormat, unregisterFormat } from './format-registry';
+import { FormatRegistry, registerFormat, unregisterFormat } from './format-registry';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -1403,6 +1403,11 @@ describe('TopologySource point import', () => {
 });
 
 describe('TopologySource format plugin routing', () => {
+  let formats: FormatRegistry;
+  beforeEach(() => {
+    formats = new FormatRegistry();
+  });
+  afterEach(() => formats.dispose());
   const PLUGIN_DATASET = {
     layers: [{ name: 'plug', geometry_type: 'point' as const, shapes: [[[1, 2]]] }],
     arcs: undefined,
@@ -1410,7 +1415,7 @@ describe('TopologySource format plugin routing', () => {
   };
 
   afterEach(() => {
-    unregisterFormat('test-plugin');
+    unregisterFormat(formats, 'test-plugin');
   });
 
   function registerTestPlugin() {
@@ -1418,7 +1423,7 @@ describe('TopologySource format plugin routing', () => {
     const exportHandler = vi.fn(async () => [
       { filename: 'out.parquet', content: new Uint8Array([1, 2, 3]) },
     ]);
-    registerFormat({
+    registerFormat(formats, {
       name: 'test-plugin',
       extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
       importBinary,
@@ -1433,7 +1438,7 @@ describe('TopologySource format plugin routing', () => {
 
   it('routes .parquet files to the registered plugin instead of mapshaper', async () => {
     const { importBinary } = registerTestPlugin();
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     const content = new Uint8Array([0xde, 0xad]);
     await source.setData({ filename: 'data.parquet', content });
     expect(importBinary).toHaveBeenCalledWith(content, 'data.parquet');
@@ -1445,7 +1450,7 @@ describe('TopologySource format plugin routing', () => {
     const adapter = getDefaultMapshaperAdapter();
     const splitSpy = vi.spyOn(adapter, 'splitSelfIntersectingPolygonRings');
     try {
-      const parquet = new TopologySource('parquet');
+      const parquet = new TopologySource('parquet', { formats });
       await parquet.setData({
         filename: 'data.parquet',
         content: new Uint8Array([1]),
@@ -1454,7 +1459,7 @@ describe('TopologySource format plugin routing', () => {
       expect(splitSpy).toHaveBeenCalledWith(PLUGIN_DATASET);
 
       splitSpy.mockClear();
-      const arrow = new TopologySource('arrow');
+      const arrow = new TopologySource('arrow', { formats });
       await arrow.setData({
         filename: 'data.arrow',
         content: new Uint8Array([1]),
@@ -1466,7 +1471,7 @@ describe('TopologySource format plugin routing', () => {
   });
 
   it('throws a registration hint for plugin extensions when unregistered', async () => {
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     await expect(
       source.setData({ filename: 'data.parquet', content: new Uint8Array([1]) }),
     ).rejects.toThrow(/@mapseekai\/emap\/arrow/);
@@ -1474,7 +1479,7 @@ describe('TopologySource format plugin routing', () => {
 
   it('rejects mixing plugin files with other inputs', async () => {
     registerTestPlugin();
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     await expect(
       source.setData([
         { filename: 'a.parquet', content: new Uint8Array([1]) },
@@ -1485,7 +1490,7 @@ describe('TopologySource format plugin routing', () => {
 
   it('exports plugin formats through the registered handler with correct MIME', async () => {
     const { exportHandler } = registerTestPlugin();
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     setPrivate(source, '_dataset', FAKE_DATASET);
     const blob = await source.export({ format: 'geoparquet', encoding: 'wkb' });
     expect(exportHandler).toHaveBeenCalledWith(
@@ -1498,7 +1503,7 @@ describe('TopologySource format plugin routing', () => {
 
   it('exports FlatGeobuf through the registered handler with its MIME type', async () => {
     const { exportHandler } = registerTestPlugin();
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     setPrivate(source, '_dataset', FAKE_DATASET);
     const blob = await source.export({ format: 'flatgeobuf' as never });
     expect(exportHandler).toHaveBeenCalledWith(
@@ -1510,7 +1515,7 @@ describe('TopologySource format plugin routing', () => {
   });
 
   it('throws a registration hint for geoparquet export when unregistered', async () => {
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     setPrivate(source, '_dataset', FAKE_DATASET);
     await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(
       /@mapseekai\/emap\/arrow/,
@@ -1518,7 +1523,7 @@ describe('TopologySource format plugin routing', () => {
   });
 
   it('throws a FlatGeobuf plugin hint when export is unregistered', async () => {
-    const source = new TopologySource('p');
+    const source = new TopologySource('p', { formats });
     setPrivate(source, '_dataset', FAKE_DATASET);
     await expect(source.export({ format: 'flatgeobuf' as never })).rejects.toThrow(
       /FlatGeobuf format plugin/,

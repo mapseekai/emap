@@ -1,3 +1,11 @@
+import { ViewService } from '../services/keys';
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Emap } from './map';
@@ -39,7 +47,7 @@ function container(): HTMLElement {
 
 describe('Emap camera facade (DX P9)', () => {
   it('exposes camera methods that return `this` and move the view', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.jumpTo({ center: [10, 20], scale: 3 })).toBe(map);
     const t = map.getTransform();
     const [px, py] = t.project(10, 20);
@@ -53,7 +61,7 @@ describe('Emap camera facade (DX P9)', () => {
   });
 
   it('jumpTo fires the movestart/move/moveend lifecycle', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const seen: string[] = [];
     for (const t of ['movestart', 'move', 'moveend']) map.on(t, () => seen.push(t));
     map.jumpTo({ center: [1, 2], scale: 2 });
@@ -61,8 +69,8 @@ describe('Emap camera facade (DX P9)', () => {
   });
 
   it('starting a drag stops a running camera animation', () => {
-    const map = new Emap({ container: container() });
-    const stop = vi.spyOn(map, 'stop');
+    const map = createBrowserTestMap({ container: container() });
+    const stop = vi.spyOn(map.getService(ViewService), 'stop');
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -90,7 +98,7 @@ describe('Emap camera facade (DX P9)', () => {
   });
 
   it('legacy view methods still work (back-compat)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const c0 = map.getCenter();
     map.zoomIn();
     map.zoomOut();
@@ -108,7 +116,7 @@ describe('Emap camera facade (DX P9)', () => {
       return callbacks.length;
     }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
 
     try {
       map.setExtent(new Bounds(0, 0, 100, 100));
@@ -138,7 +146,7 @@ describe('Emap camera facade (DX P9)', () => {
   });
 
   it('resets to the latest data extent after a vertex edit', async () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const source = new TopologySource('edited');
     const geojson = JSON.stringify({
       type: 'FeatureCollection',

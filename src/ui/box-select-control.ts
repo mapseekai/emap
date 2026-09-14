@@ -1,10 +1,9 @@
-import type { Control } from './control';
-import type { Emap } from '../map/map';
-import type { BoxSelectHandlerOptions } from '../core/handlers/box-select';
+import type { BoxSelectHandlerOptions, BoxSelectStyle } from '../core/handlers/box-select';
 import type { ModifierCombo } from '../core/handlers/select-mode';
+import type { ControlContext } from '../services/controls';
+import type { Control } from './control';
 
 export type { BoxSelectStyle } from '../core/handlers/box-select';
-import type { BoxSelectStyle } from '../core/handlers/box-select';
 
 export interface BoxSelectControlOptions {
   /**
@@ -42,14 +41,14 @@ export interface BoxSelectControlOptions {
 export class BoxSelectControl implements Control {
   private _options: BoxSelectControlOptions;
   private _enabled = true;
-  private _handler: Emap['boxSelect'] | null = null;
+  private _handler: ControlContext['boxSelect'] | null = null;
   private _container: HTMLElement | null = null;
 
   constructor(options: BoxSelectControlOptions = {}) {
     this._options = options;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._handler = map.boxSelect;
     this._handler.setOptions({
       layers: this._options.layers,

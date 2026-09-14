@@ -1,6 +1,6 @@
 import type { MeasureOptions } from '../core/handlers/measure';
 import type { MeasurementMode } from '../geo/measurement';
-import type { Emap } from '../map/map';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 
@@ -21,7 +21,7 @@ export interface MeasureControlOptions extends MeasureOptions {
 /** Button control for one spherical measurement mode. Add one instance per mode. */
 export class MeasureControl implements Control {
   private readonly _opts: MeasureControlOptions;
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _button: HTMLButtonElement | null = null;
   private readonly _onEditModeChange = (event: { mode: string }): void => {
@@ -36,7 +36,7 @@ export class MeasureControl implements Control {
     this._opts = { ...options };
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group';

@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Emap } from './map';
@@ -36,7 +43,7 @@ function container(): HTMLElement {
 
 describe('Emap handler registry (Phase 1)', () => {
   it('exposes dragPan and scrollZoom handlers, enabled by default', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.dragPan.name).toBe('dragPan');
     expect(map.scrollZoom.name).toBe('scrollZoom');
     expect(map.dragPan.isEnabled()).toBe(true);
@@ -44,13 +51,13 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('interactive:false disables both handlers (legacy behavior preserved)', () => {
-    const map = new Emap({ container: container(), interactive: false });
+    const map = createBrowserTestMap({ container: container(), interactive: false });
     expect(map.dragPan.isEnabled()).toBe(false);
     expect(map.scrollZoom.isEnabled()).toBe(false);
   });
 
   it('map.scrollZoom.disable() leaves dragPan enabled (selective toggle)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.scrollZoom.disable();
     expect(map.scrollZoom.isEnabled()).toBe(false);
     expect(map.dragPan.isEnabled()).toBe(true);
@@ -58,7 +65,7 @@ describe('Emap handler registry (Phase 1)', () => {
 
   it('dragging the canvas pans the viewport through the arbiter', () => {
     const el = container();
-    const map = new Emap({ container: el });
+    const map = createBrowserTestMap({ container: el });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -84,7 +91,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('exposes disabled-by-default selection handlers', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.clickSelect.name).toBe('clickSelect');
     expect(map.boxSelect.name).toBe('boxSelect');
     expect(map.lassoSelect.name).toBe('lassoSelect');
@@ -95,7 +102,7 @@ describe('Emap handler registry (Phase 1)', () => {
 
   it('plain drag with boxSelect enabled selects via the arbiter (not pan)', () => {
     const el = container();
-    const map = new Emap({ container: el });
+    const map = createBrowserTestMap({ container: el });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -120,7 +127,7 @@ describe('Emap handler registry (Phase 1)', () => {
 
   it('pan cursor becomes move when hovering an already-selected feature', () => {
     const el = container();
-    const map = new Emap({ container: el });
+    const map = createBrowserTestMap({ container: el });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -144,7 +151,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('map.on("feature:click", filter, cb) fires for the hit feature via the arbiter', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -172,7 +179,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('map.once("feature:click", cb) fires once then a second click does nothing', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -205,7 +212,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('map.once("feature:click", cb) then map.off("feature:click", cb) → cb never called and sink is null', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -236,7 +243,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('typed 2-arg feature on/off compile smoke (Bug 2 fix)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     // This must compile: proves the typed 2-arg overload exists for feature events.
     const cb = (e: import('../core/feature-event-dispatcher').FeatureEvent) => {
       void e.ref;
@@ -247,7 +254,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('typed mousemove inline-arrow inference compile smoke (overload precedence)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     // Inline arrow with NO annotation must infer PointerMoveEvent — proves
     // the 'mousemove' literal overload precedes the generic on<T>. If the
     // generic shadowed it, `e` would be Record<string,unknown> and the
@@ -269,7 +276,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('non-feature map.on still works (super delegation unaffected)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const cb = vi.fn();
     map.on('move', cb);
     map.fire('move', { foo: 1 });
@@ -277,7 +284,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('no feature:* listener ⇒ no pointer sink installed (zero cost)', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const hm = (map as any)._handlers;
     expect((hm as any)._pointerSink).toBeNull();
     const cb = () => {};
@@ -288,13 +295,13 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('exposes a disabled-by-default vertexEdit handler', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.vertexEdit.name).toBe('vertexEdit');
     expect(map.vertexEdit.isEnabled()).toBe(false);
   });
 
   it('vertexEdit.enable() enters vertex edit mode (editmodechange) and disables dragPan', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const modes: string[] = [];
     map.on('editmodechange', (e: any) => modes.push(e.mode));
     map.vertexEdit.enable();
@@ -307,13 +314,13 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('exposes a disabled-by-default drawFeature handler', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.drawFeature.name).toBe('drawFeature');
     expect(map.drawFeature.isEnabled()).toBe(false);
   });
 
   it('exposes a disabled-by-default measure handler and leaves dragPan available', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.measure.name).toBe('measure');
     expect(map.measure.isEnabled()).toBe(false);
 
@@ -325,7 +332,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('drawFeature.enable() without source/type throws; configured enters draw mode', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(() => map.drawFeature.enable()).toThrow(/source\+type required/i);
     map.drawFeature.setOptions({ source: 's', type: 'polygon' });
     map.drawFeature.enable();
@@ -337,7 +344,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it("setEditMode('transform') leaves dragPan enabled (transformFeature claims exclusive on selected hit; arbiter handles the rest); fires editmodechange", () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const modes: string[] = [];
     map.on('editmodechange', (e: any) => modes.push(e.mode));
     map.setEditMode('transform');
@@ -349,7 +356,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it("setEditMode('vertex'|'draw') still wholesale-disables dragPan (those handlers don't claim exclusive on 'down')", () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setEditMode('vertex');
     expect(map.dragPan.isEnabled()).toBe(false);
     map.setEditMode('none');
@@ -361,7 +368,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('setEditMode restores dragPan to the state that existed before edit-mode suspension', () => {
-    const map = new Emap({ container: container(), interactive: false });
+    const map = createBrowserTestMap({ container: container(), interactive: false });
     map.setEditMode('vertex');
     expect(map.dragPan.isEnabled()).toBe(false);
     map.setEditMode('none');
@@ -372,7 +379,7 @@ describe('Emap handler registry (Phase 1)', () => {
     map.setEditMode('none');
     expect(map.dragPan.isEnabled()).toBe(false);
 
-    const manual = new Emap({ container: container() });
+    const manual = createBrowserTestMap({ container: container() });
     manual.dragPan.disable();
     manual.setEditMode('vertex');
     expect(manual.dragPan.isEnabled()).toBe(false);
@@ -381,7 +388,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('enabling vertexEdit cross-deactivates an active drawFeature', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.drawFeature.setOptions({ source: 's', type: 'polygon' });
     map.drawFeature.enable();
     map.vertexEdit.enable();
@@ -390,13 +397,13 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('exposes a disabled-by-default transformFeature handler', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.transformFeature.name).toBe('transformFeature');
     expect(map.transformFeature.isEnabled()).toBe(false);
   });
 
   it('transformFeature.enable() enters transform mode but leaves dragPan enabled; disable() restores mode', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.transformFeature.enable();
     expect(map.getEditMode()).toBe('transform');
     expect(map.dragPan.isEnabled()).toBe(true);
@@ -407,7 +414,7 @@ describe('Emap handler registry (Phase 1)', () => {
 
   it('transformFeature shows move cursor over an already-selected feature (dragPan stays enabled; arbiter routes by priority)', () => {
     const el = container();
-    const map = new Emap({ container: el });
+    const map = createBrowserTestMap({ container: el });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({
       left: 0,
@@ -431,13 +438,13 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('exposes splitFeature disabled by default', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     expect(map.splitFeature.name).toBe('splitFeature');
     expect(map.splitFeature.isEnabled()).toBe(false);
   });
 
   it('wires reshape, ring, and part editing handlers as mutually exclusive modes', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const handlers = [map.reshapeFeature, map.ringEdit, map.partEdit, map.autoCompletePolygon];
     const contexts = handlers as unknown as Array<{
       _resolveSelectionContext: () => {
@@ -479,7 +486,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.transformFeature.enable();
     map.vertexEdit.enable(); // setEditMode('vertex') → editmodechange
     expect(map.transformFeature.isEnabled()).toBe(false);
@@ -487,7 +494,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('transformFeature ↔ drawFeature cross-deactivate each other', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.drawFeature.setOptions({ source: 's', type: 'polygon' });
     // drawFeature active → enabling transformFeature deactivates it.
     map.drawFeature.enable();
@@ -501,7 +508,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('map.on(mousemove) installs the combined sink and delivers PointerMoveEvent; off clears it', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const mgr = (map as any)._handlers;
     expect(mgr._pointerSink).toBeNull();
     const cb = vi.fn();
@@ -525,7 +532,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('sink-install matrix: feature-only / pointer-only / both / neither', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const mgr = (map as any)._handlers;
     const fcb = vi.fn();
     const pcb = vi.fn();
@@ -541,7 +548,7 @@ describe('Emap handler registry (Phase 1)', () => {
   });
 
   it('combined sink fans out: one move reaches BOTH feature hover and mousemove', () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     const mgr = (map as any)._handlers;
     const fcb = vi.fn();
     const pcb = vi.fn();

@@ -2,7 +2,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { aggregateSql, runSingleInputTool } from '../core/runners/processing';
 import { quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import type { AggregateOptions } from '../aggregate/types';
 
 /**
@@ -19,7 +19,7 @@ export interface PointToLineOptions extends AggregateOptions {
 export function pointToLine(
   input: MapshaperDataset,
   options: PointToLineOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runSingleInputTool(
     input,

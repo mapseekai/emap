@@ -1,7 +1,7 @@
-import { Control } from './control';
-import { Emap } from '../map/map';
 import type { PointerMoveEvent } from '../core/pointer-event-dispatcher';
 import { normalizeCrsString } from '../geo/crs-resolver';
+import type { ControlContext } from '../services/controls';
+import { Control } from './control';
 
 export interface StatusOptions {
   showMousePos?: boolean;
@@ -11,7 +11,7 @@ export interface StatusOptions {
 }
 
 export class StatusControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _options: StatusOptions;
   private _mousePosEl: HTMLElement | null = null;
@@ -33,7 +33,7 @@ export class StatusControl implements Control {
     this._onUpdateEPSGBound = this._updateEPSG.bind(this);
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-status-ctrl emap-align-${this._options.alignment} ${this._options.className || ''}`;

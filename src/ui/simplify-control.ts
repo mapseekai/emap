@@ -9,9 +9,9 @@
 //   new SimplifyControl({ source: 's1' })                  // simplify whole source
 //   new SimplifyControl({ source: 's1', target: 'parks' }) // simplify single layer
 
-import { Control } from './control';
-import type { Emap } from '../map/map';
 import type { SimplifyMethod } from '../map/types';
+import type { ControlContext } from '../services/controls';
+import { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface SimplifyControlOptions {
@@ -36,7 +36,7 @@ const METHODS: Array<{ value: '' | SimplifyMethod; label: string }> = [
 
 export class SimplifyControl implements Control {
   private _opts: SimplifyControlOptions;
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
   private _popup: HTMLElement | null = null;
@@ -54,7 +54,7 @@ export class SimplifyControl implements Control {
     this._opts = opts;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group emap-ctrl-simplify-wrap';

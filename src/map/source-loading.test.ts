@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 import { describe, expect, it, vi } from 'vitest';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
@@ -8,7 +15,7 @@ import { Emap } from './map';
 import { Selection } from './selection';
 
 function setPrivate(target: object, key: string, value: unknown): void {
-  Reflect.set(target, key, value);
+  fixtureSet(target, key, value);
 }
 
 function createBareMap(): {
@@ -16,7 +23,7 @@ function createBareMap(): {
   readonly scheduleRender: ReturnType<typeof vi.fn>;
   readonly viewportSetCrs: ReturnType<typeof vi.spyOn>;
 } {
-  const map = Object.create(Emap.prototype) as Emap;
+  const map = createTestMap() as Emap;
   const projection = new Projection();
   const viewport = new Viewport();
   const scheduleRender = vi.fn();

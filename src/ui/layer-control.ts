@@ -1,4 +1,3 @@
-import type { Emap } from '../map/map';
 import type { LayerSpecification } from '../map/layer';
 import type {
   MapLibreOverlayService,
@@ -6,6 +5,7 @@ import type {
   MapLibreServiceErrorEvent,
   MapLibreServiceManager,
 } from '../map/maplibre-service';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
@@ -19,7 +19,7 @@ function isAbortError(error: unknown): boolean {
 
 export class LayerControl implements Control {
   private readonly _instanceId = ++layerControlSequence;
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _manager: MapLibreServiceManager | null = null;
   private _container: HTMLElement | null = null;
   private _trigger: HTMLButtonElement | null = null;
@@ -75,7 +75,7 @@ export class LayerControl implements Control {
     }
   };
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._manager = map.mapLibreServices;
     this._createDom();

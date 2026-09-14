@@ -1,3 +1,4 @@
+import { scopedOperationHost } from './operation-scope';
 // Mapshaper operation facade — `emap.ops.*`. Each method is a 1-line
 // delegation to a free function under `src/map/ops/<op>.ts`. The real
 // work lives there; this file's only job is to keep the
@@ -128,7 +129,7 @@ import { addPart, deletePart } from './ops/parts';
 export class MapshaperOps {
   private readonly _ctx: OpContext;
 
-  constructor(_emap: EmapHostInternal) {
+  constructor(private readonly _emap: EmapHostInternal) {
     this._ctx = {
       host: _emap,
       runDatasetCommandParsed: (sourceId, commands, label, inputFiles) =>
@@ -149,6 +150,11 @@ export class MapshaperOps {
       runPreparedEditCommandMany: (sourceIds, label, plan) =>
         _runPreparedEditCommandManyShared(_emap, sourceIds, label, plan),
     };
+  }
+
+  /** Bind execution and its commit guards to a caller-owned cancellation scope. */
+  withSignal(signal: AbortSignal): MapshaperOps {
+    return new MapshaperOps(scopedOperationHost(this._emap, signal));
   }
 
   // -- Whole-dataset CLI ops ---------------------------------------------

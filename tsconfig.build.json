@@ -9,6 +9,18 @@
     "stripInternal": true,
     "rootDir": "src"
   },
-  "include": ["src/index.ts", "src/arrow/index.ts", "src/duckdb/index.ts", "src/types/**/*.d.ts"],
+  "include": [
+    "src/index.ts",
+    "src/kernel/index.ts",
+    "src/services/index.ts",
+    "src/providers/index.ts",
+    "src/plugins/index.ts",
+    "src/presets/index.ts",
+    "src/ai/index.ts",
+    "src/providers/maplibre/index.ts",
+    "src/arrow/index.ts",
+    "src/duckdb/index.ts",
+    "src/types/**/*.d.ts"
+  ],
   "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

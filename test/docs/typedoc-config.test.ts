@@ -7,11 +7,18 @@ const config = JSON.parse(readFileSync(resolve(root, 'typedoc.json'), 'utf8'));
 const plugin = readFileSync(resolve(root, 'scripts/typedoc-hide-internals.mjs'), 'utf8');
 
 describe('TypeDoc configuration', () => {
-  it('builds the three supported public entry points and excludes @internal declarations', () => {
+  it('builds every supported public entry point and excludes @internal declarations', () => {
     expect(config.entryPoints).toEqual([
       'src/index.ts',
       'src/arrow/index.ts',
       'src/duckdb/index.ts',
+      'src/kernel/index.ts',
+      'src/services/index.ts',
+      'src/providers/index.ts',
+      'src/plugins/index.ts',
+      'src/presets/index.ts',
+      'src/ai/index.ts',
+      'src/providers/maplibre/index.ts',
     ]);
     expect(config.excludeInternal).toBe(true);
     expect(config.treatWarningsAsErrors).toBe(true);

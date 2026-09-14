@@ -16,9 +16,14 @@
 // mutations go through the existing `attribute-ops` / edit-command
 // pipeline so they participate in undo / history.
 
-import type { FeatureRef } from './types';
-import type { PathShape, PointShape, LegacyPointShape } from '../types/mapshaper-types';
+import type { LegacyPointShape, PathShape, PointShape } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
+import type { FeatureRef } from './types';
+
+export type FeatureReadContext = Pick<
+  EmapHostInternal,
+  'layers' | '_resolveRenderLayerTarget' | '_filterMaskForRenderLayer'
+>;
 
 /**
  * Read-only view of a single feature — geometry + frozen properties.
@@ -44,7 +49,7 @@ export interface Feature {
  * beyond the host reference; safe to call from any phase.
  */
 export class FeatureAccessor {
-  constructor(private readonly _host: EmapHostInternal) {}
+  constructor(private readonly _host: FeatureReadContext) {}
 
   /**
    * Look up one feature by reference. Returns `null` if the source,

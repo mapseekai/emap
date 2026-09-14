@@ -1,3 +1,4 @@
+import { mapLibrePlugin, MapLibreService } from '@mapseekai/emap/maplibre';
 import * as Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import {
@@ -199,6 +200,7 @@ export function installExampleMapUi(
   root: Document = document,
 ): void {
   if (mapsWithExampleUi.has(map)) return;
+  if (!map.services.has(MapLibreService)) map.use(mapLibrePlugin);
 
   const header = root.querySelector<HTMLElement>('#header');
   if (!header) throw new Error('Example pages must provide a #header banner');

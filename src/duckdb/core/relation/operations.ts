@@ -3,7 +3,7 @@ import { assertProjectedCrs } from '../dataset-crs';
 import { DuckDbOperationError } from '../../errors';
 import { runRelationTool, type RelationOperation } from '../runners/relation';
 import type { BinaryRelationOptions } from '../types';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
+import { type DuckDbRuntime } from '../../runtime';
 import {
   RELATION_OPERATIONS,
   type NamedRelationOperation,
@@ -71,7 +71,7 @@ export function runTopologicalRelation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   options: RelationOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const operationDefinition = RELATION_OPERATIONS[operationId];
   const operation: RelationOperation =
@@ -91,7 +91,7 @@ export function runDistanceWithinRelation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   options: RelationOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const distance = requireDistance(options.distance);
   assertProjectedCrsForDistance(inputDataset, maskDataset, options);
@@ -112,7 +112,7 @@ export function distanceRelation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   options: RelationOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   assertProjectedCrsForDistance(inputDataset, maskDataset, options);
   return runRelationTool(
@@ -136,7 +136,7 @@ export function runNamedRelationOperation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   options: RelationOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   if (mode !== 'filter' && mode !== 'attribute') {
     throw new DuckDbOperationError('validation', `Unknown DuckDB relation mode '${mode}'`, {

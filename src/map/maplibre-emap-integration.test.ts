@@ -1,3 +1,11 @@
+import { MapLibreService } from '../services/keys';
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
@@ -54,13 +62,13 @@ function createContainer(): HTMLElement {
 }
 
 function createMap(options: Omit<MapOptions, 'container'> = {}): Emap {
-  const map = new Emap({ container: createContainer(), ...options });
+  const map = createBrowserTestMap({ container: createContainer(), ...options });
   maps.push(map);
   return map;
 }
 
 function getOwnedManager(map: Emap): MapLibreServiceManager | undefined {
-  return (map as unknown as { _mapLibreServices?: MapLibreServiceManager })._mapLibreServices;
+  return map.services.has(MapLibreService) ? map.getService(MapLibreService) : undefined;
 }
 
 const inactiveOverlay = {
@@ -81,10 +89,11 @@ const basemap = {
 } as const;
 
 describe('Emap MapLibre service ownership', () => {
-  it('does not create an unconfigured manager until the getter is read', () => {
+  it('provides an unconfigured service without initializing the MapLibre runtime', () => {
     const map = createMap();
 
-    expect(getOwnedManager(map)).toBeUndefined();
+    expect(getOwnedManager(map)?.getMapLibreMap()).toBeNull();
+    expect(mapLibreModuleLoaded).not.toHaveBeenCalled();
     const manager = map.mapLibreServices;
 
     expect(manager).toBeDefined();
@@ -152,10 +161,10 @@ describe('Emap MapLibre service ownership', () => {
     expect(getOwnedManager(map)).toBeUndefined();
   });
 
-  it('finishes teardown before rethrowing a manager destroy failure', () => {
+  it('finishes teardown before reporting a manager destroy failure through dispose', async () => {
     const order: string[] = [];
     const container = createContainer();
-    const map = new Emap({ container });
+    const map = createBrowserTestMap({ container });
     maps.push(map);
     const manager = map.mapLibreServices as MapLibreServiceManagerImpl;
     const destroy = vi.spyOn(manager, 'destroy').mockImplementation(() => {
@@ -170,7 +179,13 @@ describe('Emap MapLibre service ownership', () => {
     };
     map.addControl(control);
 
-    expect(() => map.remove()).toThrow('manager destroy failed');
+    const failure = await map.dispose().catch((error) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    const leafErrors = (error: unknown): unknown[] =>
+      error instanceof AggregateError ? error.errors.flatMap(leafErrors) : [error];
+    expect(leafErrors(failure).map((error) => (error as Error).message)).toContain(
+      'manager destroy failed',
+    );
 
     expect(order).toEqual(['control', 'manager']);
     expect(getOwnedManager(map)).toBeUndefined();
@@ -191,14 +206,13 @@ describe('Emap MapLibre service ownership', () => {
       return appendChild(node);
     }) as typeof container.appendChild;
 
-    expect(
-      () =>
-        new Emap({
-          container,
-          useWorker: true,
-          workerPool,
-          mapLibre: { services: [basemap], defaultBasemap: 'missing' },
-        }),
+    expect(() =>
+      createBrowserTestMap({
+        container,
+        useWorker: true,
+        workerPool,
+        mapLibre: { services: [basemap], defaultBasemap: 'missing' },
+      }),
     ).toThrow('MapLibre default basemap "missing" does not exist');
 
     expect(container.querySelector('.emap-canvas-container')).toBeNull();

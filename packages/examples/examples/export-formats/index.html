@@ -50,7 +50,6 @@
       const emap = await loadExampleRuntime();
       const emapArrow = await loadExampleArrow();
       await emapArrow.initParquetWasm();
-      installFlatGeobufFormat(emap);
 
       const { Emap, TopologySource } = emap;
       const SOURCE_ID = 'export-source';
@@ -63,7 +62,10 @@
         geoarrow: '.arrow',
       };
       const map = new Emap({ container: 'map' });
-      map.addControl(new emap.NavigationControl(), 'top-left');
+      const releaseFormat = installFlatGeobufFormat(emap, map.formats);
+    window.addEventListener('pagehide', releaseFormat, { once: true });
+    map.use(emapArrow.arrowFormatsPlugin);
+    map.addControl(new emap.NavigationControl(), 'top-left');
       installExampleMapUi(map, emap);
 
       const fileInput = document.getElementById('file-input');
@@ -81,7 +83,7 @@
 
         exportButton.disabled = true;
         status.textContent = `处理 ${file.name} 中...`;
-        const source = new TopologySource(SOURCE_ID);
+        const source = new TopologySource(SOURCE_ID, { formats: map.formats });
 
         try {
           if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);

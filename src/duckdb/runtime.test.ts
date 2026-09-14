@@ -1,10 +1,9 @@
+import { DuckDbRuntimeScope } from './runtime-scope';
 import { tableFromArrays, tableFromIPC, type Table } from 'apache-arrow';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDuckDbRuntime,
   createDuckDbRuntimeFromJsDelivr,
-  getDuckDbRuntime,
-  setDuckDbRuntime,
   type DuckDbRuntime,
   type DuckDbWasmModule,
 } from './index';
@@ -171,11 +170,7 @@ function fakeWorker(): Worker {
   return { terminate: vi.fn() } as unknown as Worker;
 }
 
-describe('DuckDB runtime injection', () => {
-  beforeEach(() => {
-    setDuckDbRuntime(null);
-  });
-
+describe('DuckDB runtime ownership', () => {
   it('stores injected runtime', async () => {
     const runtime: DuckDbRuntime = {
       connect: async () => ({
@@ -187,9 +182,9 @@ describe('DuckDB runtime injection', () => {
       ensureSpatial: async () => undefined,
     };
 
-    setDuckDbRuntime(runtime);
-
-    expect(getDuckDbRuntime()).toBe(runtime);
+    const scope = new DuckDbRuntimeScope({ runtime });
+    expect(await scope.get()).toBe(runtime);
+    await scope.dispose();
   });
 
   it('closes and clears the injected runtime', async () => {
@@ -205,11 +200,11 @@ describe('DuckDB runtime injection', () => {
       close,
     };
 
-    setDuckDbRuntime(runtime);
-    await closeDuckDbRuntime();
+    const scope = new DuckDbRuntimeScope({ runtime, owned: true });
+    await scope.dispose();
 
     expect(close).toHaveBeenCalledTimes(1);
-    expect(getDuckDbRuntime()).toBeNull();
+    expect(scope.peek()).toBeUndefined();
   });
 
   it('does not clear a newer injected runtime while closing an older one', async () => {
@@ -233,11 +228,12 @@ describe('DuckDB runtime injection', () => {
       ensureSpatial: async () => undefined,
     };
 
-    setDuckDbRuntime(currentRuntime);
+    const current = new DuckDbRuntimeScope({ runtime: currentRuntime });
     await closeDuckDbRuntime(oldRuntime);
 
     expect(oldRuntime.close).toHaveBeenCalledTimes(1);
-    expect(getDuckDbRuntime()).toBe(currentRuntime);
+    expect(await current.get()).toBe(currentRuntime);
+    await current.dispose();
   });
 });
 

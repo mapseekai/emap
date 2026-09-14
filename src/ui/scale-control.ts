@@ -1,10 +1,10 @@
-import type { Emap } from '../map/map';
 import {
   formatScaleDistance,
   selectScaleDistance,
   type ScaleCalculationMethod,
   type ScaleViewMetrics,
 } from '../geo/scale-calculator';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
 
 export type ScaleControlStyle = 'checker' | 'line' | 'ruler' | 'steps' | 'solid' | 'minimal';
@@ -21,7 +21,7 @@ export interface ScaleControlOptions {
 }
 
 export class ScaleControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _summary: HTMLElement | null = null;
   private _labels: HTMLElement | null = null;
@@ -49,7 +49,7 @@ export class ScaleControl implements Control {
     this._onCrsChangeBound = this._onCrsChange.bind(this);
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-scale-ctrl emap-scale-ctrl-${this._options.style} ${this._options.className ?? ''}`;

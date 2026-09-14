@@ -330,7 +330,12 @@ export class CanvasPainter implements EditPainter {
             }
           }
         }
-        cached = { shapes, arcs, revision: geometryRevision, arcIds: Int32Array.from(ids) };
+        cached = {
+          shapes,
+          arcs,
+          revision: geometryRevision,
+          arcIds: Int32Array.from(ids),
+        };
         this._pathArcCache.set(shapeIndices, cached);
       }
       this.drawArcs(arcs, style, arcFilter, cached.arcIds);

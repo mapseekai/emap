@@ -39,6 +39,28 @@ afterEach(() => {
   }
 });
 
+describe('published plugin architecture subpaths', () => {
+  it('publishes every explicit architecture entry point', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      exports: Record<string, { types?: string; import?: string } | string>;
+    };
+    for (const name of [
+      'kernel',
+      'services',
+      'providers',
+      'plugins',
+      'presets',
+      'ai',
+      'maplibre',
+    ]) {
+      expect(manifest.exports[`./${name}`]).toMatchObject({
+        types: expect.stringContaining('.d.ts'),
+        import: expect.stringContaining('.mjs'),
+      });
+    }
+  });
+});
+
 describe('published CSS type declaration', () => {
   it('resolves for legacy Node10 and modern Node16 TypeScript consumers', () => {
     const { consumerFile, declarationFile } = createConsumerPackage();
@@ -59,14 +81,14 @@ describe('published CSS type declaration', () => {
     expect(manifest.files).toContain('dist/emap-duckdb.mjs');
   });
 
-  it('keeps Arrow, Parquet, and DuckDB-Wasm optional for core-only consumers', () => {
+  it('keeps optional providers out of core dependencies', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
       peerDependenciesMeta?: Record<string, { optional?: boolean }>;
     };
 
-    for (const name of ['@duckdb/duckdb-wasm', 'apache-arrow', 'parquet-wasm']) {
+    for (const name of ['@duckdb/duckdb-wasm', 'apache-arrow', 'parquet-wasm', 'maplibre-gl']) {
       expect(manifest.dependencies).not.toHaveProperty(name);
       expect(manifest.peerDependencies?.[name]).toEqual(expect.any(String));
       expect(manifest.peerDependenciesMeta?.[name]?.optional).toBe(true);

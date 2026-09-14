@@ -47,6 +47,12 @@ async function settleDomEvents(): Promise<void> {
 }
 
 class ExampleMapStub {
+  private hasMapLibre = false;
+  readonly services = { has: () => this.hasMapLibre };
+  readonly use = vi.fn(() => {
+    this.hasMapLibre = true;
+    return this;
+  });
   crs = 'EPSG:4326';
   readonly controls: Array<{ control: Control; position: ControlPosition }> = [];
   readonly reprojectCalls: string[] = [];

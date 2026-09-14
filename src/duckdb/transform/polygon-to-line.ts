@@ -2,7 +2,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import type { GeometryOptions } from '../geometry/types';
 import { boundary } from '../geometry/boundary';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 /**
  * @example
  * const result = await polygonToLine(polygons);
@@ -10,7 +10,7 @@ import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
 export function polygonToLine(
   input: MapshaperDataset,
   options: GeometryOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return boundary(input, options, runtime);
 }

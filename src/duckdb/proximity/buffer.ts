@@ -4,7 +4,7 @@ import { DuckDbOperationError } from '../errors';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { runUnaryGeometryTool } from '../core/runners/geometry';
 import type { ProcessingOptions } from '../core/types';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 /**
  * @example
@@ -40,7 +40,7 @@ export function normalizeBufferOptions(
 export async function buffer(
   input: MapshaperDataset,
   options: BufferOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   const normalized = normalizeBufferOptions(input, options);
   return runUnaryGeometryTool(

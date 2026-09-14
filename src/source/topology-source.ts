@@ -1,3 +1,4 @@
+import type { FormatRegistryContract } from '../services/formats';
 import { EventDispatcher } from '../core/events';
 import { createLayerDataset, type CreateLayerOptions } from './create-layer';
 import { bindLayerFields } from './layer-fields';
@@ -30,12 +31,7 @@ import {
   resolveProjectCrs,
   setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
-import {
-  getExportHandler,
-  getFileExtension,
-  getFormatForExtension,
-  isKnownPluginExtension,
-} from './format-registry';
+import { FormatRegistry, getFileExtension, isKnownPluginExtension } from './format-registry';
 
 export type TopologySourceData = string | { filename: string; content: Uint8Array };
 
@@ -135,6 +131,8 @@ function assertCompressedZipSize(byteLength: number, limits: Required<ZipExtract
 }
 
 export interface TopologySourceOptions {
+  /** Format registry supplied by the workspace or standalone caller. */
+  formats?: FormatRegistryContract;
   data?: TopologySourceInput;
   zipLimits?: ZipExtractionLimits;
   /** Adapter used for every mapshaper import, transform, bounds and export operation. */
@@ -187,8 +185,25 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    */
   private _simplifyFloor: number = 0;
   private _adapter: MapshaperAdapter;
+  private _formats: FormatRegistryContract;
+  private _formatOwner: object | null = null;
   private _datasetNormalizer: DatasetNormalizer | null = null;
   private _managedCrs: (() => string) | null = null;
+
+  /** @internal A mutable source has exactly one workspace owner. */
+  bindFormatRegistry(formats: FormatRegistryContract): () => void {
+    if (this._formatOwner)
+      throw new Error(`TopologySource "${this.id}" already belongs to a workspace`);
+    const previous = this._formats;
+    const owner = {};
+    this._formats = formats;
+    this._formatOwner = owner;
+    return () => {
+      if (this._formatOwner !== owner) return;
+      this._formats = previous;
+      this._formatOwner = null;
+    };
+  }
 
   /** @internal Install the map-owned pre-commit dataset normalization hook. */
   setDatasetNormalizer(normalizer: DatasetNormalizer | null): void {
@@ -238,10 +253,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   constructor(id: string, options?: TopologySourceOptions) {
     super();
     this.id = id;
-    const { data, adapter, ...sourceOptions } = options ?? {};
+    const { data, adapter, formats, ...sourceOptions } = options ?? {};
     this._options = sourceOptions;
     this._data = data;
     this._adapter = adapter ?? getDefaultMapshaperAdapter();
+    this._formats = formats ?? new FormatRegistry();
 
     if (this._data) {
       this._updateData();
@@ -534,7 +550,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // Stale chain (either superseded by a newer setData, or its fetch was
       // aborted by us). Either way, the new chain owns the next event.
       if (version !== this._loadVersion) return;
-      if (err instanceof Error && err.name === 'AbortError') return;
+      // Current owner cancellation rejects setData. Only obsolete load versions
+      // are ignored above; otherwise its promise would never settle.
       this._data = undefined;
       this.fire('error', { error: err });
       this._rejectPending(version, err);
@@ -576,14 +593,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     primaryFiles: string[],
     inputFiles: Record<string, Uint8Array | string>,
   ): Promise<MapshaperDataset> | null {
-    const pluginFile = primaryFiles.find((f) => isKnownPluginExtension(getFileExtension(f)));
+    const pluginFile = primaryFiles.find(
+      (f) =>
+        this._formats.getFormatForExtension(getFileExtension(f)) ||
+        isKnownPluginExtension(getFileExtension(f)),
+    );
     if (!pluginFile) return null;
     const ext = getFileExtension(pluginFile);
-    const plugin = getFormatForExtension(ext);
+    const plugin = this._formats.getFormatForExtension(ext);
     if (!plugin) {
       throw new Error(
         `'.${ext}' import requires a registered format plugin — ` +
-          `call registerFormat (or import '@mapseekai/emap/arrow' for Arrow/GeoParquet) before setData`,
+          `register the codec on the source formats (arrowFormatsPlugin from '@mapseekai/emap/arrow') before setData`,
       );
     }
     if (primaryFiles.length > 1) {
@@ -597,8 +618,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private _hasSupportedExtension(filename: string): boolean {
-    return /\.(json|geojson|topojson|zip|shp|kml|msx|parquet|geoparquet|arrow|arrows|feather|fgb)$/i.test(
-      filename,
+    return (
+      !!this._formats.getFormatForExtension(getFileExtension(filename)) ||
+      /\.(json|geojson|topojson|zip|shp|kml|msx|parquet|geoparquet|arrow|arrows|feather|fgb)$/i.test(
+        filename,
+      )
     );
   }
 
@@ -833,7 +857,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     try {
       // Plugin formats (geoparquet / geoarrow) are produced by their
       // registered DatasetFormatPlugin, not by mapshaper's exporters.
-      const pluginHandler = getExportHandler(options.format);
+      const pluginHandler = this._formats.getExportHandler(options.format);
       if (pluginHandler) {
         const files = await pluginHandler(this._dataset, options);
         return this._filesToBlob(files, options.format);
@@ -841,13 +865,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       if (options.format === 'geoparquet' || options.format === 'geoarrow') {
         throw new Error(
           `'${options.format}' export requires the emap Arrow module — ` +
-            `import '@mapseekai/emap/arrow' (or call registerFormat) before export`,
+            `mount arrowFormatsPlugin from '@mapseekai/emap/arrow' or register the codec on the source formats before export`,
         );
       }
       if (options.format === 'flatgeobuf') {
         throw new Error(
           "'flatgeobuf' export requires a registered FlatGeobuf format plugin — " +
-            'call registerFormat before export',
+            'register the codec on the source formats before export',
         );
       }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent
@@ -906,7 +930,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     }
 
     // GeoJSON / TopoJSON: single file, return directly
-    return new Blob([toBlobPart(files[0].content)], { type: EXPORT_MIME[format] });
+    return new Blob([toBlobPart(files[0].content)], {
+      type: this._formats.getMimeType(format) ?? EXPORT_MIME[format] ?? 'application/octet-stream',
+    });
   }
 
   /**

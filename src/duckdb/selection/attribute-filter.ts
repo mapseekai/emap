@@ -5,7 +5,7 @@ import { toArrowTable } from '../../arrow/dataset-to-table';
 import { recordsFromArrowTable } from '../../arrow/table-to-dataset';
 import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { validateDuckDbSelectSql } from '../core/query-sql';
 import {
   nextTableName,
@@ -118,7 +118,7 @@ function rebuildShapes(
 export async function attributeFilter(
   dataset: MapshaperDataset,
   opts: AttributeFilterOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   if (!runtime)
     throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');

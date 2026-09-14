@@ -10,6 +10,13 @@ const entryPoints = [
   { label: '@mapseekai/emap', path: 'src/index.ts' },
   { label: '@mapseekai/emap/arrow', path: 'src/arrow/index.ts' },
   { label: '@mapseekai/emap/duckdb', path: 'src/duckdb/index.ts' },
+  { label: '@mapseekai/emap/kernel', path: 'src/kernel/index.ts' },
+  { label: '@mapseekai/emap/services', path: 'src/services/index.ts' },
+  { label: '@mapseekai/emap/providers', path: 'src/providers/index.ts' },
+  { label: '@mapseekai/emap/plugins', path: 'src/plugins/index.ts' },
+  { label: '@mapseekai/emap/presets', path: 'src/presets/index.ts' },
+  { label: '@mapseekai/emap/ai', path: 'src/ai/index.ts' },
+  { label: '@mapseekai/emap/maplibre', path: 'src/providers/maplibre/index.ts' },
 ];
 
 const failures = [];
@@ -26,7 +33,18 @@ for (const entry of entryPoints) {
       failures.push(`${entry.label}: default/export-assignment syntax is not allowed`);
       continue;
     }
-    if (!ts.isExportDeclaration(statement)) continue;
+    if (!ts.isExportDeclaration(statement)) {
+      if (statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+        const names = ts.isVariableStatement(statement)
+          ? statement.declarationList.declarations.map(declaration => declaration.name).filter(ts.isIdentifier).map(name => name.text)
+          : statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : [];
+        for (const name of names) {
+          if (name.startsWith('_') || exportedNames.has(name)) failures.push(`${entry.label}: invalid or duplicate declaration export ${name}`);
+          exportedNames.add(name);
+        }
+      }
+      continue;
+    }
     if (!statement.exportClause) {
       failures.push(`${entry.label}: wildcard export is not allowed: ${statement.getText(file)}`);
       continue;

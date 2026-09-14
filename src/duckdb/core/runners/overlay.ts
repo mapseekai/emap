@@ -9,7 +9,7 @@ import {
   requireRuntime,
   runPipeline,
 } from '../pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
+import { type DuckDbRuntime } from '../../runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from '../sql/overlay';
 
 export interface OverlayRunnerOptions {
@@ -63,7 +63,7 @@ export async function runOverlayTool(
   maskDataset: MapshaperDataset,
   opts: OverlayRunnerOptions,
   operation: OverlayOperation,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const rt = requireRuntime(runtime);
   const messages = pipelineMessages(operation.id);

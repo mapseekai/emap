@@ -1,7 +1,7 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { runOverlayTool } from '../core/runners/overlay';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { OVERLAY_OPERATIONS } from './_shared';
 import type { OverlayOptions } from './types';
 
@@ -19,7 +19,7 @@ export function intersect(
   input: MapshaperDataset,
   mask: MapshaperDataset,
   options: IntersectOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   return runOverlayTool(input, mask, options, OVERLAY_OPERATIONS.intersect, runtime);
 }

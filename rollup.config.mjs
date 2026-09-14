@@ -114,7 +114,6 @@ const isProduction = process.env.BUILD === 'production';
 const shouldWriteSourcemap = !isProduction;
 const browserSyntaxTarget = 'es2022';
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
-const moduleOutput = 'dist/emap.mjs';
 // Worker file is always called emap-worker.js so consumers don't have to
 // branch by build mode. Minified in prod, sourcemapped in dev.
 const workerOutput = 'dist/emap-worker.js';
@@ -255,11 +254,22 @@ export default [
   // @rollup/plugin-commonjs (that path produced the Friction #8 fragility:
   // dead require("adm-zip") and a runtime-throwing iconv-lite helper).
   {
-    input: 'src/index.ts',
+    input: {
+      emap: 'src/index.ts',
+      'emap-kernel': 'src/kernel/index.ts',
+      'emap-services': 'src/services/index.ts',
+      'emap-providers': 'src/providers/index.ts',
+      'emap-plugins': 'src/plugins/index.ts',
+      'emap-presets': 'src/presets/index.ts',
+      'emap-ai': 'src/ai/index.ts',
+      'emap-maplibre': 'src/providers/maplibre/index.ts',
+    },
     external: ['maplibre-gl', 'mapshaper'],
     onwarn: quietKnownCircularWarnings,
     output: {
-      file: moduleOutput,
+      dir: 'dist',
+      entryFileNames: '[name].mjs',
+      chunkFileNames: 'emap-shared-[name]-[hash].mjs',
       format: 'es',
       sourcemap: shouldWriteSourcemap,
       paths: { mapshaper: './mapshaper-vendor.mjs' },
@@ -278,8 +288,7 @@ export default [
     external: ['maplibre-gl', 'mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
-      // Keep emap's own side effects (plugin registration in the entry) and
-      // apache-arrow's; everything else may be shaken normally.
+      // Codecs register only when explicitly mounted; retain Arrow library initialization.
       moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
     },
     output: {
@@ -299,8 +308,7 @@ export default [
     external: ['mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
-      // Keep emap's own side effects (plugin registration in the entry) and
-      // apache-arrow's; everything else may be shaken normally.
+      // Codecs register only when explicitly mounted; retain Arrow library initialization.
       moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
     },
     output: {

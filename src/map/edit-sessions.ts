@@ -46,6 +46,22 @@ interface SelectionBucket {
  * plus the live "drag" sessions (see {@link FeatureTranslateSession}).
  */
 export class EditSessions {
+  private readonly _activeSessions = new Set<{ cancel(): void }>();
+
+  /** Release live preview geometry when the owning provider is unloaded. */
+  dispose(): void {
+    const failures: unknown[] = [];
+    for (const session of [...this._activeSessions]) {
+      try {
+        session.cancel();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this._activeSessions.clear();
+    if (failures.length) throw new AggregateError(failures, 'Edit session cleanup failed');
+  }
+
   constructor(private _emap: EmapHostInternal) {}
 
   splitSharedNode(ref: FeatureRef, vertexId: number): number[] | null {
@@ -289,17 +305,18 @@ export class EditSessions {
       }
     };
 
-    return {
-      applyStep: (step) => {
+    const session = {
+      applyStep: (step: TStep) => {
         if (closed) return;
         if (config.isNoop(step)) return;
         applyToBuckets(step);
         accum = config.accumulate(accum, step);
         this._emap._scheduleRender();
       },
-      commit: (label) => {
+      commit: (label?: string) => {
         if (closed) return false;
         closed = true;
+        this._activeSessions.delete(session);
         if (config.isNoop(accum)) {
           // Opened the session, didn't drag, committed: roll any
           // split-shared-arcs work back — splitting alone with no visible
@@ -330,6 +347,7 @@ export class EditSessions {
       cancel: () => {
         if (closed) return;
         closed = true;
+        this._activeSessions.delete(session);
         if (!config.isNoop(accum)) applyToBuckets(config.invert(accum));
         for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         accum = config.initial;
@@ -340,6 +358,8 @@ export class EditSessions {
       },
       getCumulative: () => accum,
     };
+    this._activeSessions.add(session);
+    return session;
   }
 
   beginTranslateSession(opts?: DragSessionOptions): FeatureTranslateSession | null {

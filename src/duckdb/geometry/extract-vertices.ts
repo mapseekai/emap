@@ -3,7 +3,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { runSingleInputTool } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { dumpSql } from './_dump';
 export type ExtractVerticesOptions = ProcessingOptions;
 /**
@@ -13,7 +13,7 @@ export type ExtractVerticesOptions = ProcessingOptions;
 export function extractVertices(
   input: MapshaperDataset,
   options: ExtractVerticesOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runSingleInputTool(
     input,

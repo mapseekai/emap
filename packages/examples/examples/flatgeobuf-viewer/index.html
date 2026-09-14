@@ -38,12 +38,13 @@
 
     const emap = await loadExampleRuntime();
     const { Emap, TopologySource } = emap;
-    installFlatGeobufFormat(emap);
 
     const map = new Emap({
       container: "map",
     });
 
+    const releaseFormat = installFlatGeobufFormat(emap, map.formats);
+    window.addEventListener('pagehide', releaseFormat, { once: true });
     map.addControl(new emap.NavigationControl(), "top-left");
     installExampleMapUi(map, emap);
 
@@ -60,7 +61,7 @@
         const reader = new FileReader();
         reader.onload = async (event) => {
           const content = new Uint8Array(event.target.result);
-          const source = new TopologySource("fgb-source");
+          const source = new TopologySource("fgb-source", { formats: map.formats });
 
           if (map.getSource("fgb-source")) {
             map.removeSource("fgb-source");

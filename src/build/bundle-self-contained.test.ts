@@ -12,7 +12,7 @@ const REPO = resolve(__dirname, '../..');
 const DIST = resolve(REPO, 'dist');
 const STRICT = ['emap.mjs', 'emap.js', 'emap-worker.js'];
 const VENDOR = ['mapshaper-vendor.js', 'mapshaper-vendor.mjs'];
-const REQUIRE_RE = /require\$?1?\(\s*['"][^'"]+['"]\s*\)/g;
+const REQUIRE_RE = /(?<![\w.$])require\$?1?\(\s*['"][^'"]+['"]\s*\)/g;
 const bin = (name: string) =>
   resolve(REPO, 'node_modules/.bin', process.platform === 'win32' ? `${name}.cmd` : name);
 const runBin = (name: string, args: string[]) => {

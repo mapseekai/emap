@@ -81,7 +81,7 @@
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
         duckDbSpatialSummaryJoinLayer,
-        setDuckDbRuntime,
+
         spatialSummaryJoin,
       } from '@mapseekai/emap/duckdb';
 
@@ -219,7 +219,7 @@
 
       async function getRuntime() {
         runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-          setDuckDbRuntime(runtime);
+
           return runtime;
         });
         return runtimePromise;

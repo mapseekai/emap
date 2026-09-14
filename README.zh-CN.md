@@ -211,10 +211,13 @@ pnpm add apache-arrow
 pnpm add parquet-wasm # 仅 GeoParquet
 ```
 
-导入 Arrow 子路径即注册 GeoArrow 与 GeoParquet 格式：
+将 Arrow 格式插件显式安装到对应工作区：
 
 ```ts
-import '@mapseekai/emap/arrow';
+import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
+map.use(arrowFormatsPlugin);
+// For optional-format input loaded before addSource:
+const optionalSource = new TopologySource('upload', { formats: map.formats });
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 ```
 
@@ -232,26 +235,27 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 import {
   createDuckDbRuntimeFromJsDelivr,
   attributeFilter,
-  setDuckDbRuntime,
 } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
-setDuckDbRuntime(runtime);
 
 const result = await attributeFilter(source.getDataset()!, {
   sql: 'SELECT geometry, name FROM input WHERE active = true',
-});
+}, runtime);
 ```
 
 属性筛选接口只接受受限的单条 `SELECT`。DuckDB 处理工具箱提供 Overlay、Proximity、Aggregate、Join、Geometry、Transform、Selection 和 Data Management 八类操作。距离类操作默认拒绝地理坐标系，结果不会以角度为单位。
 
 ## 可选 MapLibre 服务
 
-需要在线底图或叠加服务时，通过 `MapOptions.mapLibre` 或 `map.mapLibre` 注册：
+需要在线底图或叠加服务时，先安装 `mapLibrePlugin`，再通过 `EmapOptions.mapLibre` 或 `map.mapLibreServices` 注册：
 
 ```ts
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+
 const map = new Emap({
   container: 'map',
+  plugins: [mapLibrePlugin],
   mapLibre: {
     services: [
       {

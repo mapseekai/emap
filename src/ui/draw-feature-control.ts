@@ -1,6 +1,6 @@
 import type { DrawFeatureOptions, DrawGeometryType } from '../core/handlers/draw-feature';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
-import type { Emap } from '../map/map';
 import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 
 export type { DrawGeometryType } from '../core/handlers/draw-feature';
@@ -23,7 +23,7 @@ const DEFAULT_TITLES: Record<DrawGeometryType, string> = {
 
 export class DrawFeatureControl implements Control {
   private _opts: DrawFeatureControlOptions;
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
   private _onEditModeChange = (e: { mode: string }) => {
@@ -37,7 +37,7 @@ export class DrawFeatureControl implements Control {
     this._opts = options;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group';

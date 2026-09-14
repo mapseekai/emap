@@ -80,36 +80,9 @@ type DuckDbWasmDatabaseLike = {
 
 const SPATIAL_EXTENSION_FILE = 'spatial.duckdb_extension.wasm';
 
-let injectedRuntime: DuckDbRuntime | null = null;
-
-/**
- * @example
- * setDuckDbRuntime(await createDuckDbRuntimeFromJsDelivr());
- */
-export function setDuckDbRuntime(runtime: DuckDbRuntime | null): void {
-  injectedRuntime = runtime;
-}
-
-/**
- * Return the injected DuckDB runtime, or `null` when none has been configured.
- *
- * @example
- * const runtime = getDuckDbRuntime();
- */
-export function getDuckDbRuntime(): DuckDbRuntime | null {
-  return injectedRuntime;
-}
-
-/**
- * @example
- * await closeDuckDbRuntime();
- */
-export async function closeDuckDbRuntime(
-  runtime: DuckDbRuntime | null = injectedRuntime,
-): Promise<void> {
-  if (!runtime) return;
-  if (injectedRuntime === runtime) injectedRuntime = null;
-  await runtime.close?.();
+/** Close only the explicitly supplied runtime; no process-global runtime is consulted. */
+export async function closeDuckDbRuntime(runtime: DuckDbRuntime | null = null): Promise<void> {
+  await runtime?.close?.();
 }
 
 async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {

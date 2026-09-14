@@ -8,7 +8,7 @@ import {
   resolveTableColumnName,
   runPipeline,
 } from '../pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
+import { type DuckDbRuntime } from '../../runtime';
 import { buildAttributeSql } from '../sql/attribute';
 
 export interface AttributeRunnerOptions {
@@ -33,7 +33,7 @@ export async function runAttributeTool(
   dataset: MapshaperDataset,
   opts: AttributeRunnerOptions,
   operation: AttributeOperation,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';

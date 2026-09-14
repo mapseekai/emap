@@ -54,7 +54,7 @@ export async function projectLayer(
   if (requestedFilename !== undefined && !requestedFilename.trim()) {
     return Err.validation('output.filename', 'must be a non-empty filename');
   }
-  const filename = requestedFilename ?? `${target}.${PROJECT_EXPORT_EXTENSIONS[format]}`;
+  const filename = requestedFilename ?? `${target}.${PROJECT_EXPORT_EXTENSIONS[format] ?? format}`;
 
   let crs: string;
   let init: string | undefined;
@@ -94,7 +94,10 @@ export async function projectLayer(
     const projected = await adapter.runOnDatasetParsed(commands, working);
     setDatasetCrsMetadata(projected, normalizeProjectCrsMetadata(rawCrs));
 
-    const detached = new TopologySource(`project:${opts.source}:${target}`, { adapter });
+    const detached = new TopologySource(`project:${opts.source}:${target}`, {
+      adapter,
+      formats: ctx.host._formats,
+    });
     detached.setDataset(projected, false);
     const blob = await detached.export({ format });
     return okValue({ blob, filename, format });

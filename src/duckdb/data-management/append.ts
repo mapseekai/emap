@@ -1,6 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { merge, type MergeOptions } from './merge';
 /**
  * @example
@@ -10,7 +10,7 @@ export function append(
   target: MapshaperDataset,
   incoming: MapshaperDataset,
   options: MergeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return merge(target, incoming, options, runtime);
 }

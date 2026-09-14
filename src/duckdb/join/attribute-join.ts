@@ -3,7 +3,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { runTwoInputTool } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 /**
  * @example
@@ -22,7 +22,7 @@ export function attributeJoin(
   input: MapshaperDataset,
   join: MapshaperDataset,
   options: AttributeJoinOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runTwoInputTool(
     input,

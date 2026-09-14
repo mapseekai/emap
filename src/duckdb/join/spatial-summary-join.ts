@@ -4,7 +4,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from '../core/dataset-crs';
 import { DuckDbOperationError } from '../errors';
 import { resolveUniqueColumnName, runPipeline } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { buildSpatialSummaryJoinSql } from './_spatial-summary-sql';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import {
@@ -41,7 +41,7 @@ export async function spatialSummaryJoin(
   targetDataset: MapshaperDataset,
   joinDataset: MapshaperDataset,
   opts: SpatialSummaryJoinOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const { options, predicate, joinType, targetGeometryColumn, joinGeometryColumn } =
     validateSpatialSummaryOptions(opts);

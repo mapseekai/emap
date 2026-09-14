@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
-import './index'; // module side effect registers the plugin
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerArrowFormats } from './index';
 import { setArrowTable, toArrowTableFromSource } from './index';
-import { getExportHandler, getFormatForExtension } from '../source/format-registry';
+import { FormatRegistry, getExportHandler, getFormatForExtension } from '../source/format-registry';
 import { TopologySource } from '../source/topology-source';
 import { datasetFromGeoJSON } from './test-utils';
 import { toArrowTable } from './dataset-to-table';
@@ -10,11 +17,11 @@ import { Selection } from '../map/selection';
 import { EditHistory } from '../edit/edit-history';
 
 function setPrivate(target: object, key: string, value: unknown): void {
-  Reflect.set(target, key, value);
+  fixtureSet(target, key, value);
 }
 
 function createBareMap(crs: string): Emap {
-  const map: Emap = Object.create(Emap.prototype);
+  const map: Emap = createTestMap();
   const projection = {
     crs,
     setCRS(nextCrs: string) {
@@ -48,15 +55,21 @@ async function pointDataset(coordinates: readonly [number, number], crs?: string
 }
 
 describe('Arrow module registration', () => {
+  let formats: FormatRegistry;
+  beforeEach(() => {
+    formats = new FormatRegistry();
+    registerArrowFormats(formats);
+  });
+  afterEach(() => formats.dispose());
   it('registers import handling for all plugin extensions', () => {
     for (const ext of ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather']) {
-      expect(getFormatForExtension(ext)?.name).toBe('geoarrow-formats');
+      expect(getFormatForExtension(formats, ext)?.name).toBe('geoarrow-formats');
     }
   });
 
   it('registers geoparquet and geoarrow export handlers', () => {
-    expect(getExportHandler('geoparquet')).toBeTypeOf('function');
-    expect(getExportHandler('geoarrow')).toBeTypeOf('function');
+    expect(getExportHandler(formats, 'geoparquet')).toBeTypeOf('function');
+    expect(getExportHandler(formats, 'geoarrow')).toBeTypeOf('function');
   });
 
   it('TopologySource accepts .arrow bytes end-to-end after registration', async () => {
@@ -65,7 +78,7 @@ describe('Arrow module registration', () => {
       properties: { name: 'roundtrip' },
       geometry: { type: 'Point', coordinates: [100, 50] },
     });
-    const source = new TopologySource('a');
+    const source = new TopologySource('a', { formats });
     const { exportGeoArrow } = await import('./geoarrow-io');
     await source.setData({ filename: 'data.arrow', content: exportGeoArrow(dataset) });
     expect(source.getLayers()[0].geometry_type).toBe('point');

@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const duckDb = vi.hoisted(() => ({
   closeDuckDbRuntime: vi.fn(async () => {}),
   createDuckDbRuntimeFromJsDelivr: vi.fn(async () => ({ runtime: true })),
-  setDuckDbRuntime: vi.fn(),
   centroid: vi.fn(async (dataset) => dataset),
   envelope: vi.fn(async (dataset) => dataset),
   repairGeometry: vi.fn(async (dataset) => dataset),

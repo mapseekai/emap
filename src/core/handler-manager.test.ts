@@ -41,8 +41,8 @@ describe('HandlerManager', () => {
     const m = new HandlerManager();
     const pan = fake('dragPan');
     const zoom = fake('scrollZoom');
-    m.register(pan);
-    m.register(zoom);
+    m.register(pan, { group: 'navigation' });
+    m.register(zoom, { group: 'navigation' });
     m.applyInteractive(false);
     expect(pan.isEnabled()).toBe(false);
     expect(zoom.isEnabled()).toBe(false);
@@ -529,7 +529,7 @@ describe('HandlerManager cursor arbitration (DX P11)', () => {
     const m = new HandlerManager();
     const e = el();
     m.register(stub('dragPan', 'grab') as any);
-    m.register(stub('drawFeature', 'crosshair') as any);
+    m.register(stub('drawFeature', 'crosshair') as any, { priority: 100 });
     m.attach(e);
     m.refreshCursor();
     expect(e.style.cursor).toBe('crosshair');
@@ -583,7 +583,7 @@ describe('HandlerManager cursor arbitration (DX P11)', () => {
     const m = new HandlerManager();
     const e = el();
     // drawFeature has higher PRIORITY than dragPan
-    m.register(stub('drawFeature', 'crosshair') as any);
+    m.register(stub('drawFeature', 'crosshair') as any, { priority: 100 });
     m.register(stub('dragPan', 'grab') as any);
     m.attach(e);
     // Simulate dragPan having won the gesture (exclusive lock)

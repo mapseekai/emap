@@ -1,6 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
 
@@ -11,7 +11,7 @@ import type { AttributeOptions } from './types';
 export function isValid(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('isValid', input, options, runtime);
 }
@@ -22,7 +22,7 @@ export function isValid(
 export function isEmpty(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('isEmpty', input, options, runtime);
 }
@@ -33,7 +33,7 @@ export function isEmpty(
 export function isSimple(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('isSimple', input, options, runtime);
 }

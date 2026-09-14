@@ -1,7 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import type { DuckDbRuntime } from '../runtime';
-import { getDuckDbRuntime } from '../runtime';
 import { intersect, type IntersectOptions } from './intersect';
 
 /**
@@ -18,7 +17,7 @@ export function clip(
   input: MapshaperDataset,
   mask: MapshaperDataset,
   options: ClipOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return intersect(input, mask, options, runtime);
 }

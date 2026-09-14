@@ -1,7 +1,7 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { distanceRelation } from '../core/relation/operations';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 /**
  * @example
@@ -24,7 +24,7 @@ export function near(
   input: MapshaperDataset,
   reference: MapshaperDataset,
   options: NearOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return distanceRelation(
     input,

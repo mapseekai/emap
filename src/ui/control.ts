@@ -1,8 +1,8 @@
-import type { Emap } from '../map/map';
+import type { ControlContext } from '../services/controls';
 
 export interface Control {
-  onAdd(map: Emap): HTMLElement;
-  onRemove(map?: Emap): void;
+  onAdd(map: ControlContext): HTMLElement;
+  onRemove(map?: ControlContext): void;
 }
 
 export type ControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

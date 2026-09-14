@@ -1,14 +1,14 @@
 import type { EditCommand } from '../../edit/edit-command';
-import type { MapshaperOps } from '../../map/mapshaper-ops';
-import type { EditMode } from '../../map/edit-state-store';
 import type { EditSessions } from '../../map/edit-sessions';
-import type { DrawOverlayState, MeasurementOverlayState } from '../../renderer/painter';
+import type { EditMode } from '../../map/edit-state-store';
+import type { MapshaperOps } from '../../map/mapshaper-ops';
 import type { EditVertexState, FeatureRef } from '../../map/types';
+import type { DrawOverlayState, MeasurementOverlayState } from '../../renderer/painter';
 import type { EventDispatcher } from '../events';
 import type { SelectionHandlerHost } from './selection-handler-host';
 
 export interface EditHandlerHost extends SelectionHandlerHost {
-  readonly editSession: EditSessions;
+  readonly editSession: Pick<EditSessions, keyof EditSessions>;
   readonly ops: Pick<
     MapshaperOps,
     | 'splitSelected'

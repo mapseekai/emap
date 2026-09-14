@@ -10,7 +10,7 @@ import {
   resolveTableColumnName,
   runPipeline,
 } from '../pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
+import { type DuckDbRuntime } from '../../runtime';
 import {
   buildRelationAttributeSql,
   buildRelationFilterSql,
@@ -99,7 +99,7 @@ export async function runRelationTool(
   maskDataset: MapshaperDataset,
   opts: RelationRunnerOptions,
   operation: RelationOperation,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const rt = requireRuntime(runtime);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';

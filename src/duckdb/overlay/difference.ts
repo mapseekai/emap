@@ -1,7 +1,7 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { runOverlayTool } from '../core/runners/overlay';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { OVERLAY_OPERATIONS } from './_shared';
 import type { OverlayOptions } from './types';
 
@@ -18,7 +18,7 @@ export function difference(
   input: MapshaperDataset,
   mask: MapshaperDataset,
   options: DifferenceOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runOverlayTool(input, mask, options, OVERLAY_OPERATIONS.difference, runtime);
 }

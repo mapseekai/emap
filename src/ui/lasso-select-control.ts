@@ -1,10 +1,9 @@
+import type { LassoSelectHandlerOptions, LassoSelectStyle } from '../core/handlers/lasso-select';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
-import type { Emap } from '../map/map';
-import type { LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 
-export { pointInPolygon, featureMatchesLasso } from '../core/handlers/select-geometry';
 export type { LassoSelectStyle } from '../core/handlers/lasso-select';
-import type { LassoSelectStyle } from '../core/handlers/lasso-select';
+export { featureMatchesLasso, pointInPolygon } from '../core/handlers/select-geometry';
 
 export interface LassoSelectControlOptions {
   /**
@@ -42,14 +41,14 @@ export interface LassoSelectControlOptions {
 export class LassoSelectControl implements Control {
   private _options: LassoSelectControlOptions;
   private _enabled = true;
-  private _handler: Emap['lassoSelect'] | null = null;
+  private _handler: ControlContext['lassoSelect'] | null = null;
   private _container: HTMLElement | null = null;
 
   constructor(options: LassoSelectControlOptions = {}) {
     this._options = options;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._handler = map.lassoSelect;
     this._handler.setOptions({
       layers: this._options.layers,

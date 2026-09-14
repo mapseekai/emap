@@ -53,6 +53,7 @@
     const { Emap, TopologySource } = emap;
 
     const map = new Emap({ container: 'map' });
+    map.use(emapArrow.arrowFormatsPlugin);
     map.addControl(new emap.NavigationControl(), 'top-left');
     installExampleMapUi(map, emap);
 
@@ -74,14 +75,14 @@
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
-        const source = new TopologySource(SOURCE_ID);
+        const source = new TopologySource(SOURCE_ID, { formats: map.formats });
 
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         activeSource = source;
 
         try {
           // setData 识别 .parquet/.arrow 扩展名并调用 formats 模块注册的插件。
-          // loadExampleArrow() 已通过 Vite 加载并注册该模块。
+          // Arrow 格式已通过 map.use(arrowFormatsPlugin) 显式注册。
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());

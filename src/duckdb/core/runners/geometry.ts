@@ -5,7 +5,7 @@ import {
   requireRuntime,
   runPipeline,
 } from '../pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../../runtime';
+import { type DuckDbRuntime } from '../../runtime';
 import { buildUnaryGeometrySql } from '../sql/geometry';
 
 export interface UnaryGeometryRunnerOptions {
@@ -25,7 +25,7 @@ export async function runUnaryGeometryTool(
   dataset: MapshaperDataset,
   opts: UnaryGeometryRunnerOptions,
   operation: GeometryOperation,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';

@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { GetScaleMetricsOptions, ScaleMetrics } from '../index';
@@ -79,7 +86,7 @@ function deferScaleCalculation(map: Emap) {
 
 describe('Emap scale metrics', () => {
   it('reports Earth scale metrics and adds zoom only for Web Mercator', async () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setCRS('EPSG:4326');
     map.setExtent(new Bounds(-1, -1, 1, 1));
 
@@ -104,7 +111,7 @@ describe('Emap scale metrics', () => {
     'EPSG:900913',
     'EPSG:102100',
   ] as const)('adds zoom for the %s Web Mercator alias', async (crs) => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setCRS(crs);
     map.setExtent(new Bounds(-1000, -1000, 1000, 1000));
 
@@ -115,14 +122,14 @@ describe('Emap scale metrics', () => {
   });
 
   it('returns null for an empty, zero-sized view', async () => {
-    const map = new Emap({ container: container(0, 0) });
+    const map = createBrowserTestMap({ container: container(0, 0) });
 
     await expect(map.getScaleMetrics()).resolves.toBeNull();
     map.remove();
   });
 
   it('returns null when the CRS changes while metrics are pending', async () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setCRS('EPSG:4326');
     map.setExtent(new Bounds(-1, -1, 1, 1));
     const pending = deferScaleCalculation(map);
@@ -136,7 +143,7 @@ describe('Emap scale metrics', () => {
   });
 
   it('returns null when the view moves while metrics are pending', async () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setCRS('EPSG:4326');
     map.setExtent(new Bounds(-1, -1, 1, 1));
     const pending = deferScaleCalculation(map);
@@ -151,7 +158,7 @@ describe('Emap scale metrics', () => {
 
   it('returns null when the viewport resizes while metrics are pending', async () => {
     const host = resizableContainer();
-    const map = new Emap({ container: host.element });
+    const map = createBrowserTestMap({ container: host.element });
     map.setCRS('EPSG:4326');
     map.setExtent(new Bounds(-1, -1, 1, 1));
     const pending = deferScaleCalculation(map);
@@ -166,7 +173,7 @@ describe('Emap scale metrics', () => {
   });
 
   it('uses zoom from the same snapshot as the measured view', async () => {
-    const map = new Emap({ container: container() });
+    const map = createBrowserTestMap({ container: container() });
     map.setCRS('EPSG:3857');
     map.setExtent(new Bounds(-1000, -1000, 1000, 1000));
     const pending = deferScaleCalculation(map);

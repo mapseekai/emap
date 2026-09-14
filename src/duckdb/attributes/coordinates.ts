@@ -1,6 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import { runAttribute } from './_shared';
 import type { AttributeOptions } from './types';
 
@@ -11,7 +11,7 @@ import type { AttributeOptions } from './types';
 export function x(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('x', input, options, runtime);
 }
@@ -22,7 +22,7 @@ export function x(
 export function y(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('y', input, options, runtime);
 }
@@ -33,7 +33,7 @@ export function y(
 export function centroidX(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('centroidX', input, options, runtime);
 }
@@ -44,7 +44,7 @@ export function centroidX(
 export function centroidY(
   input: MapshaperDataset,
   options: AttributeOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runAttribute('centroidY', input, options, runtime);
 }

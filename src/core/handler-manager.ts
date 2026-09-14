@@ -1,35 +1,28 @@
 import { type Handler, isHandler, type NormalizedPointerEvent } from './handler';
 
-// Highest → lowest. Only registered+enabled handlers participate. The
-// selection handlers (Phase 2b) slot ahead of the modal edit handlers
-// (transformFeature, splitFeature, reshapeFeature, ringEdit, partEdit,
-// drawFeature, measure, vertexEdit), which slot ahead of dragPan. Keep the
-// topology-edit sequence together: split establishes the cut, reshape adjusts
-// its path, then ring and part edit polygon and feature structure respectively.
-const PRIORITY = [
-  'lassoSelect',
-  'boxSelect',
-  'clickSelect',
-  'transformFeature',
-  'splitFeature',
-  'reshapeFeature',
-  'autoCompletePolygon',
-  'ringEdit',
-  'partEdit',
-  'drawFeature',
-  'measure',
-  'vertexEdit',
-  'dragPan',
-] as const;
+export interface HandlerRegistration {
+  priority?: number;
+  before?: readonly string[];
+  after?: readonly string[];
+  group?: string;
+}
+
+interface RegisteredHandler {
+  options: HandlerRegistration;
+  sequence: number;
+}
 
 /**
  * Registry of named interaction handlers owned by Emap. Owns the
  * single-DOM-listener pointer arbitration layer: installs one set of pointer
- * listeners, normalizes events, and dispatches to enabled handlers in fixed
+ * listeners, normalizes events, and dispatches to enabled handlers in configured
  * priority order with an exclusive-gesture lock.
  */
 export class HandlerManager {
   private _handlers = new Map<string, Handler>();
+  private _registrations = new Map<string, RegisteredHandler>();
+  private _order: string[] = [];
+  private _sequence = 0;
   private _element: HTMLElement | null = null;
   private _exclusive: Handler | null = null;
   private _pointerSink: ((ev: NormalizedPointerEvent) => void) | null = null;
@@ -46,13 +39,97 @@ export class HandlerManager {
   private _onContextMenu = (e: MouseEvent) => this._dispatch(this._norm(e, 'contextmenu'));
   private _onDblClick = (e: MouseEvent) => this._dispatch(this._norm(e, 'dblclick'));
 
-  /** Register a handler; re-registering the same `name` replaces the prior one. */
-  register(handler: Handler): void {
-    if (!isHandler(handler)) {
-      throw new Error(`HandlerManager.register: argument is not a valid Handler`);
-    }
+  /** Register a handler with configuration-time ordering and owner-safe removal. */
+  register(handler: Handler, options: HandlerRegistration = {}): () => void {
+    if (!isHandler(handler))
+      throw new Error('HandlerManager.register: argument is not a valid Handler');
+    const priority = options.priority ?? 0;
+    if (!Number.isFinite(priority)) throw new Error('Handler priority must be finite');
+    const record = {
+      options: {
+        ...options,
+        priority,
+        before: [...(options.before ?? [])],
+        after: [...(options.after ?? [])],
+      },
+      sequence: this._sequence++,
+    };
+    const next = new Map(this._registrations);
+    next.set(handler.name, record);
+    const order = this._resolveOrder(next);
+    const previous = this._handlers.get(handler.name);
+    if (previous && previous !== handler) this._release(previous);
+    this._registrations = next;
+    this._order = order;
     this._handlers.set(handler.name, handler);
     (handler as unknown as { _manager?: HandlerManager })._manager = this;
+    this.refreshCursor();
+    return () => {
+      if (this._registrations.get(handler.name) === record) this.unregister(handler.name);
+    };
+  }
+
+  unregister(name: string): void {
+    const handler = this._handlers.get(name);
+    if (!handler) return;
+    try {
+      this._release(handler);
+    } finally {
+      this._handlers.delete(name);
+      this._registrations.delete(name);
+      this._order = this._resolveOrder(this._registrations);
+      this.refreshCursor();
+    }
+  }
+
+  private _release(handler: Handler): void {
+    try {
+      handler.disable();
+    } finally {
+      if (this._exclusive === handler) {
+        this._exclusive = null;
+        this._exclusiveGestureMoved = false;
+        this._suppressNextClick = true;
+      }
+      const owned = handler as unknown as { _manager?: HandlerManager };
+      if (owned._manager === this) delete owned._manager;
+    }
+  }
+
+  private _resolveOrder(registrations: ReadonlyMap<string, RegisteredHandler>): string[] {
+    const incoming = new Map([...registrations.keys()].map((name) => [name, 0]));
+    const edges = new Map([...registrations.keys()].map((name) => [name, new Set<string>()]));
+    const edge = (from: string, to: string): void => {
+      if (!registrations.has(from) || !registrations.has(to) || edges.get(from)!.has(to)) return;
+      edges.get(from)!.add(to);
+      incoming.set(to, incoming.get(to)! + 1);
+    };
+    for (const [name, { options }] of registrations) {
+      for (const other of options.before ?? []) edge(name, other);
+      for (const other of options.after ?? []) edge(other, name);
+    }
+    const compare = (a: string, b: string) =>
+      (registrations.get(b)!.options.priority ?? 0) -
+        (registrations.get(a)!.options.priority ?? 0) ||
+      registrations.get(a)!.sequence - registrations.get(b)!.sequence;
+    const ready = [...incoming]
+      .filter(([, count]) => count === 0)
+      .map(([name]) => name)
+      .sort(compare);
+    const result: string[] = [];
+    while (ready.length) {
+      const name = ready.shift()!;
+      result.push(name);
+      for (const next of edges.get(name)!) {
+        incoming.set(next, incoming.get(next)! - 1);
+        if (incoming.get(next) === 0) {
+          ready.push(next);
+          ready.sort(compare);
+        }
+      }
+    }
+    if (result.length !== registrations.size) throw new Error('Handler ordering cycle');
+    return result;
   }
 
   /** Is a sibling handler currently registered AND enabled? */
@@ -67,11 +144,11 @@ export class HandlerManager {
 
   /** Legacy `interactive` shim: toggles the pan + zoom handlers together. */
   applyInteractive(interactive: boolean): void {
-    for (const n of ['dragPan', 'scrollZoom']) {
-      const h = this._handlers.get(n);
-      if (!h) continue;
-      if (interactive) h.enable();
-      else h.disable();
+    for (const [name, { options }] of this._registrations) {
+      if (options.group !== 'navigation') continue;
+      const handler = this._handlers.get(name)!;
+      if (interactive) handler.enable();
+      else handler.disable();
     }
   }
 
@@ -125,7 +202,7 @@ export class HandlerManager {
 
   private _orderedEnabled(): Handler[] {
     const out: Handler[] = [];
-    for (const name of PRIORITY) {
+    for (const name of this._order) {
       const h = this._handlers.get(name);
       if (h && h.isEnabled()) out.push(h);
     }
@@ -173,7 +250,7 @@ export class HandlerManager {
   /**
    * Resolve the effective cursor and write it to the attached element.
    * Order: active exclusive handler's cursor → first enabled handler in
-   * PRIORITY with a non-empty cursor → '' (clear → CSS/page default).
+   * configured order with a non-empty cursor → '' (clear → CSS/page default).
    * Idempotent: only writes when the value changes.
    */
   private _applyCursor(): void {

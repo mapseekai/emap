@@ -3,7 +3,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { processingValidation, runTwoInputTool } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import type { RelationOperationId } from '../core/relation/types';
 
 /**
@@ -40,7 +40,7 @@ export function spatialJoin(
   input: MapshaperDataset,
   join: MapshaperDataset,
   options: SpatialJoinOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   const predicate = options.predicate ?? 'intersects';
   const fn = FUNCTIONS[predicate];

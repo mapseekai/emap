@@ -1,9 +1,9 @@
-import type { Emap } from '../map/map';
 import type {
   MapLibreBasemapService,
   MapLibreServiceErrorEvent,
   MapLibreServiceManager,
 } from '../map/maplibre-service';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
@@ -167,7 +167,7 @@ export class BasemapControl implements Control {
     this._instanceId = ++basemapControlSequence;
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     const manager = map.mapLibreServices;
     const registeredServices = manager.getServices();
     if (this._hasLegacyOptions && registeredServices.length > 0) {

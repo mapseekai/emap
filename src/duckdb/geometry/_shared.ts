@@ -2,7 +2,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
 import { runUnaryGeometryTool, type GeometryOperation } from '../core/runners/geometry';
 import type { GeometryOptions } from './types';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 export type UnaryGeometryOperationId = 'centroid' | 'envelope' | 'convexHull' | 'boundary';
 
@@ -17,7 +17,7 @@ export function runUnary(
   operationId: UnaryGeometryOperationId,
   input: MapshaperDataset,
   options: GeometryOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   const operation = UNARY_GEOMETRY_OPERATIONS[operationId];
   if (!operation) {

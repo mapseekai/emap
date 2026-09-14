@@ -1,7 +1,7 @@
-import type { Emap } from '../map/map';
+import type { ControlContext } from '../services/controls';
 import type { Control } from './control';
-import { VertexEditControl } from './vertex-edit-control';
 import { DrawFeatureControl } from './draw-feature-control';
+import { VertexEditControl } from './vertex-edit-control';
 
 type AdvancedTool =
   | 'reshape'
@@ -34,14 +34,14 @@ export interface EditToolbarOptions {
 }
 
 class AdvancedEditControl implements Control {
-  private _map: Emap | null = null;
+  private _map: ControlContext | null = null;
   private _button: HTMLButtonElement | null = null;
   private readonly _onEditModeChange = (event: { mode: string }): void =>
     this._syncPressed(event.mode);
 
   constructor(private readonly _tool: AdvancedTool) {}
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._map = map;
     const container = document.createElement('div');
     container.className = 'emap-ctrl emap-ctrl-group';
@@ -191,7 +191,7 @@ export class EditToolbar implements Control {
     }
   }
 
-  onAdd(map: Emap): HTMLElement {
+  onAdd(map: ControlContext): HTMLElement {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group emap-edit-toolbar';
 

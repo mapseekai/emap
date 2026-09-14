@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Emap } from './map';
@@ -64,7 +71,7 @@ beforeEach(() => {
     clientHeight: { value: 600 },
   });
   document.body.appendChild(el);
-  map = new Emap({ container: el });
+  map = createBrowserTestMap({ container: el });
   map.setExtent(new Bounds(-100, -60, 100, 60));
   flushFrame();
 });
@@ -135,7 +142,7 @@ describe('temporary overlays with expensive map layers', () => {
       pixelRatio: window.devicePixelRatio || 1,
     });
     // Exercise the actual wheel listener, including the tool's move subscription.
-    const zoom = Reflect.get(map, '_scrollZoom') as { fire: (type: string, event: object) => void };
+    const zoom = map.scrollZoom as { fire: (type: string, event: object) => void };
     zoom.fire('mousewheel', { direction: 1, multiplier: 1, x: 400, y: 300 });
     flushFrame();
     expect(base.clearRect).not.toHaveBeenCalled();

@@ -52,7 +52,7 @@
         createDuckDbRuntimeFromJsDelivr,
         duckDbAttributeFilterLayer,
         attributeFilter,
-        setDuckDbRuntime,
+
         validateDuckDbSelectSql,
       } from '@mapseekai/emap/duckdb';
 
@@ -179,7 +179,7 @@
 
       async function getRuntime() {
         runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-          setDuckDbRuntime(runtime);
+
           return runtime;
         });
         return runtimePromise;

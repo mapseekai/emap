@@ -1,0 +1,75 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import ts from 'typescript';
+
+function files(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const file = path.join(directory, entry.name);
+    return entry.isDirectory() ? files(file) : [file];
+  });
+}
+const production = files('src').filter(file => file.endsWith('.ts') && !/\.test(?:-d)?\.ts$/.test(file) && !file.endsWith('.d.ts'));
+const graph = new Map();
+const violations = [];
+for (const file of production) {
+  const source = fs.readFileSync(file, 'utf8');
+  const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const ast = ts.createSourceFile(file, output, ts.ScriptTarget.Latest, true);
+  const imports = [];
+  const visit = node => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) imports.push(node.moduleSpecifier.text);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) imports.push(node.arguments[0].text);
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  const edges = [];
+  for (const specifier of imports) {
+    if (file.startsWith('src/kernel/') && !specifier.startsWith('./')) violations.push(`${file}: kernel dependency ${specifier}`);
+    if (file.startsWith('src/plugins/') && /(?:^|\/)map\/map$/.test(specifier)) violations.push(`${file}: feature depends on Emap`);
+    if (!specifier.startsWith('.')) continue;
+    const base = path.normalize(path.join(path.dirname(file), specifier));
+    const target = [base + '.ts', path.join(base, 'index.ts')].find(candidate => fs.existsSync(candidate));
+    if (target) edges.push(target);
+  }
+  if (file.startsWith('src/services/') && /from\s+['"][^'"]*providers\//.test(source)) violations.push(`${file}: contract imports provider implementation`);
+  if (file.startsWith('src/kernel/') && /\b(document|window|HTMLElement|HTMLCanvasElement)\b/.test(output)) violations.push(`${file}: kernel depends on browser UI`);
+  graph.set(file, edges);
+}
+
+const visited = new Set();
+const visiting = new Set();
+const cycles = [];
+function walk(file, stack) {
+  if (visiting.has(file)) { cycles.push([...stack.slice(stack.indexOf(file)), file]); return; }
+  if (visited.has(file)) return;
+  visiting.add(file);
+  for (const target of graph.get(file) ?? []) walk(target, [...stack, file]);
+  visiting.delete(file); visited.add(file);
+}
+for (const file of graph.keys()) walk(file, []);
+for (const cycle of cycles) violations.push(`Runtime import cycle: ${cycle.join(' -> ')}`);
+
+const formatSource = fs.readFileSync('src/source/format-registry.ts', 'utf8');
+if (formatSource.includes("Symbol.for('emap.formatRegistry')")) violations.push('Format registry still has process-global mutable state');
+if (/\b(setDuckDbRuntime|getDuckDbRuntime|injectedRuntime)\b/.test(fs.readFileSync('src/duckdb/runtime.ts', 'utf8'))) violations.push('DuckDB still has a global runtime');
+const reachable = new Set();
+function visitEntry(file) {
+  if (reachable.has(file)) return;
+  reachable.add(file);
+  for (const dependency of graph.get(file) ?? []) visitEntry(dependency);
+}
+visitEntry('src/index.ts');
+for (const forbidden of ['src/providers/maplibre/plugin.ts', 'src/arrow/index.ts', 'src/duckdb/index.ts']) {
+  if (reachable.has(forbidden)) violations.push(`Default entry eagerly imports optional provider: ${forbidden}`);
+}
+const inventory = JSON.parse(fs.readFileSync('docs/plans/plugin-migration-inventory.json', 'utf8'));
+const baselineFiles = execFileSync('git', ['ls-tree', '-r', '--name-only', inventory.baseline, '--', 'src'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+const trackedBaseline = new Set(inventory.files.map(entry => entry.original));
+for (const file of baselineFiles) if (!trackedBaseline.has(file)) violations.push(`Missing baseline inventory record: ${file}`);
+for (const entry of inventory.files) {
+  if (entry.classification === 'pending' || !entry.owner) violations.push(`Unclassified baseline file: ${entry.original}`);
+  if (!fs.existsSync(entry.current)) violations.push(`Missing migrated file: ${entry.current}`);
+}
+if (violations.length) throw new Error(violations.join('\n'));
+console.log(`Architecture verified: ${production.length} production modules, no runtime cycles, ${inventory.files.length} baseline files owned.`);

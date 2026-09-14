@@ -4,7 +4,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { processingValidation, runSingleInputTool, sqlString } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { preserveEmptyGeometryType, quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 /**
  * @example
  * const options: ReprojectOptions = { sourceCrs: 'EPSG:4326', targetCrs: 'EPSG:3857' };
@@ -21,7 +21,7 @@ export interface ReprojectOptions extends ProcessingOptions {
 export async function reproject(
   input: MapshaperDataset,
   options: ReprojectOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   const sourceCrs = options.sourceCrs ?? resolveDatasetCRSMetadata(input);
   if (!sourceCrs) throw processingValidation('reproject', 'source CRS is required', 'sourceCrs');

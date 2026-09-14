@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { Emap } from './map';
@@ -6,12 +13,12 @@ import { EditHistory } from '../edit/edit-history';
 import { TopologySource } from '../source/topology-source';
 
 function setPrivate(target: object, key: string, value: unknown): void {
-  Reflect.set(target, key, value);
+  fixtureSet(target, key, value);
 }
 
 /** Bare Emap with only the state addSource()'s data path touches. */
 function createBareMap(): { map: Emap; scheduleRender: ReturnType<typeof vi.fn> } {
-  const map = Object.create(Emap.prototype) as Emap;
+  const map = createTestMap() as Emap;
   const scheduleRender = vi.fn();
   setPrivate(map, '_sources', new globalThis.Map());
   setPrivate(map, '_sourceListeners', new globalThis.Map());

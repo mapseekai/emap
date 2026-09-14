@@ -65,7 +65,10 @@ Pass a complete ZIP for a Shapefile. It needs `.shp`; matching `.dbf`, `.shx`, a
 Import the optional entry point before importing, exporting, or interoperating with Arrow Tables:
 
 ```ts
-import '@mapseekai/emap/arrow';
+import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
+map.use(arrowFormatsPlugin);
+// For optional-format input loaded before addSource:
+const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```
 
 This registers GeoParquet and GeoArrow formats. GeoParquet loads `parquet-wasm` on first use; an application may instead supply a WASM URL or an initialized module:
@@ -89,7 +92,7 @@ const blob = await source.export({
 
 ## FlatGeobuf
 
-An application installs `flatgeobuf` and registers a format plugin with the module-level `registerFormat()`. The plugin supplies import, export, and the `.fgb` extension; after registration, use `fromBytes()` or `export({ format: 'flatgeobuf' })`. See the complete integration in the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
+An application installs `flatgeobuf` and registers a format plugin with the instance-scoped `registerFormat(map.formats, codec)`. The plugin supplies import, export, and the `.fgb` extension; after registration, use `fromBytes()` or `export({ format: 'flatgeobuf' })`. See the complete integration in the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
 
 ## Export and download
 

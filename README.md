@@ -213,10 +213,13 @@ pnpm add apache-arrow
 pnpm add parquet-wasm # GeoParquet only
 ```
 
-Importing the Arrow subpath registers the GeoArrow and GeoParquet formats:
+Mount the Arrow codec plugin on the workspace explicitly:
 
 ```ts
-import '@mapseekai/emap/arrow';
+import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
+map.use(arrowFormatsPlugin);
+// For optional-format input loaded before addSource:
+const optionalSource = new TopologySource('upload', { formats: map.formats });
 import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 ```
 
@@ -234,26 +237,27 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 import {
   createDuckDbRuntimeFromJsDelivr,
   attributeFilter,
-  setDuckDbRuntime,
 } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
-setDuckDbRuntime(runtime);
 
 const result = await attributeFilter(source.getDataset()!, {
   sql: 'SELECT geometry, name FROM input WHERE active = true',
-});
+}, runtime);
 ```
 
 The attribute-filter API accepts a restricted single-`SELECT` contract. The DuckDB processing toolbox exposes overlay, proximity, aggregate, join, geometry, transform, selection, and data-management operations. Distance-like operations reject geographic CRS by default so results are never measured in degrees.
 
 ## Optional MapLibre Services
 
-Register MapLibre services through `MapOptions.mapLibre` or `map.mapLibre` when online basemaps or overlays are needed:
+Register MapLibre services by mounting `mapLibrePlugin`, then configuring `EmapOptions.mapLibre` or `map.mapLibreServices` when online basemaps or overlays are needed:
 
 ```ts
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+
 const map = new Emap({
   container: 'map',
+  plugins: [mapLibrePlugin],
   mapLibre: {
     services: [
       {

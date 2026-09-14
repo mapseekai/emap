@@ -1,6 +1,6 @@
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 import type { RelationOptions } from '../core/relation/operations';
 import type { RelationOperationId } from '../core/relation/types';
 import { spatialRelation } from './spatial-relation';
@@ -25,7 +25,7 @@ export function spatialFilter(
   input: MapshaperDataset,
   reference: MapshaperDataset,
   options: SpatialFilterOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return spatialRelation(input, reference, { ...options, mode: 'filter' }, runtime);
 }

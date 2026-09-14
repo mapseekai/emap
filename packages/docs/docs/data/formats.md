@@ -65,10 +65,13 @@ Shapefile 应传入完整 ZIP。ZIP 至少包含 `.shp`，属性、索引和坐�
 在导入、导出或 Arrow Table 互操作前导入可选子入口：
 
 ```ts
-import '@mapseekai/emap/arrow';
+import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
+map.use(arrowFormatsPlugin);
+// For optional-format input loaded before addSource:
+const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```
 
-该导入注册 GeoParquet 和 GeoArrow 格式。GeoParquet 首次使用时加载 `parquet-wasm`；也可以提供 WASM URL 或已初始化模块：
+`map.use()` 为该地图实例注册 GeoParquet 和 GeoArrow 格式，单纯 import 不会注册。GeoParquet 首次使用时加载 `parquet-wasm`；也可以提供 WASM URL 或已初始化模块：
 
 ```ts
 import { initParquetWasm, setParquetWasm } from '@mapseekai/emap/arrow';
@@ -89,7 +92,7 @@ const blob = await source.export({
 
 ## FlatGeobuf
 
-FlatGeobuf 由应用安装 `flatgeobuf`，并使用模块级 `registerFormat()` 注册格式插件。插件提供导入器、导出器和 `.fgb` 扩展名；注册完成后使用 `fromBytes()` 或 `export({ format: 'flatgeobuf' })`。完整集成可参考 [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。
+FlatGeobuf 由应用安装 `flatgeobuf`，并使用实例级 `registerFormat(map.formats, codec)` 注册格式插件。插件提供导入器、导出器和 `.fgb` 扩展名；注册完成后使用 `fromBytes()` 或 `export({ format: 'flatgeobuf' })`。完整集成可参考 [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。
 
 ## 导出和下载
 

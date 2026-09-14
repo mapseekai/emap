@@ -9,7 +9,7 @@ import {
   resolveUniqueColumnName,
   tableFieldNames,
 } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 /**
  * @example
@@ -28,7 +28,7 @@ export async function nearest(
   input: MapshaperDataset,
   reference: MapshaperDataset,
   options: NearestOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   assertProjectedCrs([input, reference], 'DuckDB nearest requires a known projected CRS');
   const result = await runTwoInputTool(

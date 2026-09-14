@@ -1,3 +1,10 @@
+import {
+  createTestMap,
+  createBrowserTestMap,
+  fixtureGet,
+  fixtureSet,
+  fixtureCall,
+} from '../../test/utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
@@ -72,7 +79,7 @@ function pool(): MapshaperWorkerPool {
 describe('Emap worker pool ownership', () => {
   it('does not adopt an injected pool when worker mode is disabled', async () => {
     const workerPool = pool();
-    const map = new Emap({ container: container(), useWorker: false, workerPool });
+    const map = createBrowserTestMap({ container: container(), useWorker: false, workerPool });
 
     map.remove();
 
@@ -86,7 +93,7 @@ describe('Emap worker pool ownership', () => {
 
   it('destroys an injected pool adopted by enabled worker mode', async () => {
     const workerPool = pool();
-    const map = new Emap({ container: container(), useWorker: true, workerPool });
+    const map = createBrowserTestMap({ container: container(), useWorker: true, workerPool });
 
     map.remove();
 

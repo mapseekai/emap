@@ -1,4 +1,4 @@
-import { access, readFile, stat } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = process.cwd();
@@ -23,7 +23,7 @@ for (const relativePath of requiredBundles) {
   }
 }
 
-const browserJavaScript = requiredBundles.filter((path) => /\.(?:m?js)$/.test(path));
+const browserJavaScript = (await readdir(resolve(root, 'dist'))).filter(path => /\.(?:m?js)$/.test(path)).map(path => `dist/${path}`);
 const forbiddenNodeRuntimePatterns = [
   /(?:from\s*|import\s*\()\s*['"]node:/,
   /\brequire\s*\(\s*['"](?:assert|buffer|child_process|crypto|fs|http|https|os|path|stream|url|util|worker_threads)(?:\/[^'"]*)?['"]\s*\)/,

@@ -5,7 +5,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
 import { quoteIdentifier, tableFieldNames } from '../core/pipeline';
 import { validateDuckDbSelectSql } from '../core/query-sql';
-import { getDuckDbRuntime, quoteSqlString, type DuckDbRuntime } from '../runtime';
+import { quoteSqlString, type DuckDbRuntime } from '../runtime';
 
 export interface DuckDbGeoParquetQueryOptions extends FromArrowTableOptions {
   sql: string;
@@ -118,7 +118,7 @@ async function queryGeoParquetView(
 
 export async function createDuckDbGeoParquetQuerySource(
   data: Uint8Array | ArrayBuffer,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<DuckDbGeoParquetQuerySource> {
   if (!runtime) {
     throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
@@ -178,7 +178,7 @@ export async function createDuckDbGeoParquetQuerySource(
 export async function queryGeoParquetWithDuckDb(
   data: Uint8Array | ArrayBuffer,
   opts: DuckDbGeoParquetQueryOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
   let source: DuckDbGeoParquetQuerySource | undefined;
   let primaryError: unknown;

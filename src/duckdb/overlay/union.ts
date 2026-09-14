@@ -3,7 +3,7 @@ import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-def
 import { coverageCte, runTwoInputTool } from '../core/runners/processing';
 import type { ProcessingOptions } from '../core/types';
 import { quoteIdentifier } from '../core/pipeline';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 
 /**
  * @example
@@ -18,7 +18,7 @@ export function union(
   input: MapshaperDataset,
   overlay: MapshaperDataset,
   options: UnionOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runTwoInputTool(
     input,

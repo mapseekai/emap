@@ -2,7 +2,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { defineDuckDbTool, requireToolInput, toolParams } from '../core/tool-definition';
 import { runUnaryGeometryTool } from '../core/runners/geometry';
 import type { ProcessingOptions } from '../core/types';
-import { getDuckDbRuntime, type DuckDbRuntime } from '../runtime';
+import { type DuckDbRuntime } from '../runtime';
 /**
  * @example
  * const options: RepairGeometryOptions = { outputLayer: 'repaired' };
@@ -15,7 +15,7 @@ export type RepairGeometryOptions = ProcessingOptions;
 export function repairGeometry(
   input: MapshaperDataset,
   options: RepairGeometryOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  runtime: DuckDbRuntime | null = null,
 ) {
   return runUnaryGeometryTool(
     input,

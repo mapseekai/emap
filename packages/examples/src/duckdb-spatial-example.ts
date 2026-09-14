@@ -32,7 +32,7 @@ import {
   spatialFilter,
   spatialJoin,
   spatialRelation,
-  setDuckDbRuntime,
+
   simplify,
   simplifyPreserveTopology,
   x,
@@ -373,7 +373,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
 
   async function ensureRuntime() {
     runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-      setDuckDbRuntime(runtime);
+
       return runtime;
     });
     return runtimePromise;

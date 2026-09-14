@@ -4,23 +4,25 @@
 // emap's canonical crs_string.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TopologySource } from '../../src/source/topology-source';
-import { unregisterFormat } from '../../src/source/format-registry';
-import { getDefaultMapshaperAdapter, registerFormat } from '../../src/index';
+import { FormatRegistry } from '../../src/source/format-registry';
+import { getDefaultMapshaperAdapter } from '../../src/index';
 import { installFlatGeobufFormat } from '../../packages/examples/src/flatgeobuf-format';
 
 const FIXTURE = resolve(process.cwd(), 'packages/examples/public/fixtures/example-flatgeobuf.fgb');
 
 describe('flatgeobuf example format plugin', () => {
-  afterEach(() => {
-    unregisterFormat('flatgeobuf');
+  let formats: FormatRegistry;
+  beforeEach(() => {
+    formats = new FormatRegistry();
   });
+  afterEach(() => formats.dispose());
 
   it('imports .fgb through TopologySource.setData with header CRS', async () => {
-    installFlatGeobufFormat({ registerFormat, getDefaultMapshaperAdapter });
+    installFlatGeobufFormat({ getDefaultMapshaperAdapter }, formats);
 
-    const source = new TopologySource('fgb');
+    const source = new TopologySource('fgb', { formats });
     await source.setData({
       filename: 'example-flatgeobuf.fgb',
       content: new Uint8Array(readFileSync(FIXTURE)),
@@ -34,9 +36,9 @@ describe('flatgeobuf example format plugin', () => {
   });
 
   it('exports FlatGeobuf with its features and EPSG header', async () => {
-    installFlatGeobufFormat({ registerFormat, getDefaultMapshaperAdapter });
+    installFlatGeobufFormat({ getDefaultMapshaperAdapter }, formats);
 
-    const source = new TopologySource('fgb-export');
+    const source = new TopologySource('fgb-export', { formats });
     await source.setData({
       filename: 'example-flatgeobuf.fgb',
       content: new Uint8Array(readFileSync(FIXTURE)),
@@ -44,7 +46,7 @@ describe('flatgeobuf example format plugin', () => {
 
     const blob = await source.export({ format: 'flatgeobuf' as never });
     const output = new Uint8Array(await blob.arrayBuffer());
-    const roundTripped = new TopologySource('fgb-roundtrip');
+    const roundTripped = new TopologySource('fgb-roundtrip', { formats });
     await roundTripped.setData({ filename: 'export.fgb', content: output });
 
     const outputFeatureCount = roundTripped
@@ -57,7 +59,7 @@ describe('flatgeobuf example format plugin', () => {
   });
 
   it('rejects .fgb with a plugin-hinting error when nothing is registered', async () => {
-    const source = new TopologySource('fgb-missing');
+    const source = new TopologySource('fgb-missing', { formats });
     await expect(
       source.setData({
         filename: 'example-flatgeobuf.fgb',

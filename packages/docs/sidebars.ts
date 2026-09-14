@@ -30,6 +30,7 @@ const sidebars: SidebarsConfig = {
         'guides/camera',
         'guides/controls',
         'guides/worker',
+        'guides/plugins',
       ],
     },
     {

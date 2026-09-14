@@ -48,19 +48,47 @@
     "./dist/emap.js": "./dist/emap.js",
     "./dist/emap-arrow.js": "./dist/emap-arrow.js",
     "./dist/emap-arrow.mjs": "./dist/emap-arrow.mjs",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./kernel": {
+      "types": "./dist/kernel/index.d.ts",
+      "import": "./dist/emap-kernel.mjs"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/emap-services.mjs"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "import": "./dist/emap-providers.mjs"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "import": "./dist/emap-plugins.mjs"
+    },
+    "./presets": {
+      "types": "./dist/presets/index.d.ts",
+      "import": "./dist/emap-presets.mjs"
+    },
+    "./ai": {
+      "types": "./dist/ai/index.d.ts",
+      "import": "./dist/emap-ai.mjs"
+    },
+    "./maplibre": {
+      "types": "./dist/providers/maplibre/index.d.ts",
+      "import": "./dist/emap-maplibre.mjs"
+    }
   },
   "sideEffects": [
     "*.css",
     "./src/shim.ts",
     "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs",
-    "./dist/emap-arrow.js",
-    "./dist/emap-arrow.mjs"
+    "./dist/emap-arrow.js"
   ],
   "files": [
     "dist/emap.js",
     "dist/emap.mjs",
+    "dist/emap-*.mjs",
     "dist/emap-worker.js",
     "dist/emap-arrow.js",
     "dist/emap-arrow.mjs",
@@ -110,7 +138,10 @@
     "examples:check": "node scripts/check-examples.mjs",
     "docs:verify": "npm run typecheck && npm run api:check-surface && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
     "release:verify": "npm run format:check && npm run typecheck && npm run api:check-surface && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check && npm run browser:check && pnpm pack --dry-run && npm run audit:prod",
-    "prepublishOnly": "npm run release:verify"
+    "prepublishOnly": "npm run release:verify",
+    "capabilities:generate": "node scripts/generate-capability-schemas.mjs",
+    "capabilities:check": "node scripts/generate-capability-schemas.mjs --check",
+    "architecture:check": "node scripts/check-plugin-architecture.mjs"
   },
   "keywords": [
     "mapshaper",
@@ -152,7 +183,8 @@
     "typedoc": "^0.28.0",
     "typescript": "^5.0.0",
     "vite": "^7.3.6",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "maplibre-gl": "^6.4.1"
   },
   "dependencies": {
     "@tmcw/togeojson": "^5.8.1",
@@ -160,14 +192,14 @@
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
     "kdbush": "^4.0.2",
-    "maplibre-gl": "^6.4.1",
     "mapshaper": "^0.6.113",
     "mproj": "^0.1.2"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
     "apache-arrow": "^17.0.0",
-    "parquet-wasm": "^0.7.1"
+    "parquet-wasm": "^0.7.1",
+    "maplibre-gl": "^6.4.1"
   },
   "peerDependenciesMeta": {
     "@duckdb/duckdb-wasm": {
@@ -177,6 +209,9 @@
       "optional": true
     },
     "parquet-wasm": {
+      "optional": true
+    },
+    "maplibre-gl": {
       "optional": true
     }
   }

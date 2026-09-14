@@ -1,8 +1,8 @@
 /**
  * `@mapseekai/emap/arrow` — optional GeoParquet / GeoArrow support.
  *
- * Importing this module registers the formats plugin with the core
- * (side effect), after which:
+ * Mount `arrowFormatsPlugin` or call `registerArrowFormats(formats)`
+ * explicitly, after which:
  *   - `TopologySource.setData` accepts `.parquet` / `.geoparquet` /
  *     `.arrow` / `.arrows` / `.feather` files, and
  *   - `TopologySource.export` accepts `format: 'geoparquet' | 'geoarrow'`.
@@ -16,13 +16,11 @@
  * GeoParquet use.
  */
 import type { Table } from 'apache-arrow';
-import type { MapshaperDataset } from '../types/mapshaper-types';
 import {
   asMutableTopologySource,
   type ReplaceableTopologySource,
   type TopologySource,
 } from '../source/source';
-import { registerFormat, type ExportedFormatFile } from '../source/format-registry';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
 import { exportGeoArrow, importGeoArrow } from './geoarrow-io';
@@ -95,39 +93,5 @@ export function toArrowTableFromSource(source: TopologySource, opts?: ToArrowTab
   return toArrowTable(dataset, opts);
 }
 
-function layerNameFromFilename(filename: string): string {
-  const base = filename.split('/').pop() || filename;
-  return base.replace(/\.[a-z0-9]+$/i, '');
-}
-
-/**
- * Register the GeoParquet / GeoArrow plugin with the core format registry.
- * Runs automatically when this module is imported; exported for bundler
- * setups that strip module side effects.
- */
-export function registerArrowFormats(): void {
-  registerFormat({
-    name: 'geoarrow-formats',
-    extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
-    importBinary: async (content, filename): Promise<MapshaperDataset> => {
-      const layerName = layerNameFromFilename(filename);
-      const ext = filename.toLowerCase();
-      if (ext.endsWith('.parquet') || ext.endsWith('.geoparquet')) {
-        return importGeoParquet(content, { layerName });
-      }
-      return importGeoArrow(content, { layerName });
-    },
-    exportFormats: {
-      geoparquet: async (dataset, options): Promise<ExportedFormatFile[]> => {
-        const bytes = await exportGeoParquet(dataset, options ?? {});
-        return [{ filename: 'export.parquet', content: bytes }];
-      },
-      geoarrow: async (dataset, options): Promise<ExportedFormatFile[]> => {
-        const bytes = exportGeoArrow(dataset, options ?? {});
-        return [{ filename: 'export.arrow', content: bytes }];
-      },
-    },
-  });
-}
-
-registerArrowFormats();
+export { registerArrowFormats } from './formats';
+export { arrowFormatsPlugin } from './plugin';

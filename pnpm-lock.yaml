@@ -31,9 +31,6 @@ importers:
       kdbush:
         specifier: ^4.0.2
         version: 4.0.2
-      maplibre-gl:
-        specifier: ^6.4.1
-        version: 6.8.0
       mapshaper:
         specifier: ^0.6.113
         version: 0.6.113(@types/geojson@7946.0.16)
@@ -77,6 +74,9 @@ importers:
       jsdom:
         specifier: ^29.1.0
         version: 29.1.0
+      maplibre-gl:
+        specifier: ^6.4.1
+        version: 6.8.0
       parquet-wasm:
         specifier: ^0.7.1
         version: 0.7.1

@@ -74,7 +74,10 @@ pnpm add apache-arrow parquet-wasm
 Import this entry point before the first GeoArrow or GeoParquet read or write:
 
 ```ts
-import '@mapseekai/emap/arrow';
+import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
+map.use(arrowFormatsPlugin);
+// For optional-format input loaded before addSource:
+const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```
 
 ### DuckDB queries and spatial processing

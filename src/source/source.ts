@@ -1,3 +1,4 @@
+import type { FormatRegistryContract } from '../services/formats';
 import { EventDispatcher } from '../core/events';
 import type {
   ArcCollection,
@@ -29,7 +30,8 @@ export type ExportFormat =
   | 'msx'
   | 'geoparquet'
   | 'geoarrow'
-  | 'flatgeobuf';
+  | 'flatgeobuf'
+  | (string & {});
 
 /** Options for {@link TopologySource.export}. */
 export interface ExportOptions {
@@ -131,6 +133,8 @@ export type DatasetNormalizer = (
  * ownership boundary instead of scattering assertions across callers.
  */
 export interface MutableTopologySource extends ReplaceableTopologySource {
+  /** @internal Optional owned format binding for custom topology providers. */
+  bindFormatRegistry?(formats: FormatRegistryContract): () => void;
   getArcs(): ArcCollection | undefined;
   getLayers(): MapshaperLayer[];
   getDataset(): MapshaperDataset | undefined;
