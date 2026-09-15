@@ -5,7 +5,7 @@ title: Performance
 api: ["Emap", "MapOptions", "SimplifyOptions"]
 examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # Performance

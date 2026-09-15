@@ -5,7 +5,7 @@ title: 事件参考
 api: ["Emap", "EmapEventMap", "CameraEvent", "LayerChangeEvent", "EventListener", "FeatureEvent", "FeatureEventFilter", "PointerMoveEvent"]
 examples: ["feature-selection","web-worker"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # 事件参考

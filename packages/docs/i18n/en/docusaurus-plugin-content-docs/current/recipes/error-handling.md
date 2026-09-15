@@ -5,7 +5,7 @@ title: Error handling
 api: ["Emap", "OpResult", "OpError"]
 examples: ["check-geometry", "duckdb-buffer", "duckdb-query"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # Error handling

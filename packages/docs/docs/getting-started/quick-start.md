@@ -5,7 +5,7 @@ title: 第一张地图
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # 第一张地图

@@ -5,7 +5,7 @@ title: Emap 简介
 api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # Emap

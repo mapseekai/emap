@@ -5,7 +5,7 @@ title: 适配范围
 api: ["Emap", "Bounds", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
 stability: stable
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # 适配范围

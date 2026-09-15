@@ -269,11 +269,11 @@ describe('TopologySource.export', () => {
 
 describe('TopologySource.setData', () => {
   it.each([
-    ['roads.geojson', 'roads.geojson', 'first.zip', 'second.zip'],
-    ['roads.geojson', 'ROADS.GEOJSON', 'first.zip', 'second.zip'],
-    ['roads.geojson', 'ROADS.GEOJSON', 'first.zip', undefined],
-    ['ROADS.GEOJSON', 'roads.geojson', undefined, 'second.zip'],
-    ['nested/roads.geojson', 'roads.geojson', undefined, 'second.zip'],
+    ['roads.shp', 'roads.shp', 'first.zip', 'second.zip'],
+    ['roads.shp', 'ROADS.SHP', 'first.zip', 'second.zip'],
+    ['roads.shp', 'ROADS.SHP', 'first.zip', undefined],
+    ['ROADS.SHP', 'roads.shp', undefined, 'second.zip'],
+    ['nested/roads.shp', 'roads.shp', undefined, 'second.zip'],
     ['roads.geojson', 'ROADS.GEOJSON', undefined, undefined],
   ] as const)('rejects conflicting input basenames %s / %s from %s / %s without replacing live data', async (firstName, secondName, firstArchive, secondArchive) => {
     const source = new TopologySource('t');
@@ -305,10 +305,18 @@ describe('TopologySource.setData', () => {
   it('imports distinct files from multiple archives and a loose input', async () => {
     const source = new TopologySource('t');
     const bytes = new TextEncoder().encode('{"type":"Point","coordinates":[1,2]}');
+    const archives: Uint8Array[] = [];
+    for (const name of ['roads', 'districts']) {
+      const input = new TopologySource(name);
+      await input.setData({ filename: `${name}.geojson`, content: bytes });
+      archives.push(
+        new Uint8Array(await (await input.export({ format: 'shapefile' })).arrayBuffer()),
+      );
+    }
 
     await source.setData([
-      { filename: 'first.zip', content: zipSync({ 'north/roads.geojson': bytes }) },
-      { filename: 'second.zip', content: zipSync({ 'south/districts.geojson': bytes }) },
+      { filename: 'first.zip', content: archives[0] },
+      { filename: 'second.zip', content: archives[1] },
       { filename: 'places.geojson', content: bytes },
     ]);
 
@@ -322,17 +330,17 @@ describe('TopologySource.setData', () => {
     const load = source.setData([
       {
         filename: 'first.zip',
-        content: zipSync({ 'roads.geojson': bytes, 'shared.prj': new Uint8Array([1]) }),
+        content: zipSync({ 'roads.shp': bytes, 'shared.dbf': new Uint8Array([1]) }),
       },
       {
         filename: 'second.zip',
-        content: zipSync({ 'districts.geojson': bytes, 'SHARED.PRJ': new Uint8Array([2]) }),
+        content: zipSync({ 'districts.shp': bytes, 'SHARED.DBF': new Uint8Array([2]) }),
       },
     ]);
 
-    await expect(load).rejects.toThrow(/duplicate basename.*SHARED\.PRJ/i);
-    await expect(load).rejects.toThrow('first.zip/shared.prj');
-    await expect(load).rejects.toThrow('second.zip/SHARED.PRJ');
+    await expect(load).rejects.toThrow(/duplicate basename.*SHARED\.DBF/i);
+    await expect(load).rejects.toThrow('first.zip/shared.dbf');
+    await expect(load).rejects.toThrow('second.zip/SHARED.DBF');
     expect(source.getDataset()).toBeUndefined();
   });
 

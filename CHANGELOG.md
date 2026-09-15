@@ -7,54 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.12.0] - 2026-09-15
 
-- Add `/geopackage` vector import using `@ngageoint/geopackage` SQLite WASM and
-  direct GP Binary/WKB-to-TypedArray decoding, without a GeoJSON intermediate.
-  Multiple feature tables retain independent layers in one dataset and share
-  one ArcCollection/topology build; tile/raster tables are excluded.
-- Add native Cordis `geoPackagePlugin`, direct and Worker import APIs, transferable
-  coordinates, cancellation, input/coordinate budgets, progress and table/CRS metadata.
-  Preserve NULL/empty records and lossless large integer attributes; normalize mixed
-  CRSs, retain XY from Z/M input and reject unsupported curves explicitly.
-- Publish a GeoPackage worker/WASM asset set and a multi-layer example with
-  independent SQLite fixtures and real-browser worker/main-thread parity tests.
-
-### Fixed
-
-- Exclude Symbol-keyed properties from generated capability JSON schemas so adding
-  a dependency cannot change compiler-internal identifiers in the public schema.
-
-### Security
-
-- Constrain GeoPackage integration to the SQL.js adapter and upgrade its transitive
-  image-size dependency to 2.0.4. Native better-sqlite3 builds remain disabled.
-
+Changes since [v0.11.2](https://github.com/mapseekai/emap/compare/v0.11.2...v0.12.0).
 
 ### Changed — breaking
 
-- Replace the custom plugin kernel with the exact official `cordis@4.0.0-rc.10`
-  package. All providers and features use native Context, inject, Fiber and effects;
-  existing GIS dependency versions are unchanged.
-- Initialize maps with `await Emap.create(options)` or await `map.ready` after
-  construction. Control mounting/removal and map disposal must be awaited.
-- Remove `map.runtime`, `map.services`, `map.use`, `map.getService`, custom service
-  tokens, PluginRuntime and EffectScope. Use `map.ctx`, `ctx.plugin`, native Fiber
-  disposal/restart/update and Context declaration merging instead.
-- Replace the `/kernel` package entry with `/context` native re-exports and
-  diagnostics. ESM output leaves Cordis external rather than bundling another copy.
-- Forward optional `Control.inject` metadata to native child plugins so controls
-  suspend and reactivate with their service dependencies.
-- Update all examples and the runtime inspector to use actual Cordis fibers;
-  add cross-browser tests of pointer behavior, optional providers and dependency recovery.
-- Reorganize internal source ownership into six top-level zones: `domain`, `engine`,
-  `runtime`, `integrations`, `ui`, and `shared`. Public package subpaths remain unchanged.
-- Enforce colocated `foo.ts` / `foo.test.ts` unit tests with at most one unit-test file
-  per implementation; move cross-module regressions to `test/integration`, build checks
-  to `test/build`, and public type contracts to `test/types`.
-- Add `test-layout:check` and `typecheck:contracts` to documentation and release gates.
-- Refresh README, security guidance, bilingual docs, architecture records, examples, and
-  release instructions for native Cordis and the current source/test layout.
+- Move map capabilities, providers, interactions and controls to native
+  `cordis@4.0.0-rc.10` plugins. Initialize with `await Emap.create(options)`
+  or await `map.ready`; await control mounting/removal and `map.dispose()`.
+- Configure and extend maps through `map.ctx`, `ctx.plugin`, injected services
+  and presets. Controls follow their service dependencies through suspension,
+  reactivation and disposal.
+- Move MapLibre integration to the optional `/maplibre` entry and
+  `mapLibrePlugin`; MapLibre GL is now an optional peer dependency.
+- ZIP imports accept only Shapefile data and its SHX/DBF/PRJ/CPG sidecars.
+  Each SHP remains an independent layer in one dataset. The first non-empty
+  matching PRJ in SHP import order supplies the archive CRS; later PRJs are
+  ignored and coordinates are not reprojected. ZIPs without SHP data are rejected.
+
+### Added
+
+- Add `/context`, `/services`, `/providers`, `/plugins`, `/presets` and
+  `/ai` package entries for runtime composition and capability discovery.
+- Add `/geopackage` vector import with direct GP Binary/WKB decoding through
+  SQLite WASM. Feature tables retain independent layers in one dataset with
+  shared topology; tile/raster tables are excluded.
+- Add `geoPackagePlugin`, main-thread and Worker APIs, cancellation, progress,
+  resource budgets and transferable coordinates. Preserve NULL/empty features
+  and large integer attributes, normalize mixed CRSs, retain XY from Z/M input,
+  and reject unsupported curves.
+- Ship GeoPackage worker/WASM assets and a multi-layer example with browser
+  tests for Worker/main-thread parity.
+- Add bilingual quick-start guides and an `llms.txt` documentation index.
+
+### Fixed
+
+- Normalize WKT coordinate-system metadata, including GeoPackage CRS handling.
+- Reduce vertex-overlay rendering work by visiting shared arcs once and batching
+  vertex dots; bound arrow-dot caches by bytes and reuse computed styles per frame.
+- Preserve Arrow fields such as `__proto__` as ordinary data properties.
+- Exclude Symbol-keyed properties from generated capability JSON schemas.
+- Fix Apache Arrow bundling and align documentation with current selection,
+  event, source-layer, Worker and package-entry APIs.
+
+### Changed
+
+- Reorganize internal source into `domain`, `engine`, `runtime`,
+  `integrations`, `ui` and `shared`; colocate unit tests and separate
+  integration, browser, build and public-type checks.
+- Expand release verification with runtime, lint, architecture, capability,
+  test-layout and public-type checks.
+
+### Security
+
+- Enforce raw-input byte budgets for URL, in-memory and plugin imports,
+  including streamed downloads.
+- Limit GeoPackage integration to the SQL.js adapter and update its transitive
+  image-size dependency to 2.0.4; native better-sqlite3 builds remain disabled.
 
 
 ## [0.11.2] - 2026-09-14

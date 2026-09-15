@@ -454,7 +454,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             const extracted = await this._extractZip(entry.content);
             const primaries = this._findPrimaryFiles(extracted);
             if (primaries.length === 0) {
-              throw new Error(`No importable file found in zip archive: ${entry.filename}`);
+              throw new Error(`No Shapefile (.shp) found in zip archive: ${entry.filename}`);
             }
             for (const [name, content] of Object.entries(extracted)) {
               addInputFile(name, content, `${entry.filename}/${name}`);
@@ -518,7 +518,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
           const extracted = await this._extractZip(input.content);
           const primaries = this._findPrimaryFiles(extracted);
           if (primaries.length === 0) {
-            throw new Error('No importable file found in zip archive');
+            throw new Error('No Shapefile (.shp) found in zip archive');
           }
           for (const [name, content] of Object.entries(extracted)) {
             inputFiles[name] = content;
@@ -1052,7 +1052,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             // Skip metadata and dot files before inflating their payloads.
             // They are still counted above, so they cannot hide bytes or
             // entry count.
-            return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
+            return (
+              !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.')) &&
+              /\.(shp|shx|dbf|prj|cpg)$/i.test(file.name)
+            );
           },
         },
         (err, result) => {
@@ -1085,6 +1088,28 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       }
     }
 
+    // One archive is one dataset with independent Shapefile layers. Apply
+    // its first available PRJ to every layer before mapshaper combines them,
+    // so later PRJs cannot override it or trigger incompatible-CRS checks.
+    // This assigns CRS metadata only; coordinates are not reprojected.
+    const shapefiles = Object.keys(result).filter((filename) => /\.shp$/i.test(filename));
+    let firstPrj: string | undefined;
+    for (const filename of shapefiles) {
+      const prjName = pathsByBasename.get(filename.replace(/\.shp$/i, '.prj').toLowerCase());
+      const prj = prjName && result[prjName.split('/').pop()!];
+      if (typeof prj === 'string' && prj.trim()) {
+        firstPrj = prj;
+        break;
+      }
+    }
+    for (const filename of Object.keys(result)) {
+      if (/\.prj$/i.test(filename)) delete result[filename];
+    }
+    if (firstPrj !== undefined) {
+      for (const filename of shapefiles) {
+        result[filename.replace(/\.shp$/i, '.prj')] = firstPrj;
+      }
+    }
     return result;
   }
 
@@ -1092,30 +1117,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return /\.(prj|cpg|csv|json|geojson|kml|txt)$/i.test(filename);
   }
 
-  private _findPrimaryFile(files: Record<string, unknown>): string {
-    const filenames = Object.keys(files);
-
-    // Priority: .shp > .geojson > .json > .kml > other
-    const priority = ['.shp', '.geojson', '.json', '.kml', '.topojson'];
-
-    for (const ext of priority) {
-      const match = filenames.find((f) => f.toLowerCase().endsWith(ext));
-      if (match) return match;
-    }
-
-    // Return first importable file
-    return filenames.find((f) => !this._isAuxiliaryFile(f)) || '';
-  }
-
   private _findPrimaryFiles(files: Record<string, unknown>): string[] {
-    const shapefiles = Object.keys(files).filter((filename) => /\.shp$/i.test(filename));
-    if (shapefiles.length > 0) return shapefiles;
-
-    const primary = this._findPrimaryFile(files);
-    return primary ? [primary] : [];
-  }
-
-  private _isAuxiliaryFile(filename: string): boolean {
-    return /\.(prj|shx|dbf)$/i.test(filename);
+    return Object.keys(files).filter((filename) => /\.shp$/i.test(filename));
   }
 }

@@ -2,7 +2,7 @@
 
 > `@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. Data lives in mapshaper topology datasets, layers render with Canvas 2D, and every mutation is an undoable command. No backend map service is required.
 
-Current version: 0.11.2. Default documentation locale is Chinese; every page has an English mirror under `/en/`.
+Current version: 0.12.0. Default documentation locale is Chinese; every page has an English mirror under `/en/`.
 
 ## Key facts for code generation
 

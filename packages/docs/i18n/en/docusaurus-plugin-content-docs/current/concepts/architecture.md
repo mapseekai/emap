@@ -5,7 +5,7 @@ title: Current architecture and source layout
 api: ["Emap", "Context", "TopologySource"]
 examples: ["plugin-runtime", "getting-started/geojson-viewer"]
 stability: experimental
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # Current architecture and source layout

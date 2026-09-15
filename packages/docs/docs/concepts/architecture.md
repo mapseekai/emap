@@ -5,7 +5,7 @@ title: 当前技术架构与源码组织
 api: ["Emap", "Context", "TopologySource"]
 examples: ["plugin-runtime", "getting-started/geojson-viewer"]
 stability: experimental
-verifiedVersion: unreleased
+verifiedVersion: 0.12.0
 ---
 
 # 当前技术架构与源码组织
