@@ -1,0 +1,58 @@
+# emap
+
+> `@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. Data lives in mapshaper topology datasets, layers render with Canvas 2D, and every mutation is an undoable command. No backend map service is required.
+
+Current version: 0.11.2. Default documentation locale is Chinese; every page has an English mirror under `/en/`.
+
+## Key facts for code generation
+
+- Install: `pnpm add @mapseekai/emap`; always import `@mapseekai/emap/style.css`.
+- Root entry exports `Emap`, `TopologySource`, `Bounds`, edit commands, handlers, and 13 UI controls. Create maps with `await Emap.create({ container })`.
+- Optional entry points: `/arrow` (GeoArrow/GeoParquet, needs `apache-arrow`, plus `parquet-wasm` for GeoParquet), `/duckdb` (needs `@duckdb/duckdb-wasm` + `apache-arrow`), `/geopackage` (no extra install; publish `emap-geopackage-worker.js` + `sql-wasm.wasm` for Worker import), `/maplibre` (needs `maplibre-gl`), `/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`.
+- Worker execution needs `emap-worker.js` + `mapshaper-vendor.js` published from `dist/`.
+- String expressions are disabled by default (`expressionPolicy: 'disabled'`); only set `'trusted'` for application-controlled configuration.
+- Operations return `OpResult`; check `result.ok` instead of relying on `try/catch`.
+- TypeScript config: `"module": "ESNext"`, `"moduleResolution": "Bundler"`. Requires Chrome/Edge 109+, Firefox 115+, Safari 16.4+.
+
+## Documentation
+
+- [Introduction](https://mapseekai.github.io/mapseekai/emap/): what emap is and the reading order
+- [Installation](https://mapseekai.github.io/mapseekai/emap/getting-started/installation): package, stylesheet, optional entry points, peers
+- [Your first map](https://mapseekai.github.io/mapseekai/emap/getting-started/quick-start): minimal working page
+- [Concepts overview](https://mapseekai.github.io/mapseekai/emap/concepts/overview): Emap, source, source layer, render layer
+- [Emap instance](https://mapseekai.github.io/mapseekai/emap/concepts/emap): create, events, lifecycle, dispose
+- [Sources and layers](https://mapseekai.github.io/mapseekai/emap/concepts/source-layer): import, export, CRS preflight, format plugins
+- [Topology model](https://mapseekai.github.io/mapseekai/emap/concepts/topology): shared arcs, readonly views
+- [Coordinates and CRS](https://mapseekai.github.io/mapseekai/emap/concepts/coordinates-crs): three coordinate spaces, reprojection
+- [Architecture](https://mapseekai.github.io/mapseekai/emap/concepts/architecture): six source zones, native Cordis runtime
+- [Styling](https://mapseekai.github.io/mapseekai/emap/guides/styling): paint properties, restricted expressions, attribute buckets
+- [Events](https://mapseekai.github.io/mapseekai/emap/guides/events): on/once/off, feature events
+- [Selection](https://mapseekai.github.io/mapseekai/emap/guides/selection): select API, click/box/lasso handlers
+- [Editing](https://mapseekai.github.io/mapseekai/emap/guides/editing): edit handlers, undo/redo, transactions
+- [Camera](https://mapseekai.github.io/mapseekai/emap/guides/camera): jumpTo/easeTo/flyTo/fitBounds
+- [Controls](https://mapseekai.github.io/mapseekai/emap/guides/controls): 13 built-in UI controls
+- [Web Worker](https://mapseekai.github.io/mapseekai/emap/guides/worker): useWorker routing, asset publishing
+- [Plugins and presets](https://mapseekai.github.io/mapseekai/emap/guides/plugins): Cordis plugins, presets, AI capabilities
+- [Data formats](https://mapseekai.github.io/mapseekai/emap/data/formats): format matrix, ZIP limits, export
+- [Attributes](https://mapseekai.github.io/mapseekai/emap/data/attributes): reading/writing attributes, filters, fields
+- [Data operations](https://mapseekai.github.io/mapseekai/emap/data/operations): the 45 map.ops methods
+- [GeoPackage](https://mapseekai.github.io/mapseekai/emap/data/geopackage): direct vector import, worker, limits
+- [DuckDB](https://mapseekai.github.io/mapseekai/emap/data/duckdb): restricted SELECT, spatial toolbox
+- [Event reference](https://mapseekai.github.io/mapseekai/emap/reference/events): every event and payload
+- [Error reference](https://mapseekai.github.io/mapseekai/emap/reference/errors): OpError kinds, error classes
+- [Compatibility](https://mapseekai.github.io/mapseekai/emap/reference/compatibility): browser/Node requirements, peer table
+- [FAQ](https://mapseekai.github.io/mapseekai/emap/reference/faq): blank map, invisible layers, failed ops
+
+## API reference
+
+- [TypeDoc API](https://mapseekai.github.io/mapseekai/emap/api/): generated reference for every public symbol
+
+## Examples
+
+- [Example catalog](https://mapseekai.github.io/mapseekai/emap/examples/): 115 runnable examples covering viewers, styling, editing, mapshaper ops, and DuckDB analysis
+
+## Repository
+
+- [GitHub](https://github.com/mapseekai/emap): source, issues, changelog
+- [AGENTS.md](https://github.com/mapseekai/emap/blob/master/AGENTS.md): contributor rules, verification gates
+- [Release checklist](https://github.com/mapseekai/emap/blob/master/docs/release-checklist.md): release gates and static outputs

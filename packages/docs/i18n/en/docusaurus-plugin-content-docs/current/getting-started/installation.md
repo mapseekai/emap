@@ -37,7 +37,7 @@ The stylesheet includes styles for built-in controls and editing UI. The map con
 
 ## TypeScript resolution for optional modules
 
-`@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` are `package.json` export subpaths. Vite and other browser bundlers use `bundler` resolution:
+Beyond the root entry, every feature entry point is a `package.json` export subpath: `/arrow`, `/duckdb`, `/geopackage`, `/maplibre`, `/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`, plus the `/style.css` stylesheet. Vite and other browser bundlers use `bundler` resolution:
 
 ```json
 {
@@ -93,6 +93,28 @@ import { createDuckDbRuntimeFromJsDelivr } from '@mapseekai/emap/duckdb';
 ```
 
 When `@mapseekai/emap/duckdb` processes GeoParquet, also install `apache-arrow` and `parquet-wasm`, and import `@mapseekai/emap/arrow`.
+
+### GeoPackage import
+
+`@mapseekai/emap/geopackage` decodes GeoPackage vector tables straight into a typed-buffer dataset. No extra install is needed: `@ngageoint/geopackage` ships as a bundled dependency. Worker import requires publishing `dist/emap-geopackage-worker.js` and `dist/sql-wasm.wasm` from the package; see [GeoPackage](../data/geopackage.md) for the asset, CRS, and memory contracts.
+
+### MapLibre online basemaps and overlays
+
+`@mapseekai/emap/maplibre` provides MapLibre basemap and online overlay services. Install `maplibre-gl`:
+
+```bash
+pnpm add maplibre-gl
+```
+
+```ts
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+```
+
+Service configuration is covered in the [plugins guide](../guides/plugins.md).
+
+### Worker execution
+
+Routing dataset operations to a Web Worker needs no extra dependency, but the application must publish `emap-worker.js` and `mapshaper-vendor.js`; see [Web Worker](../guides/worker.md).
 
 ## Next steps
 

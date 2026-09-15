@@ -19,7 +19,7 @@ Emap 用 `{ source, layer, id }` 标识已选要素。`source` 是地图 source 
 ```ts
 map.select([{ source: 'parcels', layer: 'lots', id: 42 }]);
 
-const hits = map.queryFeatures([240, 160], { layers: ['parcel-fill'] });
+const hits = map.queryFeatures([240, 160], { layers: ['lots'] });
 map.select(hits, { mode: 'add' });
 
 map.deselect([{ source: 'parcels', layer: 'lots', id: 42 }]);
@@ -27,20 +27,20 @@ map.clearSelection();
 const selected = map.getSelection();
 ```
 
-`queryFeatures()` 的 `layers` 过滤器使用渲染图层 ID；选择引用和要素事件过滤器使用 source layer 名称。
+`queryFeatures()` 的 `layers` 过滤器按 source layer 的名称或 ID 匹配，和选择引用、要素事件过滤器一致。查询范围本身只覆盖可见渲染图层对应的 source layer，因此通常不需要再用 `layers` 限制显示状态。
 
 ## 启用点击、框选或套索
 
-这些 Handler 默认关闭。用 `setOptions()` 限制可选渲染图层或设置修饰键，然后启用：
+这些 Handler 默认关闭。用 `setOptions()` 限制参与选择的 source layer 或设置修饰键，然后启用：
 
 ```ts
 map.clickSelect.setOptions({
-  layers: ['parcel-fill'],
+  layers: ['lots'],
   modifiers: { replace: 'none', add: 'shift', toggle: 'shift+alt' },
 });
 map.clickSelect.enable();
 
-map.boxSelect.setOptions({ layers: ['parcel-fill'], dragActivator: 'shift' });
+map.boxSelect.setOptions({ layers: ['lots'], dragActivator: 'shift' });
 map.boxSelect.enable();
 ```
 
@@ -48,7 +48,7 @@ map.boxSelect.enable();
 
 ```ts
 map.boxSelect.disable();
-map.lassoSelect.setOptions({ layers: ['parcel-fill'], includeIntersecting: true });
+map.lassoSelect.setOptions({ layers: ['lots'], includeIntersecting: true });
 map.lassoSelect.enable();
 ```
 

@@ -94,6 +94,8 @@ if (result.status === 'ready') await map.confirmSource(result.plan);
 
 `source.export({ format: 'geojson' })` 返回浏览器 `Blob`。支持 GeoJSON、TopoJSON、Shapefile、MSX、GeoParquet、GeoArrow 和 FlatGeobuf；GeoParquet 与 GeoArrow 需要导入 `@mapseekai/emap/arrow`，FlatGeobuf 需要先通过 `registerFormat` 注册格式插件。
 
+GeoPackage 矢量表通过 `@mapseekai/emap/geopackage` 导入（只导入、不导出），一个文件的多个要素表合并为一个共享弧的 dataset，见 [GeoPackage](../data/geopackage.md)。
+
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)

@@ -47,7 +47,7 @@ pnpm run release:verify
 
 | Stage | Gates |
 | --- | --- |
-| Source | `format:check`, `typecheck`, `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `architecture:check`, `capabilities:check` |
+| Source | `runtime:check`, `format:check`, `lint`, `typecheck`, `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `architecture:check`, `capabilities:check` |
 | Package | `build`, `bundle:smoke`, `test:run`, `test:duckdb` |
 | Documentation | `examples:build`, `docs:build`, `docs:compose-examples` |
 | Documentation contracts | `docs:check-i18n`, `docs:check-api`, `examples:check` |

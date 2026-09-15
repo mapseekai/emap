@@ -60,7 +60,7 @@ map.on('feature:click', { layers: ['districts'] }, (event) => {
 });
 ```
 
-`on` 持续监听，`once` 只接收一次事件，`off` 使用同一个 listener 取消监听。`queryFeatures` 查询 Canvas 本地像素位置或范围内的要素；选择状态由 `map.selection` 保存。
+`on` 持续监听，`once` 只接收一次事件，`off` 使用同一个 listener 取消监听。`queryFeatures` 查询 Canvas 本地像素位置或范围内的要素；选择通过 `select()`、`deselect()`、`clearSelection()` 修改，用 `getSelection()` 读取。
 
 ## 编辑与数据操作
 

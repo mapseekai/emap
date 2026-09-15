@@ -60,7 +60,7 @@ map.on('feature:click', { layers: ['districts'] }, (event) => {
 });
 ```
 
-`on` keeps listening, `once` receives one event, and `off` removes the same listener. `queryFeatures` queries features at Canvas-local pixels or within an extent; `map.selection` stores selection state.
+`on` keeps listening, `once` receives one event, and `off` removes the same listener. `queryFeatures` queries features at Canvas-local pixels or within an extent; selection changes through `select()`, `deselect()`, and `clearSelection()`, and reads back with `getSelection()`.
 
 ## Edit and process data
 

@@ -19,7 +19,7 @@ Emap identifies a selected feature by `{ source, layer, id }`. `source` is the m
 ```ts
 map.select([{ source: 'parcels', layer: 'lots', id: 42 }]);
 
-const hits = map.queryFeatures([240, 160], { layers: ['parcel-fill'] });
+const hits = map.queryFeatures([240, 160], { layers: ['lots'] });
 map.select(hits, { mode: 'add' });
 
 map.deselect([{ source: 'parcels', layer: 'lots', id: 42 }]);
@@ -27,20 +27,20 @@ map.clearSelection();
 const selected = map.getSelection();
 ```
 
-The `layers` filter for `queryFeatures()` uses render-layer IDs; selection references and feature-event filters use source-layer names.
+The `layers` filter for `queryFeatures()` matches source-layer names or IDs, same as selection references and feature-event filters. The query scope already covers only source layers behind visible render layers, so `layers` rarely needs to restate visibility.
 
 ## Enable click, box, or lasso selection
 
-These handlers start disabled. Use `setOptions()` to limit selectable render layers or configure modifiers, then enable one:
+These handlers start disabled. Use `setOptions()` to limit the source layers that participate or configure modifiers, then enable one:
 
 ```ts
 map.clickSelect.setOptions({
-  layers: ['parcel-fill'],
+  layers: ['lots'],
   modifiers: { replace: 'none', add: 'shift', toggle: 'shift+alt' },
 });
 map.clickSelect.enable();
 
-map.boxSelect.setOptions({ layers: ['parcel-fill'], dragActivator: 'shift' });
+map.boxSelect.setOptions({ layers: ['lots'], dragActivator: 'shift' });
 map.boxSelect.enable();
 ```
 
@@ -48,7 +48,7 @@ map.boxSelect.enable();
 
 ```ts
 map.boxSelect.disable();
-map.lassoSelect.setOptions({ layers: ['parcel-fill'], includeIntersecting: true });
+map.lassoSelect.setOptions({ layers: ['lots'], includeIntersecting: true });
 map.lassoSelect.enable();
 ```
 

@@ -37,7 +37,7 @@ import '@mapseekai/emap/style.css';
 
 ## TypeScript 模块解析
 
-`@mapseekai/emap/arrow` 和 `@mapseekai/emap/duckdb` 是 `package.json` exports 子路径。Vite 和其他浏览器打包器使用 `bundler` 解析：
+除根入口外，功能入口都是 `package.json` exports 子路径：`/arrow`、`/duckdb`、`/geopackage`、`/maplibre`、`/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`，以及样式表 `/style.css`。Vite 和其他浏览器打包器使用 `bundler` 解析：
 
 ```json
 {
@@ -93,6 +93,28 @@ import { createDuckDbRuntimeFromJsDelivr } from '@mapseekai/emap/duckdb';
 ```
 
 使用 `@mapseekai/emap/duckdb` 处理 GeoParquet 时，同时安装 `apache-arrow` 和 `parquet-wasm`，并导入 `@mapseekai/emap/arrow`。
+
+### GeoPackage 导入
+
+`@mapseekai/emap/geopackage` 把 GeoPackage 矢量表直接解码为 typed-buffer dataset，不需要安装额外依赖（`@ngageoint/geopackage` 是包的捆绑依赖）。Worker 导入需要应用发布包内的 `dist/emap-geopackage-worker.js` 和 `dist/sql-wasm.wasm` 两个文件；资产、CRS 和内存约定见 [GeoPackage](../data/geopackage.md)。
+
+### MapLibre 在线底图与叠加层
+
+`@mapseekai/emap/maplibre` 提供 MapLibre 底图和在线叠加层服务，需要安装 `maplibre-gl`：
+
+```bash
+pnpm add maplibre-gl
+```
+
+```ts
+import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
+```
+
+服务配置见 [插件与 Preset](../guides/plugins.md)。
+
+### Worker 执行
+
+把 dataset 操作路由到 Web Worker 不需要额外依赖，但应用必须发布 `emap-worker.js` 和 `mapshaper-vendor.js` 两个文件，见 [Web Worker](../guides/worker.md)。
 
 ## 下一步
 

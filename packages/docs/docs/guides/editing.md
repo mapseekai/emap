@@ -44,7 +44,7 @@ map.drawFeature.enable();
 例如，切换到顶点编辑后，在切换工具前关闭它：
 
 ```ts
-map.vertexEdit.setOptions({ layers: ['parcel-fill'] });
+map.vertexEdit.setOptions({ layers: ['lots'] });
 map.vertexEdit.enable();
 
 // 切换到其他工具前

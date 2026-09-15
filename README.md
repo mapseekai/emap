@@ -294,6 +294,7 @@ The integration owns MapLibre source/layer registration, revision cancellation, 
 ## Documentation
 
 - [Installation](packages/docs/docs/getting-started/installation.md)
+- [Quick start](packages/docs/docs/getting-started/quick-start.md)
 - [Core concepts](packages/docs/docs/concepts/emap.md)
 - [Architecture and source layout](packages/docs/docs/concepts/architecture.md)
 - [Editing](packages/docs/docs/guides/editing.md)
@@ -302,7 +303,7 @@ The integration owns MapLibre source/layer registration, revision cancellation, 
 - [DuckDB](packages/docs/docs/data/duckdb.md)
 - [Compatibility](packages/docs/docs/reference/compatibility.md)
 - [Runnable examples](packages/examples/examples)
-- [Architecture decisions](docs/decisions/README.md)
+- [llms.txt](https://mapseekai.github.io/mapseekai/emap/llms.txt) — docs site index for AI coding assistants
 
 ## Architecture
 
@@ -341,11 +342,11 @@ Important boundaries:
 - `src/engine/map/ops/` owns mapshaper-backed operation orchestration; `src/engine/core/handlers/` owns browser interaction; `src/engine/rendering/` owns Canvas rendering.
 - `src/runtime/` owns Cordis composition only: service contracts, providers, feature plugins, presets, and AI capability registration.
 - `src/integrations/mapshaper/adapter.ts` is the normal bridge to `mapshaper.internal.*`; MapLibre, Arrow, and DuckDB are explicit integration boundaries.
-- Public package subpaths (`/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`, `/maplibre`, `/arrow`, `/duckdb`) are stable package entry points and do not mirror internal folders one-for-one.
+- Public package subpaths (`/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`, `/maplibre`, `/arrow`, `/duckdb`, `/geopackage`) are stable package entry points and do not mirror internal folders one-for-one.
 
 Unit tests are colocated as `foo.ts` + `foo.test.ts`, with at most one unit test file per implementation. Cross-module regression/integration tests live under `test/integration/`; browser, package/build, type-contract, docs, examples, and security checks live in their dedicated `test/` subdirectories. `test-layout:check` and `typecheck:contracts` enforce this layout.
 
-See [Current architecture and source layout](packages/docs/docs/concepts/architecture.md), [ADR 0009](docs/decisions/0009-native-cordis.md), and [ADR 0010](docs/decisions/0010-source-and-test-layout.md).
+See [Current architecture and source layout](packages/docs/docs/concepts/architecture.md).
 
 ## Development
 

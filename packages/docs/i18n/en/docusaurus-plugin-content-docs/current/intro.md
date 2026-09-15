@@ -1,7 +1,7 @@
 ---
 id: intro
 slug: /
-title: Emap Introduction
+title: Introduction
 api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
@@ -10,37 +10,28 @@ verifiedVersion: unreleased
 
 # Emap
 
-## Current architecture
+`@mapseekai/emap` is a browser-side TypeScript map engine: load vector data, render layers with Canvas 2D, edit features, and run spatial analysis — no backend map service required. Data lives in mapshaper topology datasets, and every change is an undoable command.
 
-See the [current architecture and source layout](/concepts/architecture) for the native Cordis runtime and the six `domain / engine / runtime / integrations / ui / shared` source zones.
+It is built for applications that embed GIS viewing, editing, and processing into their own interface: data viewers, business editors, batch-processing tools. The application owns its toolbars, property panels, and status UI; Emap provides the map, the data, the interaction, and the plugin runtime.
 
+## Capabilities
 
-Emap is a browser-focused TypeScript library for map rendering, editing, and spatial data processing. It renders with Canvas 2D and manages data sources as mapshaper topology datasets. An application can load data, draw layers, edit features, run analysis operations, and export results in the frontend.
+**Data formats**: the core package reads and writes GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper snapshots, and imports KML. The `/arrow` entry adds GeoArrow and GeoParquet; the `/geopackage` entry decodes GeoPackage vector tables directly into a typed-buffer dataset, on the main thread or in a Worker. FlatGeobuf works after the application registers a format plugin.
 
-Emap serves applications that combine viewing, interaction, and processing for data that fits in the browser, including GIS data viewers, business editors, and data-processing tools. The application owns its toolbar, property panel, and status UI; Emap supplies the map, data, and interaction capabilities.
+**Layers and styling**: `fill`, `line`, and `circle` render layers with viewport culling, zoom-aware display-arc simplification, and attribute-driven fill buckets. Paint properties such as `fill-color` accept a restricted expression subset — no `eval`.
 
-## Supported capabilities
+**Editing and history**: draw, edit vertices, split, merge, reshape, edit rings/holes/parts, auto-complete polygons, and translate/rotate/scale selected features. Edit commands and data operations all go through history, with undo, redo, transactions, and selection restoration.
 
-### Data input and output
+**Data operations**: `map.ops` exposes 45 mapshaper operations — clip, erase, dissolve, buffer, simplify, project, join, classify, and more. Operations can route to a Web Worker, and data versions are checked before committing so stale results never overwrite newer state. The `/duckdb` entry adds DuckDB-Wasm SQL queries and spatial analysis.
 
-The core package imports and exports GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper snapshots, and imports KML. `TopologySource` loads data from a URL, file bytes, or application memory and exports results as a `Blob`.
-
-Import `@mapseekai/emap/arrow` to read and write GeoArrow and GeoParquet. FlatGeobuf input and output are available after the application installs `flatgeobuf` and registers a local format plugin.
-
-### Layers, interaction, and editing
-
-`Emap` manages the canvas, camera, sources, render layers, events, and history. Use `LayerSpecification` to add `fill`, `line`, and `circle` layers for polygon, line, and point data.
-
-The library provides pan, zoom, click, box, and lasso selection; drawing; vertex, split, reshape, ring, and part editing. Edit commands and data operations enter the history, which an application can expose through undo and redo UI.
-
-### Analysis and data processing
-
-`map.ops` provides simplify, buffer, clip, erase, dissolve, union, projection, topology repair, attribute processing, and layer-management operations. Import `@mapseekai/emap/duckdb` and install DuckDB-Wasm to use DuckDB query and spatial-processing capabilities.
+**Runtime and extension**: `Emap` is the public facade; `map.ctx` is the native Cordis `Context`. The `editor`, `viewer`, `headless`, and `empty` presets are plugin compositions, not separate map classes. The `/ai` entry exposes existing operations as capabilities callable from UI, workflows, and agents. The `/maplibre` entry wires in MapLibre online basemaps and overlays.
 
 ## Start here
 
-1. Read [Installation](./getting-started/installation.md) to install the package, import its stylesheet, and configure optional modules.
-2. Read [Concepts overview](./concepts/overview.md) to understand the relationship between maps, sources, and render layers.
-3. Read [Data formats](./data/formats.md) and [Styling](./guides/styling.md) to load data and define its presentation.
-4. Read [Selection](./guides/selection.md), [Editing](./guides/editing.md), and [Data operations](./data/operations.md) to add interaction and processing workflows.
-5. Open the [runnable examples](/mapseekai/emap/examples/) for complete implementations.
+1. [Install](./getting-started/installation.md) and configure the optional entries you need.
+2. Follow [Your first map](./getting-started/quick-start.md) to a working page.
+3. Read [Concepts overview](./concepts/overview.md) for the relationship between sources, source layers, and render layers.
+4. Look up [Styling](./guides/styling.md), [Selection](./guides/selection.md), [Editing](./guides/editing.md), and [Data operations](./data/operations.md) as tasks come up.
+5. Browse the [runnable examples](/mapseekai/emap/examples/) for complete implementations; runtime layering and source organization are in [Architecture](./concepts/architecture.md).
+
+A site index for AI coding assistants lives at [llms.txt](pathname:///llms.txt).

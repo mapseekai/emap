@@ -7,17 +7,16 @@ engine built on `mapshaper` data structures and HTML5 Canvas.
 
 | Task | Guidance |
 | --- | --- |
-| Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture), then relevant [architecture decisions](docs/decisions/README.md) |
+| Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture) and the [architecture guide](packages/docs/docs/concepts/architecture.md) |
 | Install dependencies or select development commands | [README development](README.md#development); `package.json` defines executable commands |
-| Change public APIs or package entry points | [Public API decision](docs/decisions/0006-public-api-surface.md) and affected type contracts |
-| Change DuckDB SQL, tables, or data access | [DuckDB guide](packages/docs/docs/data/duckdb.md) and [integration decision](docs/decisions/0002-duckdb-browser-analysis.md) |
+| Change public APIs or package entry points | The explicit export list in `src/index.ts` and affected type contracts |
+| Change DuckDB SQL, tables, or data access | [DuckDB guide](packages/docs/docs/data/duckdb.md) |
 | Change expression execution or untrusted input handling; report a vulnerability | [SECURITY.md](SECURITY.md) |
 | Publish a package, deploy docs, or prepare a release | [Release checklist](docs/release-checklist.md) and relevant `.github/workflows/` file |
 | Navigate/refactor code with graph tools | [Code intelligence](docs/agent-tools.md#code-intelligence) |
 | Use or maintain a skill | [Skill selection and maintenance](docs/agent-tools.md#skills) |
 
-Read only the relevant sections and follow deeper references as needed. Historical
-plans and audit reports are evidence, not additional standing rules. This is a
+Read only the relevant sections and follow deeper references as needed. This is a
 browser-only project with optional DuckDB-Wasm, not a server database application;
 do not invent a database migration or deployment workflow.
 

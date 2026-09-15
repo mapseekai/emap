@@ -44,9 +44,9 @@ map.once("moveend", (event) => {
 | `historychange` | 历史快照字段（可选） | 历史记录改变 |
 | `validationfailed` | `{ results, label }` | 提交后的验证返回失败结果 |
 | `warning` | `{ layerId, buckets?, error? }` | 样式解析产生诊断 |
-| `error` | `{ error }` | 地图操作或事件监听器报告错误 |
+| `error` | `{ error, layerId?, filterExpression?, valueType? }` | 地图操作或事件监听器报告错误 |
 
-`data.reason` 的值为 `edit`、`load`、`replace` 或 `reproject`；外部输入替换会包含 `origin: "external"`。`layerchange.reason` 的值为 `add`、`remove`、`visibility` 或 `effective`。
+`data.reason` 的值为 `edit`、`load`、`replace` 或 `reproject`；外部输入替换会包含 `origin: "external"`。`layerchange.reason` 的值为 `add`、`remove`、`visibility`、`effective` 或 `filter`（`setFilter` 改变图层显示过滤）。过滤器表达式求值失败时，`error` 事件会携带 `layerId`、`filterExpression` 和实际值的 `valueType`。
 
 ## 指针和要素事件
 
@@ -58,10 +58,10 @@ map.once("moveend", (event) => {
 | `feature:enter` | `FeatureEvent` | 指针进入要素 |
 | `feature:leave` | `FeatureEvent` | 指针离开要素 |
 
-要素事件可按 source 或图层过滤：
+要素事件可按 source ID 或 source layer 名称过滤：
 
 ```ts
-map.on("feature:click", { source: "parcels", layers: ["parcel-fill"] }, (event) => {
+map.on("feature:click", { source: "parcels", layers: ["lots"] }, (event) => {
   console.log(event.ref, event.lngLat)
 })
 ```

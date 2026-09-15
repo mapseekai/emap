@@ -18,7 +18,7 @@ Emap stores each layer's attributes in a data table. A feature ID locates both i
 
 ```ts
 const hits = map.queryFeatures([240, 180], {
-  layers: ['district-fill'],
+  layers: ['districts'],
 });
 
 const feature = map.features.get({

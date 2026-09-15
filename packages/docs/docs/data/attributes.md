@@ -18,7 +18,7 @@ Emap 将每个 layer 的属性保存在 data table 中。要素 ID 同时定位 
 
 ```ts
 const hits = map.queryFeatures([240, 180], {
-  layers: ['district-fill'],
+  layers: ['districts'],
 });
 
 const feature = map.features.get({

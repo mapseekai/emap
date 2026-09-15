@@ -37,6 +37,15 @@ if (!result.ok && result.error.kind === 'validation') {
 }
 ```
 
+需要取消长时间操作时，用 `withSignal` 把整组操作绑定到一个 `AbortSignal`。它返回同样的 `map.ops` 接口；信号中止后，新的调用被拒绝，进行中的执行和结果提交也会被取消：
+
+```ts
+const controller = new AbortController();
+const ops = map.ops.withSignal(controller.signal);
+cancelButton.addEventListener('click', () => controller.abort(), { once: true });
+const result = await ops.simplifyLayer({ source: 'main', percentage: 0.25 });
+```
+
 ## `map.ops` 方法目录
 
 | 类别 | 方法 |

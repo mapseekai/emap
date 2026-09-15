@@ -44,9 +44,9 @@ map.once("moveend", (event) => {
 | `historychange` | optional history-snapshot fields | History changes |
 | `validationfailed` | `{ results, label }` | Post-commit validation returns failed results |
 | `warning` | `{ layerId, buckets?, error? }` | Style parsing produces a diagnostic |
-| `error` | `{ error }` | A map operation or event listener reports an error |
+| `error` | `{ error, layerId?, filterExpression?, valueType? }` | A map operation or event listener reports an error |
 
-`data.reason` is `edit`, `load`, `replace`, or `reproject`. External input replacement includes `origin: "external"`. `layerchange.reason` is `add`, `remove`, `visibility`, or `effective`.
+`data.reason` is `edit`, `load`, `replace`, or `reproject`. External input replacement includes `origin: "external"`. `layerchange.reason` is `add`, `remove`, `visibility`, `effective`, or `filter` (`setFilter` changed a layer's display filter). When filter-expression evaluation fails, the `error` event carries `layerId`, `filterExpression`, and the offending value's `valueType`.
 
 ## Pointer and feature events
 
@@ -58,10 +58,10 @@ map.once("moveend", (event) => {
 | `feature:enter` | `FeatureEvent` | Handle a pointer entering a feature |
 | `feature:leave` | `FeatureEvent` | Handle a pointer leaving a feature |
 
-Feature events can filter by source or layer:
+Feature events can filter by source ID or source-layer name:
 
 ```ts
-map.on("feature:click", { source: "parcels", layers: ["parcel-fill"] }, (event) => {
+map.on("feature:click", { source: "parcels", layers: ["lots"] }, (event) => {
   console.log(event.ref, event.lngLat)
 })
 ```

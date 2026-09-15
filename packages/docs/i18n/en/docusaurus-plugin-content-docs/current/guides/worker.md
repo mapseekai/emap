@@ -34,6 +34,21 @@ const map = await Emap.create({
 
 Bulk dataset-replace operations can run in a worker; selection-level edits such as vertex commands and translating selected features run on the main thread.
 
+`'auto'` adjusts the decision by command type: record-linear commands such as `rename-fields`, `sort-features`, and `filter-fields` always stay on the main thread (worker serialization costs more than the operation itself), while geometry-heavy commands — `buffer`, `clean`, `dissolve`, `mosaic`, `union`, `snap`, `check-geometry`, `simplify` — route at half the threshold. For a fully custom decision, pass `workerRouting`:
+
+```ts
+const map = await Emap.create({
+  container: 'map',
+  useWorker: 'auto',
+  workerRouting: ({ heads, vertexCount, recordCount, defaultDecision }) => {
+    if (heads.includes('buffer')) return true;
+    return defaultDecision;
+  },
+});
+```
+
+The callback also receives `cmd`, `mode`, and `threshold`; returning `defaultDecision` keeps the engine's judgment.
+
 ## Publish worker assets
 
 An application must publish these files from the installed package and point `workerUrl` at the first one:
@@ -51,6 +66,8 @@ public/assets/mapshaper-vendor.js
 ```
 
 The worker loads `mapshaper-vendor.js` from its own directory. The static server must return JavaScript for both URLs, not an application HTML fallback.
+
+Without an explicit `workerUrl`, the default is `'emap-worker.js'`, resolved against `document.baseURI`. The package also publishes the vendor bundle as an ES module, `mapshaper-vendor.mjs`, in the same dist directory for deployments that need ESM.
 
 ## Use your own worker pool
 

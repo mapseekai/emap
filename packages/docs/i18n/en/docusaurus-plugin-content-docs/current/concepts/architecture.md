@@ -31,7 +31,7 @@ src/
 | `domain/` | GIS state and reversible changes independent of UI/plugin runtime | `source/`, `geo/`, `edit/`, `validation/` |
 | `engine/` | Hot-path map execution and host implementations | `map/`, `core/handlers/`, `rendering/`, `worker/`, built-in workspace providers |
 | `runtime/` | Cordis composition layer | `context/`, `services/`, `providers/`, `plugins/`, `presets/`, `ai/` |
-| `integrations/` | Third-party and optional engine boundaries | `mapshaper/`, `maplibre/`, `arrow/`, `duckdb/` |
+| `integrations/` | Third-party and optional engine boundaries | `mapshaper/`, `maplibre/`, `arrow/`, `duckdb/`, `geopackage/` |
 | `ui/` | Browser controls, CSS, icons, and theme | controls, `assets/`, `theme/` |
 | `shared/` | Declarations without one business owner | ambient `.d.ts`, external declarations, stylesheet typing |
 
@@ -121,5 +121,3 @@ pnpm run release:verify
 ```
 
 The complete release gate covers formatting, types, architecture, capability schemas, production build, bundles, unit/integration tests, DuckDB-Wasm, examples, bilingual docs, three real browsers, pack dry-run, and production dependency auditing.
-
-See ADR 0009 for native Cordis and ADR 0010 for the source/test layout decision.

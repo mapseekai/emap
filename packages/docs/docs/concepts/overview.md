@@ -71,7 +71,7 @@ if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 | 改变视图 | `jumpTo`、`fitBounds`、`flyTo`、`panTo` |
 | 改变显示 | `addLayer`、`removeLayer`、`setLayerVisibility` |
 | 读取屏幕位置的要素 | `queryFeatures` |
-| 改变选择 | `map.selection` 或选择 Handler |
+| 改变选择 | `select()` / `deselect()` / `clearSelection()` 或选择 Handler |
 | 编辑要素 | 编辑命令、编辑会话或编辑 Handler |
 | 处理整个数据集 | `map.ops` |
 | 响应地图变化 | `on`、`once`、`off` |

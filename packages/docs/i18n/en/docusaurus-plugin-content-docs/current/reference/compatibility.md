@@ -47,12 +47,15 @@ Native Node ESM uses paired `"module": "Node16"` and `"moduleResolution": "Node1
 | Arrow and GeoArrow from `@mapseekai/emap/arrow` | `apache-arrow` `^17.0.0` |
 | GeoParquet import and export from the Arrow entry point | `apache-arrow` `^17.0.0`, `parquet-wasm` `^0.7.1` |
 | `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`, `apache-arrow` `^17.0.0` |
+| `@mapseekai/emap/maplibre` | `maplibre-gl` `^6.4.1` |
 
 All of these peers are optional installs; install the dependencies required by the entry points your application imports. GeoParquet loads `parquet-wasm` on first use. Environments whose bundler cannot resolve that module can inject an initialized module with `setParquetWasm`.
 
 ## Worker assets
 
 When `workerUrl` is enabled, the page must be able to fetch `emap-worker.js`, and the same directory must contain `mapshaper-vendor.js`. The Worker loads that vendor asset relatively.
+
+Worker-based import from `@mapseekai/emap/geopackage` also requires publishing `emap-geopackage-worker.js` and `sql-wasm.wasm`, both in the package `dist/`; see [GeoPackage](../data/geopackage.md) for deployment details.
 
 Low-level commands that modify a dataset directly call `bumpEditVersion()` after geometry changes and `bumpAttributeVersion()` after attribute-only changes so spatial indexes and attribute-style caches invalidate at their respective boundaries.
 

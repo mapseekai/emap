@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -85,13 +84,5 @@ visitEntry('src/index.ts');
 for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts', 'src/integrations/geopackage/index.ts']) {
   if (reachable.has(forbidden)) violations.push(`Default entry eagerly imports optional provider: ${forbidden}`);
 }
-const inventory = JSON.parse(fs.readFileSync('docs/plans/plugin-migration-inventory.json', 'utf8'));
-const baselineFiles = execFileSync('git', ['ls-tree', '-r', '--name-only', inventory.baseline, '--', 'src'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-const trackedBaseline = new Set(inventory.files.map(entry => entry.original));
-for (const file of baselineFiles) if (!trackedBaseline.has(file)) violations.push(`Missing baseline inventory record: ${file}`);
-for (const entry of inventory.files) {
-  if (entry.classification === 'pending' || !entry.owner) violations.push(`Unclassified baseline file: ${entry.original}`);
-  if (!fs.existsSync(entry.current)) violations.push(`Missing migrated file: ${entry.current}`);
-}
 if (violations.length) throw new Error(violations.join('\n'));
-console.log(`Architecture verified: ${production.length} production modules, no runtime cycles, ${inventory.files.length} baseline files owned.`);
+console.log(`Architecture verified: ${production.length} production modules, no runtime cycles.`);

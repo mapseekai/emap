@@ -121,5 +121,3 @@ pnpm run release:verify
 ```
 
 完整发布门禁包含格式、类型、架构、Capability schema、production build、bundle、单元/集成测试、DuckDB-Wasm、示例、双语文档、三浏览器、pack dry-run 和生产依赖审计。
-
-架构决策见 [ADR 0009：原生 Cordis](https://github.com/mapseekai/emap/blob/master/docs/decisions/0009-native-cordis.md) 与 ADR 0010（源码与测试布局）。

@@ -42,7 +42,7 @@ map.drawFeature.enable();
 For example, disable vertex editing before switching tools:
 
 ```ts
-map.vertexEdit.setOptions({ layers: ['parcel-fill'] });
+map.vertexEdit.setOptions({ layers: ['lots'] });
 map.vertexEdit.enable();
 
 // Before enabling another tool

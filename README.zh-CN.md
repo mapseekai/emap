@@ -291,7 +291,8 @@ const map = await Emap.create({
 
 ## 文档
 
-- [安装与第一张地图](packages/docs/docs/getting-started/installation.md)
+- [安装](packages/docs/docs/getting-started/installation.md)
+- [快速开始](packages/docs/docs/getting-started/quick-start.md)
 - [Emap 核心概念](packages/docs/docs/concepts/emap.md)
 - [技术架构与源码组织](packages/docs/docs/concepts/architecture.md)
 - [编辑指南](packages/docs/docs/guides/editing.md)
@@ -300,7 +301,7 @@ const map = await Emap.create({
 - [DuckDB 指南](packages/docs/docs/data/duckdb.md)
 - [兼容性](packages/docs/docs/reference/compatibility.md)
 - [可运行示例](packages/examples/examples)
-- [架构决策记录](docs/decisions/README.md)
+- [llms.txt](https://mapseekai.github.io/mapseekai/emap/llms.txt) — 面向 AI 编程助手的文档站点索引
 
 ## 架构
 
@@ -339,11 +340,11 @@ DOM 指针输入
 - `src/engine/map/ops/`：Mapshaper 支持的数据操作编排；`src/engine/core/handlers/`：浏览器交互；`src/engine/rendering/`：Canvas 渲染。
 - `src/runtime/`：只负责 Cordis 组合，包括 Service 契约、Provider、Feature Plugin、Preset 和 AI Capability 注册。
 - `src/integrations/mapshaper/adapter.ts`：访问 `mapshaper.internal.*` 的正常边界；MapLibre、Arrow、DuckDB 都有独立 integration 边界。
-- `/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`、`/maplibre`、`/arrow`、`/duckdb` 是稳定 package subpath，不要求与内部目录一一对应。
+- `/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`、`/maplibre`、`/arrow`、`/duckdb`、`/geopackage` 是稳定 package subpath，不要求与内部目录一一对应。
 
 单元测试严格使用 `foo.ts` + `foo.test.ts` 同目录同名，一个实现文件最多一个单元测试文件。跨模块回归/集成测试进入 `test/integration/`；浏览器、构建、类型契约、文档、示例、安全测试分别进入 `test/` 对应目录。`test-layout:check` 和 `typecheck:contracts` 自动约束这套规则。
 
-完整说明见 [当前技术架构与源码组织](packages/docs/docs/concepts/architecture.md)、[ADR 0009](docs/decisions/0009-native-cordis.md) 和 [ADR 0010](docs/decisions/0010-source-and-test-layout.md)。
+完整说明见 [当前技术架构与源码组织](packages/docs/docs/concepts/architecture.md)。
 
 ## 开发
 

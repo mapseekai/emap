@@ -94,6 +94,8 @@ An explicit `sourceCrs` identifies the CRS of the imported coordinates. Once reg
 
 `source.export({ format: 'geojson' })` returns a browser `Blob`. GeoJSON, TopoJSON, Shapefile, MSX, GeoParquet, GeoArrow, and FlatGeobuf are supported; GeoParquet and GeoArrow require importing `@mapseekai/emap/arrow`, while FlatGeobuf requires a format plugin registered through `registerFormat`.
 
+GeoPackage vector tables are imported through `@mapseekai/emap/geopackage` (import only, no export). All feature tables in one file merge into a single dataset with shared arcs; see [GeoPackage](../data/geopackage.md).
+
 ## API
 
 - [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)

@@ -71,7 +71,7 @@ if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
 | Change the view | `jumpTo`, `fitBounds`, `flyTo`, `panTo` |
 | Change presentation | `addLayer`, `removeLayer`, `setLayerVisibility` |
 | Read features at a screen position | `queryFeatures` |
-| Change selection | `map.selection` or a selection handler |
+| Change selection | `select()` / `deselect()` / `clearSelection()` or a selection handler |
 | Edit features | Edit commands, edit sessions, or edit handlers |
 | Process a dataset | `map.ops` |
 | React to map changes | `on`, `once`, `off` |

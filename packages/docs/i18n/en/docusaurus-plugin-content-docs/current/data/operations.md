@@ -37,6 +37,15 @@ if (!result.ok && result.error.kind === 'validation') {
 }
 ```
 
+To cancel a long-running operation, bind a whole call set to an `AbortSignal` with `withSignal`. It returns the same `map.ops` interface; once the signal aborts, new calls are rejected and in-flight execution and result commits are cancelled:
+
+```ts
+const controller = new AbortController();
+const ops = map.ops.withSignal(controller.signal);
+cancelButton.addEventListener('click', () => controller.abort(), { once: true });
+const result = await ops.simplifyLayer({ source: 'main', percentage: 0.25 });
+```
+
 ## `map.ops` catalog
 
 | Category | Methods |
