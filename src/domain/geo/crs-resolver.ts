@@ -21,6 +21,8 @@ export const DEFAULT_CRS = 'EPSG:4326';
 const EPSG_CODE_RE = /^(?:EPSG:)?(\d+)$/i;
 const EPSG_URN_RE = /^urn:ogc:def:crs:epsg(?::[^:]*)?:(\d+)$/i;
 const EPSG_HTTP_RE = /\/epsg\/(?:[^/]+\/)?(\d+)$/i;
+const OGC_CRS84_URN_RE = /^urn:ogc:def:crs:ogc(?::[^:]*)?:crs84$/i;
+const OGC_CRS84_HTTP_RE = /\/ogc\/(?:[^/]+\/)?crs84$/i;
 const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
 
 /**
@@ -84,10 +86,25 @@ export function resolveDatasetCRSMetadata(
  * direction before handing CRS labels to mapshaper's `-proj`.
  */
 export function normalizeCrsString(str: string): string {
-  const lower = str.toLowerCase();
-  if (lower === 'wgs84' || lower.includes('4326')) return 'EPSG:4326';
+  const trimmed = str.trim();
+
+  if (isWktCrsDefinition(trimmed)) {
+    return inferFromPrj(trimmed) ?? str;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === 'wgs84' ||
+    lower === 'ogc:crs84' ||
+    lower === 'crs84' ||
+    OGC_CRS84_URN_RE.test(trimmed) ||
+    OGC_CRS84_HTTP_RE.test(trimmed) ||
+    lower.includes('4326')
+  ) {
+    return 'EPSG:4326';
+  }
   if (lower.includes('3857') || lower === 'webmercator') return 'EPSG:3857';
-  if (/^epsg:\d+$/i.test(str)) return str.toUpperCase();
+  if (/^epsg:\d+$/i.test(trimmed)) return trimmed.toUpperCase();
   return str;
 }
 
@@ -96,15 +113,15 @@ export function normalizeCrsString(str: string): string {
  * browser bundle can project without trying to read EPSG init files.
  */
 export function normalizeProjectCrs(crs: string): string {
-  const trimmed = crs.trim();
-  const lower = trimmed.toLowerCase();
+  const normalized = normalizeCrsString(crs.trim());
+  const lower = normalized.toLowerCase();
   if (lower === 'epsg:3857' || lower === 'epsg:900913' || lower === 'epsg:102100') {
     return 'webmercator';
   }
   if (lower === 'epsg:4326') {
     return 'wgs84';
   }
-  return trimmed;
+  return normalized;
 }
 
 /**
@@ -188,10 +205,62 @@ function isGeographicEpsgCode(code: string): boolean {
   return proj4 ? isLongLatProj4(proj4) : false;
 }
 
+function isWktCrsDefinition(wkt: string): boolean {
+  return /^(?:GEOGCS|PROJCS|GEOCCS|LOCAL_CS|COMPD_CS|VERT_CS|GEODCRS|GEOGCRS|GEOGRAPHICCRS|PROJCRS|PROJECTEDCRS|BOUNDCRS|COMPOUNDCRS|VERTCRS|ENGCRS)\s*\[/i.test(
+    wkt,
+  );
+}
+
 function detectTopLevelWktGeographic(wkt: string): boolean | null {
   const trimmed = wkt.trim();
-  if (/^(?:GEOGCS|GEODCRS|GEOGRAPHICCRS)\s*\[/i.test(trimmed)) return true;
+  if (/^(?:GEOGCS|GEODCRS|GEOGCRS|GEOGRAPHICCRS)\s*\[/i.test(trimmed)) return true;
   if (/^(?:PROJCS|PROJCRS|PROJECTEDCRS)\s*\[/i.test(trimmed)) return false;
+  return null;
+}
+
+function topLevelWktAuthority(wkt: string): readonly [string, string] | null {
+  let depth = 0;
+  let quoted = false;
+  let authority: readonly [string, string] | null = null;
+
+  for (let i = 0; i < wkt.length; i += 1) {
+    const char = wkt[i];
+    if (quoted) {
+      if (char === '"') {
+        if (wkt[i + 1] === '"') i += 1;
+        else quoted = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      quoted = true;
+      continue;
+    }
+    if (char === '[') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 1) continue;
+
+    const match = /^(?:AUTHORITY|ID)\s*\[\s*"([^"]+)"\s*,\s*(?:"([^"]+)"|([A-Za-z0-9_.:-]+))/i.exec(
+      wkt.slice(i),
+    );
+    if (match) authority = [match[1], match[2] ?? match[3]];
+  }
+
+  return authority;
+}
+
+function canonicalWktAuthority(wkt: string): string | null {
+  const authority = topLevelWktAuthority(wkt);
+  if (!authority) return null;
+  const [name, code] = authority;
+  if (name.toUpperCase() === 'EPSG' && /^\d+$/.test(code)) return `EPSG:${code}`;
+  if (name.toUpperCase() === 'OGC' && code.toUpperCase() === 'CRS84') return 'EPSG:4326';
   return null;
 }
 
@@ -233,9 +302,9 @@ export function isGeographicCrs(dataset: MapshaperDataset | undefined): boolean 
  * and leaves custom Proj.4 strings / mapshaper aliases untouched.
  */
 export async function resolveProjectCrs(crs: string): Promise<string> {
-  const trimmed = crs.trim();
-  const code = parseEpsgCode(trimmed);
-  if (!code) return normalizeProjectCrs(trimmed);
+  const normalized = normalizeCrsString(crs.trim());
+  const code = parseEpsgCode(normalized);
+  if (!code) return normalizeProjectCrs(normalized);
 
   if (code === '4326') return 'wgs84';
   if (WEB_MERCATOR_CODES.has(code)) return 'webmercator';
@@ -279,8 +348,12 @@ export async function resolveProjectCrsDefinition(crs: string): Promise<Resolved
  *   - WGS_1984 datum + GEOGCS top-level → `EPSG:4326`.
  */
 export function inferFromPrj(prj: string): string | null {
-  const authorityMatch = prj.match(/AUTHORITY\["EPSG"\s*,\s*"(\d+)"\]/i);
-  if (authorityMatch) return `EPSG:${authorityMatch[1]}`;
+  const standaloneAuthority =
+    /^\s*(?:AUTHORITY|ID)\s*\[\s*"EPSG"\s*,\s*(?:"(\d+)"|(\d+))\s*\]\s*$/i.exec(prj);
+  if (standaloneAuthority) return `EPSG:${standaloneAuthority[1] ?? standaloneAuthority[2]}`;
+
+  const authority = canonicalWktAuthority(prj);
+  if (authority) return authority;
 
   if (
     /Mercator.*WGS.*84.*Pseudo/i.test(prj) ||

@@ -280,6 +280,7 @@ export default [
       entryFileNames: '[name].mjs',
       chunkFileNames: 'emap-shared-[name]-[hash].mjs',
       format: 'es',
+      hoistTransitiveImports: false,
       sourcemap: shouldWriteSourcemap,
       paths: { mapshaper: './mapshaper-vendor.mjs' },
     },

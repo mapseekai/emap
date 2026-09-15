@@ -18,6 +18,11 @@ function ds(info: MapshaperDataset['info']): MapshaperDataset {
   return { layers: [], info };
 }
 
+const CRS84_WKT =
+  'GEOGCS["WGS 84 (CRS84)",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH],AUTHORITY["OGC","CRS84"]]';
+const WGS84_WKT2 =
+  'GEOGCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563]],CS[ellipsoidal,2],AXIS["latitude",north],AXIS["longitude",east],ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]],ID["EPSG",4326]]';
+
 describe('normalizeCrsString', () => {
   it.each([
     ['wgs84', 'EPSG:4326'],
@@ -28,6 +33,9 @@ describe('normalizeCrsString', () => {
     ['epsg:3857', 'EPSG:3857'],
     ['epsg:32633', 'EPSG:32633'],
     ['EPSG:4490', 'EPSG:4490'],
+    ['OGC:CRS84', 'EPSG:4326'],
+    [CRS84_WKT, 'EPSG:4326'],
+    [WGS84_WKT2, 'EPSG:4326'],
     // Unknown labels pass through unchanged so case-sensitive proj4 tokens
     // (e.g. `+proj=utm +zone=10`) survive intact.
     ['weird', 'weird'],
@@ -42,6 +50,9 @@ describe('normalizeProjectCrs', () => {
     ['EPSG:3857', 'webmercator'],
     ['epsg:900913', 'webmercator'],
     ['EPSG:102100', 'webmercator'],
+    ['OGC:CRS84', 'wgs84'],
+    [CRS84_WKT, 'wgs84'],
+    [WGS84_WKT2, 'wgs84'],
     ['EPSG:4326', 'wgs84'],
     ['+proj=utm +zone=10', '+proj=utm +zone=10'],
   ])('%p -> %p', (input, expected) => {
@@ -134,6 +145,14 @@ describe('inferFromPrj — ESRI Web Mercator variants', () => {
 describe('inferFromPrj', () => {
   it('extracts EPSG code from AUTHORITY clause', () => {
     expect(inferFromPrj('PROJCS["NAD83",AUTHORITY["EPSG","26910"]]')).toBe('EPSG:26910');
+  });
+
+  it('uses the top-level CRS authority instead of a nested unit authority', () => {
+    expect(inferFromPrj(CRS84_WKT)).toBe('EPSG:4326');
+  });
+
+  it('reads WKT2 top-level ID without mistaking a nested unit ID for the CRS', () => {
+    expect(inferFromPrj(WGS84_WKT2)).toBe('EPSG:4326');
   });
 
   it('case-insensitive AUTHORITY match', () => {
@@ -286,6 +305,7 @@ describe('resolveDatasetCRSMetadata', () => {
 
   it('returns explicit CRS metadata when present', () => {
     expect(resolveDatasetCRSMetadata(ds({ crs_string: 'epsg:4326' }))).toBe('EPSG:4326');
+    expect(resolveDatasetCRSMetadata(ds({ crs_string: CRS84_WKT }))).toBe('EPSG:4326');
     expect(resolveDatasetCRSMetadata(ds({ prj: 'PROJCS["x",AUTHORITY["EPSG","3857"]]' }))).toBe(
       'EPSG:3857',
     );

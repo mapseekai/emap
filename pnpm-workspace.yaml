@@ -19,3 +19,6 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - image-size@2.0.4
+
+patchedDependencies:
+  apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch

@@ -34,6 +34,9 @@ const hole = [
 ];
 const row = (geometry: Uint8Array | null, name = 'sample') => ({ geometry, values: { name } });
 
+const CRS84_WKT =
+  'GEOGCS["WGS 84 (CRS84)",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH],AUTHORITY["OGC","CRS84"]]';
+
 async function multiple() {
   return fixtureGeoPackage([
     {
@@ -148,6 +151,27 @@ describe('direct SQLite/WKB to one mapshaper dataset', () => {
       importGeoPackage(await multiple(), { ...(await options()), layers: ['missing'] }),
     ).rejects.toThrow('not found');
   });
+  it('imports OGC:CRS84 WKT definitions without mistaking the degree unit for EPSG:9122', async () => {
+    const srs = 100001;
+    const bytes = await fixtureGeoPackage([
+      {
+        name: 'crs84',
+        type: 'POINT',
+        srs,
+        srsOrganization: 'OGC',
+        srsOrganizationCode: 84,
+        srsDefinition: CRS84_WKT,
+        rows: [row(gpkg(wkb(1, [120.5, 30.25]), srs))],
+      },
+    ]);
+
+    const data = await importGeoPackage(bytes, await options());
+
+    expect(data.info.crs_string).toBe('EPSG:4326');
+    expect(data.info.geopackage.tables[0].sourceCrs).toBe(CRS84_WKT);
+    expect(data.layers[0].shapes).toEqual([[[120.5, 30.25]]]);
+  });
+
   it('normalizes mixed CRS instead of relabeling coordinates', async () => {
     const bytes = await fixtureGeoPackage([
       { name: 'geographic', type: 'POINT', rows: [row(gpkg(wkb(1, [1, 1])))] },

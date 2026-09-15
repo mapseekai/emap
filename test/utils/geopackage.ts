@@ -83,6 +83,9 @@ export interface FixtureTable {
     values?: Record<string, unknown>;
   }>;
   columns?: Record<string, string>;
+  srsOrganization?: string;
+  srsOrganizationCode?: number;
+  srsDefinition?: string;
 }
 let wasm: Promise<string> | undefined;
 export function testGeoPackageWasmUrl(): Promise<string> {
@@ -128,6 +131,18 @@ export async function fixtureGeoPackage(
       ]);
     }
     for (const table of tables) {
+      if (table.srsDefinition || table.srsOrganization || table.srsOrganizationCode !== undefined) {
+        const srs = table.srs ?? 4326;
+        db.run(
+          'UPDATE gpkg_spatial_ref_sys SET organization = ?, organization_coordsys_id = ?, definition = ? WHERE srs_id = ?',
+          [
+            table.srsOrganization ?? (srs > 0 ? 'EPSG' : 'NONE'),
+            table.srsOrganizationCode ?? srs,
+            table.srsDefinition ?? 'undefined',
+            srs,
+          ],
+        );
+      }
       const columns = { name: 'TEXT', ...table.columns };
       db.run(
         `CREATE TABLE ${quoted(table.name)} (fid INTEGER PRIMARY KEY, geom ${table.type}, ${Object.entries(
