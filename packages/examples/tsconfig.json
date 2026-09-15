@@ -40,6 +40,9 @@
       ],
       "@mapseekai/emap/maplibre": [
         "../../src/integrations/maplibre/index.ts"
+      ],
+      "@mapseekai/emap/geopackage": [
+        "../../src/integrations/geopackage/index.ts"
       ]
     }
   },

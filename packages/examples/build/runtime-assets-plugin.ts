@@ -58,6 +58,16 @@ const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
     productionSource: 'emap-worker.js',
     contentType: 'application/javascript; charset=utf-8',
   },
+  {
+    requestPath: 'emap-geopackage-worker.js', buildPath: 'emap-geopackage-worker.js',
+    developmentSource: 'emap-geopackage-worker.js', productionSource: 'emap-geopackage-worker.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  {
+    requestPath: 'sql-wasm.wasm', buildPath: 'sql-wasm.wasm',
+    developmentSource: 'sql-wasm.wasm', productionSource: 'sql-wasm.wasm',
+    contentType: 'application/wasm',
+  },
 ] as const;
 
 function assertInside(root: string, candidate: string, label: string): string {

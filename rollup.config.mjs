@@ -18,6 +18,7 @@ function copyControlsCss() {
     writeBundle() {
       copyFileSync('src/ui/controls.css', 'dist/emap.css');
       copyFileSync('src/shared/types/style.css.d.ts', 'dist/style.css.d.ts');
+      copyFileSync('node_modules/@ngageoint/geopackage/dist/sql-wasm.wasm', 'dist/sql-wasm.wasm');
     },
   };
 }
@@ -270,6 +271,7 @@ export default [
       'emap-presets': 'src/runtime/presets/index.ts',
       'emap-ai': 'src/runtime/ai/index.ts',
       'emap-maplibre': 'src/integrations/maplibre/index.ts',
+      'emap-geopackage': 'src/integrations/geopackage/index.ts',
     },
     external: ['cordis', 'maplibre-gl', 'mapshaper'],
     onwarn: quietKnownCircularWarnings,
@@ -356,6 +358,21 @@ export default [
       file: workerOutput,
       format: 'iife',
       sourcemap: shouldWriteSourcemap,
+      banner: "importScripts('mapshaper-vendor.js');",
+      globals: mapshaperGlobal,
+    },
+    plugins: commonPlugins(),
+  },
+  // Optional GeoPackage worker: SQLite WASM, direct WKB decode, reprojection and topology.
+  {
+    input: 'src/integrations/geopackage/worker-entry.ts',
+    external: ['mapshaper'],
+    onwarn: quietKnownCircularWarnings,
+    output: {
+      file: 'dist/emap-geopackage-worker.js',
+      format: 'iife',
+      sourcemap: shouldWriteSourcemap,
+      inlineDynamicImports: true,
       banner: "importScripts('mapshaper-vendor.js');",
       globals: mapshaperGlobal,
     },

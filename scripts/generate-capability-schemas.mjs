@@ -38,6 +38,9 @@ function schema(type, seen = new Set()) {
     for (const property of checker.getPropertiesOfType(type)) {
       const declaration = property.valueDeclaration ?? property.declarations?.[0];
       if (!declaration) continue;
+      // Symbol-keyed properties are not JSON fields; compiler-assigned ids are unstable.
+      if (declaration.name && ts.isComputedPropertyName(declaration.name) &&
+          checker.getTypeAtLocation(declaration.name.expression).flags & ts.TypeFlags.ESSymbolLike) continue;
       const entry = schema(checker.getTypeOfSymbolAtLocation(property, declaration), next);
       const description = ts.displayPartsToString(property.getDocumentationComment(checker));
       if (description) entry.description = description.replace(/\{@link ([^}]+)\}/g, '$1');

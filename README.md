@@ -225,6 +225,23 @@ import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 
 `parquet-wasm` loads on first GeoParquet use; applications that never import this entry point never execute the format module.
 
+## Direct GeoPackage vector import
+
+The optional `/geopackage` entry reads NGA SQLite WASM → GP Binary/WKB → TypedArrays without a GeoJSON intermediate. All feature tables remain layers in one dataset with shared arcs. Main-thread and Web Worker APIs are provided; raster/tile tables are excluded.
+
+```ts
+import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
+await map.ctx.plugin(geoPackagePlugin({
+  workerUrl: '/assets/emap-geopackage-worker.js',
+  wasmUrl: '/assets/sql-wasm.wasm',
+}));
+const source = new TopologySource('gpkg', { formats: map.formats });
+await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
+await map.addSource('gpkg', source);
+```
+
+[Assets, CRS, multi-layer, Z/M and memory contracts](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/data/geopackage.md).
+
 ## Optional DuckDB-Wasm
 
 Install the runtime peers before importing the DuckDB subpath:
@@ -296,7 +313,7 @@ src/
 ├── domain/          # GIS source/geometry/edit/validation domain
 ├── engine/          # Map execution, interaction, rendering, worker, built-in providers
 ├── runtime/         # Native Cordis context/services/plugins/presets/AI capabilities
-├── integrations/    # Mapshaper, MapLibre, Arrow, DuckDB
+├── integrations/    # Mapshaper, MapLibre, Arrow, DuckDB, GeoPackage
 ├── ui/              # Controls, icons, CSS, theme
 ├── shared/          # Ambient declarations and cross-layer type boundaries
 └── index.ts         # Explicit root public API

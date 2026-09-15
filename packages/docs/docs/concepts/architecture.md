@@ -19,7 +19,7 @@ src/
 ├── domain/          # GIS 领域模型与可逆数据修改
 ├── engine/          # 地图执行、交互、渲染和内置 Provider
 ├── runtime/         # Cordis、服务契约、插件、Preset、AI Capability
-├── integrations/    # Arrow / DuckDB / MapLibre / Mapshaper
+├── integrations/    # Arrow / DuckDB / MapLibre / Mapshaper / GeoPackage
 ├── ui/              # 控件、图标与主题
 ├── shared/          # 跨层共享的声明和类型边界
 └── index.ts         # 根公共 API
@@ -31,7 +31,7 @@ src/
 | `domain/` | 与 UI/插件框架无关的 GIS 领域状态和可逆修改 | `source/`、`geo/`、`edit/`、`validation/` |
 | `engine/` | 地图执行热路径和宿主实现 | `map/`、`core/handlers/`、`rendering/`、`worker/`、内置 workspace provider |
 | `runtime/` | Cordis 组合层 | `context/`、`services/`、`providers/`、`plugins/`、`presets/`、`ai/` |
-| `integrations/` | 第三方引擎与可选能力边界 | `mapshaper/`、`maplibre/`、`arrow/`、`duckdb/` |
+| `integrations/` | 第三方引擎与可选能力边界 | `mapshaper/`、`maplibre/`、`arrow/`、`duckdb/`、`geopackage/` |
 | `ui/` | 浏览器控件、CSS、图标和主题 | controls、`assets/`、`theme/` |
 | `shared/` | 没有单一业务所有者的共享声明 | ambient `.d.ts`、外部库声明、样式类型 |
 

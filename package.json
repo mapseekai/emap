@@ -76,7 +76,13 @@
     "./maplibre": {
       "types": "./dist/integrations/maplibre/index.d.ts",
       "import": "./dist/emap-maplibre.mjs"
-    }
+    },
+    "./geopackage": {
+      "types": "./dist/integrations/geopackage/index.d.ts",
+      "import": "./dist/emap-geopackage.mjs"
+    },
+    "./dist/emap-geopackage-worker.js": "./dist/emap-geopackage-worker.js",
+    "./dist/sql-wasm.wasm": "./dist/sql-wasm.wasm"
   },
   "sideEffects": [
     "*.css",
@@ -100,7 +106,9 @@
     "README.md",
     "SECURITY.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "dist/emap-geopackage-worker.js",
+    "dist/sql-wasm.wasm"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -144,7 +152,8 @@
     "architecture:check": "node scripts/check-plugin-architecture.mjs",
     "typecheck:contracts": "tsc -p tsconfig.type-tests.json --noEmit",
     "test-layout:check": "node scripts/check-test-layout.mjs",
-    "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit"
+    "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit",
+    "test:geopackage": "vitest run src/integrations/geopackage test/integration/geopackage"
   },
   "keywords": [
     "mapshaper",
@@ -190,6 +199,7 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@ngageoint/geopackage": "4.2.9",
     "@tmcw/togeojson": "^5.8.1",
     "cordis": "4.0.0-rc.10",
     "fflate": "^0.8.3",

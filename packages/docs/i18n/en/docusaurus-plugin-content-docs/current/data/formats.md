@@ -127,3 +127,7 @@ TopoJSON preserves coordinate precision without quantization by default, making 
 - [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet viewer](/mapseekai/emap/examples/geoparquet-viewer/)
 - [KML viewer](/mapseekai/emap/examples/getting-started/kml-viewer/)
+
+## GeoPackage
+
+The optional `/geopackage` entry imports vector tables directly from SQLite/WKB into typed arrays without GeoJSON. It returns one multi-layer dataset and supports Workers, CRS normalization and cancellation. See [direct GeoPackage import](geopackage.md). GeoPackage export is not provided.

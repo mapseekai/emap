@@ -2,6 +2,7 @@ packages:
   - packages/*
 
 overrides:
+  '@ngageoint/geopackage>image-size': '2.0.4'
   '@xmldom/xmldom': '0.8.15'
   adm-zip: '0.6.0'
   fflate: '0.8.3'
@@ -10,6 +11,10 @@ overrides:
   qs: '6.16.0'
 
 allowBuilds:
+  better-sqlite3: false
   core-js: true
   esbuild: true
   msgpackr-extract: true
+
+minimumReleaseAgeExclude:
+  - image-size@2.0.4

@@ -19,6 +19,7 @@ describe('TypeDoc configuration', () => {
       'src/runtime/presets/index.ts',
       'src/runtime/ai/index.ts',
       'src/integrations/maplibre/index.ts',
+      'src/integrations/geopackage/index.ts',
     ]);
     expect(config.excludeInternal).toBe(true);
     expect(config.treatWarningsAsErrors).toBe(true);

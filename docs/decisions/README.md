@@ -15,4 +15,6 @@ This directory preserves the durable decisions that were previously mixed with c
 | [0009](0009-native-cordis.md) | Replace the custom plugin kernel with upstream Cordis |
 | [0010](0010-source-and-test-layout.md) | Organize source by six responsibility zones and tests by scope |
 
+| [0011](0011-direct-geopackage-vector-import.md) | Decode GeoPackage vector tables directly into one typed-buffer dataset, optionally in a Worker |
+
 ADRs record why the implementation has its current shape. They are not task lists and do not represent unfinished work.

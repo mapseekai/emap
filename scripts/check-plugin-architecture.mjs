@@ -82,7 +82,7 @@ function visitEntry(file) {
   for (const dependency of graph.get(file) ?? []) visitEntry(dependency);
 }
 visitEntry('src/index.ts');
-for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts']) {
+for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts', 'src/integrations/geopackage/index.ts']) {
   if (reachable.has(forbidden)) violations.push(`Default entry eagerly imports optional provider: ${forbidden}`);
 }
 const inventory = JSON.parse(fs.readFileSync('docs/plans/plugin-migration-inventory.json', 'utf8'));

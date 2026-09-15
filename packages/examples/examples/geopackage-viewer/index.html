@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GeoPackage 多图层直接转换</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:system-ui,sans-serif;color:#17211c;background:#f6f8f7}
+    body{display:flex;flex-direction:column} header{padding:12px 18px;background:white;border-bottom:1px solid #dbe2dd}
+    h1{font-size:18px;margin:0 0 8px} .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    button,input{font:inherit} button{padding:7px 13px;background:white;border:1px solid #bacbbd;border-radius:6px;cursor:pointer}
+    main{display:flex;flex:1;min-height:0} aside{width:320px;padding:16px;overflow:auto;background:white;border-right:1px solid #dbe2dd}
+    #map{flex:1;min-width:0} #status{font-size:13px;margin-top:8px;overflow-wrap:anywhere}
+    .metric{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #edf0ee}
+    table{width:100%;font-size:12px;border-collapse:collapse} td,th{padding:8px 4px;text-align:left;border-bottom:1px solid #eee}
+    .hint{font-size:12px;line-height:1.6;color:#53645a} #log{white-space:pre-wrap;font-size:11px;overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+<header id="header">
+  <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+  <h1>GeoPackage → mapshaper · 多图层 / 单 Dataset</h1>
+  <div class="controls">
+    <input id="file-input" type="file" accept=".gpkg" />
+    <label><input id="worker" type="checkbox" checked /> Web Worker</label>
+    <button id="sample">加载多图层示例</button><button id="cancel" disabled>取消</button>
+  </div>
+  <div id="status" role="status">初始化地图…</div>
+</header>
+<main><aside>
+  <div class="metric"><span>Dataset 数量</span><strong id="datasets">0</strong></div>
+  <div class="metric"><span>矢量图层</span><strong id="layers">0</strong></div>
+  <div class="metric"><span>要素记录</span><strong id="features">0</strong></div>
+  <div class="metric"><span>共享 ArcCollection</span><strong id="arcs">0</strong></div>
+  <div class="metric"><span>转换耗时</span><strong id="duration">—</strong></div>
+  <p class="hint">SQLite WASM → GP Binary / WKB → Float64Array / Int32Array → mapshaper。转换中不创建 GeoJSON；瓦片和栅格表被忽略。</p>
+  <table><thead><tr><th>图层</th><th>类型</th><th>记录</th></tr></thead><tbody id="layer-rows"></tbody></table>
+  <p class="hint">Z/M 读取后归一为 XY；不同坐标系按第一个矢量表统一。64 位整数超出 JavaScript 安全范围时保留为十进制字符串。</p>
+  <pre id="log"></pre>
+</aside><div id="map"></div></main>
+<script type="module">
+import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const map = await Emap.create({ container: 'map' });
+const base = '/mapseekai/emap/examples/';
+const status = document.getElementById('status');
+let generation = 0, currentFiber, controller;
+const state = { map, source: null, dataset: null, worker: true, error: null, loading: false };
+window.geopackageDemo = state;
+
+async function load(bytes, filename) {
+  const run = ++generation;
+  controller?.abort();
+  const abort = controller = new AbortController();
+  if (currentFiber) await currentFiber.dispose();
+  const inWorker = document.getElementById('worker').checked;
+  state.loading = true; state.error = null; state.worker = inWorker;
+  document.getElementById('cancel').disabled = false;
+  const started = performance.now();
+  const fiber = currentFiber = map.ctx.plugin(geoPackagePlugin({
+    ...(inWorker ? { workerUrl: base + 'emap-geopackage-worker.js' } : {}),
+    wasmUrl: base + 'sql-wasm.wasm', signal: abort.signal,
+    onProgress: progress => { if (run === generation) status.textContent = `${inWorker ? 'Worker' : 'Main'} · ${progress.phase} · ${progress.table ?? ''} · ${progress.rows} 条`; },
+  }));
+  try {
+    await fiber.await();
+    const source = new TopologySource('gpkg', { formats: map.formats });
+    await source.setData({ filename, content: new Uint8Array(bytes) });
+    if (run !== generation || abort.signal.aborted) return;
+    if (map.getSource('gpkg')) map.removeSource('gpkg');
+    await map.addSource('gpkg', source);
+    const dataset = source.getDataset();
+    state.source = source; state.dataset = dataset;
+    const body = document.getElementById('layer-rows'); body.replaceChildren();
+    for (const [index, layer] of source.getLayers().entries()) {
+      const tr = document.createElement('tr');
+      for (const value of [layer.name, layer.geometry_type ?? 'null', layer.shapes?.length ?? 0]) {
+        const td = document.createElement('td'); td.textContent = String(value); tr.append(td);
+      }
+      body.append(tr);
+      const type = layer.geometry_type === 'point' ? 'circle' : layer.geometry_type === 'polygon' ? 'fill' : layer.geometry_type === 'polyline' ? 'line' : null;
+      if (!type) continue;
+      const paint = type === 'fill' ? { 'fill-color': '#77ad8b', 'fill-opacity': 0.45 } : type === 'line' ? { 'line-color': '#446bcb', 'line-width': 3 } : { 'circle-color': '#dc7a33', 'circle-radius': 6 };
+      map.addLayer({ id: `gpkg-${index}`, source: 'gpkg', 'source-layer': layer.name, type, paint });
+    }
+    if (source.getExtent().hasBounds()) map.fitBounds(source.getExtent(), { padding: 35, duration: 0 });
+    document.getElementById('datasets').textContent = '1';
+    document.getElementById('layers').textContent = String(source.getLayers().length);
+    document.getElementById('features').textContent = String(source.getLayers().reduce((count, layer) => count + (layer.shapes?.length ?? 0), 0));
+    document.getElementById('arcs').textContent = String(source.getArcs()?.size() ?? 0);
+    document.getElementById('duration').textContent = `${Math.round(performance.now()-started)} ms`;
+    document.getElementById('log').textContent = JSON.stringify(dataset.info.geopackage, null, 2);
+    status.textContent = `${filename} · ${inWorker ? 'Web Worker' : '主线程'} · 完成：全部矢量图层位于一个 dataset`;
+  } catch (error) {
+    if (run !== generation) return;
+    state.error = String(error); status.textContent = abort.signal.aborted ? '已取消；没有提交部分数据' : `导入失败：${error.message}`;
+    if (!abort.signal.aborted) console.error(error);
+  } finally {
+    if (run === generation) { state.loading = false; document.getElementById('cancel').disabled = true; }
+  }
+}
+state.load = load;
+async function sample() {
+  const response = await fetch(base + 'fixtures/example-geopackage.gpkg');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  await load(await response.arrayBuffer(), 'example-geopackage.gpkg');
+}
+document.getElementById('sample').onclick = () => { void sample(); };
+document.getElementById('cancel').onclick = () => controller?.abort();
+document.getElementById('file-input').onchange = async event => {
+  const file = event.target.files?.[0];
+  if (file) await load(await file.arrayBuffer(), file.name);
+};
+window.addEventListener('pagehide', () => { controller?.abort(); void map.dispose(); }, { once: true });
+await sample();
+await installExampleMapUi(map, emap);
+</script>
+</body>
+</html>

@@ -1517,10 +1517,6 @@ export const operationSchemas = {
                         description:
                           'Returns a new String consisting of the single UTF-16 code unit located at the specified index.',
                       },
-                      '__@iterator@1308': {
-                        anyOf: [],
-                        description: 'Iterator',
-                      },
                     },
                     required: [
                       'toString',
@@ -1572,7 +1568,6 @@ export const operationSchemas = {
                       'matchAll',
                       'replaceAll',
                       'at',
-                      '__@iterator@1308',
                     ],
                     additionalProperties: false,
                   },

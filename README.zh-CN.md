@@ -223,6 +223,23 @@ import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 
 `parquet-wasm` 在首次使用 GeoParquet 时才加载；不导入该入口的应用不会执行格式模块。
 
+## GeoPackage 矢量直接导入
+
+可选 `/geopackage` 入口使用 NGA SQLite WASM → GP Binary/WKB → TypedArray 直接转换，不经 GeoJSON。一个 GeoPackage 的全部矢量表保留在一个 dataset，使用共享 ArcCollection；支持主线程或 Web Worker。栅格/瓦片表被忽略。
+
+```ts
+import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
+await map.ctx.plugin(geoPackagePlugin({
+  workerUrl: '/assets/emap-geopackage-worker.js',
+  wasmUrl: '/assets/sql-wasm.wasm',
+}));
+const source = new TopologySource('gpkg', { formats: map.formats });
+await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
+await map.addSource('gpkg', source);
+```
+
+[部署资源、CRS、多图层、Z/M 与内存限制](packages/docs/docs/data/geopackage.md)。
+
 ## 可选 DuckDB-Wasm
 
 导入 DuckDB 子路径前安装运行时 peer：
@@ -294,7 +311,7 @@ src/
 ├── domain/          # GIS Source / Geometry / Edit / Validation 领域
 ├── engine/          # 地图执行、交互、渲染、Worker、内置 Provider
 ├── runtime/         # 原生 Cordis Context / Service / Plugin / Preset / AI Capability
-├── integrations/    # Mapshaper / MapLibre / Arrow / DuckDB
+├── integrations/    # Mapshaper / MapLibre / Arrow / DuckDB / GeoPackage
 ├── ui/              # 控件、图标、CSS、主题
 ├── shared/          # Ambient 声明与跨层类型边界
 └── index.ts         # 显式根公共 API

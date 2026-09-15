@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `/geopackage` vector import using `@ngageoint/geopackage` SQLite WASM and
+  direct GP Binary/WKB-to-TypedArray decoding, without a GeoJSON intermediate.
+  Multiple feature tables retain independent layers in one dataset and share
+  one ArcCollection/topology build; tile/raster tables are excluded.
+- Add native Cordis `geoPackagePlugin`, direct and Worker import APIs, transferable
+  coordinates, cancellation, input/coordinate budgets, progress and table/CRS metadata.
+  Preserve NULL/empty records and lossless large integer attributes; normalize mixed
+  CRSs, retain XY from Z/M input and reject unsupported curves explicitly.
+- Publish a GeoPackage worker/WASM asset set and a multi-layer example with
+  independent SQLite fixtures and real-browser worker/main-thread parity tests.
+
+### Fixed
+
+- Exclude Symbol-keyed properties from generated capability JSON schemas so adding
+  a dependency cannot change compiler-internal identifiers in the public schema.
+
+### Security
+
+- Constrain GeoPackage integration to the SQL.js adapter and upgrade its transitive
+  image-size dependency to 2.0.4. Native better-sqlite3 builds remain disabled.
+
+
 ### Changed — breaking
 
 - Replace the custom plugin kernel with the exact official `cordis@4.0.0-rc.10`

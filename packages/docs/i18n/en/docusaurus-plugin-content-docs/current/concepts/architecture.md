@@ -19,7 +19,7 @@ src/
 ├── domain/          # GIS domain state and reversible mutations
 ├── engine/          # Map execution, interaction, rendering, built-in providers
 ├── runtime/         # Cordis, service contracts, plugins, presets, AI capabilities
-├── integrations/    # Arrow / DuckDB / MapLibre / Mapshaper
+├── integrations/    # Arrow / DuckDB / MapLibre / Mapshaper / GeoPackage
 ├── ui/              # Controls, icons, styles, theme
 ├── shared/          # Cross-layer declarations and type boundaries
 └── index.ts         # Root public API

@@ -8,7 +8,7 @@ export function collectTransferables(root: unknown): Transferable[] {
   const seen = new Set<ArrayBuffer>();
   const visit = (val: unknown): void => {
     if (!val || typeof val !== 'object') return;
-    if (val instanceof Uint8Array) {
+    if (ArrayBuffer.isView(val)) {
       const buf = val.buffer;
       if (buf instanceof ArrayBuffer && !seen.has(buf)) {
         seen.add(buf);

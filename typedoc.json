@@ -10,7 +10,8 @@
     "src/runtime/plugins/index.ts",
     "src/runtime/presets/index.ts",
     "src/runtime/ai/index.ts",
-    "src/integrations/maplibre/index.ts"
+    "src/integrations/maplibre/index.ts",
+    "src/integrations/geopackage/index.ts"
   ],
   "treatWarningsAsErrors": true,
   "intentionallyNotExported": [

@@ -127,3 +127,7 @@ TopoJSON 默认保留坐标精度，不进行量化，适合保存、恢复和�
 - [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet 查看器](/mapseekai/emap/examples/geoparquet-viewer/)
 - [KML 查看器](/mapseekai/emap/examples/getting-started/kml-viewer/)
+
+## GeoPackage
+
+使用 `/geopackage` 可选入口直接读取矢量表，SQLite/WKB 到 TypedArray，无 GeoJSON 中间格式。多个图层合并为一个 dataset，支持 Worker、CRS 归一与取消。详见 [GeoPackage 直接导入](geopackage.md)。仅支持导入，不支持 GeoPackage 写出。

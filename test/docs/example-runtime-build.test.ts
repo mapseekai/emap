@@ -68,6 +68,8 @@ describe('example runtime build assets', () => {
       ['dist/emap.js', 'vendor/emap.js'],
       ['dist/emap.css', 'vendor/emap.css'],
       ['dist/emap-worker.js', 'emap-worker.js'],
+      ['dist/emap-geopackage-worker.js', 'emap-geopackage-worker.js'],
+      ['dist/sql-wasm.wasm', 'sql-wasm.wasm'],
       // Worker sibling: emap-worker.js boots with a relative
       // importScripts('mapshaper-vendor.js'), so the vendor file must also
       // be emitted next to the worker bundle.

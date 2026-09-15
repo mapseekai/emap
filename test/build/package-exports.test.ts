@@ -52,6 +52,7 @@ describe('published plugin architecture subpaths', () => {
       'presets',
       'ai',
       'maplibre',
+      'geopackage',
     ]) {
       expect(manifest.exports[`./${name}`]).toMatchObject({
         types: expect.stringContaining('.d.ts'),
