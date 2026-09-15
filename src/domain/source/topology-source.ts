@@ -32,6 +32,11 @@ import {
   setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
 import { FormatRegistry, getFileExtension, isKnownPluginExtension } from './format-registry';
+import {
+  assertImportInputBytes,
+  resolveImportResourceLimits,
+  type ImportResourceLimits,
+} from '../../shared/import-resource-limits';
 
 export type TopologySourceData = string | { filename: string; content: Uint8Array };
 
@@ -130,10 +135,55 @@ function assertCompressedZipSize(byteLength: number, limits: Required<ZipExtract
   }
 }
 
+async function readResponseBytes(response: Response, maxInputBytes: number): Promise<Uint8Array> {
+  const declared = response.headers.get('Content-Length');
+  if (declared !== null) {
+    const byteLength = Number(declared);
+    if (Number.isFinite(byteLength) && byteLength >= 0) {
+      assertImportInputBytes(byteLength, maxInputBytes);
+    }
+  }
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    assertImportInputBytes(bytes.byteLength, maxInputBytes);
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      assertImportInputBytes(total + value.byteLength, maxInputBytes);
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch (error) {
+    await reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (chunks.length === 1) return chunks[0];
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export interface TopologySourceOptions {
   /** Format registry supplied by the workspace or standalone caller. */
   formats?: FormatRegistryContract;
   data?: TopologySourceInput;
+  /** Raw input byte ceiling shared by URL, in-memory and plugin-backed imports. */
+  resourceLimits?: Partial<ImportResourceLimits>;
   zipLimits?: ZipExtractionLimits;
   /** Adapter used for every mapshaper import, transform, bounds and export operation. */
   adapter?: MapshaperAdapter;
@@ -373,12 +423,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // file names that mapshaper's `-i` should reference.
       const inputFiles: Record<string, Uint8Array | string> = {};
       const primaryFiles: string[] = [];
+      const resourceLimits = resolveImportResourceLimits(this._options.resourceLimits);
 
       if (Array.isArray(data)) {
         // Multi-file import: each entry becomes its own layer in one dataset
         // (same behaviour as mapshaper CLI `-i FILE1 FILE2 ...`).
         if (data.length === 0) {
           throw new Error('setData received an empty array; nothing to import');
+        }
+        let totalInputBytes = 0;
+        for (const entry of data) {
+          totalInputBytes += entry.content.byteLength;
+          assertImportInputBytes(totalInputBytes, resourceLimits.maxInputBytes);
         }
         const originsByBasename = new Map<string, string>();
         const addInputFile = (filename: string, content: Uint8Array | string, origin: string) => {
@@ -436,20 +492,25 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             filename = 'data.json';
           }
 
-          if (this._isZipFile(filename)) {
-            const contentLengthHeader = response.headers.get('Content-Length');
-            if (contentLengthHeader !== null) {
-              const contentLength = Number(contentLengthHeader);
-              if (Number.isFinite(contentLength) && contentLength >= 0) {
-                assertCompressedZipSize(contentLength, resolveZipLimits(this._options.zipLimits));
+          const zipLimits = this._isZipFile(filename)
+            ? resolveZipLimits(this._options.zipLimits)
+            : null;
+          if (zipLimits) {
+            const declared = response.headers.get('Content-Length');
+            if (declared !== null) {
+              const byteLength = Number(declared);
+              if (Number.isFinite(byteLength) && byteLength >= 0) {
+                assertCompressedZipSize(byteLength, zipLimits);
               }
             }
           }
-
-          const buf = await response.arrayBuffer();
-          const content = new Uint8Array(buf);
+          const maxInputBytes = zipLimits
+            ? Math.min(resourceLimits.maxInputBytes, zipLimits.maxCompressedBytes)
+            : resourceLimits.maxInputBytes;
+          const content = await readResponseBytes(response, maxInputBytes);
           input = { filename, content };
         } else {
+          assertImportInputBytes(data.content.byteLength, resourceLimits.maxInputBytes);
           input = data;
         }
 

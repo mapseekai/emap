@@ -1,8 +1,11 @@
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
+import {
+  DEFAULT_IMPORT_RESOURCE_LIMITS,
+  type ImportResourceLimits,
+} from '../../shared/import-resource-limits';
 
 /** Resource limits are enforced before typed coordinate storage is allocated. */
-export interface GeoPackageLimits {
-  maxInputBytes: number;
+export interface GeoPackageLimits extends ImportResourceLimits {
   maxDecodedBytes: number;
   maxFeatures: number;
   maxLayers: number;
@@ -41,7 +44,7 @@ export interface GeoPackagePluginOptions extends ImportGeoPackageOptions {
 
 /** @internal */
 export const DEFAULT_GEOPACKAGE_LIMITS: Readonly<GeoPackageLimits> = Object.freeze({
-  maxInputBytes: 2 * 1024 ** 3,
+  ...DEFAULT_IMPORT_RESOURCE_LIMITS,
   maxDecodedBytes: 2 * 1024 ** 3,
   maxFeatures: 10_000_000,
   maxLayers: 4096,

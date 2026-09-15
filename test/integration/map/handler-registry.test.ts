@@ -1,13 +1,6 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../utils/plugin-test-map';
+import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { Emap } from '../../../src/engine/map/map';
 // jsdom does not implement CanvasRenderingContext2D; stub getContext so
 // CanvasPainter construction succeeds.
 beforeAll(() => {

@@ -1,6 +1,5 @@
 import {
   createTestMap,
-  createBrowserTestMap,
   fixtureGet,
   fixtureSet,
   fixtureCall,

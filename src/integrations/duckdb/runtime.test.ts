@@ -1,6 +1,6 @@
 import { DuckDbRuntimeScope } from './runtime-scope';
 import { tableFromArrays, tableFromIPC, type Table } from 'apache-arrow';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDuckDbRuntime,
   createDuckDbRuntimeFromJsDelivr,

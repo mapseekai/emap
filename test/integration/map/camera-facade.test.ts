@@ -1,13 +1,6 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../utils/plugin-test-map';
+import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { Emap } from '../../../src/engine/map/map';
 import { Bounds } from '../../../src/domain/geo/bounds';
 import { TopologySource } from '../../../src/domain/source/topology-source';
 import { VertexMoveCommand } from '../../../src/domain/edit/commands/vertex-move';

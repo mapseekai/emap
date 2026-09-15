@@ -456,6 +456,57 @@ describe('TopologySource.setData', () => {
     }
   });
 
+  it('rejects oversized URL imports from Content-Length before buffering the body', async () => {
+    const arrayBuffer = vi.fn(async () => new Uint8Array(5).buffer);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'Content-Type': 'application/geo+json',
+        'Content-Length': '5',
+      }),
+      arrayBuffer,
+    } as unknown as Response);
+    const source = new TopologySource('roads', { resourceLimits: { maxInputBytes: 4 } });
+
+    try {
+      await expect(source.setData('/data/roads.geojson')).rejects.toThrow(/input byte limit/i);
+      expect(arrayBuffer).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('rejects streamed URL imports that exceed the byte limit without Content-Length', async () => {
+    const response = new Response(new Uint8Array([1, 2, 3, 4, 5]), {
+      headers: { 'Content-Type': 'application/geo+json' },
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+    const source = new TopologySource('roads', { resourceLimits: { maxInputBytes: 4 } });
+
+    try {
+      await expect(source.setData('/data/roads.geojson')).rejects.toThrow(/input byte limit/i);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('applies the input byte limit to the total size of multi-file imports', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const source = new TopologySource('roads', {
+      adapter: { runImport },
+      resourceLimits: { maxInputBytes: 4 },
+    });
+
+    await expect(
+      source.setData([
+        { filename: 'a.geojson', content: new Uint8Array(3) },
+        { filename: 'b.geojson', content: new Uint8Array(2) },
+      ]),
+    ).rejects.toThrow(/input byte limit/i);
+    expect(runImport).not.toHaveBeenCalled();
+  });
+
   it('marks GeoJSON imports as EPSG:4326 when mapshaper provides no CRS metadata', async () => {
     // RFC 7946 fixes GeoJSON to WGS84 lon/lat; without this the CRS stays
     // "unknown" and GeoParquet exports write `crs: null`.

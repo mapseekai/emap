@@ -221,6 +221,30 @@ describe('CanvasPainter arrow-dot rendering', () => {
     } as any);
     expect(arcs.iteratorCount).toBe(4);
   });
+
+  it('evicts arrow command entries by byte budget, not only entry count', () => {
+    const arcs = makeArrowArcs([
+      [
+        [10, 50],
+        [90, 50],
+      ],
+    ]);
+    const { painter } = makeArrowPainter();
+    const first = { shapes: [[[0]]], cacheKey: 'first', geometryRevision: 1 } as const;
+    const second = { ...first, cacheKey: 'second' } as const;
+
+    painter.drawArcs(arcs as any, arrowStyle, undefined, undefined, first as any);
+    const oneEntryBytes = Reflect.get(painter, '_arrowDotCacheBytes') as number;
+    expect(oneEntryBytes).toBeGreaterThan(0);
+    Reflect.set(painter, '_arrowDotCacheByteLimit', oneEntryBytes);
+
+    painter.drawArcs(arcs as any, arrowStyle, undefined, undefined, second as any);
+    expect(arcs.iteratorCount).toBe(2);
+    expect(Reflect.get(painter, '_arrowDotCacheBytes')).toBe(oneEntryBytes);
+
+    painter.drawArcs(arcs as any, arrowStyle, undefined, undefined, first as any);
+    expect(arcs.iteratorCount).toBe(3);
+  });
 });
 
 function makeBatchPainter(strokeCalls: string[], dashCalls: number[][] = []) {
@@ -1003,6 +1027,53 @@ const completedArea: MeasurementOverlayState = {
   drawColor: '#224466',
 };
 
+describe('CanvasPainter.drawVertexDots', () => {
+  it('deduplicates shared arcs and batches large vertex paths', () => {
+    const fills: number[] = [];
+    let dots = 0;
+    const visited: number[] = [];
+    const { painter } = createCanvasPainterHarness({
+      set fillStyle(_value: string) {},
+      beginPath() {
+        dots = 0;
+      },
+      moveTo() {},
+      arc() {
+        dots++;
+      },
+      fill() {
+        fills.push(dots);
+      },
+    });
+    const arcs = {
+      size: () => 2,
+      getArcIter(id: number) {
+        visited.push(id);
+        let index = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            if (index >= 60) return false;
+            this.x = index;
+            this.y = id * 10;
+            index++;
+            return true;
+          },
+        };
+      },
+    } as unknown as ArcCollection;
+
+    painter.drawVertexDots([[[0, 1]], [[0]]] as PathShape[], arcs, {
+      dotColor: '#123456',
+      hoverColor: '#123456',
+    });
+
+    expect(visited).toEqual([0, 1]);
+    expect(fills).toEqual([100, 20]);
+  });
+});
+
 describe('CanvasPainter.drawMeasurementOverlay', () => {
   it('fills a completed area before drawing its vertex dots and label', () => {
     const { ctx, calls } = makeContext();
@@ -1243,7 +1314,7 @@ describe('CanvasPainter theme colors', () => {
     expect(getComputedStyle).toHaveBeenCalledWith(canvas);
   });
 
-  it('resolves inherited emap variables on every draw', () => {
+  it('resolves computed theme variables once per frame and refreshes after clear', () => {
     const { assignments, canvas, painter } = makeThemePainter();
     const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
       const values = new Map(
@@ -1262,9 +1333,16 @@ describe('CanvasPainter theme colors', () => {
       radius: 4,
       fill: true,
     });
+    painter.drawPoints([[[20, 20]]] as any, {
+      color: 'var(--emap-primary)',
+      radius: 4,
+      fill: true,
+    });
     expect(assignments).toContain('rgb(1, 2, 3)');
+    expect(getComputedStyle).toHaveBeenCalledTimes(1);
 
     canvas.style.setProperty('--emap-primary', 'rgb(4, 5, 6)');
+    painter.clear();
     painter.drawPoints([[[10, 10]]] as any, {
       color: 'var(--emap-primary)',
       radius: 4,

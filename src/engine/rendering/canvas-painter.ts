@@ -28,7 +28,9 @@ import {
 const ARC_STROKE_BATCH_ARC_LIMIT = 100;
 const ARC_STROKE_BATCH_VERTEX_LIMIT = 12_000;
 const ARROW_DOT_BATCH_SEGMENT_LIMIT = 12_000;
-const ARROW_DOT_CACHE_LIMIT = 64;
+const VERTEX_DOT_BATCH_LIMIT = 100;
+const ARROW_DOT_CACHE_ENTRY_LIMIT = 64;
+const ARROW_DOT_CACHE_BYTE_LIMIT = 32 * 1024 * 1024;
 const DEFAULT_ARROW_DOT_SPACING = 32;
 const DEFAULT_ARROW_DOT_SIZE = 6;
 const MIN_ARROW_DOT_VALUE = 0.1;
@@ -254,6 +256,9 @@ export class CanvasPainter implements EditPainter {
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
+  private _arrowDotCacheBytes = 0;
+  private _arrowDotCacheByteLimit = ARROW_DOT_CACHE_BYTE_LIMIT;
+  private _computedStyle: CSSStyleDeclaration | null | undefined;
   private _arcVisitMarks = new Uint32Array(0);
   private _arcVisitEpoch = 0;
   private _pathArcCache = new WeakMap<
@@ -276,8 +281,11 @@ export class CanvasPainter implements EditPainter {
     const color = value || EMAP_THEME_COLORS[role];
     if (!color.trim().startsWith('var(')) return color;
     const fallbackRole = THEME_TOKEN_ROLES[color] ?? role;
-    const view = this._canvas.ownerDocument?.defaultView;
-    const computed = view?.getComputedStyle?.(this._canvas);
+    if (this._computedStyle === undefined) {
+      const view = this._canvas.ownerDocument?.defaultView;
+      this._computedStyle = view?.getComputedStyle?.(this._canvas) ?? null;
+    }
+    const computed = this._computedStyle;
     const semanticToken = EMAP_THEME_COLORS[fallbackRole];
     return resolveThemeColor(color, EMAP_THEME_FALLBACKS[fallbackRole], (name) => {
       if (color === semanticToken && name === semanticToken.slice(4, -1)) {
@@ -583,11 +591,7 @@ export class CanvasPainter implements EditPainter {
       spacing,
       size,
     );
-    if (!cached && this._arrowDotCache.size >= ARROW_DOT_CACHE_LIMIT) {
-      const oldestKey = this._arrowDotCache.keys().next().value;
-      if (oldestKey !== undefined) this._arrowDotCache.delete(oldestKey);
-    }
-    this._arrowDotCache.set(options.cacheKey, {
+    this._storeArrowDotCache(options.cacheKey, {
       arcs,
       shapes: options.shapes,
       shapeIndices: options.shapeIndices,
@@ -604,6 +608,30 @@ export class CanvasPainter implements EditPainter {
       commands,
     });
     return commands;
+  }
+
+  private _storeArrowDotCache(key: string, entry: ArrowDotCacheEntry): void {
+    const previous = this._arrowDotCache.get(key);
+    if (previous) {
+      this._arrowDotCache.delete(key);
+      this._arrowDotCacheBytes -= previous.commands.byteLength;
+    }
+
+    const bytes = entry.commands.byteLength;
+    if (bytes > this._arrowDotCacheByteLimit) return;
+    while (
+      this._arrowDotCache.size > 0 &&
+      (this._arrowDotCache.size >= ARROW_DOT_CACHE_ENTRY_LIMIT ||
+        this._arrowDotCacheBytes + bytes > this._arrowDotCacheByteLimit)
+    ) {
+      const oldestKey = this._arrowDotCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      const oldest = this._arrowDotCache.get(oldestKey);
+      this._arrowDotCache.delete(oldestKey);
+      if (oldest) this._arrowDotCacheBytes -= oldest.commands.byteLength;
+    }
+    this._arrowDotCache.set(key, entry);
+    this._arrowDotCacheBytes += bytes;
   }
 
   private buildArrowDotCommands(
@@ -831,30 +859,51 @@ export class CanvasPainter implements EditPainter {
       hoverPx = [hoverVertex[0] * mx + bx, hoverVertex[1] * my + by];
     }
 
-    // Draw normal vertex dots
+    // Shared topology can reference the same arc from many features. Visit each
+    // visible arc once, and flush small Canvas paths: large circle paths become
+    // super-linear in Skia just like ordinary point rendering.
     ctx.fillStyle = dotColor;
+    let dotCount = 0;
+    const arcCount = typeof arcs.size === 'function' ? arcs.size() : 0;
+    const visitEpoch = arcCount > 0 ? this._beginArcVisit(arcCount) : 0;
+    const fallbackVisited = visitEpoch === 0 ? new Set<number>() : null;
+    const flushDots = () => {
+      if (dotCount === 0) return;
+      ctx.fill();
+      ctx.beginPath();
+      dotCount = 0;
+    };
     ctx.beginPath();
 
-    shapes.forEach((shape) => {
-      if (!shape) return;
-      (shape as PathShape).forEach((part) => {
-        part.forEach((arcId) => {
+    for (const shape of shapes) {
+      if (!shape) continue;
+      for (const part of shape as PathShape) {
+        for (const arcId of part) {
           const absId = absArcId(arcId);
-          if (arcFilter && !arcFilter(absId)) return;
+          if (arcFilter && !arcFilter(absId)) continue;
+          if (fallbackVisited) {
+            if (fallbackVisited.has(absId)) continue;
+            fallbackVisited.add(absId);
+          } else {
+            if (this._arcVisitMarks[absId] === visitEpoch) continue;
+            this._arcVisitMarks[absId] = visitEpoch;
+          }
           const iter = arcs.getArcIter(absId);
           while (iter.hasNext()) {
             const x = iter.x * mx + bx;
             const y = iter.y * my + by;
             if (x < left || x > right || y < top || y > bottom) continue;
-            // Skip hover vertex (drawn separately with larger radius)
+            // Skip hover vertex (drawn separately with larger radius).
             if (hoverPx && Math.abs(x - hoverPx[0]) < 1 && Math.abs(y - hoverPx[1]) < 1) continue;
+            if (dotCount >= VERTEX_DOT_BATCH_LIMIT) flushDots();
             ctx.moveTo(x + dotRadius, y);
             ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+            dotCount++;
           }
-        });
-      });
-    });
-    ctx.fill();
+        }
+      }
+    }
+    flushDots();
 
     if (style.selectedVertices?.length) {
       ctx.fillStyle = this._resolveColor(style.selectedColor, 'selection');
@@ -1168,6 +1217,7 @@ export class CanvasPainter implements EditPainter {
   }
 
   clear(): void {
+    this._computedStyle = undefined;
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   }
 

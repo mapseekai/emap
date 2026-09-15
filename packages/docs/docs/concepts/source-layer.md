@@ -2,7 +2,7 @@
 id: source-layer
 slug: /concepts/source-layer
 title: 数据源与图层
-api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ZipExtractionLimits"]
+api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ImportResourceLimits", "ZipExtractionLimits"]
 examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
 verifiedVersion: unreleased
@@ -28,6 +28,8 @@ const upload = await TopologySource.fromBytes('upload', bytes, {
 ```
 
 `fromBytes` 的 `filename` 决定导入器识别的格式，上传时应保留原始文件名。也可创建 source 后调用 `await source.setData(...)`。source 必须完成首次导入后才能传给 `map.addSource(...)`。
+
+对于不可信或超大输入，可通过 `TopologySourceOptions` 配置 `resourceLimits.maxInputBytes`。`ImportResourceLimits` 默认限制每个逻辑导入请求最多 2 GiB；ZIP 解压相关的独立限制仍由 `ZipExtractionLimits` 控制。
 
 ## 四个 ID
 

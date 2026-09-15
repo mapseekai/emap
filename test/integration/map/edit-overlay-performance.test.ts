@@ -1,10 +1,4 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../utils/plugin-test-map';
+import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Emap } from '../../../src/engine/map/map';

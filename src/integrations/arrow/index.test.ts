@@ -1,10 +1,4 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../../test/utils/plugin-test-map';
+import { createTestMap, fixtureSet } from '../../../test/utils/plugin-test-map';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerArrowFormats } from './index';
 import { setArrowTable, toArrowTableFromSource } from './index';

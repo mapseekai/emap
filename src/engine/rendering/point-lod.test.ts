@@ -211,8 +211,11 @@ describe('point LOD review regressions', () => {
       );
       expect(first).not.toBeNull();
       expect(next).not.toBeNull();
-      expect(next!.featureIds.length).toBeGreaterThan(first!.featureIds.length);
-      expect(next!.featureIds.length).toBeLessThan(600_000);
+      expect(next!.featureIds.length).toBeGreaterThanOrEqual(first!.featureIds.length);
+      expect(next!.featureIds.length).toBeLessThanOrEqual(150_000);
+      if (width === 1920) {
+        expect(next!.featureIds.length).toBeGreaterThan(first!.featureIds.length);
+      }
       const tiny = cache.query(
         spec,
         layer,

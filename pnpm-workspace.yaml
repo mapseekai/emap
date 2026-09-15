@@ -2,9 +2,10 @@ packages:
   - packages/*
 
 overrides:
+  '@ngageoint/geopackage>file-type': '21.3.2'
   '@ngageoint/geopackage>image-size': '2.0.4'
   '@xmldom/xmldom': '0.8.15'
-  adm-zip: '0.6.0'
+  adm-zip: '0.6.1'
   fflate: '0.8.3'
   form-data: '2.5.6'
   protocol-buffers-schema: '3.6.1'

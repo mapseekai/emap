@@ -1,14 +1,7 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../utils/plugin-test-map';
+import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MapshaperWorkerPool } from '../../../src/engine/core/mapshaper-worker-pool';
-import { Emap } from '../../../src/engine/map/map';
 class TestWorker {
   static instances: TestWorker[] = [];
   onmessage: ((event: MessageEvent) => void) | null = null;

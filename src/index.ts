@@ -209,6 +209,7 @@ export type {
   TopologySourceFromBytesOptions,
   ZipExtractionLimits,
 } from './domain/source/topology-source';
+export type { ImportResourceLimits } from './shared/import-resource-limits';
 export type {
   TopologySource as ITopologySource,
   ReplaceableTopologySource,

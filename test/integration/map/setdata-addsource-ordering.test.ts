@@ -1,10 +1,4 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../utils/plugin-test-map';
+import { createTestMap, fixtureSet } from '../../utils/plugin-test-map';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { Emap } from '../../../src/engine/map/map';

@@ -288,6 +288,29 @@ describe('fromArrowTable', () => {
     expect(dataset.layers[0].shapes).toEqual([[[1, 10]], [[2, 20]], [[3, 30]]]);
   });
 
+  it('preserves special attribute names without mutating imported record prototypes', () => {
+    const geom = wkbColumn('geometry', (w) => {
+      w.writePoint(0, 0);
+      w.endRow();
+    });
+    const protoVec = vectorFromArray([7], new Int32());
+    const constructorVec = vectorFromArray(['safe'], new Utf8());
+    const dataset = fromArrowTable(
+      tableFromColumns([
+        geom,
+        { field: new Field('__proto__', new Int32(), true), data: protoVec.data[0] },
+        { field: new Field('constructor', new Utf8(), true), data: constructorVec.data[0] },
+      ]),
+    );
+    const [record] = dataset.layers[0].data!.getRecords!() as Array<Record<string, unknown>>;
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toBe(7);
+    expect(Object.hasOwn(record, 'constructor')).toBe(true);
+    expect(record.constructor).toBe('safe');
+  });
+
   it('converts BigInt and Timestamp attributes, preserving nulls', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const geom = wkbColumn('geometry', (w) => {

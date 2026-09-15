@@ -395,36 +395,39 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._validateDefaultBasemap(_options.defaultBasemap);
   }
 
-  on<K extends keyof MapLibreServiceEventMap>(
+  override on<K extends keyof MapLibreServiceEventMap>(
     type: K,
     listener: (event: { type: K } & MapLibreServiceEventMap[K]) => void,
   ): this;
-  on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  on(type: string, listener: EventListener): this {
+  override on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override on(type: string, listener: EventListener): this {
     return super.on(type, listener);
   }
 
-  off<K extends keyof MapLibreServiceEventMap>(
+  override off<K extends keyof MapLibreServiceEventMap>(
     type: K,
     listener: (event: { type: K } & MapLibreServiceEventMap[K]) => void,
   ): this;
-  off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  off(type: string, listener: EventListener): this {
+  override off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override off(type: string, listener: EventListener): this {
     return super.off(type, listener);
   }
 
-  once<K extends keyof MapLibreServiceEventMap>(
+  override once<K extends keyof MapLibreServiceEventMap>(
     type: K,
     listener: (event: { type: K } & MapLibreServiceEventMap[K]) => void,
   ): this;
-  once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  once(type: string, listener: EventListener): this {
+  override once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override once(type: string, listener: EventListener): this {
     return super.once(type, listener);
   }
 
-  fire<K extends keyof MapLibreServiceEventMap>(type: K, data: MapLibreServiceEventMap[K]): this;
-  fire<T = Record<string, unknown>>(type: string, data?: T): this;
-  fire(type: string, data?: Record<string, unknown>): this {
+  override fire<K extends keyof MapLibreServiceEventMap>(
+    type: K,
+    data: MapLibreServiceEventMap[K],
+  ): this;
+  override fire<T = Record<string, unknown>>(type: string, data?: T): this;
+  override fire(type: string, data?: Record<string, unknown>): this {
     if (type === 'error' && !Object.hasOwn(data ?? {}, 'phase')) {
       return super.fire('error', {
         phase: 'lifecycle',

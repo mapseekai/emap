@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../../../integrations/mapshaper/adapter';
+import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type {
   ArcCollection,
   MapshaperDataset,

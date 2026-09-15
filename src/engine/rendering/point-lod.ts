@@ -53,6 +53,10 @@ const MAX_LEVELS = 3;
 // representative is a budgeting unit, not a JS heap guarantee.
 const GRID_MEMORY_BUDGET = 64 * 1024 * 1024;
 const REPRESENTATIVE_BYTES = 80;
+// Keep point painting bounded independently of viewport resolution. A 4K viewport
+// otherwise admits >400k representatives, which shifts the bottleneck from the
+// LOD index to Canvas path construction and produces long frames.
+const MAX_PAINT_REPRESENTATIVES = 150_000;
 const DEFAULT_VIEW = { width: 1024, height: 768 };
 const EMPTY: PointLodSelection = { featureIds: new Uint32Array(), componentIds: new Uint32Array() };
 
@@ -158,6 +162,7 @@ export class PointLod {
     );
     const budget = Math.min(
       viewportCells * 2,
+      MAX_PAINT_REPRESENTATIVES,
       Math.floor(GRID_MEMORY_BUDGET / REPRESENTATIVE_BYTES),
     );
     const scale = Math.max(Math.abs(transform.mx), Math.abs(transform.my));

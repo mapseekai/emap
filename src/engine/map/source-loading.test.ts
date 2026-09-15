@@ -1,10 +1,4 @@
-import {
-  createTestMap,
-  createBrowserTestMap,
-  fixtureGet,
-  fixtureSet,
-  fixtureCall,
-} from '../../../test/utils/plugin-test-map';
+import { createTestMap, fixtureSet } from '../../../test/utils/plugin-test-map';
 import { describe, expect, it, vi } from 'vitest';
 import { Projection } from '../../domain/geo/projection';
 import { Viewport } from '../../domain/geo/viewport';

@@ -1,7 +1,6 @@
 import type { Plugin } from 'cordis';
 import { inspectServices } from '../../src/runtime/context/inspection';
 import { settleContext } from '../../src/runtime/context/settle';
-import type { Context } from 'cordis';
 import { pluginSignal } from '../../src/runtime/context/cancellation';
 import { mapLibrePlugin } from '../../src/integrations/maplibre/plugin';
 import { shortcutsPlugin } from '../../src/engine/providers/workspace/shortcuts-plugin';

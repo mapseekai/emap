@@ -221,7 +221,12 @@ function buildRecords(
     if (!vector) continue;
     const wrapDate = DataType.isTimestamp(field.type) || DataType.isDate(field.type);
     for (let row = 0; row < table.numRows; row++) {
-      records[row][field.name] = toRecordValue(vector.get(row), wrapDate);
+      Object.defineProperty(records[row], field.name, {
+        configurable: true,
+        enumerable: true,
+        value: toRecordValue(vector.get(row), wrapDate),
+        writable: true,
+      });
     }
   }
   return records;

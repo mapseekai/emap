@@ -5,7 +5,6 @@ import { toArrowTable } from '../../../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../../arrow/test-utils';
 import { parseGeoMetadata } from '../../../arrow/geoparquet-metadata';
 import type MapshaperDataset from '../../../../shared/types/mapshaper-types';
-import { DuckDbOperationError } from '../../errors';
 import { runRelationTool, resolveRelationOutputColumn, type RelationOperation } from './relation';
 import type { DuckDbConnection, DuckDbRuntime } from '../../runtime';
 

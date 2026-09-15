@@ -114,10 +114,11 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "rollup -c --environment BUILD:development -w",
     "dev-build": "rollup -c --environment BUILD:development",
-    "prebuild": "npm run clean",
+    "prebuild": "npm run runtime:check && npm run clean",
     "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -145,7 +146,7 @@
     "docs:check-api": "node scripts/check-docs-api.mjs",
     "examples:check": "node scripts/check-examples.mjs",
     "docs:verify": "npm run typecheck && npm run typecheck:contracts && npm run typecheck:examples && npm run test-layout:check && npm run api:check-surface && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
-    "release:verify": "npm run format:check && npm run typecheck && npm run typecheck:contracts && npm run typecheck:examples && npm run test-layout:check && npm run api:check-surface && npm run architecture:check && npm run capabilities:check && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check && npm run browser:check && pnpm pack --dry-run && npm run audit:prod",
+    "release:verify": "npm run runtime:check && npm run format:check && npm run lint && npm run typecheck && npm run typecheck:contracts && npm run typecheck:examples && npm run test-layout:check && npm run api:check-surface && npm run architecture:check && npm run capabilities:check && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check && npm run browser:check && pnpm pack --dry-run && npm run audit:prod",
     "prepublishOnly": "npm run release:verify",
     "capabilities:generate": "node scripts/generate-capability-schemas.mjs",
     "capabilities:check": "node scripts/generate-capability-schemas.mjs --check",
@@ -153,7 +154,8 @@
     "typecheck:contracts": "tsc -p tsconfig.type-tests.json --noEmit",
     "test-layout:check": "node scripts/check-test-layout.mjs",
     "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit",
-    "test:geopackage": "vitest run src/integrations/geopackage test/integration/geopackage"
+    "test:geopackage": "vitest run src/integrations/geopackage test/integration/geopackage",
+    "runtime:check": "node scripts/check-node-version.mjs"
   },
   "keywords": [
     "mapshaper",

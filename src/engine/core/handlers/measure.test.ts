@@ -4,7 +4,6 @@ import type { NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import { MeasureHandler } from './measure';
 import { MeasurementCalculator, type MeasurementContext } from '../../../domain/geo/measurement';
-import type { MeasurementOverlayState } from '../../rendering/painter';
 
 function makeHost(crs = 'EPSG:4326') {
   const listeners = new Map<string, Set<(payload: unknown) => void>>();

@@ -153,7 +153,7 @@ export class Emap extends EventDispatcher {
       ? this.ctx.routing
       : this.ctx.mapEvents;
   }
-  fire<T = Record<string, unknown>>(type: string, data?: T): this {
+  override fire<T = Record<string, unknown>>(type: string, data?: T): this {
     if (!this._closed && !!this.ctx.get('mapEvents')) this.ctx.mapEvents.fire(type, data);
     return this;
   }
@@ -185,8 +185,8 @@ export class Emap extends EventDispatcher {
   public getExpressionPolicy(): ExpressionEvaluationPolicy {
     return this.ctx.policy.getExpressionPolicy();
   }
-  on(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
-  on<K extends keyof EmapEventMap>(
+  override on(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  override on<K extends keyof EmapEventMap>(
     type: K,
     listener: (
       e: {
@@ -194,16 +194,16 @@ export class Emap extends EventDispatcher {
       } & EmapEventMap[K],
     ) => void,
   ): this;
-  on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  on(type: string, listener: (e: FeatureEvent) => void): this;
-  on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
-  on(type: string, filterOrListener: unknown, listener?: unknown): this {
+  override on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override on(type: string, listener: (e: FeatureEvent) => void): this;
+  override on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
+  override on(type: string, filterOrListener: unknown, listener?: unknown): this {
     const target = this._eventTarget(type);
     Reflect.apply(target.on, target, [type, filterOrListener, listener]);
     return this;
   }
-  off(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
-  off<K extends keyof EmapEventMap>(
+  override off(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  override off<K extends keyof EmapEventMap>(
     type: K,
     listener: (
       e: {
@@ -211,15 +211,15 @@ export class Emap extends EventDispatcher {
       } & EmapEventMap[K],
     ) => void,
   ): this;
-  off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  off(type: string, listener: (e: FeatureEvent) => void): this;
-  off(type: string, listener: unknown): this {
+  override off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override off(type: string, listener: (e: FeatureEvent) => void): this;
+  override off(type: string, listener: unknown): this {
     const target = this._eventTarget(type);
     Reflect.apply(target.off, target, [type, listener]);
     return this;
   }
-  once(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
-  once<K extends keyof EmapEventMap>(
+  override once(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  override once<K extends keyof EmapEventMap>(
     type: K,
     listener: (
       e: {
@@ -227,10 +227,14 @@ export class Emap extends EventDispatcher {
       } & EmapEventMap[K],
     ) => void,
   ): this;
-  once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  once(type: string, listener: (e: FeatureEvent) => void): this;
-  once(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
-  once(type: string, filterOrListener: unknown, listener?: unknown): this {
+  override once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  override once(type: string, listener: (e: FeatureEvent) => void): this;
+  override once(
+    type: string,
+    filter: FeatureEventFilter,
+    listener: (e: FeatureEvent) => void,
+  ): this;
+  override once(type: string, filterOrListener: unknown, listener?: unknown): this {
     const target = this._eventTarget(type);
     Reflect.apply(target.once, target, [type, filterOrListener, listener]);
     return this;
