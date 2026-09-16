@@ -10,36 +10,58 @@ verifiedVersion: 0.12.0
 
 # Attributes
 
-Emap stores each layer's attributes in a data table. A feature ID locates both its geometry and property record; use `map.features` to read and `map.attributes` or `map.ops` to modify them.
-
-## Read properties
-
-`queryFeatures()` queries by screen coordinate, while `map.features.get()` queries by source, layer, and ID:
+Emap stores layer attributes in a data table; feature IDs locate geometry and attributes. `map.features` reads; `map.attributes` or `map.ops` writes.
 
 ```ts
-const hits = map.queryFeatures([240, 180], {
+const hits = map.queryFeatures([240, 180], { // pick features at a screen position
   layers: ['districts'],
 });
-
-const feature = map.features.get({
+const feature = map.features.get({ // read one feature by source, layer, and ID
   source: 'main',
   layer: 'districts',
   id: 3,
 });
-
-console.log(hits[0]?.properties, feature?.properties);
+console.log(hits[0]?.properties, feature?.properties); // read frozen property snapshots
 ```
 
-A `Feature` is a read view. Do not mutate `feature.properties` or source-dataset records directly; those changes bypass Emap's history, selection, and rendering updates.
+## Core methods
 
-## Layer display filtering
+| Method | Parameters | Description |
+| --- | --- | --- |
+| `queryFeatures(geometryOrOptions, options?)` | Pixel coordinate/bounds, `QueryFeaturesOptions` | Query visible features. |
+| `map.features.get(ref)` | `FeatureRef` | Read one feature by source, layer, and ID. |
+| `setFeatureProperty(ref, key, value)` / `setFeatureProperties(ref, props)` | Feature reference, field, value | Update properties with history. |
 
-`map.setFilter(layerId, expression)` sets a display filter for a render layer. Expressions use the same
-MapLibre subset as style expressions (`get / == != < <= > >= / ! / all / any / match / step / interpolate`)
-and **must evaluate to a boolean for every feature**—if any feature produces a non-boolean value (for example,
-`['get', 'enabled']` yielding the string `'false'` or the number `1`), the entire filter is disabled and an
-`error` event fires; no truthiness coercion occurs.
-When evaluation fails, the `error` event includes `layerId`, `filterExpression`, and `valueType`.
+## More property reading
+
+### Query and Feature parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `queryFeatures.geometryOrOptions` | `[number, number] \| [[number, number], [number, number]] \| QueryFeaturesOptions` | Current viewport | Pixel point, pixel bbox, or options. |
+| `queryFeatures.options.layers` | `string[]` | `undefined` | Limits layers; empty queries all visible layers. |
+| `map.features.get(ref).source` | `string` | — | Owning source ID. |
+| `map.features.get(ref).layer` | `string` | — | Layer name or ID. |
+| `map.features.get(ref).id` | `number` | — | Nonnegative feature ID; unresolved returns `null`. |
+| `Feature.geometry` | `PathShape \| PointShape \| LegacyPointShape \| null` | — | Feature geometry; may be `null`. |
+| `Feature.properties` | `Readonly<Record<string, unknown>>` | `{}` | Frozen property snapshot. |
+
+### DataTable methods
+
+The underlying table is `source.getLayers()[layerIndex].data`; feature IDs match record indexes.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `getRecords()` | `() => Record<string, unknown>[]` | — | Records ordered by feature ID. |
+| `getRecordAt(id)` — `id` | `number` | — | Feature property record. |
+| `getFields()` | `() => string[]` | — | Current field names. |
+| `size()` | `() => number` | — | Attribute-record count. |
+
+## More property operations
+
+### Layer display filtering
+
+`map.setFilter(layerId, expression)` sets a MapLibre-subset render-layer filter. It **must return boolean for every feature**; a non-boolean result disables the filter and fires an `error` with `layerId`, `filterExpression`, and `valueType`.
 
 You can also declare a filter when calling `addLayer` through the layer specification's `filter` field:
 
@@ -47,23 +69,27 @@ You can also declare a filter when calling `addLayer` through the layer specific
 map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
 ```
 
-Use `map.getFilter(layerId)` to read the current filter.
+`map.getFilter(layerId)` reads the filter.
 
-Filters only affect what is seen: rendering, picking/hover, highlighting, and the filtered attribute views
-`map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`.
-They do not alter data, enter undo history, or affect `map.ops.*` or exports; `map.features.iter()/count()`
-retain their all-features semantics. `iterFiltered` accepts a render-layer ID (the `addLayer` ID), not a data-layer ID.
+Filters affect rendering, picking, hover, highlighting, and `iterFiltered(layerId)` / `countFiltered(layerId)`, not attributes, history, `map.ops.*`, export, or `iter()` / `count()`. `iterFiltered` takes a render-layer ID.
 
-To show only filtered contents in an attribute table, iterate/count with `iterFiltered(layerId)` /
-`countFiltered(layerId)`, and refresh the table on the `layerchange` event (`setFilter` fires it with reason
-`'filter'`). Attribute-data changes continue to use the existing `data` event.
+Attribute tables use `iterFiltered` / `countFiltered` and refresh on `layerchange` with reason `'filter'`. Layers without tables evaluate against `null`; `map.setFilter(layerId, null)` clears the filter.
 
-For layers without an attribute table, every feature evaluates against a `null` record (`['get', ...]` yields
-`undefined`). `map.setFilter(layerId, null)` clears the filter.
+### Filter parameters
 
-## Change feature properties
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `setFilter.id` | `string` | — | Render-layer ID. |
+| `setFilter.expression` | `StyleExpression \| null` | — | MapLibre-subset expression; `null` clears. |
+| `getFilter.id` | `string` | — | Render-layer ID; unset returns `undefined`. |
+| `iter(sourceId, layerId)` — `sourceId` / `layerId` | `string` | — | Data source and layer; yields all `Feature`. |
+| `count(sourceId, layerId)` — `sourceId` / `layerId` | `string` | — | Complete feature count. |
+| `iterFiltered(renderLayerId)` — `renderLayerId` | `string` | — | Current-filter visible `Feature`. |
+| `countFiltered(renderLayerId)` — `renderLayerId` | `string` | — | Current-filter visible count. |
 
-`map.attributes.setFeatureProperty()` changes one field, and `setFeatureProperties()` writes several fields as one history entry. Assigning `undefined` to a field deletes it.
+### Change feature properties
+
+`map.attributes.setFeatureProperty()` writes one field; `setFeatureProperties()` combines fields into one history entry; `undefined` deletes a field.
 
 ```ts
 const result = map.attributes.setFeatureProperty(
@@ -80,14 +106,27 @@ map.attributes.setFeatureProperties(
 );
 ```
 
-A complete no-op returns a validation error and creates no history entry.
+Identical values return `validation` without a history entry.
 
-## Manage fields
+#### Property write parameters
 
-### Create an empty layer with fields
+Both methods return `OpResult<void>`; success is `{ ok: true }`.
 
-`map.createLayer(id, options)` creates and registers a separate source with default rendering.
-`geometryType` supports `point`, `polyline`, and `polygon`; no imported file or placeholder feature is needed.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `setFeatureProperty.ref.source` | `string` | — | Source ID. |
+| `setFeatureProperty.ref.layer` | `string` | — | Layer name or ID. |
+| `setFeatureProperty.ref.id` | `number` | — | Feature ID and record index. |
+| `setFeatureProperty.key` | `string` | — | Field name. |
+| `setFeatureProperty.value` | `unknown` | — | New value; `undefined` deletes. |
+| `setFeatureProperties.ref` | `FeatureRef` | — | Bulk-write feature. |
+| `setFeatureProperties.props` | `Record<string, unknown>` | — | Field-value map; one undo entry. |
+
+### Manage fields
+
+#### Create an empty layer with fields
+
+`map.createLayer(id, options)` creates and registers a source with default rendering; `geometryType` supports `point`, `polyline`, and `polygon`.
 
 ```ts
 const source = await map.createLayer('survey', {
@@ -109,19 +148,24 @@ map.drawFeature.setOptions({ source: 'survey', sourceLayer: 'Survey points', typ
 map.drawFeature.enable();
 ```
 
-Field types are `string`, `number`, and `boolean`. They validate creation defaults, not later
-expressions or property edits. Omitted defaults become `null` on newly drawn features.
-Names must be nonempty and unique; defaults must match their types, with finite numbers.
+#### Create-layer parameters
 
-`crs` specifies the initial source CRS. An established map normalizes the new source to its project CRS.
-Source IDs must be unique, and failures reject the returned promise. Source creation does not enter
-feature history; subsequent drawing and field edits support undo/redo.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | — | Unique source ID. |
+| `options.name` | `string` | — | Nonempty layer name. |
+| `options.geometryType` | `'point' \| 'polyline' \| 'polygon'` | — | Layer geometry type. |
+| `options.crs` | `string` | — | Input CRS; normalizes to project CRS. |
+| `options.fields` | `readonly LayerFieldDefinition[]` | `[]` | Empty-table field definitions. |
+| `options.fields[].name` | `string` | — | Nonempty unique field name. |
+| `options.fields[].type` | `'string' \| 'number' \| 'boolean'` | — | Default-value validation type. |
+| `options.fields[].defaultValue` | `string \| number \| boolean \| null` | `undefined` | New-feature value; omitted writes `null`, numbers finite. |
 
-Use `await TopologySource.create(id, options)` to prepare a detached source, then register it with
-`await map.addSource(id, source)`. Definitions are emap layer metadata; exchange formats such as
-GeoJSON do not represent empty-table field types or drawing defaults and cannot preserve them.
+`map.createLayer` returns an immediately registered `Promise<ConcreteTopologySource>`; `TopologySource.create` prepares an unregistered source. Field types validate defaults; names are nonempty and unique.
 
-Field operations target a source-layer name and are undoable. Rename does not overwrite an existing destination field.
+`crs` is the initial CRS; an established map normalizes the source. Source IDs are unique.
+
+Field operations target a source layer and are undoable; an existing destination field makes rename conflict.
 
 ```ts
 map.attributes.addField({
@@ -145,9 +189,34 @@ map.attributes.removeField({
 });
 ```
 
-## Expressions, filtering, and joins
+#### Field-operation parameters
 
-Expression, `where`, and `calc` options on `map.ops` obey `expressionPolicy`. Its default is `'disabled'`; set `'trusted'` only for expressions controlled by the application.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `addField.source` | `string` | — | Source ID. |
+| `addField.target` | `string` | — | Target layer name or ID. |
+| `addField.field` | `string` | — | New field name. |
+| `addField.defaultValue` | `unknown` | `null` | Value for missing fields; existing values persist. |
+| `removeField.source` / `removeField.target` | `string` | — | Source and layer. |
+| `removeField.field` | `string` | — | Field to remove. |
+| `renameField.source` / `renameField.target` | `string` | — | Source and layer. |
+| `renameField.from` | `string` | — | Current field name. |
+| `renameField.to` | `string` | — | New unique name, distinct from `from`. |
+
+#### Field-name validation
+
+Import `isValidFieldName` and `findInvalidFieldName` for operation-layer validation.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `isValidFieldName(value)` — `value` | `unknown` | — | Nonempty safe field name. |
+| `findInvalidFieldName(values)` — `values` | `ReadonlyArray<unknown>` | — | First invalid value; `null` if valid or empty. |
+
+Names exclude commas, equals, colons, quotes, backslashes, and controls.
+
+### Expressions, filtering, and joins
+
+`map.ops` expressions, `where`, and `calc` obey `expressionPolicy`: default `'disabled'`; application-controlled expressions may use `'trusted'`.
 
 ```ts
 const map = await Emap.create({
@@ -168,7 +237,50 @@ await map.ops.filterFields({
 });
 ```
 
-Use `joinTable()` to join an external table to a layer by key fields. Key type and formatting must match on both sides: string `"001"` and number `1` are distinct keys.
+#### Expression and field-filter parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `applyExpression.source` | `string` | — | Source ID. |
+| `applyExpression.target` | `string` | — | Layer name or ID. |
+| `applyExpression.expression` | `string` | — | Per-feature JavaScript; `this.<field>` accesses attributes. |
+| `applyExpression.where` | `string` | `undefined` | Truthy records receive expression. |
+| `filterFields.source` | `string` | — | Source ID. |
+| `filterFields.target` | `string` | — | Layer name or ID. |
+| `filterFields.fields` | `string[]` | — | Retained fields; `['*']` removes all. |
+| `filterFields.invert` | `boolean` | `false` | Removes listed fields. |
+
+#### Classification parameters
+
+`classifyFeatures()` writes colors and returns breaks, categories, counts, and null color.
+
+```ts
+const result = await map.ops.classifyFeatures({
+  source: 'main',
+  target: 'districts',
+  field: 'population',
+  method: 'quantile',
+  classes: 5,
+  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#4292c6', '#084594'],
+});
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `source` | `string` | — | Source ID. |
+| `target` | `string` | — | Layer receiving colors. |
+| `field` | `string` | — | Classification field. |
+| `method` | `'quantile' \| 'equal-interval' \| 'nice' \| 'categorical'` | — | Quantile, interval, nice, or categorical. |
+| `classes` | `number` | `4` | Sequential classes; at least `2`. |
+| `breaks` | `number[]` | `undefined` | Explicit interior breaks; overrides `method`. |
+| `categories` | `(string \| number)[]` | Distinct non-nullish values in appearance order | Categorical values. |
+| `colors` | `string[]` | — | Category or interval colors. |
+| `saveAs` | `string` | `'fill'` | Color-field name. |
+| `nullValue` | `string` | Theme muted color | Null color. |
+| `otherColor` | `string` | `nullValue` | Unlisted-category color. |
+| `invert` | `boolean` | `false` | Reverses colors. |
+
+`joinTable()` joins an external table by key; both sides need matching type and formatting.
 
 ```ts
 await map.ops.joinTable({
@@ -179,7 +291,24 @@ await map.ops.joinTable({
 });
 ```
 
-Attribute operations normally preserve feature IDs and selection. Operations that change feature count can shift record indexes; re-query results or handle `selectionchange` to refresh cached references.
+#### Join parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `source` | `string` | — | Target layer's source ID. |
+| `target` | `string` | — | Layer receiving fields. |
+| `data` | `JoinTableData` | — | CSV, JSON, or same-source layer. |
+| `keys` | `[string, string]` | — | Nonempty `[targetKey, sourceKey]`. |
+| `fields` | `string[]` | All fields except the source key | Copied fields. |
+| `prefix` | `string` | `undefined` | Joined-field prefix. |
+| `where` | `string` | `undefined` | Pre-join filter expression. |
+| `calc` | `string` | `undefined` | Many-to-one aggregation expression. |
+| `unjoined` | `boolean` | `false` | Retains unmatched targets. |
+| `unmatched` | `boolean` | `false` | Outputs unmatched external records as a layer. |
+
+`where`, `calc`, and `applyExpression` require `expressionPolicy: 'trusted'`.
+
+Attribute operations usually preserve feature IDs and selection; re-query after count changes.
 
 ## API
 

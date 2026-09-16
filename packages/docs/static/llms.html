@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>emap — llms.txt</title>
+<style>
+  body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c1e21; }
+  h1 { font-size: 1.1rem; display: flex; justify-content: space-between; align-items: baseline; }
+  a { color: #2e5fa3; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 8px; padding: 1rem 1.25rem; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body>
+<h1><span>emap — llms.txt</span><a href="llms.txt" download>下载 .txt</a></h1>
+<pre id="content">加载中…</pre>
+<script>
+  fetch('llms.txt')
+    .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+    .then(function (t) { document.getElementById('content').textContent = t; })
+    .catch(function () { document.getElementById('content').textContent = 'llms.txt 加载失败'; });
+</script>
+</body>
+</html>

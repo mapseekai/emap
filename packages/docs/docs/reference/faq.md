@@ -10,37 +10,51 @@ verifiedVersion: 0.12.0
 
 # FAQ
 
-## 为什么地图空白？
-
-确认地图容器及其父级有非零宽度和高度；导入 `@mapseekai/emap/style.css`；等待 `TopologySource` 加载完成后调用 `map.addSource(...)`；使图层的 `source` 与注册的 source ID 一致；并用 `map.setExtent(source.getExtent())` 或相机方法将视图移动到数据范围。
-
-## 如何加载自己的文件？
-
-从 URL 创建数据源：
+常见的地图初始化、数据加载和运行时配置问题。
 
 ```ts
-const source = await TopologySource.fromUrl("roads", "/data/roads.geojson")
-await map.addSource("roads", source)
-map.setExtent(source.getExtent())
+const source = await TopologySource.fromUrl("roads", "/data/roads.geojson") // 从 URL 加载数据
+await map.addSource("roads", source) // 以同一 ID 注册数据源
+map.setExtent(source.getExtent()) // 适配数据范围
 ```
 
-URL 必须可被浏览器访问；跨域 URL 必须返回允许应用访问的 CORS 响应头。二进制内容可通过 `new TopologySource(id)` 后的 `setData({ filename, content })` 载入。`filename` 的扩展名决定导入格式。
+## 核心问题
 
-## 为什么图层没有显示？
+### 为什么地图空白？
 
-图层的 `type` 必须匹配 source layer 的几何类型，`source` 必须匹配 source ID。source 可以对应多个渲染图层，后添加的图层位于更靠上的绘制顺序。
+`MapOptions.container` 定位画布挂载点。为它及父级设置非零尺寸并导入 `@mapseekai/emap/style.css`；静态展示设 `interactive: false`。
 
-## 何时需要 Worker？
+使用 `TopologySource.fromUrl()` 或 `source.setData()` 加载，以同一 `id` 注册，调用 `map.setExtent(source.getExtent())`，并令 `LayerSpecification.source` 匹配该 `id`；多数据层 source 使用 `'source-layer'`。
 
-仅在将较重的数据处理移出主线程时设置 `useWorker` 和 `workerUrl`。应用将 `emap-worker.js` 和同目录的 `mapshaper-vendor.js` 发布为页面可访问的资源。
+### 如何加载自己的文件？
 
-## 如何使用 Arrow、GeoParquet 或 DuckDB？
+`TopologySource.fromUrl(id, url, options?)` 的 `id` 用于 `map.addSource` 和图层 `source`；跨域 URL 需要 CORS。内存数据使用 `source.setData({ filename, content })`，按扩展名选导入器；文件数组每项为一个 dataset layer。`TopologySource.fromBytes(id, bytes, { filename })` 接受 `ArrayBuffer`，默认文件名为 `${id}.geojson`。
 
-从 `@mapseekai/emap/arrow` 导入 Arrow、GeoArrow 和 GeoParquet API，并安装 `apache-arrow`；GeoParquet 还安装 `parquet-wasm`。从 `@mapseekai/emap/duckdb` 导入 DuckDB API，并安装 `@duckdb/duckdb-wasm` 和 `apache-arrow`。各入口的 peer 依赖见[兼容性](./compatibility.md)。
+### 为什么图层没有显示？
 
-## 如何处理操作失败？
+`spec.id` 是唯一图层键，`spec.source` 指定已注册 source，`'source-layer'` 选择数据 layer。点用 `'circle'`，线和边界用 `'line'`，面填充用 `'fill'`；`'visible'` 渲染图层，`before` 控制顺序。
 
-检查 `OpResult` 的 `ok` 字段；失败时按 `error.kind` 显示恢复操作或记录诊断。source 预检和加载错误以 `SourceLoadError` 的 `code` 和 `diagnostics` 提供详情。
+## 更多数据格式
+
+`arrowFormatsPlugin` 向 `map.formats` 注册 Arrow 和 GeoParquet 扩展名。`setData()` 按文件名导入，`export()` 支持 `'geoparquet'` 和 `'geoarrow'`。Arrow 入口需要 `apache-arrow`，GeoParquet 还需要 `parquet-wasm`。
+
+用 `createDuckDbRuntimeFromJsDelivr(options?)` 创建 DuckDB；`spatialExtensionUrls` 提供自托管扩展 WASM。`queryGeoParquetWithDuckDb()` 接收数据、必填 SQL 和 runtime；`geometryColumn` 选几何列，`layerName` 默认 `'layer'`，`noTopology` 用于仅展示。需要 `@duckdb/duckdb-wasm` 和 `apache-arrow`；见[兼容性](./compatibility.md)。
+
+## 更多后台处理
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `useWorker` | `boolean \| 'auto'` | `false` | dataset 替换的 Worker 路由。 |
+| `workerThreshold` | `number` | `50000` | `'auto'` Worker 阈值。 |
+| `workerUrl` | `string` | `'emap-worker.js'` | 相对 `document.baseURI` 的 bundle URL。 |
+| `workerPoolSize` | `number` | `1` | 维护的 Worker 数。 |
+| `workerRouting` | `WorkerRoutingFn` | 引擎路由 | 自定义 `'auto'` 路由。 |
+
+发布 `emap-worker.js` 和同目录 `mapshaper-vendor.js`。
+
+## 更多错误处理
+
+`MapshaperOps` 返回 `OpResult<T>`：成功读取 `value`，失败按 `error.kind` 分支。错误包含目标 ID、校验字段、DuckDB 详情或 mapshaper 原因；`SourceLoadError` 包含诊断代码、级别、消息和可选 CRS 恢复值。
 
 ## API
 

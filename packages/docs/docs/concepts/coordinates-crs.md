@@ -10,95 +10,142 @@ verifiedVersion: 0.12.0
 
 # 坐标与 CRS
 
-Emap 区分 dataset/map 坐标、Canvas 像素和 CRS 标识。几何、相机中心和空间操作使用 dataset/map 坐标；指针命中和屏幕叠加物使用 Canvas 本地像素；CRS 说明坐标数值代表的位置和单位。
+Emap 使用 dataset/map 坐标保存几何和空间计算，使用 Canvas 像素进行交互和绘制，并以 CRS 标识定义坐标含义与单位。
+
+```ts
+const map = await Emap.create({ container: '#map' }); // 创建地图实例
+map.setCRS('EPSG:3857'); // 为空地图建立 CRS
+const source = await TopologySource.create('places', { // 创建带 CRS 的空 source
+  name: 'places', // 设置数据 layer 名称
+  geometryType: 'point', // 设置几何类型
+  crs: 'EPSG:3857', // 指定输入坐标 CRS
+});
+await map.addSource('places', source); // 登记 source 并统一地图 CRS
+```
+
+## 核心方法
+
+| API | 参数 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `map.setCRS(crs)` | `crs: string` | 必填 | 为无 source 的地图设置活动 CRS。 |
+| `map.getCRS()` / `source.getCRS()` | 无 | — | 读取地图 / source CRS。 |
+| `map.project(x, y)` / `map.unproject(px, py)` | 两个 `number` | 必填 | 当前 CRS 坐标与 Canvas 本地像素互转。 |
+| `map.reproject(targetCrs)` | `targetCrs: string` | 必填 | 重投影已登记 source、元数据、索引和视图，并创建可撤销记录。 |
 
 | 空间 | 示例 | 用途 |
 | --- | --- | --- |
-| dataset/map 坐标 | `[120, 30]`、`[13358338, 3503549]` | 几何、范围、相机、操作 |
-| Canvas 像素 | `[320, 180]` | 指针、命中测试、屏幕 UI |
-| CRS 标识 | `EPSG:4326`、`EPSG:3857` | 解释坐标和单位 |
+| dataset/map 坐标 | `[120, 30]`、`[13358338, 3503549]` | 几何、范围、相机和空间操作。 |
+| Canvas 像素 | `[320, 180]` | 指针、命中测试和屏幕 UI。 |
+| CRS 标识 | `EPSG:4326`、`EPSG:3857` | 坐标位置和单位。 |
 
-Canvas 像素不是经纬度，dataset 坐标也不一定是 WGS84。
+## 更多 CRS 设置
 
-## 读取和确定 CRS
+`Emap.create(options)` 初始化地图。`TopologySource.create(id, options)` 创建独立空 layer；`map.addSource(id, source, answers)` 为导入 source 建立 CRS。
 
-`source.getCRS()` 与 `map.getCRS()` 返回 CRS 字符串。`resolveDatasetCRS(dataset)` 从 dataset 元数据解析 CRS，在没有可识别元数据时返回 `DEFAULT_CRS`（`EPSG:4326`）。该回退值不能证明原始坐标就是经纬度；来源不明的数据应由应用收集 CRS。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `Emap.create(options)` 的 `options` | `EmapOptions` | `{}` | 地图初始化选项。 |
+| `TopologySource.create(id, options)` 的 `id` / `options` | `string` / `CreateLayerOptions` | 必填 | source 标识 / 空 layer 及 CRS 元数据。 |
+| `name` / `geometryType` | `string` / `'point' \| 'polyline' \| 'polygon'` | 必填 | layer 名称 / 几何类型。 |
+| `crs` / `fields` | `string` / `readonly LayerFieldDefinition[]` | 必填 / `[]` | 新 layer CRS / 初始属性字段。 |
+| `map.addSource` 的 `id` / `source` / `answers.sourceCrs` | `string` / `TopologySource` / `string` | 必填 / 必填 / source 元数据 | 注册名 / source / 导入坐标 CRS 覆盖值。 |
+
+`DEFAULT_CRS` 为 `EPSG:4326`。`resolveDatasetCRS(dataset)` 缺省为它；`normalizeCrsString(str)` 规范化外部标签；`inferFromPrj(prj)` 从 `.prj`/WKT 提取 EPSG；`setDatasetCrsMetadata(dataset, crs)` 写入 CRS 并清理 `prj`/`wkt1`。
+
+## 更多重投影
 
 ```ts
-console.log(source.getCRS());
-console.log(map.getCRS());
+await map.reproject('EPSG:3857'); // 重投影地图及其已登记 source
 ```
 
-空地图可用 `map.setCRS('EPSG:3857')` 预设 CRS。第一个注册的 source 会在地图尚未预设 CRS 时建立活动 CRS。后续 source 在注册前会归一到地图 CRS。
-
-将外部构造的 dataset 挂到地图前，可用 `setDatasetCrsMetadata(dataset, crs)` 显式写入 CRS 元数据：给定的 `crs` 会替换 dataset 内嵌的 prj/wkt1 提示，传入 `undefined` 则清除。
-
-## 重投影地图或导出图层
-
-已注册 source 的地图通过 `map.reproject(...)` 改变 CRS：
-
-```ts
-await map.reproject('EPSG:3857');
-```
-
-该操作将所有已注册 source 转换到目标 CRS，更新 CRS 元数据、空间索引和视图。一个 source 转换失败时不提交任何 source。已注册数据不能用 `setCRS` 仅改变解释；`setCRS` 用于没有 source 的地图。
-
-要以另一 CRS 导出某个 layer 而不改变地图，使用 `projectLayer`：
+| API | 参数 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `source.reproject(targetCrs, targetCrsMetadata?)` | `string`、`string \| undefined` | `targetCrs` 必填、元数据 `undefined` | 重投影独立 source 并可写入规范 CRS 元数据。 |
+| `map.ops.projectLayer(options)` | `source`、`target`、`crs` | 必填 | 导出另一 CRS 的 layer 副本，不改变地图状态。 |
+| `options.init` / `densify` | `string` / `boolean` | source 元数据 / `false` | 输入 CRS 覆盖值 / 投影曲线的中间顶点。 |
+| `output.format` / `output.filename` | `ExportFormat` / `string` | `'geojson'` / `${target}.${format}` | Blob 格式 / 建议文件名。 |
 
 ```ts
-const result = await map.ops.projectLayer({
-  source: 'main',
-  target: 'districts',
-  crs: 'EPSG:3857',
-  output: { format: 'geojson', filename: 'districts-3857.geojson' },
+const result = await map.ops.projectLayer({ // 导出重投影后的 layer 副本
+  source: 'main', // 选择 source
+  target: 'districts', // 选择 layer
+  crs: 'EPSG:3857', // 选择输出 CRS
+  output: { format: 'geojson', filename: 'districts-3857.geojson' }, // 设置导出文件
 });
 
-if (result.ok) {
-  const { blob, filename } = result.value;
-  console.log(blob, filename);
+if (result.ok) { // 仅在成功时读取结果
+  const { blob, filename } = result.value; // 取得 Blob 和文件名
+  console.log(blob, filename); // 使用导出结果
 }
 ```
 
-`projectLayer` 处理隔离副本，返回导出文件，不修改地图 source、活动 CRS 或 viewport。
-
-## 地图坐标与屏幕坐标
+## 更多坐标空间
 
 ```ts
-const [screenX, screenY] = map.project(120, 30);
-const [mapX, mapY] = map.unproject(screenX, screenY);
+const [screenX, screenY] = map.project(120, 30); // 转为 Canvas 本地像素
+const [mapX, mapY] = map.unproject(screenX, screenY); // 转回当前 CRS 坐标
 ```
 
-`project` 和 `unproject` 只应用 viewport 变换，不进行 EPSG 坐标转换。`queryFeatures` 使用 Canvas 本地像素；浏览器事件坐标需要先换算到容器内。
+`project`/`unproject` 应用当前视图变换；EPSG 转换使用 `reproject` 或 `projectLayer`。底层 `AffineTransform` 为 `project(x, y) = [x * mx + bx, y * my + by]`。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `new AffineTransform(mx, my, bx, by)` | 四个 `number` | `1`、`1`、`0`、`0` | X/Y 缩放与 X/Y 平移。 |
+| `projection.setCRS(crs)` | `string` | 必填 | Projection CRS 标签。 |
+| `projection.getCenter(cx, cy)` / `projection.getScale(zoom)` / `projection.getZoom(mx)` | `number` | 必填 | 中心 / zoom 的 scale / X scale 的 zoom。 |
+| `viewport.setCRS(crs)` | `string` | 必填 | Viewport CRS 提示。 |
+| `viewport.project(x, y)` / `viewport.unproject(px, py)` | 两个 `number` | 必填 | dataset/map 与 Viewport 像素互转。 |
+
+`Projection` 初始 CRS 为 `EPSG:4326`；`Viewport` 初始为单位变换。
 
 ## 范围、距离和单位
 
-`Bounds` 表示 dataset/map 坐标范围。加载后检查范围再移动相机：
+`Bounds` 表示 dataset/map 范围；`source.getExtent()` 返回它。buffer、simplify、snap 和面积阈值都使用 dataset 坐标单位。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `new Bounds(xmin, ymin, xmax, ymax)` | 四个 `number` | `Infinity`、`Infinity`、`-Infinity`、`-Infinity` | 最小 X/Y 与最大 X/Y。 |
+| `map.fitBounds(bounds, options)` | `Bounds`、`FitBoundsOptions` | bounds 必填 | 显示范围。 |
+| `options.padding` / `maxScale` | `number` | `0` / 未限制 | Canvas 像素内边距 / 拟合最大 scale。 |
+| `options.duration` / `easing` / `animate` | `number` / `(t: number) => number` / `boolean` | `1000` / `Tween.sineInOut` / `true` | 动画时长、缓动和开关。 |
 
 ```ts
-const extent = source.getExtent();
-if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 });
+const extent = source.getExtent(); // 读取数据范围
+if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 }); // 立即适配有效范围
 ```
-
-buffer 半径、simplify tolerance、snap interval 和面积阈值使用 dataset 坐标单位。投影 CRS 的单位可能是米或英尺；`EPSG:4326` 的单位是度。距离或面积操作应在适合该区域的投影 CRS 下执行，而不是把经纬度数值当成米。
 
 ## 相机 zoom 与 scale
 
-`zoom` 是 Web Mercator 便利值。其他 CRS 使用 `fitBounds` 或 CRS 无关的 `scale`：
+`CameraOptions` 服务于 `jumpTo`、`easeTo` 和 `flyTo`。`Projection` 处理 Web Mercator zoom/scale；其他 CRS 使用 `scale`。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `options.center` / `zoom` / `scale` | `[number, number]` / `number` / `number` | 当前中心 / 当前 zoom / 当前 scale | 目标中心 / Web Mercator zoom / 优先于 `zoom` 的 scale。 |
+| `options.duration` / `easing` / `animate` | `number` / `(t: number) => number` / `boolean` | `1000` / `Tween.sineInOut` / `true` | 动画时长、缓动和开关。 |
+| `options.curve` / `speed` | `number` | `1.42` / 自动计算 | `flyTo` van Wijk 曲率 / 飞行速度。 |
 
 ```ts
-map.jumpTo({
-  center: [500000, 3400000],
-  scale: 0.002,
+map.jumpTo({ // 立即更新相机
+  center: [500000, 3400000], // 使用投影坐标设置中心
+  scale: 0.002, // 为任意 CRS 设置比例
 });
 ```
-
-同一相机调用同时提供 `scale` 和 `zoom` 时，`scale` 优先。
 
 ## API
 
 - [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 - [Bounds](/mapseekai/emap/api/classes/emap.Bounds.html)
+- [AffineTransform](/mapseekai/emap/api/classes/emap.AffineTransform.html)
+- [Projection](/mapseekai/emap/api/classes/emap.Projection.html)
+- [Viewport](/mapseekai/emap/api/classes/emap.Viewport.html)
+- [CameraOptions](/mapseekai/emap/api/interfaces/emap.CameraOptions.html)
+- [AnimationOptions](/mapseekai/emap/api/interfaces/emap.AnimationOptions.html)
+- [FitBoundsOptions](/mapseekai/emap/api/interfaces/emap.FitBoundsOptions.html)
+- [FlyToOptions](/mapseekai/emap/api/interfaces/emap.FlyToOptions.html)
+- [DEFAULT_CRS](/mapseekai/emap/api/variables/emap.DEFAULT_CRS.html)
 - [resolveDatasetCRS](/mapseekai/emap/api/functions/emap.resolveDatasetCRS.html)
+- [normalizeCrsString](/mapseekai/emap/api/functions/emap.normalizeCrsString.html)
+- [inferFromPrj](/mapseekai/emap/api/functions/emap.inferFromPrj.html)
 - [setDatasetCrsMetadata](/mapseekai/emap/api/functions/emap.setDatasetCrsMetadata.html)
 
 ## 可运行示例

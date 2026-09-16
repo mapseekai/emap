@@ -116,14 +116,15 @@ export interface MapOptions {
    */
   workerPool?: MapshaperWorkerPool;
   /**
-   * Override the engine's per-call routing decision when `useWorker`
-   * is `'auto'`. Receives the parsed command head set, vertex count,
-   * and the engine's default decision; return `true` to route through
-   * the worker, `false` to keep on the main thread. The default
-   * decision tree handles cheap commands (rename-fields / sort / …)
-   * and expensive ones (buffer / clean / dissolve / …) but apps with
-   * domain knowledge can refine it here. Ignored when `useWorker` is
-   * `true` / `false`.
+   * Override the engine's per-call routing decision whenever a worker
+   * pool exists (`useWorker` `'auto'` or `true`). Receives the parsed
+   * command head set, vertex count, the current `mode`, and the
+   * engine's default decision; return `true` to route through the
+   * worker, `false` to keep on the main thread. The default decision
+   * tree handles cheap commands (rename-fields / sort / …) and
+   * expensive ones (buffer / clean / dissolve / …) but apps with
+   * domain knowledge can refine it here — including demoting specific
+   * commands to the main thread under `true`.
    */
   workerRouting?: import('./worker-routing').WorkerRoutingFn;
 }

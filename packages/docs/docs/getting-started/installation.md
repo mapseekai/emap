@@ -10,34 +10,22 @@ verifiedVersion: 0.12.0
 
 # 安装
 
-安装 `@mapseekai/emap` 后，在应用入口导入库和样式表。Emap 运行在支持 ES module、Canvas 2D 和现代 JavaScript 的浏览器中。
-
-## 安装核心包
-
-使用项目的包管理器安装核心包：
+安装 `@mapseekai/emap`，并在应用入口导入库和样式表；浏览器需要 ES module、Canvas 2D 和非零地图容器。
 
 ```bash
-pnpm add @mapseekai/emap
+pnpm add @mapseekai/emap # 安装核心包；npm 项目使用 npm install @mapseekai/emap
 ```
-
-或：
-
-```bash
-npm install @mapseekai/emap
-```
-
-在应用入口导入所需的 API 和样式表：
 
 ```ts
-import { Emap, TopologySource } from '@mapseekai/emap';
-import '@mapseekai/emap/style.css';
+import { Emap, TopologySource } from '@mapseekai/emap'; // 导入地图 API
+import '@mapseekai/emap/style.css'; // 导入内置控件和编辑样式
 ```
 
-样式表包含内置控件和编辑界面的样式。应用的地图容器需要非零宽度和高度。
+## 更多环境与模块配置
 
-## TypeScript 模块解析
+最低浏览器版本：Chrome 或 Edge 109、Firefox 115、Safari 16.4。开发和发布使用 Node.js `>=22.18 <25`；浏览器应用需要 ES2022、ES module、Canvas 2D 和非零地图容器。
 
-除根入口外，功能入口都是 `package.json` exports 子路径：`/arrow`、`/duckdb`、`/geopackage`、`/maplibre`、`/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`，以及样式表 `/style.css`。Vite 和其他浏览器打包器使用 `bundler` 解析：
+功能入口为 `package.json` exports 子路径：`/arrow`、`/duckdb`、`/geopackage`、`/maplibre`、`/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai` 和 `/style.css`。浏览器打包项目使用 `module: "ESNext"` 与 `moduleResolution: "bundler"`：
 
 ```json
 {
@@ -48,7 +36,7 @@ import '@mapseekai/emap/style.css';
 }
 ```
 
-原生 Node ESM 项目为 `module` 和 `moduleResolution` 使用匹配的 `Node16` 或 `NodeNext` 设置：
+原生 Node ESM 项目的 `module` 和 `moduleResolution` 均使用 `Node16` 或 `NodeNext`：
 
 ```json
 {
@@ -59,51 +47,60 @@ import '@mapseekai/emap/style.css';
 }
 ```
 
-## 可选功能与 peer 依赖
+## 更多可选功能与 peer 依赖
 
-核心包不需要以下依赖。仅在使用对应入口时安装它们。
+核心包独立运行；只安装实际导入入口的 peer 依赖。
+
+| 入口 | 必需 peer 依赖 | 启用能力 |
+| --- | --- | --- |
+| `@mapseekai/emap` | 无 | 地图、source、图层和编辑。 |
+| `@mapseekai/emap/arrow`（Arrow / GeoArrow） | `apache-arrow` `^17.0.0` | Arrow table 互操作与 GeoArrow 读写。 |
+| `@mapseekai/emap/arrow`（GeoParquet） | `apache-arrow` `^17.0.0`、`parquet-wasm` `^0.7.1` | GeoParquet 读写。 |
+| `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`、`apache-arrow` `^17.0.0` | DuckDB-Wasm 查询和空间处理。 |
+| `@mapseekai/emap/geopackage` | 无 | GeoPackage 矢量表导入。 |
+| `@mapseekai/emap/maplibre` | `maplibre-gl` `^6.4.1` | MapLibre 底图与在线叠加层。 |
 
 ### GeoArrow 和 GeoParquet
 
-`@mapseekai/emap/arrow` 提供 GeoArrow 和 GeoParquet 的导入、导出及 Arrow table 互操作。安装 `apache-arrow` 后可使用 GeoArrow 和 Arrow table；GeoParquet 还需要 `parquet-wasm`：
+`@mapseekai/emap/arrow` 提供 GeoArrow、GeoParquet 和 Arrow table 互操作；GeoParquet 还需 `parquet-wasm@^0.7.1`：
 
 ```bash
-pnpm add apache-arrow parquet-wasm
+pnpm add apache-arrow@^17.0.0 parquet-wasm@^0.7.1
 ```
 
-然后在首次读取或写入 GeoArrow、GeoParquet 前导入该入口：
+在首次 GeoArrow 或 GeoParquet 读写前导入：
 
 ```ts
 import { arrowFormatsPlugin } from '@mapseekai/emap/arrow';
 await map.ctx.plugin(arrowFormatsPlugin);
-// For optional-format input loaded before addSource:
+// 在 addSource 前加载可选格式输入：
 const optionalSource = new TopologySource('upload', { formats: map.formats });
 ```
 
 ### DuckDB 查询和空间处理
 
-`@mapseekai/emap/duckdb` 提供 DuckDB-Wasm 的查询和空间处理 API。安装 `@duckdb/duckdb-wasm` 后导入该入口：
+`@mapseekai/emap/duckdb` 提供 DuckDB-Wasm 查询、GeoParquet 查询和空间处理：
 
 ```bash
-pnpm add @duckdb/duckdb-wasm
+pnpm add @duckdb/duckdb-wasm@1.33.1-dev64.0 apache-arrow@^17.0.0
 ```
 
 ```ts
 import { createDuckDbRuntimeFromJsDelivr } from '@mapseekai/emap/duckdb';
 ```
 
-使用 `@mapseekai/emap/duckdb` 处理 GeoParquet 时，同时安装 `apache-arrow` 和 `parquet-wasm`，并导入 `@mapseekai/emap/arrow`。
+处理 GeoParquet 时，安装 `parquet-wasm@^0.7.1` 并导入 `@mapseekai/emap/arrow` 注册格式。
 
 ### GeoPackage 导入
 
-`@mapseekai/emap/geopackage` 把 GeoPackage 矢量表直接解码为 typed-buffer dataset，不需要安装额外依赖（`@ngageoint/geopackage` 是包的捆绑依赖）。Worker 导入需要应用发布包内的 `dist/emap-geopackage-worker.js` 和 `dist/sql-wasm.wasm` 两个文件；资产、CRS 和内存约定见 [GeoPackage](../data/geopackage.md)。
+`@mapseekai/emap/geopackage` 将 GeoPackage 矢量表解码为 typed-buffer dataset。Worker 导入需发布 `dist/emap-geopackage-worker.js` 和 `dist/sql-wasm.wasm`；详见 [GeoPackage](../data/geopackage.md)。
 
 ### MapLibre 在线底图与叠加层
 
-`@mapseekai/emap/maplibre` 提供 MapLibre 底图和在线叠加层服务，需要安装 `maplibre-gl`：
+`@mapseekai/emap/maplibre` 提供 MapLibre 底图和在线叠加层：
 
 ```bash
-pnpm add maplibre-gl
+pnpm add maplibre-gl@^6.4.1
 ```
 
 ```ts
@@ -114,10 +111,13 @@ import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 
 ### Worker 执行
 
-把 dataset 操作路由到 Web Worker 不需要额外依赖，但应用必须发布 `emap-worker.js` 和 `mapshaper-vendor.js` 两个文件，见 [Web Worker](../guides/worker.md)。
+Web Worker 使用核心包；应用须发布 `emap-worker.js` 和 `mapshaper-vendor.js`。详见 [Web Worker](../guides/worker.md)。
 
 ## 下一步
 
-- 阅读[核心概念](../concepts/overview.md)，创建地图、添加数据源和图层。
-- 阅读[数据格式](../data/formats.md)，加载和导出支持的格式。
-- 打开[GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)，查看完整示例。
+- [核心概念](../concepts/overview.md)
+- [数据格式](../data/formats.md)
+
+## 可运行示例
+
+- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)

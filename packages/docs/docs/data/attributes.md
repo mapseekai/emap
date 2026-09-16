@@ -10,59 +10,85 @@ verifiedVersion: 0.12.0
 
 # 属性
 
-Emap 将每个 layer 的属性保存在 data table 中。要素 ID 同时定位 geometry 和对应属性记录；使用 `map.features` 读取，使用 `map.attributes` 或 `map.ops` 修改。
-
-## 读取属性
-
-`queryFeatures()` 按屏幕坐标查询，`map.features.get()` 按 source、layer 和 ID 查询：
+Emap 将 layer 属性保存在 data table；要素 ID 定位 geometry 和属性。`map.features` 读取，`map.attributes` 或 `map.ops` 修改。
 
 ```ts
-const hits = map.queryFeatures([240, 180], {
+const hits = map.queryFeatures([240, 180], { // 按屏幕位置拾取要素
   layers: ['districts'],
 });
-
-const feature = map.features.get({
+const feature = map.features.get({ // 按 source、图层和 ID 读取要素
   source: 'main',
   layer: 'districts',
   id: 3,
 });
-
-console.log(hits[0]?.properties, feature?.properties);
+console.log(hits[0]?.properties, feature?.properties); // 读取冻结属性快照
 ```
 
-`Feature` 是读取视图。不要直接改写 `feature.properties` 或 source dataset 的 records；这些修改不会经过 Emap 的历史、选择和渲染更新流程。
+## 核心方法
 
-## 图层显示过滤
+| 方法 | 参数 | 说明 |
+| --- | --- | --- |
+| `queryFeatures(geometryOrOptions, options?)` | 像素坐标/范围，`QueryFeaturesOptions` | 查询可见要素。 |
+| `map.features.get(ref)` | `FeatureRef` | 按 source、图层和 ID 读取要素。 |
+| `setFeatureProperty(ref, key, value)` / `setFeatureProperties(ref, props)` | 要素引用、字段和值 | 更新属性并记录历史。 |
 
-`map.setFilter(layerId, expression)` 为渲染层设置显示过滤器：表达式使用与样式表达式相同的
-MapLibre 子集（`get / == != < <= > >= / ! / all / any / match / step / interpolate`），
-并且**必须对每个要素求值为 boolean**——任一要素返回非布尔值（如 `['get', 'enabled']`
-得到字符串 `'false'` 或数值 `1`）时，过滤器整体失效并触发 `error` 事件，不做真值转换。
-求值失败的 `error` 事件携带 `layerId`、`filterExpression` 和 `valueType`。
+## 更多读取属性
 
+### 查询与 Feature 参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `queryFeatures.geometryOrOptions` | `[number, number] \| [[number, number], [number, number]] \| QueryFeaturesOptions` | 当前视口 | 像素点拾取、像素 bbox 框选，或选项。 |
+| `queryFeatures.options.layers` | `string[]` | `undefined` | 限定图层；空数组查询全部可见图层。 |
+| `map.features.get(ref).source` | `string` | — | 所属 source ID。 |
+| `map.features.get(ref).layer` | `string` | — | source 内图层名或 ID。 |
+| `map.features.get(ref).id` | `number` | — | 非负要素 ID；未解析返回 `null`。 |
+| `Feature.geometry` | `PathShape \| PointShape \| LegacyPointShape \| null` | — | 要素几何；可为 `null`。 |
+| `Feature.properties` | `Readonly<Record<string, unknown>>` | `{}` | 冻结属性快照。 |
+
+### DataTable 方法
+
+底层属性表位于 `source.getLayers()[layerIndex].data`；要素 ID 对应记录索引。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `getRecords()` | `() => Record<string, unknown>[]` | — | 按要素 ID 排列的记录。 |
+| `getRecordAt(id)` 的 `id` | `number` | — | 指定要素的属性记录。 |
+| `getFields()` | `() => string[]` | — | 当前字段名。 |
+| `size()` | `() => number` | — | 属性记录数。 |
+
+## 更多属性操作
+
+### 图层显示过滤
+
+`map.setFilter(layerId, expression)` 为渲染层设置 MapLibre 子集表达式过滤器。表达式**必须对每个要素返回 boolean**；非布尔结果禁用过滤器并触发携带 `layerId`、`filterExpression`、`valueType` 的 `error` 事件。
 过滤器也可在 `addLayer` 时通过图层 spec 的 `filter` 字段声明：
 
 ```ts
 map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
 ```
 
-使用 `map.getFilter(layerId)` 读取当前过滤器。
+`map.getFilter(layerId)` 读取过滤器。
 
-过滤器只影响“看”：渲染、拾取/悬停、高亮，以及属性过滤视图
-`map.features.iterFiltered(layerId)` / `map.features.countFiltered(layerId)`。
-数据本身不变、不进撤销历史、不影响 `map.ops.*` 与导出；`map.features.iter()/count()`
-保持全量语义，`iterFiltered` 接收的是渲染层 id（`addLayer` 的 id），不是数据层 id。
+过滤器影响渲染、拾取、悬停、高亮及 `iterFiltered(layerId)` / `countFiltered(layerId)`，不影响属性、历史、`map.ops.*`、导出或 `iter()` / `count()`。`iterFiltered` 接受渲染层 ID。
 
-属性表要只显示过滤后的内容：迭代/计数改用 `iterFiltered(layerId)` / `countFiltered(layerId)`，
-并监听 `layerchange` 事件（`setFilter` 会以 reason `'filter'` 触发）刷新表格；属性数据本身的
-变化仍走既有 `data` 事件。
+属性表使用 `iterFiltered` / `countFiltered`，并在 reason 为 `'filter'` 的 `layerchange` 事件刷新。无属性表时按 `null` 记录求值；`map.setFilter(layerId, null)` 清除过滤器。
 
-无属性表的图层中每个要素按 `null` 记录求值（`['get', ...]` 得到 `undefined`）。
-`map.setFilter(layerId, null)` 清除过滤器。
+### 过滤参数
 
-## 修改要素属性
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `setFilter.id` | `string` | — | 渲染层 ID。 |
+| `setFilter.expression` | `StyleExpression \| null` | — | MapLibre 子集表达式；`null` 清除过滤器。 |
+| `getFilter.id` | `string` | — | 渲染层 ID；未设置返回 `undefined`。 |
+| `iter(sourceId, layerId)` 的 `sourceId` / `layerId` | `string` | — | 数据 source 和图层；产生全部 `Feature`。 |
+| `count(sourceId, layerId)` 的 `sourceId` / `layerId` | `string` | — | 全部要素数。 |
+| `iterFiltered(renderLayerId)` 的 `renderLayerId` | `string` | — | 当前过滤器可见的 `Feature`。 |
+| `countFiltered(renderLayerId)` 的 `renderLayerId` | `string` | — | 过滤器可见要素数。 |
 
-`map.attributes.setFeatureProperty()` 修改一个字段，`setFeatureProperties()` 将多个字段写成一次历史记录。为字段赋值 `undefined` 会删除它。
+### 修改要素属性
+
+`map.attributes.setFeatureProperty()` 写一个字段，`setFeatureProperties()` 合并多字段为一条历史；`undefined` 删除字段。
 
 ```ts
 const result = map.attributes.setFeatureProperty(
@@ -79,14 +105,26 @@ map.attributes.setFeatureProperties(
 );
 ```
 
-相同的完整属性值会返回 validation 错误，不创建空的历史项。
+相同属性值返回 `validation`，不创建历史项。
 
-## 管理字段
+#### 属性写入参数
 
-### 创建带字段的空图层
+两个方法返回 `OpResult<void>`；成功为 `{ ok: true }`。
 
-`map.createLayer(id, options)` 创建独立数据源并注册到地图，使用默认渲染样式。
-`geometryType` 支持 `point`、`polyline`、`polygon`，无需导入文件或添加占位要素。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `setFeatureProperty.ref.source` | `string` | — | source ID。 |
+| `setFeatureProperty.ref.layer` | `string` | — | 图层名或 ID。 |
+| `setFeatureProperty.ref.id` | `number` | — | 要素 ID 和属性记录索引。 |
+| `setFeatureProperty.key` | `string` | — | 字段名。 |
+| `setFeatureProperty.value` | `unknown` | — | 新值；`undefined` 删除字段。 |
+| `setFeatureProperties.ref` | `FeatureRef` | — | 批量写入目标要素。 |
+| `setFeatureProperties.props` | `Record<string, unknown>` | — | 字段新值映射；合并为一条撤销历史。 |
+### 管理字段
+
+#### 创建带字段的空图层
+
+`map.createLayer(id, options)` 创建并注册带默认渲染的 source；`geometryType` 支持 `point`、`polyline`、`polygon`。
 
 ```ts
 const source = await map.createLayer('survey', {
@@ -108,19 +146,24 @@ map.drawFeature.setOptions({ source: 'survey', sourceLayer: '调查点', type: '
 map.drawFeature.enable();
 ```
 
-字段类型支持 `string`、`number`、`boolean`，用于验证创建时的默认值；未指定默认值时，
-绘制的新要素对应属性为 `null`。字段定义不是数据库约束，不会限制已有的表达式或属性编辑接口。
-字段名称必须非空且不重复，默认值必须与类型相符，数值必须有限。
+#### 创建图层参数
 
-`crs` 指定数据源初始坐标系；地图已有坐标系时，新源会统一到地图坐标系。
-源 ID 必须唯一，失败通过 Promise rejection 返回。创建源本身不进入要素撤销历史，
-后续绘制、字段增删改支持正常撤销重做。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `id` | `string` | — | 唯一 source ID。 |
+| `options.name` | `string` | — | 非空图层名。 |
+| `options.geometryType` | `'point' \| 'polyline' \| 'polygon'` | — | 图层几何类型。 |
+| `options.crs` | `string` | — | 输入 CRS；注册后统一为项目 CRS。 |
+| `options.fields` | `readonly LayerFieldDefinition[]` | `[]` | 空表字段定义。 |
+| `options.fields[].name` | `string` | — | 非空且唯一的字段名。 |
+| `options.fields[].type` | `'string' \| 'number' \| 'boolean'` | — | 默认值验证类型。 |
+| `options.fields[].defaultValue` | `string \| number \| boolean \| null` | `undefined` | 新要素初始值；省略写入 `null`，数值有限。 |
 
-只需构造数据源而暂不添加到地图时，使用 `await TopologySource.create(id, options)`，
-之后再 `await map.addSource(id, source)`。字段定义是 emap 图层元数据；GeoJSON 等交换格式
-不表示空表的字段类型和绘制默认值，不能依赖它们保存这些定义。
+`map.createLayer` 返回已注册的 `Promise<ConcreteTopologySource>`；`TopologySource.create` 用相同参数创建待注册 source。字段类型验证默认值，名称需非空唯一。
 
-字段操作针对 source layer 名称，并可撤销。重命名不会覆盖已有目标字段。
+`crs` 是初始 CRS；已有地图会统一新 source。源 ID 必须唯一。
+
+字段操作针对 source layer，可撤销；目标字段已存在时重命名返回冲突。
 
 ```ts
 map.attributes.addField({
@@ -144,9 +187,34 @@ map.attributes.removeField({
 });
 ```
 
-## 表达式、筛选和连接
+#### 字段操作参数
 
-`map.ops` 的表达式、`where` 和 `calc` 选项遵守 `expressionPolicy`。默认值为 `'disabled'`；只对由应用控制的表达式设置 `'trusted'`。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `addField.source` | `string` | — | source ID。 |
+| `addField.target` | `string` | — | 目标图层名或 ID。 |
+| `addField.field` | `string` | — | 新字段名。 |
+| `addField.defaultValue` | `unknown` | `null` | 缺失字段的值；已有值不变。 |
+| `removeField.source` / `removeField.target` | `string` | — | source 和图层。 |
+| `removeField.field` | `string` | — | 要删除的字段。 |
+| `renameField.source` / `renameField.target` | `string` | — | source 和图层。 |
+| `renameField.from` | `string` | — | 原字段名。 |
+| `renameField.to` | `string` | — | 新字段名；唯一且不同于 `from`。 |
+
+#### 字段名校验
+
+导入 `isValidFieldName` 和 `findInvalidFieldName` 复用操作层校验。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `isValidFieldName(value)` 的 `value` | `unknown` | — | 非空安全字段名。 |
+| `findInvalidFieldName(values)` 的 `values` | `ReadonlyArray<unknown>` | — | 首个无效值；全有效或空数组返回 `null`。 |
+
+名称排除逗号、等号、冒号、引号、反斜杠和控制字符。
+
+### 表达式、筛选和连接
+
+`map.ops` 的表达式、`where`、`calc` 遵守 `expressionPolicy`；默认 `'disabled'`，应用受控表达式可用 `'trusted'`。
 
 ```ts
 const map = await Emap.create({
@@ -167,7 +235,50 @@ await map.ops.filterFields({
 });
 ```
 
-用 `joinTable()` 按键字段把外部表连接到 layer。两侧键的类型和格式必须一致，例如字符串 `"001"` 与数字 `1` 是不同的键。
+#### 表达式与字段筛选参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `applyExpression.source` | `string` | — | source ID。 |
+| `applyExpression.target` | `string` | — | 图层名或 ID。 |
+| `applyExpression.expression` | `string` | — | 每要素 JavaScript 表达式；`this.<field>` 访问属性。 |
+| `applyExpression.where` | `string` | `undefined` | 真值记录应用表达式。 |
+| `filterFields.source` | `string` | — | source ID。 |
+| `filterFields.target` | `string` | — | 图层名或 ID。 |
+| `filterFields.fields` | `string[]` | — | 保留字段；`['*']` 移除全部字段。 |
+| `filterFields.invert` | `boolean` | `false` | 移除列出字段。 |
+
+#### 属性分级参数
+
+`classifyFeatures()` 写入颜色字段并返回断点、类别、计数和空值颜色。
+
+```ts
+const result = await map.ops.classifyFeatures({
+  source: 'main',
+  target: 'districts',
+  field: 'population',
+  method: 'quantile',
+  classes: 5,
+  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#4292c6', '#084594'],
+});
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `source` | `string` | — | source ID。 |
+| `target` | `string` | — | 写入颜色的图层。 |
+| `field` | `string` | — | 分级属性字段。 |
+| `method` | `'quantile' \| 'equal-interval' \| 'nice' \| 'categorical'` | — | 分位数、等距、易读断点或类别。 |
+| `classes` | `number` | `4` | 顺序类别数；至少 `2`。 |
+| `breaks` | `number[]` | `undefined` | 显式内部断点；优先于 `method`。 |
+| `categories` | `(string \| number)[]` | 按出现顺序的非 `null`/`undefined` 唯一值 | 分类类别。 |
+| `colors` | `string[]` | — | 类别或区间颜色。 |
+| `saveAs` | `string` | `'fill'` | 颜色字段名。 |
+| `nullValue` | `string` | 主题的 muted 色 | 空值颜色。 |
+| `otherColor` | `string` | `nullValue` | 未列出类别的颜色。 |
+| `invert` | `boolean` | `false` | 反转颜色数组。 |
+
+`joinTable()` 按键字段连接外部表；两侧类型和格式必须一致。
 
 ```ts
 await map.ops.joinTable({
@@ -178,7 +289,24 @@ await map.ops.joinTable({
 });
 ```
 
-属性操作通常保留 feature ID 和选择；改变要素数量的操作可能改变记录索引。处理结果后重新查询或响应 `selectionchange` 来更新缓存引用。
+#### 表连接参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `source` | `string` | — | 目标图层的 source ID。 |
+| `target` | `string` | — | 接收字段的图层。 |
+| `data` | `JoinTableData` | — | CSV、JSON 或同 source 图层。 |
+| `keys` | `[string, string]` | — | `[targetKey, sourceKey]` 非空键对。 |
+| `fields` | `string[]` | 除 source key 外的全部字段 | 复制字段。 |
+| `prefix` | `string` | `undefined` | 连接字段名前缀。 |
+| `where` | `string` | `undefined` | 连接前筛选表达式。 |
+| `calc` | `string` | `undefined` | 多对一聚合表达式。 |
+| `unjoined` | `boolean` | `false` | 保留未匹配目标记录。 |
+| `unmatched` | `boolean` | `false` | 未匹配外部记录输出为图层。 |
+
+`where`、`calc`、`applyExpression` 需要 `expressionPolicy: 'trusted'`。
+
+属性操作通常保留 feature ID 和选择；改变要素数后重新查询。
 
 ## API
 

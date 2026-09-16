@@ -10,46 +10,116 @@ verifiedVersion: 0.12.0
 
 # 性能
 
-性能工作集中在三处：将大型数据操作路由到 Worker、简化不需要的几何细节，以及减少视口外要素的渲染工作。
+性能调优分为四层：Worker 执行耗时数据集替换、共享弧简化、视口空间索引和密集点渲染 LOD。
 
-## 为大型数据操作启用 Worker
 
 ```ts
 const map = await Emap.create({
-  container: "map",
-  useWorker: "auto",
-  workerThreshold: 50_000,
-})
+  container: 'map', // 挂载地图
+  useWorker: 'auto', // 大数据替换移出主线程
+  workerThreshold: 50_000, // 在此顶点数开始路由
+});
 ```
 
-`useWorker: "auto"` 会在数据集的弧顶点数达到 `workerThreshold` 时，把数据集替换操作路由到 Worker；较小的数据集保留在主线程以避免通信开销。`useWorker: true` 将所有这类操作路由到 Worker。Worker 路由处理数据操作，Canvas 绘制仍在主线程进行。
+## 核心参数
 
-## 简化和视口裁剪
+以下 `MapOptions` 控制 `clip`、`dissolve`、`simplify`、`project` 等数据集替换操作的执行位置：
 
-对线和面执行 `map.ops.simplifyLayer()` 可减少后续渲染和操作处理的顶点数量。选择满足可读性要求的最低细节，并在数据导入后或独立的用户操作中执行简化。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `useWorker` | `boolean \| 'auto'` | `false` | `false` 在主线程执行；`true` 将全部数据集替换交给 Worker；`'auto'` 按命令和数据规模路由。选择级平移、旋转、顶点编辑和 Canvas 绘制仍在主线程。 |
+| `workerThreshold` | `number` | `50000` | `'auto'` 顶点阈值，使用 `arcs.getPointCount()`；布尔 `useWorker` 忽略此值。`simplify`、`dissolve`、`buffer` 等重几何命令使用半阈值，轻量属性命令留在主线程。 |
 
-Emap 为大图层建立空间索引，并在局部视图中只遍历视口候选要素。为图层设置 `layout.visibility: "none"` 可跳过不需要显示的图层。全图范围内，空间索引本身不能降量；密集点还可使用下面的自动 LOD。
+## 更多 Worker 配置
 
-## 密集点自动 LOD
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `workerUrl` | `string` | `'emap-worker.js'` | Worker bundle 地址，相对 `document.baseURI` 解析。 |
+| `workerPoolSize` | `number` | `1` | Worker 池大小；独立 source 可并行，按需创建。`workerPool` 覆盖此配置。 |
+| `workerPool` | `MapshaperWorkerPool` | — | 预构造池，优先于 `workerUrl` 和 `workerPoolSize`，由地图独占管理。 |
+| `workerRouting` | `WorkerRoutingFn` | 内置决策 | 仅 `'auto'` 调用；接收 `cmd`、`heads`、`vertexCount`、`recordCount`、`mode`、`threshold`、`defaultDecision` 并返回 `boolean`。 |
 
-大数据 `circle` 图层默认按密度抽稀。每个网格保留原始 feature/component ID 最小的真实点，坐标和属性不变；Point 和 MultiPoint 都支持。显示过滤先于代表点选择，样式继续按原始要素属性解析。
+## 更多优化
+
+### `SimplifyOptions`
+
+`map.ops.simplifyLayer()` 通过共享弧简化线和面。选择一个阈值模式，在导入后或用户确认时调用：
+
+```ts
+await map.ops.simplifyLayer({
+  source: 'roads',
+  target: 'primary-roads',
+  percentage: 10,
+  method: 'weighted',
+  weighting: 0.7,
+  keepShapes: true,
+});
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `source` | `string` | 必填 | 包含共享弧的 source ID。 |
+| `target` | `string` | 整个 source | 要处理的图层；省略时处理全部图层。 |
+| `percentage` | `number` | 三选一必填 | 保留可移除顶点的百分比（`0..100`）；与 `interval`、`resolution` 互斥。 |
+| `interval` | `number` | 三选一必填 | 源 CRS 的正距离阈值；与其他阈值互斥。 |
+| `resolution` | `string` | 三选一必填 | `WIDTHxHEIGHT` 网格，如 `'1000x500'`；与其他阈值互斥。 |
+| `method` | `'dp' \| 'visvalingam' \| 'weighted'` | `'weighted'` | `'dp'`、`'visvalingam'` 或加权 Visvalingam（`'weighted'`）。 |
+| `weighting` | `number` | `0.7` | 加权 Visvalingam 系数。 |
+| `planar` | `boolean` | `false` | 为平面度数源 CRS 启用平面模式。 |
+| `keepShapes` | `boolean` | `false` | 保留简化可能移除的小面。 |
+| `lockBox` | `boolean` | `false` | 固定数据集包围盒上的顶点。 |
+| `noRepair` | `boolean` | `false` | 拓扑已验证数据的直接输出；省略时修复拓扑。 |
+
+简化将阈值写入共享弧的 `retainedInterval`，保留原始顶点阈值以便用新阈值重算。
+
+### 显示弧 LOD
+
+`DisplayArcs` 是 source 内部渲染 LOD，无额外参数。弧顶点超过 `500000` 时创建低细节副本：已有阈值保留约 `8%` 顶点，否则按平均线段长度四倍快速简化。`unitsPerPixel > 低细节平均线段长 × 1.5` 时绘制副本，放大时使用完整弧。
+
+每帧将保留阈值设为 `max(retainedInterval, pixelSize × 0.5)`，保留用户简化下限。原地编辑标记显示弧为脏；需要低细节副本时重建。导出临时恢复完整精度。
+
+### 视口裁剪参数
+
+渲染器为至少 `10000` 个 shape 的图层建立 Flatbush 索引。视图覆盖范围和候选数均低于图层 `25%` 时使用索引；否则顺序绘制。加载后可在空闲时预热：
+
+```ts
+map.prebuildSpatialIndex('roads');
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `map.prebuildSpatialIndex(sourceId)` 的 `sourceId` | `string \| undefined` | `undefined`（所有 source） | 预建一个或全部 source 的空间索引。 |
+| `map.clearSpatialIndex(sourceId)` 的 `sourceId` | `string \| undefined` | `undefined`（所有 source） | 清除缓存索引；直接修改几何后调用以按当前边界重建。 |
+| `layout.visibility` | `'visible' \| 'none'` | `'visible'` | 图层渲染开关；`'none'` 跳过图层。用 `map.setLayerVisibility(id, visibility)` 更新。 |
+
+## 更多密集点 LOD
+
+`circle` 图层默认按密度抽稀：每个二进制网格保留 feature/component ID 最小的真实点，坐标和属性仍可用于样式和拾取。支持 Point、MultiPoint，显示过滤先于代表点选择。
 
 ```ts
 map.addLayer({
-  id: 'points', type: 'circle', source: 'points',
-  pointLod: { cellSize: 8 }, // 可省略；1–64 CSS 像素
+  id: 'points',
+  type: 'circle',
+  source: 'points',
+  pointLod: { cellSize: 8 },
   paint: { 'circle-radius': 3 },
 });
-// 在 addLayer 中设置 pointLod: false 可关闭抽稀。
 ```
 
-网格锚定数据原点，使用二进制嵌套尺度，平移和 DPR 不改变分格。正常尺度下网格边长处于指定 CSS 大小的一半到一倍之间。放大逐步恢复细节；相邻格的点仍可能重叠，这不是严格避让，也不会生成聚合气泡。
+### `pointLod` 参数
 
-过滤后的有效点不足 10,000 个，或降量不足 10% 时，保留原绘制路径。每个渲染图层缓存最多三个尺度；暖平移只查代表点的 Flatbush 索引，不重新扫描全部原始点。同一查询复用结果，全范围查询直接复用已排序 ID 数组。编辑版本、属性版本、数据/图层/形状身份、数量、过滤掩码、CRS、网格配置或视口预算变化后重建。
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `pointLod` | `false \| { cellSize?: number }` | `{ cellSize: 8 }` | `circle` 图层的自动密度抽稀；`false` 绘制全部原始点。 |
+| `pointLod.cellSize` | `number` | `8` CSS 像素 | 目标网格边长（`1..64`）；越大每帧代表点越少。 |
 
-构建预算按完整 CSS 视口可容纳的网格数计算，与指针的小查询框无关，并以 64 MiB / 80 字节的代表点数量预算封顶。这个值是内存规划额度，不是 JavaScript 堆用量保证。超过预算时保留较粗的抽稀尺度；若单点图层完整视口的原始空间候选足够少，则使用原候选绘制路径。因此普通 1080p/4K 密集视图不会因越过固定十万点上限突然绘制全部点。超大数据范围或极小 cellSize 可能保持较粗细节；首次构建仍在主线程，超预算时可能尝试多个较粗尺度。
+网格锚定数据原点，使用二进制嵌套尺度；实际边长为请求 CSS 大小的一半到一倍。缩放逐步恢复细节，平移和 DPR 保持成员稳定。
 
-点击/悬停只拾取已绘制的代表点，并包含选中、高亮叠加点。CSS 快速导航期间继续拾取上一帧实际绘制的代表点，直到重绘。框选、套索、属性表、统计、分析、导出和 `.msx` 源数据快照仍使用原始数据（沿用已有显示过滤语义）；隐藏的 MultiPoint 分量不会仅因同要素的另一个分量可见就被点击命中。图层配置的读取快照独立克隆 `pointLod`；`.msx` 不保存渲染配置。
+### 渲染行为与预算
+
+有效过滤点少于 `10000`，或抽稀保留至少 `90%` 时使用原始候选。每层最多缓存三个尺度，并为暖平移索引代表点。编辑/属性版本、数据/图层/shape 身份、数量、过滤掩码、CRS、`cellSize` 或视口预算变化时重建。
+
+构建预算为 `min(两倍完整 CSS 视口网格数, 150000, floor(64 MiB / 80 字节))` 个代表点，与指针查询框无关。超限时使用更粗网格；单点图层的完整视口候选在预算内时直接绘制。点击和悬停跟随代表点及选中/高亮叠加；框选、套索、属性表、统计、分析、导出和 `.msx` 快照保留完整原始数据。
 
 运行可重复的算法基准：
 
@@ -57,7 +127,7 @@ map.addLayer({
 node --expose-gc --max-old-space-size=8192 scripts/benchmark-point-lod.mjs
 ```
 
-基准使用固定种子，覆盖 10 万、100 万、500 万点的均匀和聚集分布，分别报告首次构建（含首次查询）的三次中位数、50 次暖平移查询的中位数/P95、输入及输出点数。数据生成不计时；Node 算法耗时不是浏览器 FPS，Canvas 绘制、导入、样式解析和原始空间索引的成本不在其中。
+固定种子覆盖 10 万、100 万、500 万点的均匀和聚集分布，报告三次冷构建中位数（含首次查询）、50 次暖平移中位数/P95 及输入输出点数。生成不计时；Node 仅测 LOD，浏览器帧还包括 Canvas 绘制、导入、样式解析和原始空间索引。
 
 ## API
 

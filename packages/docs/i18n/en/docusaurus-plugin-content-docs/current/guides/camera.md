@@ -10,47 +10,98 @@ verifiedVersion: 0.12.0
 
 # Camera
 
-The camera controls a two-dimensional map's center and scale. Centers use projected/data coordinates; `zoom` is a WebMercator convenience, while `scale` works with any CRS.
-
-## Move the view immediately or smoothly
+The camera manages the 2D view by center and scale; target centers use data/projected coordinates. WebMercator accepts `zoom`; any CRS accepts `scale`.
 
 ```ts
-map.jumpTo({ center: [121.47, 31.23], zoom: 10 });
-map.easeTo({ center: [121.5, 31.2], scale: 4, duration: 600 });
-map.panBy([80, 0], { duration: 250 });
-map.zoomTo(12, { duration: 250 });
-map.flyTo({ center: [121.47, 31.23], zoom: 11, speed: 1.2 });
+map.jumpTo({ center: [121.47, 31.23], zoom: 10 }); // position instantly
+map.flyTo({ center: [121.47, 31.23], zoom: 11, speed: 1.2 }); // long-distance flight
+map.fitBounds(source.getExtent(), { padding: 32 }); // fit the data extent
 ```
 
-`jumpTo()` moves immediately. `easeTo()`, `panTo()`, `panBy()`, `zoomTo()`, and `flyTo()` accept `duration`, `easing`, or `animate: false`. Each new animation replaces a running camera animation; `map.stop()` cancels it.
+## Core methods
 
-## Fit data bounds
+| Method | Parameters | Description |
+| --- | --- | --- |
+| `jumpTo(options)` | `CameraOptions` | Apply center and scale immediately. |
+| `easeTo(options)` | `CameraOptions & AnimationOptions` | Smooth transition: linear center, logarithmic scale. |
+| `flyTo(options)` | `FlyToOptions` | van Wijk curve over long distances, smooth transition nearby. |
+| `fitBounds(bounds, options?)` | `Bounds`, `FitBoundsOptions` | Center the bounds and compute scale from container and padding. |
 
-Fit known bounds with `Bounds`, or read bounds from a source:
+### `CameraOptions`
+
+Shared by `jumpTo()`, `easeTo()`, and `flyTo()`:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `center` | `[number, number]` | Current center | Target center in data/projected coordinates. |
+| `zoom` | `number` | Keeps scale | Target WebMercator zoom level. |
+| `scale` | `number` | Keeps scale | Target pixel scale, finite and positive; wins over `zoom`. |
+
+### `AnimationOptions`
+
+Shared by `easeTo()`, `flyTo()`, `fitBounds()`, and other animated methods:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `duration` | `number` | `1000` (ms) | Animation duration in milliseconds, finite and non-negative. |
+| `easing` | `(t: number) => number` | `Tween.sineInOut` | Progress easing function. |
+| `animate` | `boolean` | `true` | `false` or `duration: 0` updates the view instantly. |
+
+### `FitBoundsOptions`
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `padding` | `number` | `0` | Uniform padding on all sides (pixels). |
+| `maxScale` | `number` | Unset | Maximum scale of the fitted view. |
+| `duration`, `easing`, `animate` | — | — | Inherit all `AnimationOptions` parameters. |
+
+## More view operations
 
 ```ts
-const bounds = new Bounds(121.2, 31.1, 121.8, 31.5);
-map.fitBounds(bounds, { padding: 32, duration: 400 });
-
-const extent = source.getExtent();
-if (extent.hasBounds()) map.fitBounds(extent);
+map.panBy([80, 0], { duration: 250 }); // pan by pixels to make room for an overlay
+map.zoomTo(12); // transition to a zoom level
+map.stop(); // end the current animation
 ```
 
-`fitBounds()` uses data coordinates and accepts `padding` and `maxScale`. Call `map.resize()` after the container changes size to update the canvas and viewport.
+| Method | Parameters | Description |
+| --- | --- | --- |
+| `setCenter(center)` | `[number, number]` | Update the center immediately, keeping the scale. |
+| `setZoom(zoom)` | `number` | Update the WebMercator zoom level immediately. |
+| `panTo(center, options?)` | `[number, number]`, `AnimationOptions` | Pan smoothly to a target center. |
+| `panBy(offset, options?)` | `[number, number]`, `AnimationOptions` | Convert a pixel offset to `[dx / scale, -dy / scale]`. |
+| `zoomTo(zoom, options?)` | `number`, `AnimationOptions` | Transition smoothly to a WebMercator zoom level. |
+| `stop()` | None | End the camera animation and emit a termination event. |
+| `zoomIn()` / `zoomOut()` | None | Animated scale by `1.15` / `1 / 1.15`. |
 
-## Read and observe the view
+`FlyToOptions` adds to `CameraOptions` and `AnimationOptions`:
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `curve` | `number` | `1.42` | van Wijk flight curvature. |
+| `speed` | `number` | Unset | Average flight speed (screen widths/second), finite and positive; overrides `duration`. |
+
+## Reading the view and events
 
 ```ts
-const center = map.getCenter();
-const zoom = map.getZoom();
-const extent = map.getExtent();
+const center = map.getCenter(); // [longitude, latitude] in WebMercator
+const extent = map.getExtent(); // Bounds copy of the current viewport
 
 map.on('moveend', (event) => {
   const savedView = { center: event.center, zoom: event.zoom };
 });
 ```
 
-Emap has no bearing or pitch. For data whose CRS gives zoom no meaning, use center, bounds, and scale rather than treating zoom as a business coordinate.
+`getZoom()` returns the WebMercator zoom level (`0` for other CRS). Movement emits `movestart`, `move`, `moveend`; scale changes also emit `zoomstart`, `zoom`, `zoomend`. Event `center` uses data/projected coordinates and `zoom` is `log2(scale)`.
+
+## Extent management
+
+`Bounds` is an axis-aligned range in data/projected coordinates: `new Bounds(xmin, ymin, xmax, ymax)` (defaults to an empty `Infinity` range); `bounds.hasBounds()` reports validity.
+
+| Method | Parameters | Description |
+| --- | --- | --- |
+| `setExtent(bounds)` | `Bounds` | Store a copy of the bounds and fit the viewport. |
+| `reset()` | None | Fit the merged source extents, otherwise restore the initial view. |
+| `resize()` | None | Update Canvas and viewport after the container resizes. |
 
 ## Runnable examples
 

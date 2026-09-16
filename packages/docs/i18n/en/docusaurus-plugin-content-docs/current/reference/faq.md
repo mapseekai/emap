@@ -10,37 +10,51 @@ verifiedVersion: 0.12.0
 
 # FAQ
 
-## Why is my map blank?
-
-Confirm that the map container and its parents have non-zero width and height; import `@mapseekai/emap/style.css`; wait for `TopologySource` to finish loading before calling `map.addSource(...)`; make the layer `source` match the registered source ID; and move the view to the data with `map.setExtent(source.getExtent())` or a camera method.
-
-## How do I load my own file?
-
-Create a source from a URL:
+Common questions about map setup, data loading, and runtime configuration.
 
 ```ts
-const source = await TopologySource.fromUrl("roads", "/data/roads.geojson")
-await map.addSource("roads", source)
-map.setExtent(source.getExtent())
+const source = await TopologySource.fromUrl("roads", "/data/roads.geojson") // Load data from a URL
+await map.addSource("roads", source) // Register it with the same ID
+map.setExtent(source.getExtent()) // Fit its data extent
 ```
 
-The URL must be reachable by the browser; cross-origin URLs must return CORS headers that permit the application. Binary content can load through `setData({ filename, content })` on `new TopologySource(id)`. The `filename` extension selects the import format.
+## Core questions
 
-## Why is my layer not visible?
+### Why is my map blank?
 
-A layer's `type` must match the source layer's geometry type, and its `source` must match the source ID. A source can have multiple rendering layers, and layers added later draw above earlier ones.
+`MapOptions.container` locates the canvas mount point. Give it and its parents non-zero dimensions and import `@mapseekai/emap/style.css`; set `interactive: false` for static displays.
 
-## When do I need a Worker?
+Load with `TopologySource.fromUrl()` or `source.setData()`, register with the same `id`, call `map.setExtent(source.getExtent())`, and match `LayerSpecification.source` to that `id`; use `'source-layer'` for a source with multiple data layers.
 
-Set `useWorker` and `workerUrl` only to move heavier data processing off the main thread. Publish `emap-worker.js` and `mapshaper-vendor.js` in the same page-reachable directory.
+### How do I load my own file?
 
-## How do I use Arrow, GeoParquet, or DuckDB?
+`TopologySource.fromUrl(id, url, options?)` uses `id` for `map.addSource` and layer `source`; cross-origin URLs require CORS. For memory data, `source.setData({ filename, content })` selects an importer by extension; a file array creates one dataset layer per file. `TopologySource.fromBytes(id, bytes, { filename })` accepts `ArrayBuffer`; `filename` defaults to `${id}.geojson`.
 
-Import Arrow, GeoArrow, and GeoParquet APIs from `@mapseekai/emap/arrow` and install `apache-arrow`; GeoParquet also installs `parquet-wasm`. Import DuckDB APIs from `@mapseekai/emap/duckdb` and install `@duckdb/duckdb-wasm` and `apache-arrow`. See [Compatibility](./compatibility.md) for each entry point's peer dependencies.
+### Why is my layer not visible?
 
-## How do I handle a failed operation?
+`spec.id` is the unique layer key; `spec.source` names a registered source and `'source-layer'` selects its data layer. Use `'circle'` for points, `'line'` for lines and outlines, and `'fill'` for polygon fills; `'visible'` renders the layer and `before` controls draw order.
 
-Check `OpResult`'s `ok` field; on failure, use `error.kind` to show a recovery action or record diagnostics. Source preflight and loading errors provide details through `SourceLoadError` `code` and `diagnostics`.
+## More data formats
+
+`arrowFormatsPlugin` registers Arrow and GeoParquet extensions on `map.formats`. `setData()` imports by filename; `export()` supports `'geoparquet'` and `'geoarrow'`. The Arrow entry point requires `apache-arrow`; GeoParquet also requires `parquet-wasm`.
+
+Create DuckDB with `createDuckDbRuntimeFromJsDelivr(options?)`; `spatialExtensionUrls` supplies self-hosted extension WASM. `queryGeoParquetWithDuckDb()` accepts data, required SQL, and a runtime; `geometryColumn` selects geometry, `layerName` defaults to `'layer'`, and `noTopology` is display-only. Requires `@duckdb/duckdb-wasm` and `apache-arrow`; see [Compatibility](./compatibility.md).
+
+## More background processing
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `useWorker` | `boolean \| 'auto'` | `false` | Routes dataset replacements to a Worker. |
+| `workerThreshold` | `number` | `50000` | Worker threshold for `'auto'`. |
+| `workerUrl` | `string` | `'emap-worker.js'` | Bundle URL relative to `document.baseURI`. |
+| `workerPoolSize` | `number` | `1` | Maintained Worker count. |
+| `workerRouting` | `WorkerRoutingFn` | Engine routing | Custom `'auto'` routing. |
+
+Publish `emap-worker.js` beside `mapshaper-vendor.js`.
+
+## More error handling
+
+`MapshaperOps` returns `OpResult<T>`: read `value` when `ok`, otherwise branch on `error.kind`. Errors expose target IDs, validation fields, DuckDB details, or mapshaper causes; `SourceLoadError` contains a diagnostic code, severity, message, and optional CRS values for recovery.
 
 ## API
 

@@ -10,46 +10,116 @@ verifiedVersion: 0.12.0
 
 # Performance
 
-Focus performance work in three places: route large data operations to a worker, simplify geometry that does not need full detail, and avoid rendering features outside the viewport.
+Tune four layers: Worker dataset replacement, shared-arc simplification, viewport spatial indexing, and dense-point render LOD.
 
-## Enable workers for large data operations
 
 ```ts
 const map = await Emap.create({
-  container: "map",
-  useWorker: "auto",
-  workerThreshold: 50_000,
-})
+  container: 'map', // mount the map
+  useWorker: 'auto', // route large replacements off the main thread
+  workerThreshold: 50_000, // route at this vertex count
+});
 ```
 
-With `useWorker: "auto"`, dataset-replace operations route to a worker when a dataset's arc vertex count reaches `workerThreshold`; smaller datasets stay on the main thread to avoid transfer overhead. `useWorker: true` routes every such operation to a worker. Worker routing handles data operations; Canvas rendering remains on the main thread.
+## Core parameters
 
-## Simplification and viewport culling
+These `MapOptions` select where dataset-replace operations such as `clip`, `dissolve`, `simplify`, and `project` run:
 
-Run `map.ops.simplifyLayer()` on line and polygon data to reduce the vertices processed by later rendering and operations. Choose the least detail that preserves readability, and simplify after import or as a separate user action.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `useWorker` | `boolean \| 'auto'` | `false` | `false` uses the main thread; `true` routes every dataset replacement through a Worker; `'auto'` routes by command and dataset size. Selection translation, rotation, vertex editing, and Canvas rendering remain on the main thread. |
+| `workerThreshold` | `number` | `50000` | Vertex threshold for `'auto'`, using `arcs.getPointCount()`; boolean `useWorker` ignores it. Geometry-heavy `simplify`, `dissolve`, and `buffer` use half the threshold; lightweight attribute commands stay on the main thread. |
 
-Emap builds spatial indexes for large layers and, in local views, visits only viewport candidate features. Set `layout.visibility: "none"` to skip layers that do not need rendering. At full extent, a spatial index alone cannot reduce the count; dense points can also use automatic LOD below.
+## More Worker configuration
 
-## Automatic LOD for dense points
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `workerUrl` | `string` | `'emap-worker.js'` | Worker bundle URL, resolved against `document.baseURI`. |
+| `workerPoolSize` | `number` | `1` | Worker-pool size; independent sources can run in parallel and Workers spawn on demand. `workerPool` overrides it. |
+| `workerPool` | `MapshaperWorkerPool` | — | Preconstructed pool, overriding `workerUrl` and `workerPoolSize`; the map exclusively manages it. |
+| `workerRouting` | `WorkerRoutingFn` | Built-in decision | Called only for `'auto'`; receives `cmd`, `heads`, `vertexCount`, `recordCount`, `mode`, `threshold`, and `defaultDecision`, then returns `boolean`. |
 
-Large `circle` layers thin dense points automatically. Each grid cell retains the real point with the lowest original feature/component ID; coordinates and attributes stay intact. Both Point and MultiPoint are supported. Display filters run before representative selection, and styles still resolve from original feature attributes.
+## More optimization
+
+### `SimplifyOptions`
+
+`map.ops.simplifyLayer()` simplifies lines and polygons through shared arcs. Choose one threshold mode and call it after import or user confirmation:
+
+```ts
+await map.ops.simplifyLayer({
+  source: 'roads',
+  target: 'primary-roads',
+  percentage: 10,
+  method: 'weighted',
+  weighting: 0.7,
+  keepShapes: true,
+});
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `source` | `string` | Required | Source ID containing shared arcs. |
+| `target` | `string` | Entire source | Layer to process; omit for every source layer. |
+| `percentage` | `number` | One of three required | Percentage of removable vertices to retain (`0..100`); mutually exclusive with `interval` and `resolution`. |
+| `interval` | `number` | One of three required | Positive source-CRS distance threshold; mutually exclusive with the other modes. |
+| `resolution` | `string` | One of three required | `WIDTHxHEIGHT` grid, such as `'1000x500'`; mutually exclusive with the other modes. |
+| `method` | `'dp' \| 'visvalingam' \| 'weighted'` | `'weighted'` | `'dp'`, `'visvalingam'`, or weighted Visvalingam (`'weighted'`). |
+| `weighting` | `number` | `0.7` | Weighted-Visvalingam coefficient. |
+| `planar` | `boolean` | `false` | Enables planar mode for planar-degree source CRSs. |
+| `keepShapes` | `boolean` | `false` | Retains small polygons simplification might remove. |
+| `lockBox` | `boolean` | `false` | Pins vertices on the dataset bounding box. |
+| `noRepair` | `boolean` | `false` | Direct output for topology-validated data; otherwise repairs topology. |
+
+Simplification writes its threshold to shared arcs' `retainedInterval` and keeps original vertex thresholds for later recalculation.
+
+### Display-arc LOD
+
+`DisplayArcs` is source-internal render LOD with no option. More than `500000` arc vertices creates a low-detail copy: existing thresholds retain about `8%`; otherwise it fast-simplifies at four times average segment length. It renders while `unitsPerPixel > low-detail average segment length × 1.5`; closer scales use full arcs.
+
+Each frame sets `max(retainedInterval, pixelSize × 0.5)`, preserving user simplification as a floor. In-place edits mark display arcs stale; rebuild waits for a low-detail copy. Export temporarily restores full precision.
+
+### Viewport-culling parameters
+
+The renderer indexes layers with at least `10000` shapes in Flatbush. It uses viewport candidates when coverage and candidate count are both below `25%`; otherwise it draws sequentially. Prebuild during idle time after loading:
+
+```ts
+map.prebuildSpatialIndex('roads');
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `sourceId` for `map.prebuildSpatialIndex(sourceId)` | `string \| undefined` | `undefined` (all sources) | Prebuilds indexes for one or all sources. |
+| `sourceId` for `map.clearSpatialIndex(sourceId)` | `string \| undefined` | `undefined` (all sources) | Clears cached indexes; call after direct geometry mutation to rebuild current bounds. |
+| `layout.visibility` | `'visible' \| 'none'` | `'visible'` | Layer render switch; `'none'` skips the layer. Update with `map.setLayerVisibility(id, visibility)`. |
+
+## More dense-point LOD
+
+`circle` layers thin by density by default: each binary-grid cell keeps the real point with the lowest feature/component ID, preserving coordinates and attributes for styling and picking. Point and MultiPoint are supported; display filtering precedes selection.
 
 ```ts
 map.addLayer({
-  id: 'points', type: 'circle', source: 'points',
-  pointLod: { cellSize: 8 }, // Optional; 1–64 CSS pixels
+  id: 'points',
+  type: 'circle',
+  source: 'points',
+  pointLod: { cellSize: 8 },
   paint: { 'circle-radius': 3 },
 });
-// Set pointLod: false in addLayer to disable thinning.
 ```
 
-The grid is anchored at the data origin and uses binary nested scales. Panning and DPR do not change cell membership. At ordinary scales, cell width is between half and all of the requested CSS size. Zooming restores detail progressively. Adjacent cells can still overlap: this is density thinning, not strict collision avoidance or cluster bubbles.
+### `pointLod` parameters
 
-Fewer than 10,000 valid filtered points, or less than 10% reduction, keeps the original drawing path. Each render layer caches at most three scales. Warm pans query a Flatbush index of representatives without rescanning original points. Identical queries reuse their result; full-extent queries reuse sorted ID arrays. Geometry/attribute versions, dataset/layer/shapes identity, feature count, filter mask, CRS, cell configuration or viewport budget changes invalidate the cache.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pointLod` | `false \| { cellSize?: number }` | `{ cellSize: 8 }` | Automatic density thinning for a `circle` layer; `false` draws every original point. |
+| `pointLod.cellSize` | `number` | `8` CSS pixels | Target grid edge (`1..64`); larger values retain fewer representatives per frame. |
 
-The build budget follows the full CSS viewport's grid capacity, independently of tiny pointer query bounds, and is capped at a representative allowance of 64 MiB / 80 bytes. This is a memory planning allowance, not a JavaScript heap guarantee. If it is exceeded, rendering retains a coarser thinned level; if a single-point layer has sufficiently few indexed original candidates in the full viewport, it uses the original candidate path. Normal dense 1080p/4K views therefore do not suddenly draw all points after crossing a fixed 100k cutoff. Very large data extents or tiny cell sizes can retain coarser detail. Cold construction runs on the main thread and may try multiple coarser scales when over budget.
+The grid anchors at the data origin with binary nested scales; its active edge is half to all of the requested CSS size. Zoom restores detail progressively; panning and DPR preserve membership.
 
-Click/hover picking follows painted representatives plus selected/highlighted overlays. During fast CSS navigation, picking retains the representatives actually painted in the previous frame until redraw. Box/lasso selection, attribute tables, statistics, analysis, exports and source-only `.msx` snapshots retain original data and existing display-filter semantics. Hidden MultiPoint components are not clickable merely because another component of the same feature is visible. Layer configuration snapshots defensively clone `pointLod`; `.msx` does not save render configuration.
+### Render behavior and budget
+
+Fewer than `10000` valid filtered points, or thinning retaining at least `90%`, uses original candidates. Each layer caches at most three scales and indexes representatives for warm pans. Changes to edit/attribute version, dataset/layer/shape identity, count, filter mask, CRS, `cellSize`, or viewport budget rebuild the cache.
+
+The build budget is `min(two full-CSS-viewport grid capacities, 150000, floor(64 MiB / 80 bytes))` representatives, independent of pointer-query bounds. Over-budget builds use a coarser grid; a single-point layer draws full-view candidates when they fit. Click and hover follow representatives plus selected/highlighted overlays; box and lasso selection, tables, statistics, analysis, exports, and `.msx` snapshots retain full data.
 
 Run the reproducible algorithm benchmark:
 
@@ -57,7 +127,7 @@ Run the reproducible algorithm benchmark:
 node --expose-gc --max-old-space-size=8192 scripts/benchmark-point-lod.mjs
 ```
 
-A fixed seed generates 100k, 1M and 5M points with uniform and clustered distributions. The report separates the median of three cold builds (including their first query), median/P95 of 50 warm pan queries, and input/output counts. Data generation is excluded. Node algorithm timings are not browser FPS; Canvas drawing, import, style resolution and the original spatial index are outside this measurement.
+A fixed seed covers 100k, 1M, and 5M uniform and clustered points, reporting median of three cold builds (including first query), median/P95 of 50 warm pans, and input/output counts. Generation is excluded; Node measures LOD only, while browser frames also include Canvas drawing, import, style resolution, and the original spatial index.
 
 ## API
 

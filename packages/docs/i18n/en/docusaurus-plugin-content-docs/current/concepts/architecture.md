@@ -10,9 +10,16 @@ verifiedVersion: 0.12.0
 
 # Current architecture and source layout
 
-Emap now uses a **native Cordis plugin runtime + GIS domain core + Canvas engine + optional integrations**. The public `Emap` facade stays stable while runtime features are composed through Cordis `Context`, services, providers, and feature plugins.
+Emap composes a GIS domain core, Canvas rendering, and optional integrations through its native Cordis plugin runtime; the public API is the `Emap` facade.
 
-Only six first-level responsibility zones remain under `src/`:
+```ts
+const map = await Emap.create({ container: 'map', preset: 'viewer' }); // create a browser map with browsing capability
+await map.dispose(); // release plugins, services, and resources
+```
+
+## Core structure
+
+The six `src/` responsibility zones and root public API:
 
 ```text
 src/
@@ -25,7 +32,6 @@ src/
 └── index.ts         # Root public API
 ```
 
-## Six source zones
 | Zone | Responsibility | Typical contents |
 | --- | --- | --- |
 | `domain/` | GIS state and reversible changes independent of UI/plugin runtime | `source/`, `geo/`, `edit/`, `validation/` |
@@ -35,23 +41,72 @@ src/
 | `ui/` | Browser controls, CSS, icons, and theme | controls, `assets/`, `theme/` |
 | `shared/` | Declarations without one business owner | ambient `.d.ts`, external declarations, stylesheet typing |
 
-Dependencies follow an “inner domain, outer composition” rule. Runtime may compose engine/domain/integration capabilities; domain must not depend on Cordis, DOM, or a concrete provider. Pointer movement, hit testing, and Canvas drawing remain direct TypeScript calls rather than going through the JSON capability layer.
+Dependencies follow “inner domain, outer composition”: `runtime` may compose engine, domain, and integration capability; domain does not depend on Cordis, DOM, or a concrete provider. Hot-path pointer movement, hit testing, and Canvas drawing stay direct TypeScript calls.
 
-## Runtime: upstream Cordis
+### `Emap.create()`
 
-The project pins upstream `cordis@4.0.0-rc.10`. `map.ctx` is the real Cordis `Context`; plugins use native `name / inject / apply / provide / effect`, and native `Fiber` owns lifecycle.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `container` | `string \| HTMLElement` | Unset | Browser-preset mount node. |
+| `preset` | `'editor' \| 'viewer' \| 'headless' \| 'empty'` | `'editor'` | Built-in plugin composition. |
+| `plugins` | `readonly Plugin[]` | `[]` | Mounted after the preset; same-named entries replace preset plugins. |
+| `excludePlugins` | `readonly string[]` | `[]` | Removes preset plugins by `name`. |
+| `authorizeCapability` | `CapabilityAuthorizer` | Unset | Host authorization policy for Capability invocation. |
+
+| preset | Included | Use case |
+| --- | --- | --- |
+| `editor` | Everything in `viewer`, editing handlers, and editing controls. | A complete interactive editor. |
+| `viewer` | Everything in `headless`, Canvas, rendering, interaction, events, shortcuts, controls, and browsing handlers. | A page for viewing, querying, selecting, and processing data. |
+| `headless` | Capability/format providers, workspace, mapshaper, editing, attributes, document, view, cache, layers, selection, history, source, policy, execution, query, validation, snapshots, projection, mutation, and scale services. | Data operations in Node, Workers, and batch jobs. |
+| `empty` | Empty preset; instance-local `host.options` is always mounted. | Application-selected Providers and Feature Plugins. |
+
+## More runtime composition
+
+The project pins `cordis@4.0.0-rc.10`. `map.ctx` is the upstream `Context`; `Emap.create()` mounts `host.options`, resolves presets, and calls `ctx.plugin()`, then returns with ready services.
+
+### `Plugin.Object` and effects
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Unset | Plugin identity for replacement and filtering. |
+| `inject` | `Inject` (a service-key array or keyed configuration object) | Unset | Activates `apply` when services are available. |
+| `apply` | `(ctx: Context, config: T) => unknown` | Required | Plugin entry point. |
+| `provide` | `string \| string[]` | Unset | Declares provided service keys. |
+
+`ctx.effect(execute, label?)` binds a resource to the current Fiber: `execute` returns a cleanup function, Promise, or async iterator that Fiber unload cleans up; `label` defaults to `'anonymous'` and labels the effect in diagnostics.
 
 ```ts
-const map = await Emap.create({ container: 'map', preset: 'editor' });
-const fiber = map.ctx.plugin(myPlugin);
+import { Emap } from '@mapseekai/emap';
+import type { Plugin } from 'cordis';
+
+const moveLogger: Plugin.Object = {
+  name: 'app.move-logger',
+  inject: ['mapEvents'],
+  apply(ctx) {
+    ctx.effect(() => {
+      const log = () => console.log('map moved');
+      ctx.mapEvents.on('move', log);
+      return () => ctx.mapEvents.off('move', log);
+    }, 'app.move-logger');
+  },
+};
+
+const map = await Emap.create({ container: 'map', preset: 'viewer' });
+const fiber = map.ctx.plugin(moveLogger);
 await fiber.await();
+// The application continues; unloading the plugin releases the listener.
 await fiber.dispose();
 ```
 
-There is no `PluginRuntime`, `ServiceRegistry`, `EffectScope`, `map.runtime`, or `map.services` compatibility layer. `runtime/context/` only re-exports upstream primitives, exposes read-only inspection, and adapts browser cancellation to native effects.
+### `ctx.plugin()` and Fiber
 
-## Services, providers, features, and capabilities
-The runtime still distinguishes five conceptual roles, but each now has a clear home in the source tree:
+`ctx.plugin(plugin, config?)`: `plugin` is a function, constructor, or object with `apply`; `config` is passed to `apply(ctx, config)`.
+
+`fiber.await()` waits for mounting or unloading to settle and rejects on error; `fiber.dispose()` unloads the plugin and awaits effect cleanup.
+
+`runtime/context/` is a thin adapter: re-exported primitives, read-only inspection, lifecycle settling, and browser cancellation through effects.
+
+### Services, Providers, Features, and Capabilities
 
 ```text
 Cordis Context / Fiber
@@ -63,9 +118,7 @@ Cordis Context / Fiber
         └─ AI capabilities        runtime/ai + runtime/plugins/capabilities
 ```
 
-Services define capability contracts. Providers own state/resources and implement services. Feature plugins compose services into interaction, controls, and validation. Capabilities expose existing domain operations to UI, workflow, and agents without duplicating GIS algorithms.
-
-`editor / viewer / headless / empty` are plugin compositions, not different map classes. MapLibre, Arrow, and DuckDB stay explicit optional integrations. Mapshaper is a GIS processing integration, not part of the Cordis kernel.
+Services define contracts; Providers implement them and own resources; Feature Plugins compose services; Capabilities expose existing domain operations. The presets share an `Emap` facade; MapLibre, Arrow, and DuckDB are optional integrations, while Mapshaper processes data operations.
 
 ## Data and rendering flow
 
@@ -81,23 +134,24 @@ render scheduler
 Canvas painter
 ```
 
-Editing remains `EditCommand → history/transaction → source version → render invalidation`. Geometry and attribute versions are independent; async workers/analysis verify both before committing stale results.
+Editing follows `EditCommand → history/transaction → source version → render invalidation`; geometry and attribute versions are independent, and async work checks versions before commit.
 
-## Test layout rules
-Unit tests must be colocated with the implementation and differ only by the `.test` suffix:
+## Test organization
+
+Unit tests sit beside implementations and differ only by `.test`:
 
 ```text
 foo.ts
 foo.test.ts
 ```
 
-One implementation file may have at most one colocated unit-test file. Cross-module behavior, regressions, browser checks, package/build checks, and public type contracts live under root `test/`:
+One implementation file has at most one colocated unit-test file. Cross-module behavior, regressions, browser checks, builds, and public type contracts live in root `test/`:
 
 ```text
 test/
 ├── integration/   # Cross-module behavior and regressions
 ├── browser/       # Playwright / real browsers
-├── build/         # Bundle and package exports
+├── build/         # Bundle / package exports
 ├── types/         # *.test-d.ts public contracts
 ├── docs/          # Documentation metadata/build contracts
 ├── examples/      # Example behavior
@@ -105,7 +159,7 @@ test/
 └── utils/         # Test support
 ```
 
-`pnpm run test-layout:check` rejects unmatched tests under `src`, multiple unit tests for one implementation, integration/audit/type-contract tests drifting back into production source. `pnpm run typecheck:contracts` validates `test/types/` separately.
+`pnpm run test-layout:check` validates `src` test layout; `pnpm run typecheck:contracts` validates `test/types/`.
 
 ## Release verification
 
@@ -120,4 +174,9 @@ pnpm run test:duckdb
 pnpm run release:verify
 ```
 
-The complete release gate covers formatting, types, architecture, capability schemas, production build, bundles, unit/integration tests, DuckDB-Wasm, examples, bilingual docs, three real browsers, pack dry-run, and production dependency auditing.
+The release gate covers formatting, types, architecture, schemas, builds, tests, examples, bilingual docs, browsers, pack dry-run, and dependency auditing.
+
+## Runnable examples
+
+- [Plugin runtime](/mapseekai/emap/examples/plugin-runtime/)
+- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)

@@ -10,22 +10,42 @@ verifiedVersion: 0.12.0
 
 # Status control
 
-`StatusControl` displays the pointer coordinate and map CRS on the map. It listens to `mousemove` and `crschange`, and updates the pointer readout once per animation frame.
-
-## Add the status control
-
+`StatusControl` displays the pointer coordinate and map CRS.
 ```ts
-await map.addControl(
+await map.addControl( // mount the control
   new StatusControl({
-    showMousePos: true,
-    showEPSG: true,
-    alignment: "right",
+    showMousePos: true, // show the pointer coordinate
+    showEPSG: true, // show the map CRS
+    alignment: "right", // align the readout
   }),
-  "bottom-left",
+  "bottom-left", // choose the control corner
 )
 ```
 
-`showMousePos` controls the coordinate readout, `showEPSG` controls the CRS readout, and `alignment` controls content alignment. Put application loading, progress, and error messages in application UI; `StatusControl` is dedicated to coordinates and CRS.
+## Core parameters
+
+
+### Control options
+
+`new StatusControl(options?)` accepts optional `StatusOptions`; omitting it shows both readouts left-aligned.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `showMousePos` | `boolean` | `true` | Shows the current pointer's `mapCoord` to four decimal places; `false` gives a compact CRS-only bar |
+| `showEPSG` | `boolean` | `true` | Shows the map CRS, read on mount and refreshed on `crschange`; common aliases normalize to `EPSG:4326`, `EPSG:3857`, and similar identifiers |
+| `alignment` | `'left' \| 'right' \| 'center'` | `'left'` | Horizontal alignment within the control |
+| `className` | `string` | Unset | CSS class names appended to the control root |
+
+## More mounting options
+
+Mount and remove the control through `Emap`; `removeControl()` releases subscriptions and removes its DOM.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `control` | `Control` | Required | Control instance to mount; one instance can occupy one placement at a time |
+| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | `'top-left'` | Control area; status bars usually use `'bottom-left'` or `'bottom-right'` |
+
+`map.addControl(control, position)` and `map.removeControl(control)` return `Promise<void>`; the latter accepts the same instance.
 
 ## API
 

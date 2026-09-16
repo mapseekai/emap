@@ -10,91 +10,129 @@ verifiedVersion: 0.12.0
 
 # Sources and layers
 
-Emap separates geospatial data from presentation configuration. `TopologySource` holds an imported mapshaper dataset; the dataset's source layers hold geometry and attributes; a render layer is the `LayerSpecification` passed to `map.addLayer`, which declares how one source layer is drawn.
-
-## Import a source
-
-A `TopologySource` imports URLs, in-memory bytes, and file-picker data:
+Emap separates geospatial data from presentation: `TopologySource` holds a mapshaper dataset, source layers hold geometry and attributes, and `LayerSpecification` declares rendering.
 
 ```ts
-import { TopologySource } from '@mapseekai/emap';
-
-const roads = await TopologySource.fromUrl('roads', '/data/roads.geojson');
-
-const bytes = await file.arrayBuffer();
-const upload = await TopologySource.fromBytes('upload', bytes, {
-  filename: file.name,
+const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // import data from a URL
+await map.addSource('roads', source); // register it under a map source ID
+map.addLayer({ // declare a render layer for the data
+  id: 'roads-line', // use a unique render layer ID
+  type: 'line', // choose the line renderer
+  source: 'roads', // reference the registered map source ID
+  paint: { 'line-color': '#166534', 'line-width': 1 }, // set line styling
 });
 ```
 
-The `filename` passed to `fromBytes` identifies the input format, so uploads should retain their original filename. You can also create a source and call `await source.setData(...)`. A source must finish its first import before it is passed to `map.addSource(...)`.
+## Core methods
 
-For untrusted or very large inputs, configure `resourceLimits.maxInputBytes` through `TopologySourceOptions`. The default `ImportResourceLimits` ceiling is 2 GiB per logical import request; ZIP-specific expansion limits remain available through `ZipExtractionLimits`.
+| API | Parameters | Default | Description |
+| --- | --- | --- | --- |
+| `TopologySource.fromUrl(id, url, options?)` | `id: string`, `url: string`, `options: Omit<TopologySourceOptions, 'data'>` | `{}` | Import a URL; extension or `Content-Type` selects the format. |
+| `TopologySource.fromBytes(id, bytes, options?)` | `id: string`, `bytes: Uint8Array \| ArrayBuffer`, `options.filename: string` | `` `${id}.geojson` `` | Import raw bytes; filename extension selects the parser. |
+| `map.addSource(id, source, answers?)` | `id: string`, `source: TopologySource`, `answers.sourceCrs?: string` | Unset | Register a source asynchronously and normalize to map CRS when needed. |
+| `map.addLayer(layer, before?)` | `layer: LayerSpecification`, `before?: string` | `before` unset | Register a render layer synchronously; later layers draw above. |
+| `source.setData(data)` | `data: TopologySourceInput` | Required | Reimport data; concurrent calls use the latest load. |
 
-## Four IDs
+`new TopologySource(id, { data })` creates a source object ID and imports data. `{ filename, content }` imports one file; an array combines files into one dataset.
+
+### `LayerSpecification`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Required | Unique render-layer ID. |
+| `type` | `'fill' \| 'line' \| 'circle'` | Required | Renderer and `paint` set. |
+| `source` / `source-layer` | `string` | `source` required; first source layer | Map source and target dataset layer. |
+| `paint` | `FillLayerPaint \| LinePaint \| CirclePaint` | Type defaults | Color, width, opacity, and marker settings. |
+| `layout.visibility` | `'visible' \| 'none'` | `'visible'` | Rendering and picking switch. |
+| `filter` | `StyleExpression` | Unset | Per-feature boolean MapLibre-subset expression. |
+| `styleSource` | `'mapshaper'` | Unset | Use baked `fill` / `stroke` color fields. |
+| `pointLod` | `false \| { cellSize?: number }` | `{ cellSize: 8 }` | `circle` point-density thinning. |
+
+## More source options
+
+The constructor, `fromUrl`, and `fromBytes` share `TopologySourceOptions`; `setData` reuses the construction import strategy.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `formats` | `FormatRegistryContract` | Separate empty registry | Plugin format registry. |
+| `resourceLimits.maxInputBytes` | `number` | 2 GiB | Raw-byte ceiling per logical import. |
+| `zipLimits.maxCompressedBytes` / `zipLimits.maxBytes` | `number` | 2 GiB | ZIP compressed / total uncompressed-byte ceilings. |
+| `zipLimits.maxEntries` / `zipLimits.maxRatio` | `number` | `5000` / `100` | ZIP entry-count / expansion-ratio ceilings. |
+| `adapter` | `MapshaperAdapter` | Default mapshaper adapter | Import, export, transformation, and bounds calculations. |
+
+## More source and layer IDs
 
 ```ts
-await map.addSource('main', source);
-map.addLayer({
-  id: 'district-fill',
-  type: 'fill',
-  source: 'main',
-  'source-layer': 'districts',
+await map.addSource('main', source); // register the source under a map source ID
+map.addLayer({ // reference a dataset source layer
+  id: 'district-fill', // set the render layer ID
+  type: 'fill', // choose the fill renderer
+  source: 'main', // reference the map source ID
+  'source-layer': 'districts', // select a dataset layer
 });
 ```
 
 | ID | Example | Scope |
 | --- | --- | --- |
-| Source object ID | `source.id` | `TopologySource` |
-| Map source ID | `main` | `Emap` source registry |
-| source-layer name | `districts` | A layer inside the dataset |
-| Render layer ID | `district-fill` | `Emap` draw order, events, and visibility |
+| Source object ID | `source.id` | `TopologySource`. |
+| Map source ID | `main` | `Emap` source registry; render-layer and `map.ops` `source` must match. |
+| source-layer name | `districts` | A dataset layer. |
+| Render layer ID | `district-fill` | `Emap` draw order, events, and visibility. |
 
-The map source ID must match the `source` used by render layers and `map.ops`. A single-source-layer dataset can omit `source-layer`; a multi-layer dataset should specify it explicitly.
+Omit `source-layer` for the first layer; a canonical ID matches `layer.name`, then `layer.id`, then positional `layer-N`, or use an exact `layer.name` or `layer.id`.
 
-## Declare how data draws
-
-`LayerSpecification.type` supports `fill`, `line`, and `circle`. They draw polygons, lines or polygon boundaries, and points respectively.
+## More layer styling
 
 ```ts
-map.addLayer({
-  id: 'parcel-fill',
-  type: 'fill',
-  source: 'parcels',
-  'source-layer': 'parcels',
-  paint: { 'fill-color': '#bbf7d0', 'fill-opacity': 0.6 },
+map.addLayer({ // draw the fill first
+  id: 'parcel-fill', // set the fill layer ID
+  type: 'fill', // choose the fill renderer
+  source: 'parcels', // reference the map source
+  'source-layer': 'parcels', // select the data layer
+  paint: { 'fill-color': '#bbf7d0', 'fill-opacity': 0.6 }, // set the fill
 });
 
-map.addLayer({
-  id: 'parcel-outline',
-  type: 'line',
-  source: 'parcels',
-  'source-layer': 'parcels',
-  paint: { 'line-color': '#166534', 'line-width': 1 },
+map.addLayer({ // draw the outline afterwards
+  id: 'parcel-outline', // set the line layer ID
+  type: 'line', // choose the line renderer
+  source: 'parcels', // reference the same map source
+  'source-layer': 'parcels', // select the same data layer
+  paint: { 'line-color': '#166534', 'line-width': 1 }, // set the outline
 });
 ```
 
-Several render layers can reference one source layer. Later layers draw above earlier ones, so this outline remains above the fill. Use `circle` for points, `line` for lines and polygon boundaries, and `fill` for polygon interiors.
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fill-color` / `fill-opacity` | `string \| StyleExpression` / `number` | Theme muted color / `1` | Polygon fill color / opacity. |
+| `line-color` / `line-width` | `string \| StyleExpression` / `number` | Theme primary color / `0.8` | Line or polygon-boundary color / width. |
+| `line-dasharray` / `line-dashstyle` | `readonly number[]` / `'solid' \| 'dash' \| 'dot' \| 'dash-dot' \| 'arrow-dot' \| StyleExpression` | Solid / `'solid'` when empty | Dash rhythm / named style; `'arrow-dot'` uses arrows. |
+| `line-arrow-spacing` / `line-arrow-size` | `number` | `32` / `6` | `'arrow-dot'` arrow spacing / wing length in CSS pixels. |
+| `circle-color` / `circle-radius` | `string \| StyleExpression` / `number` | Theme primary color / `4` | Point-marker color / radius. |
+| `circle-fill` / `circle-shape` | `boolean` / `PointMarkerShape \| StyleExpression` | `true` / `'circle'` | Filled or outlined / marker shape. |
+
+MapLibre service-layer `minzoom` / `maxzoom` configure zoom ranges.
 
 ## Confirm CRS while loading
 
-`map.addSource` preflights a source. When an application needs to ask for a CRS, use `preflightSource` to receive a draft and requirements, then retry with answers; only a ready plan can go to `confirmSource`.
-
 ```ts
-let result = await map.preflightSource({ id: 'main', source });
-if (result.status === 'needs-input') {
-  result = await map.preflightSource(result.draft, { sourceCrs: 'EPSG:3857' });
+let result = await map.preflightSource({ id: 'main', source }); // preflight the source
+if (result.status === 'needs-input') { // provide CRS input when requested
+  result = await map.preflightSource(result.draft, { sourceCrs: 'EPSG:3857' }); // retry with the draft
 }
-if (result.status === 'ready') await map.confirmSource(result.plan);
+if (result.status === 'ready') await map.confirmSource(result.plan); // confirm the single-use ready plan
 ```
 
-An explicit `sourceCrs` identifies the CRS of the imported coordinates. Once registered, the source's data stays aligned with the map's active CRS.
+| API | Parameters | Default | Description |
+| --- | --- | --- | --- |
+| `preflightSource` | `request.id: string`, `request.source?: TopologySource`, `request.input?: TopologySourceInput` | `id` required; choose `source` or `input` | Preflight a source to register. |
+| `preflightSource` | `request.sourceOptions`, `request.sourceCrs`, `draft`, `answers.sourceCrs` | `{}`, dataset CRS, required on retry, required when requested | Import options, explicit CRS, retry draft, and CRS answer. |
+| `confirmSource` | `plan: ReadySourceLoadPlan` | Required | Confirm a single-use ready plan. |
+
+`ready` provides a plan, summary, and diagnostics; `needs-input` provides a draft and requirements; `rejected` provides errors. The first source establishes map CRS; later sources are transformed to it.
 
 ## Export and format plugins
 
-`source.export({ format: 'geojson' })` returns a browser `Blob`. GeoJSON, TopoJSON, Shapefile, MSX, GeoParquet, GeoArrow, and FlatGeobuf are supported; GeoParquet and GeoArrow require importing `@mapseekai/emap/arrow`, while FlatGeobuf requires a format plugin registered through `registerFormat`.
-
-GeoPackage vector tables are imported through `@mapseekai/emap/geopackage` (import only, no export). All feature tables in one file merge into a single dataset with shared arcs; see [GeoPackage](../data/geopackage.md).
+`source.export({ format: 'geojson' })` returns a browser `Blob`. GeoJSON, TopoJSON, Shapefile, MSX, GeoParquet, GeoArrow, and FlatGeobuf are supported; the latter formats need their plugins. GeoPackage imports through `@mapseekai/emap/geopackage` only; see [GeoPackage](../data/geopackage.md).
 
 ## API
 

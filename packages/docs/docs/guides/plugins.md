@@ -10,26 +10,35 @@ verifiedVersion: 0.12.0
 
 # Cordis 原生插件与 AI Capability
 
-本分支使用官方上游 `cordis@4.0.0-rc.10`。这是固定版本的候选发布版，不是稳定版承诺。自研插件运行时、服务键和 effect scope 已删除，项目不维护第二套依赖图或插件状态机。地图公开 `map.ctx`，它就是原生 Cordis `Context`。
-
-## 创建与释放
-
-Cordis 原生插件加载是异步的。地图、控件和需要重新装配的操作都要等待生命周期完成：
+Emap 直接使用固定的上游 `cordis@4.0.0-rc.10`。`map.ctx` 是原生 Cordis `Context`；Cordis 生命周期管理插件依赖、服务、effect 和释放。
 
 ```ts
 import { Emap } from '@mapseekai/emap';
 
-const map = await Emap.create({ container: 'map', preset: 'editor' });
-await map.controls.add('navigation');
-console.log(map.ctx.view.getCRS());
-await map.dispose();
+const map = await Emap.create({
+  container: 'map',
+  preset: 'editor', // 内置插件集合
+  plugins: [myPlugin], // 追加；同名项替换 preset 插件
+});
+await map.controls.add('navigation'); // 控件是子插件
+map.ctx.view.getCRS(); // 从 ctx 读取类型化服务
+await map.dispose(); // 释放插件、服务和资源
 ```
 
-也可以 `const map = new Emap(options); await map.ready;`。构造器返回不表示服务已经激活。`remove()` 请求关闭，`dispose()` 等待 Cordis 原生卸载结束；复用容器前应等待后者。Cordis 会把清理异常记入原生 logger，不再沿用旧内核聚合抛出的错误语义。
+## 核心参数
+
+`Emap.create(options)` 在 preset 和 `plugins` 全部 `ACTIVE` 后返回；也可 `const map = new Emap(options); await map.ready`。`remove()` 发起释放，`await dispose()` 等待完成。插件相关 `EmapOptions`：
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `preset` | `'editor' \| 'viewer' \| 'headless' \| 'empty'` | `'editor'` | 内置插件集合。 |
+| `plugins` | `readonly Plugin[]` | `[]` | 原生 Cordis 插件；同名项替换 preset 插件。 |
+| `excludePlugins` | `readonly string[]` | `[]` | 按插件名排除 preset 能力；`map.ready` 验证依赖图。 |
+| `authorizeCapability` | `CapabilityAuthorizer` | Agent 写操作默认拒绝 | Capability 执行的宿主授权策略。 |
 
 ## 插件与服务契约
 
-服务使用标准 TypeScript declaration merging，不使用自定义 Symbol token：
+服务通过 TypeScript declaration merging 挂到 Cordis `Context`；插件声明依赖后从 `ctx` 读取类型化服务：
 
 ```ts
 import type { Plugin } from 'cordis';
@@ -42,8 +51,11 @@ declare module 'cordis' {
 
 const counterPlugin: Plugin.Object = {
   name: 'demo.counter',
+  provide: ['counter'],
   apply(ctx) {
-    ctx.provide('counter', { value: 1 });
+    ctx.effect(function* () {
+      yield ctx.provide('counter', { value: 1 });
+    });
   },
 };
 
@@ -54,25 +66,120 @@ const readerPlugin: Plugin.Object = {
     console.log(ctx.counter.value);
   },
 };
+```
 
+### `Plugin.Object` 形状
+
+`Plugin.Object<T>` 的 `apply(ctx, config)` 是入口；函数插件和 `Service` 子类也可传给 `ctx.plugin()`。对象形式可按 `name` 替换。
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 未命名 | 插件标识，用于替换、筛选和诊断。 |
+| `inject` | `Inject`：`(keyof Context)[]` 或服务配置对象 | 无依赖 | 硬依赖；可用后激活 `apply`。 |
+| `provide` | `string \| string[]` | 未声明 | 声明本 Fiber 提供的服务名。 |
+| `apply` | `(ctx: Context, config: T) => unknown` | 必填 | 激活入口；`ctx` 是当前 Fiber 子 Context。 |
+| `Config` | `StandardSchemaV1<any, T>` | 未声明 | 可选配置 schema。 |
+
+`provide` 描述依赖图；`ctx.provide()` 返回当前 Fiber 管理的释放函数。注册在 `ctx.effect()` 中时，Provider 卸载先撤销服务。
+
+### `ctx.plugin()` 与 `Fiber`
+
+`ctx.plugin()` 同步返回可等待的 `Fiber`（`Fiber & PromiseLike<Fiber>`）；`await ctx.plugin()` 等待激活。保留 Fiber 以管理动态安装。
+
+| API | 参数 | 返回值 | 使用场景 |
+| --- | --- | --- | --- |
+| `ctx.plugin(plugin, config?)` | `plugin: Plugin`；`config`：插件的 `T` 配置 | `Fiber & PromiseLike<Fiber>` | 挂载 Provider 或 feature。 |
+| `fiber.await()` | 无 | `Promise<Fiber>` | 等待 `ACTIVE`。 |
+| `fiber.dispose()` | 无 | `Promise<void>` | 卸载 effects、服务和子依赖。 |
+| `fiber.restart()` | 无 | `Promise<void>` | 用当前配置重新激活。 |
+| `fiber.update(config)` | `config: unknown`；`noSave?: boolean` | `void \| Promise<void>` | 更新配置并重载。 |
+| `ctx.fiber` | 当前 `Fiber` | `Fiber` | 当前插件的状态和资源。 |
+
+```ts
 const reader = map.ctx.plugin(readerPlugin);
 const provider = await map.ctx.plugin(counterPlugin);
 await reader.await();
-await provider.dispose(); // reader 由 Cordis 自动回到 PENDING
-await map.ctx.plugin(counterPlugin); // 依赖恢复后自动重新激活
+await provider.dispose();
+await map.ctx.plugin(counterPlugin);
 ```
 
-`ctx.plugin()` 也直接接受原生函数插件和 `Service` 子类，无需 emap 包装。硬依赖使用 `inject` 和类型化属性访问；可选服务用 `ctx.get('mapLibre')` 查询。可选查询并不等于硬依赖，不要把查询结果保存为长期有效的实例。
+`inject` 服务恢复时，Cordis 重新激活等待的 Fiber。可选集成可用 `ctx.get('mapLibre')` 查询。
 
-运行时开关使用原生 `Fiber.dispose()`、重新 `ctx.plugin()`、`Fiber.restart()` 或 `Fiber.update(config)`。项目不再提供按字符串 ID 的 disable/enable 模拟。插件名称用于 preset 覆盖配置；Cordis 本身以插件回调和 Fiber 标识实例，不额外禁止原生多实例语义。
+### 可注入的 Emap 服务
+
+`src/runtime/services/context.ts` 声明 workspace 服务的 Context augmentation；每项由对应 Provider 提供。使用的服务应放入 `inject`。
+
+| 服务 | 契约 / 主要能力 | 使用场景 |
+| --- | --- | --- |
+| `formats` | `FormatRegistryContract`：注册、注销和格式查询 | 格式 codec 与导入导出。 |
+| `capabilities` | `CapabilityRegistryContract`：注册、发现、执行和记录 | AI / UI 工具。 |
+| `document`、`layers`、`source`、`sourceFactory` | 数据集、图层和 source 生命周期 | 工作区数据。 |
+| `view`、`projection`、`scale` | 相机、CRS 投影与比例 | 导航和空间工具。 |
+| `selection`、`history`、`mutation`、`editState`、`editSession` | 选择、历史和编辑状态 | 编辑与可撤销交互。 |
+| `query`、`cache`、`ops`、`attributes` | 查询、缓存、mapshaper 与属性操作 | 要素处理。 |
+| `surface`、`render`、`painterFactory`、`signals` | Canvas、绘制和重绘信号 | 可视化与渲染扩展。 |
+| `interaction`、`routing`、`shortcuts`、`controls`、`controlContext` | Handler、路由、热键和控件工厂 | 自定义交互与控件。 |
+| `mapEvents`、`options`、`policy`、`validation`、`snapshot`、`execution`、`host` | 事件、选项、策略、验证、快照、Worker 与受信任操作桥 | feature 协调和异步作业。 |
+| `mapLibre` | `MapLibreServiceManager` | MapLibre 底图和在线图层。 |
+| `duckDb`、`duckDbProcessing` | 惰性 DuckDB runtime 与处理入口 | 本地 DuckDB 处理。 |
+
+`viewer` 还提供浏览交互服务；`editor` 还提供编辑交互服务，均可供控件调用或作为 `inject` 前置条件。
+
+#### `formats` 注册契约
+
+`formats` 为地图实例局部注册表。格式 feature 卸载时，`register()` 返回的函数注销 codec，并以 `AbortError` 结束其进行中的导入导出。
+
+`DatasetFormatPlugin` 参数：
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 必填 | codec 唯一注册名。 |
+| `extensions` | `readonly string[]` | 必填 | 不含点的导入扩展名；注册时转小写并保持唯一。 |
+| `importBinary` | `(content: Uint8Array, filename: string) => Promise<MapshaperDataset>` | 必填 | 将字节和文件名解码为 dataset。 |
+| `exportFormats` | `Readonly<Record<string, (dataset: MapshaperDataset, options?: object) => Promise<ExportedFormatFile[]>>>` | 必填 | 导出格式到处理器的映射。 |
+| `mimeTypes` | `Readonly<Record<string, string>>` | 未提供 | 导出格式到 Blob MIME type 的映射。 |
+
+`FormatRegistryContract` 操作：
+
+| API | 参数 | 返回值 | 使用场景 |
+| --- | --- | --- | --- |
+| `register(plugin)` | `plugin: DatasetFormatPlugin` | `() => void` | 注册 codec，返回注销函数。 |
+| `unregister(name)` | `name: string` | `void` | 按注册名注销 codec。 |
+| `getFormatForExtension(extension)` | `extension: string` | `DatasetFormatPlugin \| undefined` | 按扩展名查导入器。 |
+| `getExportHandler(format)` | `format: string` | 导出处理器或 `undefined` | 查导出处理器。 |
+| `getMimeType(format)` | `format: string` | `string \| undefined` | 查导出 MIME type。 |
+| `list()` / `dispose()` | 无 | `readonly DatasetFormatPlugin[]` / `void` | 检查或释放注册表。 |
+
+### Feature 组合
+
+Feature 声明已有 Provider 的 `inject`，以 effect 注册贡献，按需以 `provide` 发布 Handler 或服务。格式 feature 使用 `inject: ['formats']`：
+
+```ts
+import type { Plugin } from 'cordis';
+
+const formatFeature: Plugin.Object = {
+  name: 'feature.format.acme',
+  inject: ['formats'],
+  apply(ctx) {
+    ctx.effect(function* () {
+      yield ctx.effect(() => ctx.formats.register(acmeFormat));
+    });
+  },
+};
+```
+
+`formatPlugin(format)` 与 `arrowFormatsPlugin` 封装该模式。交互 feature 注册 Handler 并按名称 `provide`；Capability feature 注册领域服务方法，复用几何、CRS 和事务约束。
 
 ## 原生 effects 与异步资源
 
-需要确保消费者先结束、资源后关闭时，用 Cordis 原生 generator effect 分组：
+`ctx.effect()` 在 Fiber 激活期执行回调。回调可返回释放函数、其 iterable 或异步形式；Cordis 按反序释放同组资源。
+
+`ctx.effect(execute, label?)` 将资源绑定到插件生命周期，返回释放函数（异步 effect 可等待）；`ctx.provide(name, value)` 提供实例服务，返回异步释放函数。
 
 ```ts
 const plugin: Plugin.Object = {
   name: 'demo.resource',
+  provide: ['resource'],
   apply(ctx) {
     ctx.effect(function* () {
       const resource = acquireResource();
@@ -83,25 +190,23 @@ const plugin: Plugin.Object = {
 };
 ```
 
-组内按反序释放：先撤销服务并等待依赖它的插件，再关闭资源。事件可直接使用 `ctx.on()` 和 `ctx.emit()`，监听会随 Fiber 撤销。已有 GIS 对象的 EventDispatcher 作为 `ctx.mapEvents` 保留，负责地图业务事件，不承担插件调度。
+组内先撤销服务并等待消费者，再关闭资源。`ctx.on()` 订阅加入当前 Fiber；GIS 事件使用 `ctx.mapEvents`。控件实例是子插件，`map.addControl()`、`map.removeControl()` 和 `map.controls.add()` 返回 Promise。
 
-异步 GIS 任务使用由 `ctx.effect()` 管理的 AbortController 防止旧结果提交。取消不能强制打断所有同步 GIS 算法。控件实例现在是原生子插件，`map.addControl()`、`map.removeControl()` 和 `map.controls.add()` 返回 Promise。
-
-## 运行时角色与六区源码结构
+## 运行时职责
 
 | 层 | 实现与职责 |
 | --- | --- |
-| Kernel | 上游 Cordis：Context、Registry、Fiber、Service、events、effects、isolation。 |
-| Service | `src/runtime/services/context.ts`、各服务契约及 Cordis Context augmentation；约定能力与类型。 |
-| Provider | `src/runtime/providers/`、`src/engine/providers/` 与 `src/integrations/*/plugin.ts`：按所有权分别承载运行时、内置引擎和可选集成实现。 |
-| Feature Plugin | `src/runtime/plugins/`：交互、控件工厂、校验器、可发现能力贡献。 |
-| AI Capability | `src/runtime/ai/`：GIS 工具 schema、发现、授权、执行记录与结果摘要。它是领域工具注册表，不是第二个插件内核。 |
+| Kernel | 上游 Cordis 的 `Context`、Registry、Fiber、Service、events、effects 与 isolation。 |
+| Service | `src/runtime/services/`：Context augmentation 和领域契约。 |
+| Provider | `src/runtime/providers/`、`src/engine/providers/`、`src/integrations/*/plugin.ts`。 |
+| Feature Plugin | `src/runtime/plugins/`：交互、控件、校验与 capability 贡献。 |
+| AI Capability | `src/runtime/ai/`：schema、发现、授权、记录和结果摘要。 |
 
-源码顶层按 `domain / engine / runtime / integrations / ui / shared` 六个职责区组织；概念角色不再等于一级目录。Domain 数据结构、渲染算法和工具算法仍复用原实现；指针移动、命中测试和绘制循环不经过 JSON 或 Agent 调用。`src/runtime/context/` 仅重导出原生类型、读取原生诊断信息、等待原生状态过渡，以及将 AbortController 注册成 effect，不实现依赖调度。
+`domain / engine / runtime / integrations / ui / shared` 划分职责区；`src/runtime/context/` 提供原生类型重导出、诊断、状态等待和 effect 所有权辅助。
 
 ## Preset 与可选 Provider
 
-`editor` 提供编辑交互；`viewer` 保留数据处理但不装模态编辑 Handler；`headless` 不创建 DOM/Canvas；`empty` 仅装实例选项。替换 preset 内置项使用同名原生插件，`excludePlugins` 填插件名称。必要服务缺失会使 `map.ready` 拒绝。
+`headless` 提供处理服务，`viewer` 加入 Canvas 与浏览交互，`editor` 再加入编辑控件和交互，`empty` 仅安装 `options` Provider。`resolvePlugins()` 筛除 `excludePlugins`、替换同名 preset 项并追加应用插件。
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
@@ -118,29 +223,43 @@ await source.setData({ filename: 'roads.arrow', content: bytes });
 await map.addSource('upload', source);
 ```
 
-格式注册依旧是实例局部的，import 不产生注册副作用。DuckDB 默认惰性初始化，外部传入 runtime 默认借用；`owned: true` 才随 Provider 关闭。MapLibre 保持可选 peer，需要配置服务后才初始化底图。
+格式注册为实例局部。DuckDB runtime 按首次使用初始化；传入 runtime 时以 `owned: true` 交由 Provider 释放。MapLibre Provider 初始化浏览器底图。
 
 ## AI 调用
 
 ```ts
 import { describeAgentTools, invokeAgentTool } from '@mapseekai/emap/ai';
+
 const tools = describeAgentTools(map.capabilities);
 const result = await invokeAgentTool(map.capabilities, 'view.getCRS', {});
-console.log(result.content); // 可交给模型的摘要
-// result.value 保留给本地 UI / 工作流；不会自动向模型发送几何数据。
+console.log(result.content);
 ```
 
-Agent 默认仅允许只读能力。修改数据、选择、视图或外部状态的操作需要宿主 `authorizeCapability` 授权；授权不能由模型参数自行声明。GIS 几何、CRS、版本与事务约束仍由原领域服务验证。执行记录有界且不等于持久化事件溯源。
+`CapabilityRegistryContract` 的执行入口：
+
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `id` | `string` | 必填 | 已注册 capability ID。 |
+| `input` | `Readonly<Record<string, unknown>>` | `{}` | 依据 `inputSchema` 校验并冻结的输入。 |
+| `invocation.origin` | `'api' \| 'ui' \| 'agent'` | `'api'` | 调用来源；Agent 写 effect 由 `authorizeCapability` 决定。 |
+| `invocation.signal` | `AbortSignal` | 未提供 | 取消执行；feature 卸载时同样取消。 |
+
+`map.capabilities.execute(id, input?, invocation?)` 返回 `Promise<T>`；`list(category?)`、`get(id)` 和 `search(query)` 用于发现，`history()` 最多返回 200 条记录。Agent 读取能力直接运行；写 effect 由宿主授权策略控制。
 
 ## 检查真实运行状态
 
 ```ts
 import { inspectContext, inspectServices, settleContext } from '@mapseekai/emap/context';
+
 console.table(inspectContext(map.ctx));
 console.table(inspectServices(map.ctx));
-await settleContext(map.ctx); // 仅等待 Cordis 过渡，不自行激活插件
+await settleContext(map.ctx);
 ```
 
-示例目录中的 **Cordis Runtime / GIS Harness** 显示固定 Cordis 版本、`Context.is(map.ctx)`、原生 Fiber 状态、inject 对应的 Provider、effects、可选模块的安装/卸载及四种 preset。页面没有旧的 PluginRuntime。
+**Cordis Runtime / GIS Harness** 显示版本、`Context.is(map.ctx)`、Fiber 状态、Provider、effects、可选模块和四种 preset。ESM 保持 `cordis` 为外部依赖；script-tag 导出 `emap.Context`，跨 bundle 使用 `Context.is()`。
 
-ESM 发布入口把 `cordis` 作为外部依赖，保证应用与 emap 共享同一库实例；script-tag 版本包含 Cordis 并从 `emap.Context` 暴露。跨不同 bundle 判断 Context 使用原生 `Context.is()`，不依赖类对象引用相同。
+## 可运行示例
+
+- [插件运行时](/mapseekai/emap/examples/plugin-runtime/)
+- [导出格式](/mapseekai/emap/examples/export-formats/)
+- [在线地图服务](/mapseekai/emap/examples/online-map-services/)
