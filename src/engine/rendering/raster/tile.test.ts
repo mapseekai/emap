@@ -123,6 +123,51 @@ describe('raster display tiles', () => {
       distant.level.id,
     );
   });
+  it('allows modest overview oversampling only for tiled pyramids', () => {
+    const tiledBase = {
+      ...metadata.levels[0],
+      source: 'base' as const,
+      tileWidth: 4,
+      tileHeight: 4,
+    };
+    const tiledOverview = {
+      ...tiledBase,
+      id: 1,
+      source: 'internal-overview' as const,
+      width: 4,
+      height: 4,
+      tileWidth: 2,
+      tileHeight: 2,
+      subfileType: 1,
+    };
+    const tiled = selectRasterLevel(
+      { ...metadata, levels: [tiledBase, tiledOverview] },
+      [0, 0, 6, 6],
+      identity,
+      4,
+    );
+    expect(tiled.sourcePixelsPerDisplayPixel).toBeCloseTo(1.5);
+    expect(tiled.level.id).toBe(1);
+
+    const stripedBase = { ...tiledBase, tileWidth: 8, tileHeight: 1 };
+    const striped = selectRasterLevel(
+      { ...metadata, levels: [stripedBase, tiledOverview] },
+      [0, 0, 6, 6],
+      identity,
+      4,
+    );
+    expect(striped.level.id).toBe(0);
+
+    const tooClose = selectRasterLevel(
+      { ...metadata, levels: [tiledBase, tiledOverview] },
+      [0, 0, 5.6, 5.6],
+      identity,
+      4,
+    );
+    expect(tooClose.sourcePixelsPerDisplayPixel).toBeCloseTo(1.4);
+    expect(tooClose.level.id).toBe(0);
+  });
+
   it('renders NoData and out-of-coverage pixels transparent', () => {
     const nd = { ...metadata, noData: 0 },
       plan = planRasterTile(nd, [0, 0, 8, 8], identity, {}, 8)!;
