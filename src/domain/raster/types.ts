@@ -125,6 +125,8 @@ export interface RasterTaskDiagnostics {
   readonly fastLzwBlocks: number;
   readonly fastLzwFallbacks: number;
   readonly fastLzwMs: number;
+  readonly deinterleaveMs: number;
+  readonly directRgb8Tiles: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
@@ -157,6 +159,8 @@ export interface RasterLevelProcessingStats {
   readonly fastLzwBlocks: number;
   readonly fastLzwFallbacks: number;
   readonly fastLzwMs: number;
+  readonly deinterleaveMs: number;
+  readonly directRgb8Tiles: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
@@ -217,6 +221,8 @@ export interface RasterProcessingStats {
   readonly fastLzwBlocks: number;
   readonly fastLzwFallbacks: number;
   readonly fastLzwMs: number;
+  readonly deinterleaveMs: number;
+  readonly directRgb8Tiles: number;
   readonly workerMs: number;
   readonly fileReadMs: number;
   readonly fileReadBytes: number;
@@ -239,7 +245,7 @@ export interface RasterSource {
   /** Internal cumulative counters used to derive per-task diagnostics in a Worker. */
   getTaskDiagnosticsSnapshot?(): Omit<
     RasterTaskDiagnostics,
-    'workerMs' | 'assembleMs' | 'colorizeMs'
+    'workerMs' | 'assembleMs' | 'colorizeMs' | 'directRgb8Tiles'
   >;
   toReference(): RasterReference;
   dispose(): void;

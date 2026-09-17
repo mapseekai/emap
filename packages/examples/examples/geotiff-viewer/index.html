@@ -200,7 +200,7 @@ function performanceSnapshot() {
         fileReadBytes:delta('fileReadBytes'), fileReadOps:delta('fileReadOps'), fileReadMs:delta('fileReadMs'),
         blockCacheHits:delta('blockCacheHits'), blockCacheMisses:delta('blockCacheMisses'),
         blockCacheEvictions:delta('blockCacheEvictions'), blockCacheEvictedBytes:delta('blockCacheEvictedBytes'),
-        nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'), fastLzwBlocks:delta('fastLzwBlocks'), fastLzwFallbacks:delta('fastLzwFallbacks'), fastLzwMs:delta('fastLzwMs'),
+        nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'), fastLzwBlocks:delta('fastLzwBlocks'), fastLzwFallbacks:delta('fastLzwFallbacks'), fastLzwMs:delta('fastLzwMs'), deinterleaveMs:delta('deinterleaveMs'), directRgb8Tiles:delta('directRgb8Tiles'),
         blockLoadMs:delta('blockLoadMs'), colorizeMs:delta('colorizeMs') };
     }).filter(item => item.submitted || item.completed || item.cancelled || item.fileReadOps),
     nativeDeflate: {
@@ -213,10 +213,11 @@ function performanceSnapshot() {
       ms:performanceDelta(processing,bproc,'nativeDeflateMs'),
     },
     fastLzw: { blocks:performanceDelta(processing,bproc,'fastLzwBlocks'), fallbacks:performanceDelta(processing,bproc,'fastLzwFallbacks'), ms:performanceDelta(processing,bproc,'fastLzwMs') },
+    rgb8Direct: { tiles:performanceDelta(processing,bproc,'directRgb8Tiles'), deinterleaveMs:performanceDelta(processing,bproc,'deinterleaveMs') },
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
-      nativeDeflate:performanceDelta(processing,bproc,'nativeDeflateMs'), fastLzw:performanceDelta(processing,bproc,'fastLzwMs'),
+      nativeDeflate:performanceDelta(processing,bproc,'nativeDeflateMs'), fastLzw:performanceDelta(processing,bproc,'fastLzwMs'), deinterleave:performanceDelta(processing,bproc,'deinterleaveMs'),
       assemble: performanceDelta(perf,bp,'assembleMs'), colorize: performanceDelta(perf,bp,'colorizeMs'),
       workerTotal: performanceDelta(perf,bp,'workerMs'), transferApprox: performanceDelta(perf,bp,'transferMs'),
       canvasUpload: performanceDelta(perf,bp,'canvasUploadMs'), presentationWait: performanceDelta(perf,bp,'presentationWaitMs'),

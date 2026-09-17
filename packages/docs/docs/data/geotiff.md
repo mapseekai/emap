@@ -10,7 +10,7 @@ verifiedVersion: 0.12.0
 
 # 本地 GeoTIFF 栅格
 
-`@mapseekai/emap/geotiff` 使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片绘制到现有地图 Canvas，不创建额外地图覆盖层。 对标准 TIFF LZW（Compression=5）的字节对齐整数块使用预分配 typed-array 快速解码器，并保留 geotiff.js 解码器作为兼容回退；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
+`@mapseekai/emap/geotiff` 使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片绘制到现有地图 Canvas，不创建额外地图覆盖层。 对常见的 chunky UInt8 RGB + nearest 显示路径，Worker 会直接从 interleaved 解码窗口生成 RGBA，避免先拆成三个平面数组；不满足条件时自动回退通用数值路径。 对标准 TIFF LZW（Compression=5）的字节对齐整数块使用预分配 typed-array 快速解码器，并保留 geotiff.js 解码器作为兼容回退；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
 
 性能诊断会报告实际物理块请求/重复加载，以及 DEFLATE 原生解码的 compression code、运行时可用性、是否符合 fast path 条件和禁用原因；TIFF Compression `8` 与 `32946` 都按 Deflate 处理。
 

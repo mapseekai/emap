@@ -226,6 +226,8 @@ class WorkerRasterSource implements RasterSource {
   private fastLzwBlocks = 0;
   private fastLzwFallbacks = 0;
   private fastLzwMs = 0;
+  private deinterleaveMs = 0;
+  private directRgb8Tiles = 0;
   private nativeDeflateAvailable = false;
   private nativeDeflateEligible = false;
   private nativeDeflateDisabledReason: RasterNativeDeflateStatus['disabledReason'] = null;
@@ -442,6 +444,8 @@ class WorkerRasterSource implements RasterSource {
         fastLzwBlocks: 0,
         fastLzwFallbacks: 0,
         fastLzwMs: 0,
+        deinterleaveMs: 0,
+        directRgb8Tiles: 0,
         blockLoadMs: 0,
         assembleMs: 0,
         colorizeMs: 0,
@@ -569,6 +573,8 @@ class WorkerRasterSource implements RasterSource {
                 levelStats.fastLzwBlocks += d.fastLzwBlocks;
                 levelStats.fastLzwFallbacks += d.fastLzwFallbacks;
                 levelStats.fastLzwMs += d.fastLzwMs;
+                levelStats.deinterleaveMs += d.deinterleaveMs;
+                levelStats.directRgb8Tiles += d.directRgb8Tiles;
                 levelStats.blockLoadMs += d.blockLoadMs;
                 levelStats.assembleMs += d.assembleMs;
                 levelStats.colorizeMs += d.colorizeMs;
@@ -605,6 +611,8 @@ class WorkerRasterSource implements RasterSource {
               this.fastLzwBlocks += d.fastLzwBlocks;
               this.fastLzwFallbacks += d.fastLzwFallbacks;
               this.fastLzwMs += d.fastLzwMs;
+              this.deinterleaveMs += d.deinterleaveMs;
+              this.directRgb8Tiles += d.directRgb8Tiles;
               this.blockLoadMs += d.blockLoadMs;
               this.assembleMs += d.assembleMs;
               this.colorizeMs += d.colorizeMs;
@@ -737,6 +745,8 @@ class WorkerRasterSource implements RasterSource {
       fastLzwBlocks: this.fastLzwBlocks,
       fastLzwFallbacks: this.fastLzwFallbacks,
       fastLzwMs: this.fastLzwMs,
+      deinterleaveMs: this.deinterleaveMs,
+      directRgb8Tiles: this.directRgb8Tiles,
       blockLoadMs: this.blockLoadMs,
       assembleMs: this.assembleMs,
       colorizeMs: this.colorizeMs,

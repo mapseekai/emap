@@ -59,6 +59,48 @@ describe('off-thread raster pipeline', () => {
       reader.dispose();
     }
   });
+  it('renders chunky UInt8 RGB nearest-neighbor directly without planar deinterleave', async () => {
+    const reader = await GeoTIFFReader.open(
+      new File(
+        [
+          makeRasterFixture({
+            width: 32,
+            height: 16,
+            bits: 8,
+            bands: 3,
+            compression: 'deflate',
+            noData: 0,
+            pixelValue: (x, y, band) => (x * 5 + y * 7 + band * 43) & 255,
+          }),
+        ],
+        'rgb8.tif',
+      ),
+    );
+    try {
+      const style = { bands: [2, 0, 1], resampling: 'nearest' as const },
+        plan = planRasterTile(
+          reader.metadata,
+          reader.metadata.bounds,
+          (x, y) => [x, y],
+          style,
+          64,
+        )!,
+        samples = await reader.readWindow(plan.request),
+        expected = colorizeRasterTile(reader.metadata, plan, samples, style),
+        actual = await renderRasterWindow(reader, {
+          read: plan.request,
+          warp: plan.warp,
+          width: plan.width,
+          height: plan.height,
+          style,
+        });
+      expect(actual.rgba).toEqual(expected);
+      expect(actual.diagnostics).toMatchObject({ directRgb8Tiles: 1, deinterleaveMs: 0 });
+    } finally {
+      reader.dispose();
+    }
+  });
+
   it('does not read pixels after cancellation or for an invalid render request', async () => {
     const reader = await GeoTIFFReader.open(new File([makeRasterFixture()], 'image.tif'));
     const plan = planRasterTile(reader.metadata, reader.metadata.bounds, (x, y) => [x, y], {}, 8)!;

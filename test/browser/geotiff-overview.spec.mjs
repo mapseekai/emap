@@ -116,6 +116,42 @@ test('local external-pyramid imagery remains complete through navigation', async
   await page.evaluate(() => window.geotiffDemo.map.dispose());
 });
 
+test('classic Worker uses direct chunky RGB8 nearest rendering without deinterleave', async ({ page }) => {
+  const directory = await mkdtemp(join(tmpdir(), 'emap-rgb8-direct-'));
+  const original = join(directory, 'rgb8-direct.tif');
+  try {
+    await writeFile(original, makeRasterFixture({
+      width: 512,
+      height: 256,
+      bits: 8,
+      bands: 3,
+      compression: 'deflate',
+      pixelValue: (x, y, band) => (x + y * 3 + band * 47) & 255,
+    }));
+    await ready(page);
+    await page.locator('#file-input').setInputFiles(original);
+    await page.locator('#load').click();
+    await expect.poll(() => page.evaluate(() => window.geotiffDemo.metadata?.filename)).toBe('rgb8-direct.tif');
+    await idle(page);
+    await page.locator('#performance-reset').click();
+    await page.evaluate(() => {
+      const state = window.geotiffDemo;
+      state.map.ctx.raster.setStyle(state.currentId, { stretch: 'minmax' });
+    });
+    await expect.poll(() => page.evaluate(() => {
+      const diagnostics = window.geotiffDemo.performanceDiagnostics;
+      return Boolean(diagnostics?.stable && diagnostics.tiles > 0);
+    })).toBe(true);
+    const diagnostics = await page.evaluate(() => window.geotiffDemo.performanceDiagnostics);
+    expect(diagnostics.rgb8Direct.tiles).toBeGreaterThan(0);
+    expect(diagnostics.rgb8Direct.deinterleaveMs).toBe(0);
+    expect(diagnostics.phasesMs.deinterleave).toBe(0);
+    expect(diagnostics.fastLzw.fallbacks).toBe(0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('directory authorization auto-resolves a same-folder .tif.ovr companion', async ({ page }) => {
   const original = Array.from(makeRasterFixture({ width: 64, height: 32, bits: 16, bands: 3, photometric: 1 }));
   const overview = Array.from(makeRasterFixture({ width: 32, height: 16, bits: 16, bands: 3, photometric: 2, subfileType: 1, scaleFactor: 2, overviews: [2, 4] }));

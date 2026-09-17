@@ -1,4 +1,9 @@
-import { readNumericWindow } from './read-window';
+import {
+  getReadWindowDiagnostics,
+  readInterleavedRgb8Window,
+  readNumericWindow,
+  type InterleavedRgb8Window,
+} from './read-window';
 import { CachedGeoTIFFImage, RasterBlockCache } from './block-cache';
 import { getFastLzwDiagnostics } from './fast-lzw';
 import { getNativeDeflateDiagnostics } from './native-deflate';
@@ -431,7 +436,8 @@ export class GeoTIFFReader implements RasterSource {
     );
     const blocks = this.blockCache.getDiagnostics(),
       nativeDeflate = getNativeDeflateDiagnostics(),
-      fastLzw = getFastLzwDiagnostics();
+      fastLzw = getFastLzwDiagnostics(),
+      readWindow = getReadWindowDiagnostics();
     return {
       ...io,
       blockCacheHits: blocks.hits,
@@ -451,9 +457,63 @@ export class GeoTIFFReader implements RasterSource {
       fastLzwBlocks: fastLzw.blocks,
       fastLzwFallbacks: fastLzw.fallbacks,
       fastLzwMs: fastLzw.ms,
+      deinterleaveMs: readWindow.deinterleaveMs,
       blockLoadMs: blocks.loadMs,
       transferMs: 0,
     };
+  }
+
+  supportsInterleavedRgb8(levelId: number): boolean {
+    const image = this.images.get(levelId);
+    return Boolean(
+      image &&
+        image.planarConfiguration === 1 &&
+        image.getSamplesPerPixel() === 3 &&
+        [0, 1, 2].every(
+          (band) => image.getBitsPerSample(band) === 8 && image.getSampleFormat(band) === 1,
+        ),
+    );
+  }
+
+  async readInterleavedRgb8Window(
+    request: RasterReadRequest,
+    signal?: AbortSignal,
+  ): Promise<InterleavedRgb8Window> {
+    signal?.throwIfAborted();
+    this.lifetime.signal.throwIfAborted();
+    validateRasterRead(this.metadata.levels, request);
+    if (!this.supportsInterleavedRgb8(request.level))
+      throw new RasterError('UNSUPPORTED_SAMPLES', 'Interleaved RGB8 fast path is unavailable.');
+    if (this.pending >= 16)
+      throw new RasterError('RASTER_QUEUE_BUDGET', 'Too many queued raster reads.');
+    this.pending++;
+    const run = this.tail.then(async () => {
+      signal?.throwIfAborted();
+      this.lifetime.signal.throwIfAborted();
+      const controller = new AbortController();
+      const abort = () => controller.abort(signal?.reason ?? this.lifetime.signal.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+      this.lifetime.signal.addEventListener('abort', abort, { once: true });
+      try {
+        for (const source of this.sources) source.beginRead();
+        const image = this.images.get(request.level)!;
+        const result = await readInterleavedRgb8Window(image, request, controller.signal);
+        controller.signal.throwIfAborted();
+        return result;
+      } finally {
+        signal?.removeEventListener('abort', abort);
+        this.lifetime.signal.removeEventListener('abort', abort);
+      }
+    });
+    this.tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await run;
+    } finally {
+      this.pending--;
+    }
   }
 
   async readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
