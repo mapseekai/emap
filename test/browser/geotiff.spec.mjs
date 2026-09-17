@@ -405,3 +405,21 @@ test('fractional DPR and resampled mixed resolutions have no internal transparen
     await page.evaluate(()=>window.progressiveFixture.releaseAll());await idleRaster(page);
   }finally{await context.close();}
 });
+
+test('Performance Diagnostics records one settled navigation with worker and host phases', async ({ page }) => {
+  await ready(page);
+  await page.locator('#performance-reset').click();
+  await page.evaluate(() => { const s=window.geotiffDemo; s.map.ctx.raster.setStyle(s.currentId,{stretch:'minmax'}); });
+  await expect.poll(() => page.evaluate(() => { const d=window.geotiffDemo.performanceDiagnostics; return Boolean(d?.stable && d.tiles > 0 && d.phasesMs.workerTotal > 0); })).toBe(true);
+  const diagnostics = await page.evaluate(() => window.geotiffDemo.performanceDiagnostics);
+  expect(diagnostics.elapsedMs).toBeGreaterThan(0);
+  expect(diagnostics.logicalCores).toBeGreaterThan(0);
+  expect(diagnostics.viewport[0]).toBeGreaterThan(0);
+  expect(diagnostics.workers).toBeGreaterThan(0);
+  expect(diagnostics.tiles).toBeGreaterThan(0);
+  expect(diagnostics.phasesMs.workerTotal).toBeGreaterThan(0);
+  expect(diagnostics.phasesMs.colorize).toBeGreaterThan(0);
+  expect(diagnostics.phasesMs.canvasUpload).toBeGreaterThanOrEqual(0);
+  expect(diagnostics.io.blockCache.hits + diagnostics.io.blockCache.misses).toBeGreaterThan(0);
+  expect(JSON.parse(await page.locator('#performance-output').textContent())).toEqual(diagnostics);
+});

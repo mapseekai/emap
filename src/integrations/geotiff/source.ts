@@ -43,6 +43,7 @@ interface Job {
   resolve: (value: GeoTIFFWorkerResponse) => void;
   reject: (error: unknown) => void;
   cleanup: () => void;
+  startedAt?: number;
 }
 
 /** Source-owned tile pipeline pool. Independent workers can execute CPU decoding
@@ -59,6 +60,19 @@ class WorkerRasterSource implements RasterSource {
   private reservedBytes = 0;
   private peakWorkers = 0;
   private renderedTiles = 0;
+  private lastLevel: number | null = null;
+  private workerMs = 0;
+  private fileReadMs = 0;
+  private fileReadBytes = 0;
+  private fileReadOps = 0;
+  private pageCacheHits = 0;
+  private pageCacheMisses = 0;
+  private blockCacheHits = 0;
+  private blockCacheMisses = 0;
+  private blockLoadMs = 0;
+  private assembleMs = 0;
+  private colorizeMs = 0;
+  private transferMs = 0;
   private queuedMeshBytes = 0;
   private target = 1;
   private openCommand?: GeoTIFFWorkerOpen;
@@ -214,6 +228,7 @@ class WorkerRasterSource implements RasterSource {
         job.command.type === 'render'
           ? [job.command.request.warp.points.buffer as ArrayBuffer]
           : [];
+      job.startedAt = performance.now();
       const result = slot.client.call(job.command, job.signal, transfer);
       this.peakWorkers = Math.max(
         this.peakWorkers,
@@ -222,7 +237,28 @@ class WorkerRasterSource implements RasterSource {
       void result.then(
         (response) => {
           this.pending.delete(job);
-          if (response.type === 'rendered') this.renderedTiles++;
+          if (response.type === 'rendered') {
+            this.renderedTiles++;
+            if (job.command.type === 'render') this.lastLevel = job.command.request.read.level;
+            const d = response.result.diagnostics;
+            if (d) {
+              this.workerMs += d.workerMs;
+              this.fileReadMs += d.fileReadMs;
+              this.fileReadBytes += d.fileReadBytes;
+              this.fileReadOps += d.fileReadOps;
+              this.pageCacheHits += d.pageCacheHits;
+              this.pageCacheMisses += d.pageCacheMisses;
+              this.blockCacheHits += d.blockCacheHits;
+              this.blockCacheMisses += d.blockCacheMisses;
+              this.blockLoadMs += d.blockLoadMs;
+              this.assembleMs += d.assembleMs;
+              this.colorizeMs += d.colorizeMs;
+              this.transferMs += Math.max(
+                0,
+                performance.now() - (job.startedAt ?? performance.now()) - d.workerMs,
+              );
+            }
+          }
           job.resolve(response);
         },
         (error) => {
@@ -292,6 +328,19 @@ class WorkerRasterSource implements RasterSource {
       queuedTasks: this.queue.length,
       reservedBytes: this.reservedBytes,
       renderedTiles: this.renderedTiles,
+      lastLevel: this.lastLevel,
+      workerMs: this.workerMs,
+      fileReadMs: this.fileReadMs,
+      fileReadBytes: this.fileReadBytes,
+      fileReadOps: this.fileReadOps,
+      pageCacheHits: this.pageCacheHits,
+      pageCacheMisses: this.pageCacheMisses,
+      blockCacheHits: this.blockCacheHits,
+      blockCacheMisses: this.blockCacheMisses,
+      blockLoadMs: this.blockLoadMs,
+      assembleMs: this.assembleMs,
+      colorizeMs: this.colorizeMs,
+      transferMs: this.transferMs,
     };
   }
   toReference(): RasterReference {

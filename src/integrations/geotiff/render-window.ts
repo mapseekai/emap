@@ -18,6 +18,8 @@ export async function renderRasterWindow(
   signal?: AbortSignal,
 ): Promise<RasterRenderResult> {
   signal?.throwIfAborted();
+  const workerStarted = performance.now();
+  const before = source.getTaskDiagnosticsSnapshot?.();
   validateRasterRender(source.metadata, request);
   validateRasterStyle(source.metadata, request.style);
   const bands = rasterBands(source.metadata, request.style);
@@ -28,8 +30,11 @@ export async function renderRasterWindow(
   if (needed.some((band) => !request.read.samples.includes(band)))
     throw new RasterError('INVALID_BANDS', 'Display request omits a selected color or alpha band.');
   const level = source.metadata.levels.find((value) => value.id === request.read.level)!;
+  const readStarted = performance.now();
   const data = await source.readWindow(request.read, signal);
+  const readMs = performance.now() - readStarted;
   signal?.throwIfAborted();
+  const colorStarted = performance.now();
   const rgba = colorizeRasterTile(
     source.metadata,
     {
@@ -44,6 +49,28 @@ export async function renderRasterWindow(
     data,
     request.style,
   );
+  const colorizeMs = performance.now() - colorStarted;
   signal?.throwIfAborted();
-  return { width: request.width, height: request.height, rgba };
+  const after = source.getTaskDiagnosticsSnapshot?.();
+  const delta = (key: keyof NonNullable<typeof before>) =>
+    before && after ? after[key] - before[key] : 0;
+  const blockLoadMs = delta('blockLoadMs');
+  return {
+    width: request.width,
+    height: request.height,
+    rgba,
+    diagnostics: {
+      workerMs: performance.now() - workerStarted,
+      fileReadMs: delta('fileReadMs'),
+      fileReadBytes: delta('fileReadBytes'),
+      fileReadOps: delta('fileReadOps'),
+      pageCacheHits: delta('pageCacheHits'),
+      pageCacheMisses: delta('pageCacheMisses'),
+      blockCacheHits: delta('blockCacheHits'),
+      blockCacheMisses: delta('blockCacheMisses'),
+      blockLoadMs,
+      assembleMs: Math.max(0, readMs - blockLoadMs),
+      colorizeMs,
+    },
+  };
 }

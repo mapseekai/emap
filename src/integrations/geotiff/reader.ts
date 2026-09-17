@@ -379,6 +379,29 @@ export class GeoTIFFReader implements RasterSource {
     }
   }
 
+  getTaskDiagnosticsSnapshot() {
+    const io = this.sources.reduce(
+      (sum, source) => {
+        const value = source.getDiagnostics();
+        sum.fileReadMs += value.readMs;
+        sum.fileReadBytes += value.readBytes;
+        sum.fileReadOps += value.readOps;
+        sum.pageCacheHits += value.pageHits;
+        sum.pageCacheMisses += value.pageMisses;
+        return sum;
+      },
+      { fileReadMs: 0, fileReadBytes: 0, fileReadOps: 0, pageCacheHits: 0, pageCacheMisses: 0 },
+    );
+    const blocks = this.blockCache.getDiagnostics();
+    return {
+      ...io,
+      blockCacheHits: blocks.hits,
+      blockCacheMisses: blocks.misses,
+      blockLoadMs: blocks.loadMs,
+      transferMs: 0,
+    };
+  }
+
   async readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
     signal?.throwIfAborted();
     this.lifetime.signal.throwIfAborted();

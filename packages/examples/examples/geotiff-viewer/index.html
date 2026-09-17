@@ -4,7 +4,7 @@
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Emap 示例 - 本地 GeoTIFF 栅格</title>
 <style>
-#metadata, #references { white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.5;max-height:240px;overflow:auto; }
+#metadata, #references, #performance-output { white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.5;max-height:240px;overflow:auto; }
 .metric { display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--emap-example-border); }
 </style>
 </head>
@@ -49,6 +49,12 @@
 <div class="emap-example-field"><label for="resampling">重采样</label><select id="resampling"><option value="nearest">最近邻</option><option value="bilinear">双线性</option></select></div>
 <div class="emap-example-row"><button id="fit">缩放到栅格</button><button id="remove">移除栅格</button><button id="save-reference">查看工程引用</button></div>
 <p class="emap-example-hint">高位深显示统一拉伸到 8 位；原始数值不变。缩放期间保留已有影像，停止后按 60ms 短窗口成组更新，全部完成则立即呈现；未就绪区域继续显示旧缓存。文件和像素不写入 OPFS / IndexedDB。这里仅展示可保存的 JSON 引用；文件句柄的保存与恢复由宿主工程管理。</p>
+<details id="performance-panel" open>
+<summary><strong>Performance Diagnostics</strong></summary>
+<p class="emap-example-hint">点击“开始记录”后执行一次缩放/平移；操作稳定后自动冻结。Worker 各阶段为累计耗时，并行时不能直接相加得到总耗时。</p>
+<div class="emap-example-row"><button id="performance-reset" type="button">开始记录</button><button id="performance-copy" type="button">复制 JSON</button></div>
+<pre id="performance-output">尚未开始记录。</pre>
+</details>
 <pre id="metadata"></pre><pre id="references"></pre>
 </section>
 </div></details>
@@ -160,6 +166,55 @@ state.load = load;
 state.fit = fit;
 state.stats = () => map.ctx.raster.getStats();
 state.processing = () => { const raster = map.ctx.get('raster'); return currentId && raster?.getLayers().some(layer => layer.id === currentId) ? raster.getProcessingStats(currentId) : null; };
+let performanceBaseline = null, performanceStarted = 0, performanceFrozen = null, performanceSawActivity = false;
+const performanceDelta = (now, before, key) => { const current=Number(now?.[key] ?? 0), previous=Number(before?.[key] ?? 0), delta=current-previous; return delta >= 0 ? delta : current; };
+function performanceSnapshot() {
+  const stats = state.stats(), processing = state.processing(), perf = stats.performance;
+  if (!performanceBaseline) return null;
+  const before = performanceBaseline, bp = before.stats.performance, bproc = before.processing;
+  const elapsedMs = performanceFrozen?.elapsedMs ?? performance.now() - performanceStarted;
+  const pageHits = performanceDelta(perf,bp,'pageCacheHits'), pageMisses = performanceDelta(perf,bp,'pageCacheMisses');
+  const blockHits = performanceDelta(perf,bp,'blockCacheHits'), blockMisses = performanceDelta(perf,bp,'blockCacheMisses');
+  const blockLoadMs = performanceDelta(perf,bp,'blockLoadMs'), fileReadMs = performanceDelta(perf,bp,'fileReadMs');
+  return {
+    elapsedMs, stable: !stats.interacting && !stats.activeReads && !stats.queuedReads && !stats.pendingFrames,
+    source: state.metadata?.filename ?? null, overview: state.metadata?.overviewFile?.filename ?? null,
+    lod: processing?.lastLevel ?? null, levels: state.metadata?.levels.length ?? 0,
+    viewport: [window.innerWidth, window.innerHeight], devicePixelRatio: window.devicePixelRatio,
+    logicalCores: navigator.hardwareConcurrency ?? null,
+    workers: processing?.workers ?? 0, peakWorkers: performanceDelta(processing,bproc,'peakWorkers') || processing?.peakWorkers || 0,
+    tiles: performanceDelta(processing,bproc,'renderedTiles'), presentedTiles: stats.presentedTiles-before.stats.presentedTiles,
+    reads: stats.readRequests-before.stats.readRequests,
+    phasesMs: {
+      planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
+      blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
+      assemble: performanceDelta(perf,bp,'assembleMs'), colorize: performanceDelta(perf,bp,'colorizeMs'),
+      workerTotal: performanceDelta(perf,bp,'workerMs'), transferApprox: performanceDelta(perf,bp,'transferMs'),
+      canvasUpload: performanceDelta(perf,bp,'canvasUploadMs'), presentationWait: performanceDelta(perf,bp,'presentationWaitMs'),
+    },
+    io: { bytes: performanceDelta(perf,bp,'fileReadBytes'), operations: performanceDelta(perf,bp,'fileReadOps'),
+      pageCache: {hits:pageHits,misses:pageMisses,hitRate:pageHits+pageMisses ? pageHits/(pageHits+pageMisses) : null},
+      blockCache: {hits:blockHits,misses:blockMisses,hitRate:blockHits+blockMisses ? blockHits/(blockHits+blockMisses) : null}},
+    cacheMiB: stats.cachedBytes/1024**2,
+  };
+}
+function resetPerformanceDiagnostics() {
+  performanceBaseline = { stats: state.stats(), processing: state.processing() };
+  state.performanceDiagnostics = null;
+  performanceStarted = performance.now(); performanceFrozen = null; performanceSawActivity = false;
+  document.getElementById('performance-output').textContent = '等待缩放或平移…';
+}
+function updatePerformanceDiagnostics() {
+  if (!performanceBaseline) return;
+  const stats=state.stats(), processing=state.processing();
+  const changed = stats.interacting || stats.activeReads || stats.queuedReads || stats.pendingFrames ||
+    stats.readRequests !== performanceBaseline.stats.readRequests || (processing?.renderedTiles ?? 0) !== (performanceBaseline.processing?.renderedTiles ?? 0);
+  performanceSawActivity ||= Boolean(changed);
+  let snapshot=performanceSnapshot();
+  if (!performanceFrozen && performanceSawActivity && snapshot?.stable) { performanceFrozen={elapsedMs:snapshot.elapsedMs}; snapshot=performanceSnapshot(); }
+  document.getElementById('performance-output').textContent = JSON.stringify(snapshot,null,2);
+  state.performanceDiagnostics = snapshot;
+}
 map.ctx.mapEvents.on('rastererror', ({ error }) => { state.error = error.message; state.errorCode = error.code ?? error.name; status.textContent = error.message; });
 async function sample() {
   const filename = document.getElementById('sample-type').value;
@@ -196,8 +251,14 @@ document.getElementById('remove').onclick = () => { if (currentId) map.ctx.raste
   document.getElementById('metadata').textContent = '';
   document.getElementById('references').textContent = '';
   bandControls.setSource(null); document.getElementById('levels').textContent = '0'; status.textContent = '栅格已移除；磁盘原文件保持不变'; };
+document.getElementById('performance-reset').onclick = resetPerformanceDiagnostics;
+document.getElementById('performance-copy').onclick = async () => {
+  const value = document.getElementById('performance-output').textContent;
+  try { await navigator.clipboard.writeText(value); status.textContent = 'Performance Diagnostics 已复制'; }
+  catch { status.textContent = '无法访问剪贴板，请手动复制诊断 JSON'; }
+};
 document.getElementById('save-reference').onclick = () => { document.getElementById('references').textContent = JSON.stringify(map.ctx.raster.toReferences(), null, 2); };
-const timer = setInterval(() => { const raster = map.ctx.get('raster'); if (raster) { const stats = raster.getStats(); const processing = state.processing(); document.getElementById('worker-progress').textContent = `${processing?.workers ?? 0} / ${processing?.renderedTiles ?? 0}`; document.getElementById('cache').textContent = `${(stats.cachedBytes / 1024 ** 2).toFixed(1)} MiB`; document.getElementById('render-progress').textContent = `${stats.presentedTiles} / ${stats.committedFrames}${stats.interacting ? ' · 交互中' : stats.pendingFrames ? ' · 渐进加载' : ''}`; } }, 500);
+const timer = setInterval(() => { const raster = map.ctx.get('raster'); if (raster) { const stats = raster.getStats(); const processing = state.processing(); document.getElementById('worker-progress').textContent = `${processing?.workers ?? 0} / ${processing?.renderedTiles ?? 0}`; document.getElementById('cache').textContent = `${(stats.cachedBytes / 1024 ** 2).toFixed(1)} MiB`; document.getElementById('render-progress').textContent = `${stats.presentedTiles} / ${stats.committedFrames}${stats.interacting ? ' · 交互中' : stats.pendingFrames ? ' · 渐进加载' : ''}`; updatePerformanceDiagnostics(); } }, 250);
 const onPageHide = () => { void map.dispose(); };
 window.addEventListener('pagehide', onPageHide, { once: true });
 map.ctx.effect(() => () => {
@@ -214,7 +275,7 @@ map.ctx.effect(() => () => {
   state.rasterFiber = state.loaderFiber = null;
   document.getElementById('file-input').value = '';
   document.getElementById('overview-input').value = '';
-  for (const id of ['directory-picker','directory-raster','sample','load','cancel','fit','remove','save-reference','opacity','stretch','resampling','file-input','overview-input']) {
+  for (const id of ['directory-picker','directory-raster','sample','load','cancel','fit','remove','save-reference','performance-reset','performance-copy','opacity','stretch','resampling','file-input','overview-input']) {
     const control = document.getElementById(id);
     control.onclick = control.oninput = control.onchange = null;
   }

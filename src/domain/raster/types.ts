@@ -99,10 +99,24 @@ export interface RasterRenderRequest {
   readonly warp: RasterWarpMesh;
   readonly style: RasterStyle;
 }
+export interface RasterTaskDiagnostics {
+  readonly workerMs: number;
+  readonly fileReadMs: number;
+  readonly fileReadBytes: number;
+  readonly fileReadOps: number;
+  readonly pageCacheHits: number;
+  readonly pageCacheMisses: number;
+  readonly blockCacheHits: number;
+  readonly blockCacheMisses: number;
+  readonly blockLoadMs: number;
+  readonly assembleMs: number;
+  readonly colorizeMs: number;
+}
 export interface RasterRenderResult {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+  readonly diagnostics?: RasterTaskDiagnostics;
 }
 export interface RasterProcessingStats {
   readonly workers: number;
@@ -111,6 +125,19 @@ export interface RasterProcessingStats {
   readonly queuedTasks: number;
   readonly reservedBytes: number;
   readonly renderedTiles: number;
+  readonly lastLevel: number | null;
+  readonly workerMs: number;
+  readonly fileReadMs: number;
+  readonly fileReadBytes: number;
+  readonly fileReadOps: number;
+  readonly pageCacheHits: number;
+  readonly pageCacheMisses: number;
+  readonly blockCacheHits: number;
+  readonly blockCacheMisses: number;
+  readonly blockLoadMs: number;
+  readonly assembleMs: number;
+  readonly colorizeMs: number;
+  readonly transferMs: number;
 }
 export interface RasterSource {
   readonly metadata: RasterMetadata;
@@ -118,6 +145,11 @@ export interface RasterSource {
   /** Optional provider capability: render off-thread instead of returning raw windows. */
   renderTile?(request: RasterRenderRequest, signal?: AbortSignal): Promise<RasterRenderResult>;
   getProcessingStats?(): RasterProcessingStats;
+  /** Internal cumulative counters used to derive per-task diagnostics in a Worker. */
+  getTaskDiagnosticsSnapshot?(): Omit<
+    RasterTaskDiagnostics,
+    'workerMs' | 'assembleMs' | 'colorizeMs'
+  >;
   toReference(): RasterReference;
   dispose(): void;
 }

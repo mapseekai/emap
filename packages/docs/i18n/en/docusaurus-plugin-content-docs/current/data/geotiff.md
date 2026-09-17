@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: Local GeoTIFF rasters
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -218,3 +218,20 @@ Removed sources are tracked only through weak loader ownership, not a historical
 External `RasterSource` providers must respond to `AbortSignal` and close their own resources in `dispose()`. emap detaches cancelled waiters even when an external promise never settles, but cannot terminate network requests, threads or other resources created independently by a third-party plugin.
 
 `test/browser/raster-memory.spec.mjs` uses Chromium CDP forced garbage collection and WeakRef to verify collection, recording heap, DOM, listener and Worker counts. It covers three warmup cycles followed by 30 load/navigation/removal cycles, 15 provider restarts, map disposal and uncooperative reads. JS heap measurements do not include every browser-process, Canvas/GPU or operating-system file-cache allocation; bounded regression tests are not a guarantee against leaks for every possible dataset.
+
+
+## Performance Diagnostics
+
+`geotiff-viewer` includes a Performance Diagnostics panel. Press **Start recording**, perform one zoom, pan, or style change, and the panel freezes when raster work settles. **Copy JSON** makes Windows/macOS comparisons reproducible.
+
+The report includes wall time, LOD, viewport/DPR/logical cores, workers, tile/read counts, host planning and Canvas upload, presentation wait, cumulative Worker time, file range reads, TIFF block loads, window assembly, colorization/resampling, approximate Worker-to-host transfer, and compressed-page/decoded-block cache hit rates.
+
+```ts
+const before = map.ctx.raster.getStats();
+// Perform one navigation operation.
+const after = map.ctx.raster.getStats();
+console.log(after.performance.fileReadMs - before.performance.fileReadMs);
+console.log(after.performance.colorizeMs - before.performance.colorizeMs);
+```
+
+`RasterCacheStats.performance` contains cumulative counters; hosts should diff two snapshots. Worker tasks run in parallel, so `workerMs`, `fileReadMs`, and `blockLoadMs` are accumulated task durations and **must not be summed as wall-clock time**. The example's `decodeApprox` is `blockLoadMs - fileReadMs`, useful for bottleneck triage rather than exact CPU profiling. `transferMs` also includes Worker message scheduling and is approximate.

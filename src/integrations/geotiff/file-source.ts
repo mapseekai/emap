@@ -12,6 +12,11 @@ export class LocalRasterFileSource {
   private readonly pageSize = 64 * 1024;
   // Replicas divide this capacity instead of multiplying retained compressed pages.
   private readonly pageLimit: number;
+  private readMs = 0;
+  private readOps = 0;
+  private readBytesTotal = 0;
+  private pageHits = 0;
+  private pageMisses = 0;
   readonly fileSize: number;
   constructor(
     private file: Blob | null,
@@ -22,6 +27,21 @@ export class LocalRasterFileSource {
     this.pageLimit = pageLimit;
     if (!file) throw new RasterError('INVALID_RASTER', 'Missing local raster file.');
     this.fileSize = file.size;
+  }
+  getDiagnostics(): {
+    readMs: number;
+    readOps: number;
+    readBytes: number;
+    pageHits: number;
+    pageMisses: number;
+  } {
+    return {
+      readMs: this.readMs,
+      readOps: this.readOps,
+      readBytes: this.readBytesTotal,
+      pageHits: this.pageHits,
+      pageMisses: this.pageMisses,
+    };
   }
   beginRead(): void {
     this.bytes = 0;
@@ -95,7 +115,11 @@ export class LocalRasterFileSource {
         'RASTER_IO_BUDGET',
         'TIFF physical range reads exceed the bounded I/O budget.',
       );
+    const started = performance.now();
     const bytes = await file.slice(offset, offset + length).arrayBuffer();
+    this.readMs += performance.now() - started;
+    this.readOps++;
+    this.readBytesTotal += bytes.byteLength;
     if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster source has been closed.');
     return bytes;
   }
@@ -103,16 +127,21 @@ export class LocalRasterFileSource {
     signal?.throwIfAborted();
     const cached = this.pages.get(offset);
     if (cached) {
+      this.pageHits++;
       this.pages.delete(offset);
       this.pages.set(offset, cached);
       return cached;
     }
     const pending = this.pendingPages.get(offset);
-    if (pending) return pending;
+    if (pending) {
+      this.pageHits++;
+      return pending;
+    }
     if (this.pendingPages.size >= this.pageLimit) {
       await Promise.race(this.pendingPages.values());
       return this.readPage(offset, signal);
     }
+    this.pageMisses++;
     const request = this.readBytes(offset, this.pageSize);
     this.pendingPages.set(offset, request);
     try {

@@ -19,6 +19,24 @@ export interface RasterLayerReference {
   readonly style: RasterStyle;
   readonly visible: boolean;
 }
+export interface RasterPerformanceTotals {
+  readonly planningMs: number;
+  readonly canvasUploadMs: number;
+  readonly presentationWaitMs: number;
+  readonly presentationFlushes: number;
+  readonly workerMs: number;
+  readonly fileReadMs: number;
+  readonly fileReadBytes: number;
+  readonly fileReadOps: number;
+  readonly pageCacheHits: number;
+  readonly pageCacheMisses: number;
+  readonly blockCacheHits: number;
+  readonly blockCacheMisses: number;
+  readonly blockLoadMs: number;
+  readonly assembleMs: number;
+  readonly colorizeMs: number;
+  readonly transferMs: number;
+}
 export interface RasterCacheStats {
   readonly cachedBytes: number;
   readonly cachedTiles: number;
@@ -31,6 +49,8 @@ export interface RasterCacheStats {
   readonly presentedTiles: number;
   readonly readRequests: number;
   readonly interacting: boolean;
+  /** Cumulative counters; snapshot twice to diagnose one navigation operation. */
+  readonly performance: RasterPerformanceTotals;
 }
 /** Raster sources are independent of editable vector/topology sources. */
 export interface RasterContract {

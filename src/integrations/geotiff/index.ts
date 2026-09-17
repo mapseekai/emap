@@ -14,6 +14,7 @@ export type {
   RasterWindow,
   RasterRenderRequest,
   RasterRenderResult,
+  RasterTaskDiagnostics,
   RasterWarpMesh,
   RasterProcessingStats,
   RasterReadRequest,
@@ -27,4 +28,5 @@ export type {
   RasterLayerInfo,
   RasterLayerReference,
   RasterCacheStats,
+  RasterPerformanceTotals,
 } from '../../runtime/services/contracts/raster';

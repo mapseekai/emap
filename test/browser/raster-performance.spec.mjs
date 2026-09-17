@@ -50,7 +50,10 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
           if (complete && now.committedFrames > before.committedFrames) stable++; else stable = 0;
           if (stable === 3) {
             const reads = window.rasterReadEvents.slice(index).filter(e => e.end && e.ok);
-            records.push({ round, name, totalMs: performance.now()-start, firstMs:first, updates, tiles:now.presentedTiles-before.presentedTiles, reads:reads.length, readTimeMs:reads.reduce((n,e)=>n+e.end-e.start,0), firstReadMs:reads.length?reads[0].start-start:0, cacheMiB:now.cachedBytes/1024**2 });
+            const delta=(key)=>{const value=now.performance[key]-before.performance[key];return value>=0?value:now.performance[key];};
+            records.push({ round, name, totalMs: performance.now()-start, firstMs:first, updates, tiles:now.presentedTiles-before.presentedTiles, reads:reads.length, readTimeMs:reads.reduce((n,e)=>n+e.end-e.start,0), firstReadMs:reads.length?reads[0].start-start:0, cacheMiB:now.cachedBytes/1024**2,
+              phases:{planningMs:delta('planningMs'),fileReadMs:delta('fileReadMs'),blockLoadMs:delta('blockLoadMs'),assembleMs:delta('assembleMs'),colorizeMs:delta('colorizeMs'),workerMs:delta('workerMs'),transferMs:delta('transferMs'),canvasUploadMs:delta('canvasUploadMs'),presentationWaitMs:delta('presentationWaitMs')},
+              io:{bytes:delta('fileReadBytes'),ops:delta('fileReadOps'),pageHits:delta('pageCacheHits'),pageMisses:delta('pageCacheMisses'),blockHits:delta('blockCacheHits'),blockMisses:delta('blockCacheMisses')} });
             if (s.error) throw new Error(s.error); return;
           }
         }

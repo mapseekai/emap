@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: 本地 GeoTIFF 栅格
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -231,3 +231,20 @@ try {
 外部 `RasterSource` 应响应 `AbortSignal` 并在 `dispose()` 中关闭自己创建的资源。emap 会解除已取消任务的等待引用，即使外部 Promise 未完成；但无法代替外部插件终止其自行启动的网络、线程或其他资源。
 
 `test/browser/raster-memory.spec.mjs` 使用 Chromium CDP 强制垃圾回收与 WeakRef 验证移除后的对象可回收，同时记录堆、DOM、监听器和 Worker 数量。它覆盖 3 轮预热后 30 轮加载/导航/移除、15 次 Provider 重启、销毁地图以及不响应取消的读取。JS 堆并不包括所有浏览器进程、Canvas/GPU 或操作系统文件缓存，短期回归不能构成所有数据规模下永不泄漏的证明。
+
+
+## Performance Diagnostics
+
+`geotiff-viewer` 内置 Performance Diagnostics。点击“开始记录”，执行一次缩放、平移或样式变化，待栅格稳定后面板会自动冻结本次数据；“复制 JSON”可直接把 Windows 与 macOS 的结果带回问题分析。
+
+诊断包含总墙钟耗时、当前 LOD、视口/DPR/逻辑核心数、Worker 数量、瓦片与读取次数、主线程规划和 Canvas 上传、呈现等待、Worker 累计耗时、文件 range read、TIFF block load、窗口组装、颜色拉伸/重采样、Worker→主线程近似传输耗时，以及压缩页/解码块缓存命中率。
+
+```ts
+const before = map.ctx.raster.getStats();
+// 执行一次缩放或平移
+const after = map.ctx.raster.getStats();
+console.log(after.performance.fileReadMs - before.performance.fileReadMs);
+console.log(after.performance.colorizeMs - before.performance.colorizeMs);
+```
+
+`RasterCacheStats.performance` 是累计计数，宿主应取两次快照做差。Worker 可并行执行，因此 `workerMs`、`fileReadMs`、`blockLoadMs` 等是各任务累计时间，**不能相加当作墙钟总耗时**。示例中的 `decodeApprox` 以 `blockLoadMs - fileReadMs` 估算，适合定位方向，不是 profiler 的 CPU 精确采样；`transferMs` 也包含 Worker 消息调度开销，是近似值。

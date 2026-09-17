@@ -116,6 +116,8 @@ export class RasterRenderService implements RasterContract {
   private snapshotSequence = 0;
   private readonly currentTasks = new Map<string, Task>();
   private readRequests = 0;
+  private planningMs = 0;
+  private canvasUploadMs = 0;
   private queue: Task[] = [];
   private wanted = new Set<string>();
   private bytes = 0;
@@ -212,6 +214,7 @@ export class RasterRenderService implements RasterContract {
     crs: string,
     epoch: number,
   ): Promise<void> {
+    const planningStarted = performance.now();
     const visible = [...this.layers.values()].filter((layer) => layer.visible);
     // Reserve at least half the byte budget for previous views while panning.
     const perLayer = Math.max(
@@ -324,6 +327,7 @@ export class RasterRenderService implements RasterContract {
     for (const task of tasks) if (this.cache.has(task.key)) this.publishTile(task.key);
     this.deps.requestRender();
     this.trimCache();
+    this.planningMs += performance.now() - planningStarted;
     this.pump();
   }
   private pump(): void {
@@ -398,6 +402,7 @@ export class RasterRenderService implements RasterContract {
         signal.throwIfAborted();
         rgba = colorizeRasterTile(source.metadata, plan, result, style);
       }
+      const uploadStarted = performance.now();
       image = document.createElement('canvas');
       image.width = plan.width;
       image.height = plan.height;
@@ -405,6 +410,7 @@ export class RasterRenderService implements RasterContract {
       if (!context)
         throw new RasterError('RASTER_CANVAS_UNAVAILABLE', 'Cannot create raster tile context.');
       context.putImageData(new ImageData(rgba, plan.width, plan.height), 0, 0);
+      this.canvasUploadMs += performance.now() - uploadStarted;
     }
     if (
       this.disposed ||
@@ -773,6 +779,11 @@ export class RasterRenderService implements RasterContract {
     return this.layer(id).source.getProcessingStats?.() ?? null;
   }
   getStats(): RasterCacheStats {
+    const processing = [...this.layers.values()]
+      .map((layer) => layer.source.getProcessingStats?.())
+      .filter((value): value is RasterProcessingStats => !!value);
+    const sum = (key: keyof RasterProcessingStats) =>
+      processing.reduce((total, value) => total + Number(value[key] ?? 0), 0);
     return {
       cachedBytes: this.bytes,
       cachedTiles: this.cache.size,
@@ -783,6 +794,24 @@ export class RasterRenderService implements RasterContract {
       presentedTiles: this.presentedTiles,
       readRequests: this.readRequests,
       interacting: this.gestures.size > 0 || this.settleTimer !== null,
+      performance: {
+        planningMs: this.planningMs,
+        canvasUploadMs: this.canvasUploadMs,
+        presentationWaitMs: this.presentation.getDiagnostics().waitMs,
+        presentationFlushes: this.presentation.getDiagnostics().flushes,
+        workerMs: sum('workerMs'),
+        fileReadMs: sum('fileReadMs'),
+        fileReadBytes: sum('fileReadBytes'),
+        fileReadOps: sum('fileReadOps'),
+        pageCacheHits: sum('pageCacheHits'),
+        pageCacheMisses: sum('pageCacheMisses'),
+        blockCacheHits: sum('blockCacheHits'),
+        blockCacheMisses: sum('blockCacheMisses'),
+        blockLoadMs: sum('blockLoadMs'),
+        assembleMs: sum('assembleMs'),
+        colorizeMs: sum('colorizeMs'),
+        transferMs: sum('transferMs'),
+      },
     };
   }
   dispose(): void {
