@@ -72,19 +72,78 @@ function commandWindow(command: GeoTIFFWorkerCommand): RasterReadRequest['window
   return null;
 }
 
-/** Keep requests centred in the same physical source block on the same decoder cache. */
-function sourceBlockIndex(
+interface SourceBlockFootprint {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+  readonly tileWidth: number;
+  readonly tileHeight: number;
+}
+
+function sourceBlockFootprint(
   level: RasterMetadata['levels'][number],
   command: GeoTIFFWorkerCommand,
-): number | null {
+): SourceBlockFootprint | null {
   const window = commandWindow(command);
   if (!window) return null;
-  const centerX = Math.max(0, Math.min(level.width - 1, (window[0] + window[2]) / 2));
-  const centerY = Math.max(0, Math.min(level.height - 1, (window[1] + window[3]) / 2));
-  const blockX = Math.floor(centerX / Math.max(1, level.tileWidth));
-  const blockY = Math.floor(centerY / Math.max(1, level.tileHeight));
-  const columns = Math.max(1, Math.ceil(level.width / Math.max(1, level.tileWidth)));
-  return blockY * columns + blockX;
+  const tileWidth = Math.max(1, level.tileWidth);
+  const tileHeight = Math.max(1, level.tileHeight);
+  const left = Math.max(0, Math.min(level.width, window[0]));
+  const right = Math.max(left, Math.min(level.width, window[2]));
+  const top = Math.max(0, Math.min(level.height, window[1]));
+  const bottom = Math.max(top, Math.min(level.height, window[3]));
+  return {
+    minX: Math.floor(Math.min(level.width - 1, left) / tileWidth),
+    maxX: Math.floor(Math.max(0, Math.min(level.width - 1, Math.ceil(right) - 1)) / tileWidth),
+    minY: Math.floor(Math.min(level.height - 1, top) / tileHeight),
+    maxY: Math.floor(Math.max(0, Math.min(level.height - 1, Math.ceil(bottom) - 1)) / tileHeight),
+    left,
+    right,
+    top,
+    bottom,
+    tileWidth,
+    tileHeight,
+  };
+}
+
+/** Keep whole block columns on one Worker and score boundary requests by pixel overlap. */
+function affinitySlotIndex(
+  level: RasterMetadata['levels'][number],
+  command: GeoTIFFWorkerCommand,
+  slots: number,
+): number | null {
+  if (slots < 1) return null;
+  const footprint = sourceBlockFootprint(level, command);
+  if (!footprint) return 0;
+  const weights = new Array<number>(slots).fill(0);
+  const ownerFor = (blockX: number) => blockX % slots;
+  for (let y = footprint.minY; y <= footprint.maxY; y++) {
+    const blockTop = y * footprint.tileHeight;
+    const blockBottom = Math.min(level.height, blockTop + footprint.tileHeight);
+    const overlapY = Math.max(
+      0,
+      Math.min(footprint.bottom, blockBottom) - Math.max(footprint.top, blockTop),
+    );
+    for (let x = footprint.minX; x <= footprint.maxX; x++) {
+      const blockLeft = x * footprint.tileWidth;
+      const blockRight = Math.min(level.width, blockLeft + footprint.tileWidth);
+      const overlapX = Math.max(
+        0,
+        Math.min(footprint.right, blockRight) - Math.max(footprint.left, blockLeft),
+      );
+      weights[ownerFor(x)] += overlapX * overlapY;
+    }
+  }
+  const centerX = Math.max(0, Math.min(level.width - 1, (footprint.left + footprint.right) / 2));
+  let owner = ownerFor(Math.floor(centerX / footprint.tileWidth));
+  for (let index = 0; index < weights.length; index++)
+    if (weights[index] > weights[owner]) owner = index;
+  return owner;
 }
 
 export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
@@ -348,11 +407,10 @@ class WorkerRasterSource implements RasterSource {
       const primary = this.slots[0];
       return primary?.ready && !primary.client.busy ? primary : undefined;
     }
-    const ready = this.slots.filter((slot) => slot.ready);
-    if (!ready.length) return undefined;
-    const block = sourceBlockIndex(level, job.command);
-    const owner = block === null ? ready[0] : ready[block % ready.length];
-    return owner && !owner.client.busy ? owner : undefined;
+    if (!isTiledLevel(level)) return this.slots.find((slot) => slot.ready && !slot.client.busy);
+    const ownerIndex = affinitySlotIndex(level, job.command, this.slots.length);
+    const owner = ownerIndex === null ? undefined : this.slots[ownerIndex];
+    return owner?.ready && !owner.client.busy ? owner : undefined;
   }
   private pump(): void {
     if (this.closed || !this.metadata) return;

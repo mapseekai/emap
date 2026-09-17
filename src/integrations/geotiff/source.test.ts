@@ -244,7 +244,7 @@ describe('parallel raster pipeline pool', () => {
       levels: [
         {
           ...metadata.levels[0],
-          width: 1024,
+          width: 2048,
           height: 512,
           tileWidth: 512,
           tileHeight: 512,
@@ -306,6 +306,42 @@ describe('parallel raster pipeline pool', () => {
       source.dispose();
     }
     expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
+  });
+  it('routes a cross-block request by its full spatial footprint rather than its center block', async () => {
+    const tiledMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 2048,
+          height: 512,
+          tileWidth: 512,
+          tileHeight: 512,
+        },
+      ],
+    };
+    const { source, worker } = await opened(2, 1000, tiledMetadata);
+    try {
+      const replica = FakeWorker.instances[1];
+      replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+      await Promise.resolve();
+      // The center is in block 1 (replica), but blocks 0 and 2 together cover slightly
+      // more source pixels, so the complete footprint keeps the request on the primary.
+      const pending = source.readWindow({
+        level: 0,
+        window: [500, 0, 1530, 1],
+        samples: [0],
+      });
+      expect(worker.messages.at(-1)).toMatchObject({
+        type: 'read',
+        request: { window: [500, 0, 1530, 1] },
+      });
+      expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(0);
+      answer(worker, 40);
+      expect((await pending).data[0][0]).toBe(40);
+    } finally {
+      source.dispose();
+    }
   });
   it('sizes tiled Worker caches for a bounded decoded-block working set', async () => {
     const tiledMetadata: RasterMetadata = {
