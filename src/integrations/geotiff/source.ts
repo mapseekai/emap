@@ -223,6 +223,9 @@ class WorkerRasterSource implements RasterSource {
   private nativeDeflateBlocks = 0;
   private nativeDeflateFallbacks = 0;
   private nativeDeflateMs = 0;
+  private fastLzwBlocks = 0;
+  private fastLzwFallbacks = 0;
+  private fastLzwMs = 0;
   private nativeDeflateAvailable = false;
   private nativeDeflateEligible = false;
   private nativeDeflateDisabledReason: RasterNativeDeflateStatus['disabledReason'] = null;
@@ -436,6 +439,9 @@ class WorkerRasterSource implements RasterSource {
         nativeDeflateBlocks: 0,
         nativeDeflateFallbacks: 0,
         nativeDeflateMs: 0,
+        fastLzwBlocks: 0,
+        fastLzwFallbacks: 0,
+        fastLzwMs: 0,
         blockLoadMs: 0,
         assembleMs: 0,
         colorizeMs: 0,
@@ -560,6 +566,9 @@ class WorkerRasterSource implements RasterSource {
                 levelStats.nativeDeflateBlocks += d.nativeDeflateBlocks;
                 levelStats.nativeDeflateFallbacks += d.nativeDeflateFallbacks;
                 levelStats.nativeDeflateMs += d.nativeDeflateMs;
+                levelStats.fastLzwBlocks += d.fastLzwBlocks;
+                levelStats.fastLzwFallbacks += d.fastLzwFallbacks;
+                levelStats.fastLzwMs += d.fastLzwMs;
                 levelStats.blockLoadMs += d.blockLoadMs;
                 levelStats.assembleMs += d.assembleMs;
                 levelStats.colorizeMs += d.colorizeMs;
@@ -593,6 +602,9 @@ class WorkerRasterSource implements RasterSource {
               this.nativeDeflateBlocks += d.nativeDeflateBlocks;
               this.nativeDeflateFallbacks += d.nativeDeflateFallbacks;
               this.nativeDeflateMs += d.nativeDeflateMs;
+              this.fastLzwBlocks += d.fastLzwBlocks;
+              this.fastLzwFallbacks += d.fastLzwFallbacks;
+              this.fastLzwMs += d.fastLzwMs;
               this.blockLoadMs += d.blockLoadMs;
               this.assembleMs += d.assembleMs;
               this.colorizeMs += d.colorizeMs;
@@ -722,6 +734,9 @@ class WorkerRasterSource implements RasterSource {
         eligible: this.nativeDeflateEligible,
         disabledReason: this.nativeDeflateEligible ? null : this.nativeDeflateDisabledReason,
       },
+      fastLzwBlocks: this.fastLzwBlocks,
+      fastLzwFallbacks: this.fastLzwFallbacks,
+      fastLzwMs: this.fastLzwMs,
       blockLoadMs: this.blockLoadMs,
       assembleMs: this.assembleMs,
       colorizeMs: this.colorizeMs,

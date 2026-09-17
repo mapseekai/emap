@@ -1,5 +1,6 @@
 import { getDecoder, type GeoTIFFImage } from 'geotiff';
 import type { RasterReadRequest, RasterReadResult, RasterSamples } from '../../domain/raster/types';
+import { createFastLzwDecoder } from './fast-lzw';
 import { createNativeDeflateDecoder } from './native-deflate';
 
 const NATIVE_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
@@ -52,7 +53,12 @@ export async function readNumericWindow(
       predictor: (await directory.loadValue('Predictor')) || 1,
     },
     upstreamDecoder = await getDecoder(compression, decoderParameters),
-    decoder = createNativeDeflateDecoder(compression, decoderParameters, upstreamDecoder);
+    decoder =
+      compression === 5
+        ? createFastLzwDecoder(compression, decoderParameters, upstreamDecoder)
+        : compression === 8 || compression === 32946
+          ? createNativeDeflateDecoder(compression, decoderParameters, upstreamDecoder)
+          : upstreamDecoder;
   signal?.throwIfAborted();
   const output = samples.map((sample) => image.getArrayForSample(sample, w * h));
   const tw = image.getTileWidth(),

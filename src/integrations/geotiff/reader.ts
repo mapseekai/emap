@@ -1,5 +1,6 @@
 import { readNumericWindow } from './read-window';
 import { CachedGeoTIFFImage, RasterBlockCache } from './block-cache';
+import { getFastLzwDiagnostics } from './fast-lzw';
 import { getNativeDeflateDiagnostics } from './native-deflate';
 import { collectRasterStatistics } from '../../domain/raster/statistics';
 import { GeoTIFF, GeoTIFFImage } from 'geotiff';
@@ -429,7 +430,8 @@ export class GeoTIFFReader implements RasterSource {
       { fileReadMs: 0, fileReadBytes: 0, fileReadOps: 0, pageCacheHits: 0, pageCacheMisses: 0 },
     );
     const blocks = this.blockCache.getDiagnostics(),
-      nativeDeflate = getNativeDeflateDiagnostics();
+      nativeDeflate = getNativeDeflateDiagnostics(),
+      fastLzw = getFastLzwDiagnostics();
     return {
       ...io,
       blockCacheHits: blocks.hits,
@@ -446,6 +448,9 @@ export class GeoTIFFReader implements RasterSource {
       nativeDeflateBlocks: nativeDeflate.blocks,
       nativeDeflateFallbacks: nativeDeflate.fallbacks,
       nativeDeflateMs: nativeDeflate.ms,
+      fastLzwBlocks: fastLzw.blocks,
+      fastLzwFallbacks: fastLzw.fallbacks,
+      fastLzwMs: fastLzw.ms,
       blockLoadMs: blocks.loadMs,
       transferMs: 0,
     };

@@ -1,4 +1,4 @@
-export const GEOTIFF_WORKER_PROTOCOL_VERSION = 5;
+export const GEOTIFF_WORKER_PROTOCOL_VERSION = 6;
 
 import type {
   RasterMetadata,

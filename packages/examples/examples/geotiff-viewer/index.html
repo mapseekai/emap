@@ -200,7 +200,7 @@ function performanceSnapshot() {
         fileReadBytes:delta('fileReadBytes'), fileReadOps:delta('fileReadOps'), fileReadMs:delta('fileReadMs'),
         blockCacheHits:delta('blockCacheHits'), blockCacheMisses:delta('blockCacheMisses'),
         blockCacheEvictions:delta('blockCacheEvictions'), blockCacheEvictedBytes:delta('blockCacheEvictedBytes'),
-        nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'),
+        nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'), fastLzwBlocks:delta('fastLzwBlocks'), fastLzwFallbacks:delta('fastLzwFallbacks'), fastLzwMs:delta('fastLzwMs'),
         blockLoadMs:delta('blockLoadMs'), colorizeMs:delta('colorizeMs') };
     }).filter(item => item.submitted || item.completed || item.cancelled || item.fileReadOps),
     nativeDeflate: {
@@ -212,10 +212,11 @@ function performanceSnapshot() {
       fallbacks:performanceDelta(processing,bproc,'nativeDeflateFallbacks'),
       ms:performanceDelta(processing,bproc,'nativeDeflateMs'),
     },
+    fastLzw: { blocks:performanceDelta(processing,bproc,'fastLzwBlocks'), fallbacks:performanceDelta(processing,bproc,'fastLzwFallbacks'), ms:performanceDelta(processing,bproc,'fastLzwMs') },
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
-      nativeDeflate:performanceDelta(processing,bproc,'nativeDeflateMs'),
+      nativeDeflate:performanceDelta(processing,bproc,'nativeDeflateMs'), fastLzw:performanceDelta(processing,bproc,'fastLzwMs'),
       assemble: performanceDelta(perf,bp,'assembleMs'), colorize: performanceDelta(perf,bp,'colorizeMs'),
       workerTotal: performanceDelta(perf,bp,'workerMs'), transferApprox: performanceDelta(perf,bp,'transferMs'),
       canvasUpload: performanceDelta(perf,bp,'canvasUploadMs'), presentationWait: performanceDelta(perf,bp,'presentationWaitMs'),
@@ -237,6 +238,7 @@ function performanceSnapshot() {
         crossWorkerDuplicateLoads:performanceDelta(processing,bproc,'crossWorkerDuplicateLoads'),
         nativeDeflateBlocks:performanceDelta(processing,bproc,'nativeDeflateBlocks'),
         nativeDeflateFallbacks:performanceDelta(processing,bproc,'nativeDeflateFallbacks'),
+        fastLzwBlocks:performanceDelta(processing,bproc,'fastLzwBlocks'), fastLzwFallbacks:performanceDelta(processing,bproc,'fastLzwFallbacks'),
         diagnosticsTruncated:Boolean(processing?.blockDiagnosticsTruncated),
         workers:(processing?.workerBlockStats ?? []).map(item => {
           const previous=bproc?.workerBlockStats?.find(value => value.worker === item.worker);

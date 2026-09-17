@@ -1,4 +1,5 @@
 import type { getDecoder } from 'geotiff';
+import { applyHorizontalPredictor } from './horizontal-predictor';
 import type {
   RasterNativeDeflateDisabledReason,
   RasterNativeDeflateStatus,
@@ -33,33 +34,6 @@ export interface NativeDeflateParameters {
   readonly planarConfiguration: number;
   readonly bitsPerSample: readonly number[];
   readonly predictor: number;
-}
-
-function applyHorizontalPredictor(
-  block: ArrayBuffer,
-  parameters: NativeDeflateParameters,
-): ArrayBuffer {
-  if (parameters.predictor === 1) return block;
-  const bits = parameters.bitsPerSample[0],
-    bytesPerSample = bits / 8,
-    stride = parameters.planarConfiguration === 2 ? 1 : parameters.bitsPerSample.length,
-    rowBytes = parameters.tileWidth * stride * bytesPerSample;
-  for (let row = 0; row < parameters.tileHeight; row++) {
-    const offset = row * rowBytes;
-    if (offset >= block.byteLength) break;
-    const bytes = Math.min(rowBytes, block.byteLength - offset);
-    if (bits === 8) {
-      const values = new Uint8Array(block, offset, bytes);
-      for (let i = stride; i < values.length; i++) values[i] += values[i - stride];
-    } else if (bits === 16) {
-      const values = new Uint16Array(block, offset, Math.floor(bytes / 2));
-      for (let i = stride; i < values.length; i++) values[i] += values[i - stride];
-    } else {
-      const values = new Uint32Array(block, offset, Math.floor(bytes / 4));
-      for (let i = stride; i < values.length; i++) values[i] += values[i - stride];
-    }
-  }
-  return block;
 }
 
 async function nativeInflate(buffer: ArrayBufferLike): Promise<ArrayBuffer> {

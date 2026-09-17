@@ -122,6 +122,9 @@ export interface RasterTaskDiagnostics {
   readonly nativeDeflateBlocks: number;
   readonly nativeDeflateFallbacks: number;
   readonly nativeDeflateMs: number;
+  readonly fastLzwBlocks: number;
+  readonly fastLzwFallbacks: number;
+  readonly fastLzwMs: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
@@ -151,6 +154,9 @@ export interface RasterLevelProcessingStats {
   readonly nativeDeflateBlocks: number;
   readonly nativeDeflateFallbacks: number;
   readonly nativeDeflateMs: number;
+  readonly fastLzwBlocks: number;
+  readonly fastLzwFallbacks: number;
+  readonly fastLzwMs: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
@@ -208,6 +214,9 @@ export interface RasterProcessingStats {
   readonly nativeDeflateFallbacks: number;
   readonly nativeDeflateMs: number;
   readonly nativeDeflateStatus: RasterNativeDeflateStatus;
+  readonly fastLzwBlocks: number;
+  readonly fastLzwFallbacks: number;
+  readonly fastLzwMs: number;
   readonly workerMs: number;
   readonly fileReadMs: number;
   readonly fileReadBytes: number;
