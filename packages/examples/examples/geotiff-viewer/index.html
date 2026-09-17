@@ -185,6 +185,14 @@ function performanceSnapshot() {
     workers: processing?.workers ?? 0, peakWorkers: performanceDelta(processing,bproc,'peakWorkers') || processing?.peakWorkers || 0,
     tiles: performanceDelta(processing,bproc,'renderedTiles'), presentedTiles: stats.presentedTiles-before.stats.presentedTiles,
     reads: stats.readRequests-before.stats.readRequests,
+    planning: {
+      passes: performanceDelta(perf,bp,'planningPasses'), plannedTiles: performanceDelta(perf,bp,'plannedTiles'),
+      current: stats.planning ? {...stats.planning, layers: stats.planning.layers.map(layer => ({...layer,
+        selectedLevel: processing?.lastLevel ?? layer.selectedLevel,
+        selectedLevelSize: state.metadata && processing?.lastLevel != null ? (() => { const level=state.metadata.levels.find(item=>item.id===processing.lastLevel); return level ? [level.width,level.height] : layer.selectedLevelSize; })() : layer.selectedLevelSize,
+        selectedLevelReduction: state.metadata && processing?.lastLevel != null ? (() => { const level=state.metadata.levels.find(item=>item.id===processing.lastLevel); const base=state.metadata.levels[0]; return level ? Math.max(base.width/level.width,base.height/level.height) : layer.selectedLevelReduction; })() : layer.selectedLevelReduction,
+      }))} : null,
+    },
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
@@ -194,7 +202,19 @@ function performanceSnapshot() {
     },
     io: { bytes: performanceDelta(perf,bp,'fileReadBytes'), operations: performanceDelta(perf,bp,'fileReadOps'),
       pageCache: {hits:pageHits,misses:pageMisses,hitRate:pageHits+pageMisses ? pageHits/(pageHits+pageMisses) : null},
-      blockCache: {hits:blockHits,misses:blockMisses,hitRate:blockHits+blockMisses ? blockHits/(blockHits+blockMisses) : null}},
+      blockCache: {
+        hits:blockHits, misses:blockMisses, hitRate:blockHits+blockMisses ? blockHits/(blockHits+blockMisses) : null,
+        evictions:performanceDelta(perf,bp,'blockCacheEvictions'),
+        evictedMiB:performanceDelta(perf,bp,'blockCacheEvictedBytes')/1024**2,
+        admittedMiB:performanceDelta(perf,bp,'blockCacheAdmittedBytes')/1024**2,
+        oversizeSkips:performanceDelta(perf,bp,'blockCacheOversizeSkips'),
+        currentMiB:(processing?.blockCacheBytes ?? 0)/1024**2,
+        peakMiB:(processing?.blockCachePeakBytes ?? 0)/1024**2,
+        capacityMiB:(processing?.blockCacheLimitBytes ?? 0)/1024**2,
+        entries:processing?.blockCacheEntries ?? 0, peakEntries:processing?.blockCachePeakEntries ?? 0,
+        occupancy:processing?.blockCacheLimitBytes ? processing.blockCacheBytes/processing.blockCacheLimitBytes : null,
+        evictionRate:blockMisses ? performanceDelta(perf,bp,'blockCacheEvictions')/blockMisses : null,
+      }},
     cacheMiB: stats.cachedBytes/1024**2,
   };
 }

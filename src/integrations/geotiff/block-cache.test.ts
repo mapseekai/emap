@@ -19,6 +19,17 @@ describe('bounded decoded TIFF block cache', () => {
     cache.set('large', new ArrayBuffer(20));
     expect(cache.get('large')).toBeUndefined();
     expect(cache.bytes).toBe(12);
+    expect(cache.getDiagnostics()).toMatchObject({
+      evictions: 1,
+      evictedBytes: 4,
+      admittedBytes: 16,
+      bytes: 12,
+      peakBytes: 12,
+      entries: 3,
+      peakEntries: 3,
+      limitBytes: 12,
+      oversizeSkips: 1,
+    });
   });
   it('accounts replacements and prevents late completion from repopulating disposed caches', () => {
     const cache = new RasterBlockCache(16);

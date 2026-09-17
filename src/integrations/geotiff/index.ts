@@ -29,4 +29,6 @@ export type {
   RasterLayerReference,
   RasterCacheStats,
   RasterPerformanceTotals,
+  RasterPlanningDiagnostics,
+  RasterLayerPlanningDiagnostics,
 } from '../../runtime/services/contracts/raster';

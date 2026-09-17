@@ -176,6 +176,29 @@ describe('settled, progressive raster frames', () => {
     vi.mocked(painter.drawRasterImage).mockClear();
     return { original, service, read, frame, painter, canvases };
   }
+  it('reports current tile grid separately from cumulative planned/rendered work', async () => {
+    const { service, frame } = await harness(512, 32 * 1024 ** 2);
+    const before = service.getStats();
+    expect(before.planning).not.toBeNull();
+    expect(before.planning?.viewportCss).toEqual([512, 512]);
+    expect(before.planning?.displayTileSize).toBe(256);
+    expect(before.planning?.tileBudgetPerLayer).toBe(64);
+    const layer = before.planning?.layers[0];
+    expect(layer?.tiles).toBeGreaterThan(0);
+    expect(layer?.tiles).toBeLessThanOrEqual(64);
+    expect(layer?.grid[0] * layer?.grid[1]).toBe(layer?.tiles);
+    const passes = before.performance.planningPasses;
+    const planned = before.performance.plannedTiles;
+    const next = { ...frame, transform: frame.transform.clone() };
+    next.transform.scale(2, 256, 256);
+    service.render(next);
+    await vi.advanceTimersByTimeAsync(20);
+    const after = service.getStats();
+    expect(after.performance.planningPasses).toBe(passes + 1);
+    expect(after.performance.plannedTiles).toBeGreaterThan(planned);
+    expect(after.planning?.layers[0].tiles).toBeLessThanOrEqual(64);
+    service.dispose();
+  });
   it('does not decode or replace the visible image while a wheel/drag gesture is active', async () => {
     const { service, read, frame, painter } = await harness();
     service.beginNavigation('pointer');

@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: Local GeoTIFF rasters
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -224,7 +224,9 @@ External `RasterSource` providers must respond to `AbortSignal` and close their 
 
 `geotiff-viewer` includes a Performance Diagnostics panel. Press **Start recording**, perform one zoom, pan, or style change, and the panel freezes when raster work settles. **Copy JSON** makes Windows/macOS comparisons reproducible.
 
-The report includes wall time, LOD, viewport/DPR/logical cores, workers, tile/read counts, host planning and Canvas upload, presentation wait, cumulative Worker time, file range reads, TIFF block loads, window assembly, colorization/resampling, approximate Worker-to-host transfer, and compressed-page/decoded-block cache hit rates.
+The report includes wall time, LOD, viewport/DPR/logical cores, workers, tile/read counts, host planning and Canvas upload, presentation wait, cumulative Worker time, file range reads, TIFF block loads, window assembly, colorization/resampling, approximate Worker-to-host transfer, and compressed-page/decoded-block cache hit rates. `planning.passes/plannedTiles/current` separates cumulative planning generations during one operation from the **final current viewport** tile grid. `grid/tiles/idealViewportTiles/amplification/pixelSize/span` shows whether a count such as 168 tiles is one oversized final grid or accumulated work across view generations. The final grid remains bounded by the per-layer display-cache budget.
+
+Decoded-block diagnostics also expose eviction count, admitted/evicted bytes, current/peak occupancy, capacity, entry counts, and oversize skips. An `evictionRate = evictions / misses` near one while peak occupancy stays near capacity is a strong cache-thrashing signal. `evictedMiB` measures operation churn, not a unique working-set size.
 
 ```ts
 const before = map.ctx.raster.getStats();

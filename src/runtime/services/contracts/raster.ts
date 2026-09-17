@@ -21,6 +21,8 @@ export interface RasterLayerReference {
 }
 export interface RasterPerformanceTotals {
   readonly planningMs: number;
+  readonly planningPasses: number;
+  readonly plannedTiles: number;
   readonly canvasUploadMs: number;
   readonly presentationWaitMs: number;
   readonly presentationFlushes: number;
@@ -32,10 +34,41 @@ export interface RasterPerformanceTotals {
   readonly pageCacheMisses: number;
   readonly blockCacheHits: number;
   readonly blockCacheMisses: number;
+  readonly blockCacheEvictions: number;
+  readonly blockCacheEvictedBytes: number;
+  readonly blockCacheAdmittedBytes: number;
+  readonly blockCachePeakBytes: number;
+  readonly blockCachePeakEntries: number;
+  readonly blockCacheLimitBytes: number;
+  readonly blockCacheOversizeSkips: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
   readonly transferMs: number;
+}
+export interface RasterPlanningDiagnostics {
+  readonly viewportCss: readonly [number, number];
+  readonly pixelRatio: number;
+  readonly effectivePixelRatio: number;
+  readonly viewportDevice: readonly [number, number];
+  readonly layerCount: number;
+  readonly tileBudgetPerLayer: number;
+  readonly displayTileSize: number;
+  readonly layers: readonly RasterLayerPlanningDiagnostics[];
+}
+export interface RasterLayerPlanningDiagnostics {
+  readonly id: string;
+  readonly grid: readonly [number, number];
+  readonly tiles: number;
+  readonly idealViewportTiles: number;
+  readonly amplification: number;
+  readonly pixelSize: number;
+  readonly span: number;
+  readonly targetResolution: number;
+  readonly sourceResolution: readonly [number, number];
+  readonly selectedLevel: number | null;
+  readonly selectedLevelSize: readonly [number, number] | null;
+  readonly selectedLevelReduction: number | null;
 }
 export interface RasterCacheStats {
   readonly cachedBytes: number;
@@ -51,6 +84,8 @@ export interface RasterCacheStats {
   readonly interacting: boolean;
   /** Cumulative counters; snapshot twice to diagnose one navigation operation. */
   readonly performance: RasterPerformanceTotals;
+  /** Latest planned view geometry; diagnostic only, not cumulative. */
+  readonly planning: RasterPlanningDiagnostics | null;
 }
 /** Raster sources are independent of editable vector/topology sources. */
 export interface RasterContract {

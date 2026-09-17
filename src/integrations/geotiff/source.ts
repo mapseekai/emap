@@ -35,6 +35,11 @@ interface Slot {
   ready: boolean;
   bytes: number;
   release?: () => void;
+  cacheBytes: number;
+  cacheEntries: number;
+  cachePeakBytes: number;
+  cachePeakEntries: number;
+  cacheLimitBytes: number;
 }
 interface Job {
   command: GeoTIFFWorkerCommand;
@@ -69,6 +74,13 @@ class WorkerRasterSource implements RasterSource {
   private pageCacheMisses = 0;
   private blockCacheHits = 0;
   private blockCacheMisses = 0;
+  private blockCacheEvictions = 0;
+  private blockCacheEvictedBytes = 0;
+  private blockCacheAdmittedBytes = 0;
+  private blockCachePeakBytes = 0;
+  private blockCachePeakEntries = 0;
+  private blockCacheLimitBytes = 0;
+  private blockCacheOversizeSkips = 0;
   private blockLoadMs = 0;
   private assembleMs = 0;
   private colorizeMs = 0;
@@ -125,6 +137,11 @@ class WorkerRasterSource implements RasterSource {
       ready: false,
       bytes: 0,
       release,
+      cacheBytes: 0,
+      cacheEntries: 0,
+      cachePeakBytes: 0,
+      cachePeakEntries: 0,
+      cacheLimitBytes: 0,
     };
     slot.client = new RasterWorkerClient(
       worker,
@@ -250,6 +267,24 @@ class WorkerRasterSource implements RasterSource {
               this.pageCacheMisses += d.pageCacheMisses;
               this.blockCacheHits += d.blockCacheHits;
               this.blockCacheMisses += d.blockCacheMisses;
+              slot.cacheBytes = d.blockCacheBytes;
+              slot.cacheEntries = d.blockCacheEntries;
+              slot.cachePeakBytes = Math.max(slot.cachePeakBytes, d.blockCachePeakBytes);
+              slot.cachePeakEntries = Math.max(slot.cachePeakEntries, d.blockCachePeakEntries);
+              slot.cacheLimitBytes = d.blockCacheLimitBytes;
+              this.blockCacheEvictions += d.blockCacheEvictions;
+              this.blockCacheEvictedBytes += d.blockCacheEvictedBytes;
+              this.blockCacheAdmittedBytes += d.blockCacheAdmittedBytes;
+              this.blockCachePeakBytes = Math.max(this.blockCachePeakBytes, d.blockCachePeakBytes);
+              this.blockCachePeakEntries = Math.max(
+                this.blockCachePeakEntries,
+                d.blockCachePeakEntries,
+              );
+              this.blockCacheLimitBytes = Math.max(
+                this.blockCacheLimitBytes,
+                d.blockCacheLimitBytes,
+              );
+              this.blockCacheOversizeSkips += d.blockCacheOversizeSkips;
               this.blockLoadMs += d.blockLoadMs;
               this.assembleMs += d.assembleMs;
               this.colorizeMs += d.colorizeMs;
@@ -337,6 +372,15 @@ class WorkerRasterSource implements RasterSource {
       pageCacheMisses: this.pageCacheMisses,
       blockCacheHits: this.blockCacheHits,
       blockCacheMisses: this.blockCacheMisses,
+      blockCacheEvictions: this.blockCacheEvictions,
+      blockCacheEvictedBytes: this.blockCacheEvictedBytes,
+      blockCacheAdmittedBytes: this.blockCacheAdmittedBytes,
+      blockCacheBytes: this.slots.reduce((sum, slot) => sum + slot.cacheBytes, 0),
+      blockCachePeakBytes: this.slots.reduce((sum, slot) => sum + slot.cachePeakBytes, 0),
+      blockCacheEntries: this.slots.reduce((sum, slot) => sum + slot.cacheEntries, 0),
+      blockCachePeakEntries: this.slots.reduce((sum, slot) => sum + slot.cachePeakEntries, 0),
+      blockCacheLimitBytes: this.slots.reduce((sum, slot) => sum + slot.cacheLimitBytes, 0),
+      blockCacheOversizeSkips: this.blockCacheOversizeSkips,
       blockLoadMs: this.blockLoadMs,
       assembleMs: this.assembleMs,
       colorizeMs: this.colorizeMs,

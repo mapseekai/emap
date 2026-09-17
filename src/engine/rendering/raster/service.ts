@@ -22,6 +22,7 @@ import type {
   RasterCacheStats,
   RasterLayerInfo,
   RasterLayerReference,
+  RasterPlanningDiagnostics,
 } from '../../../runtime/services/contracts/raster';
 import type { RenderFrame, RenderPass } from '../../../runtime/services/contracts/render-pass';
 import {
@@ -117,6 +118,9 @@ export class RasterRenderService implements RasterContract {
   private readonly currentTasks = new Map<string, Task>();
   private readRequests = 0;
   private planningMs = 0;
+  private planningPasses = 0;
+  private plannedTiles = 0;
+  private planningDiagnostics: RasterPlanningDiagnostics | null = null;
   private canvasUploadMs = 0;
   private queue: Task[] = [];
   private wanted = new Set<string>();
@@ -222,6 +226,7 @@ export class RasterRenderService implements RasterContract {
       Math.floor(this.cacheLimit / (RASTER_TILE_SIZE ** 2 * 4) / 2 / Math.max(1, visible.length)),
     );
     const tasks: Task[] = [];
+    const planningLayers: RasterPlanningDiagnostics['layers'][number][] = [];
     const plannedBounds = new Map<string, RasterWindow>();
 
     for (const layer of visible) {
@@ -254,6 +259,46 @@ export class RasterRenderService implements RasterContract {
           span = pixelSize * RASTER_TILE_SIZE;
         }
         if (!Number.isFinite(span) || span <= 0) continue;
+        const gridX = Math.max(
+          0,
+          Math.ceil((clipped[2] - extent[0]) / span) - Math.floor((clipped[0] - extent[0]) / span),
+        );
+        const gridY = Math.max(
+          0,
+          Math.ceil((clipped[3] - extent[1]) / span) - Math.floor((clipped[1] - extent[1]) / span),
+        );
+        const effectivePixelRatio = Math.min(2, frame.pixelRatio);
+        const idealX = Math.max(
+          1,
+          Math.ceil((frame.width * effectivePixelRatio) / RASTER_TILE_SIZE),
+        );
+        const idealY = Math.max(
+          1,
+          Math.ceil((frame.height * effectivePixelRatio) / RASTER_TILE_SIZE),
+        );
+        const level =
+          layer.source.metadata.levels.find(
+            (item) => item.id === layer.source.getProcessingStats?.().lastLevel,
+          ) ?? null;
+        planningLayers.push({
+          id: layer.id,
+          grid: [gridX, gridY],
+          tiles: gridX * gridY,
+          idealViewportTiles: idealX * idealY,
+          amplification: (gridX * gridY) / (idealX * idealY),
+          pixelSize,
+          span,
+          targetResolution: resolution,
+          sourceResolution: layer.source.metadata.resolution,
+          selectedLevel: level?.id ?? null,
+          selectedLevelSize: level ? [level.width, level.height] : null,
+          selectedLevelReduction: level
+            ? Math.max(
+                layer.source.metadata.levels[0].width / level.width,
+                layer.source.metadata.levels[0].height / level.height,
+              )
+            : null,
+        });
 
         for (
           let y = Math.floor((clipped[1] - extent[1]) / span);
@@ -327,6 +372,21 @@ export class RasterRenderService implements RasterContract {
     for (const task of tasks) if (this.cache.has(task.key)) this.publishTile(task.key);
     this.deps.requestRender();
     this.trimCache();
+    this.planningPasses++;
+    this.plannedTiles += tasks.length;
+    this.planningDiagnostics = {
+      viewportCss: [frame.width, frame.height],
+      pixelRatio: frame.pixelRatio,
+      effectivePixelRatio: Math.min(2, frame.pixelRatio),
+      viewportDevice: [
+        Math.ceil(frame.width * Math.min(2, frame.pixelRatio)),
+        Math.ceil(frame.height * Math.min(2, frame.pixelRatio)),
+      ],
+      layerCount: visible.length,
+      tileBudgetPerLayer: perLayer,
+      displayTileSize: RASTER_TILE_SIZE,
+      layers: planningLayers,
+    };
     this.planningMs += performance.now() - planningStarted;
     this.pump();
   }
@@ -794,8 +854,11 @@ export class RasterRenderService implements RasterContract {
       presentedTiles: this.presentedTiles,
       readRequests: this.readRequests,
       interacting: this.gestures.size > 0 || this.settleTimer !== null,
+      planning: this.planningDiagnostics,
       performance: {
         planningMs: this.planningMs,
+        planningPasses: this.planningPasses,
+        plannedTiles: this.plannedTiles,
         canvasUploadMs: this.canvasUploadMs,
         presentationWaitMs: this.presentation.getDiagnostics().waitMs,
         presentationFlushes: this.presentation.getDiagnostics().flushes,
@@ -807,6 +870,16 @@ export class RasterRenderService implements RasterContract {
         pageCacheMisses: sum('pageCacheMisses'),
         blockCacheHits: sum('blockCacheHits'),
         blockCacheMisses: sum('blockCacheMisses'),
+        blockCacheEvictions: sum('blockCacheEvictions'),
+        blockCacheEvictedBytes: sum('blockCacheEvictedBytes'),
+        blockCacheAdmittedBytes: sum('blockCacheAdmittedBytes'),
+        blockCachePeakBytes: Math.max(0, ...processing.map((value) => value.blockCachePeakBytes)),
+        blockCachePeakEntries: Math.max(
+          0,
+          ...processing.map((value) => value.blockCachePeakEntries),
+        ),
+        blockCacheLimitBytes: sum('blockCacheLimitBytes'),
+        blockCacheOversizeSkips: sum('blockCacheOversizeSkips'),
         blockLoadMs: sum('blockLoadMs'),
         assembleMs: sum('assembleMs'),
         colorizeMs: sum('colorizeMs'),

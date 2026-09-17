@@ -52,8 +52,8 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
             const reads = window.rasterReadEvents.slice(index).filter(e => e.end && e.ok);
             const delta=(key)=>{const value=now.performance[key]-before.performance[key];return value>=0?value:now.performance[key];};
             records.push({ round, name, totalMs: performance.now()-start, firstMs:first, updates, tiles:now.presentedTiles-before.presentedTiles, reads:reads.length, readTimeMs:reads.reduce((n,e)=>n+e.end-e.start,0), firstReadMs:reads.length?reads[0].start-start:0, cacheMiB:now.cachedBytes/1024**2,
-              phases:{planningMs:delta('planningMs'),fileReadMs:delta('fileReadMs'),blockLoadMs:delta('blockLoadMs'),assembleMs:delta('assembleMs'),colorizeMs:delta('colorizeMs'),workerMs:delta('workerMs'),transferMs:delta('transferMs'),canvasUploadMs:delta('canvasUploadMs'),presentationWaitMs:delta('presentationWaitMs')},
-              io:{bytes:delta('fileReadBytes'),ops:delta('fileReadOps'),pageHits:delta('pageCacheHits'),pageMisses:delta('pageCacheMisses'),blockHits:delta('blockCacheHits'),blockMisses:delta('blockCacheMisses')} });
+              planning:{passes:delta('planningPasses'),plannedTiles:delta('plannedTiles'),current:now.planning}, phases:{planningMs:delta('planningMs'),fileReadMs:delta('fileReadMs'),blockLoadMs:delta('blockLoadMs'),assembleMs:delta('assembleMs'),colorizeMs:delta('colorizeMs'),workerMs:delta('workerMs'),transferMs:delta('transferMs'),canvasUploadMs:delta('canvasUploadMs'),presentationWaitMs:delta('presentationWaitMs')},
+              io:{bytes:delta('fileReadBytes'),ops:delta('fileReadOps'),pageHits:delta('pageCacheHits'),pageMisses:delta('pageCacheMisses'),blockHits:delta('blockCacheHits'),blockMisses:delta('blockCacheMisses'),blockEvictions:delta('blockCacheEvictions'),blockEvictedBytes:delta('blockCacheEvictedBytes'),blockAdmittedBytes:delta('blockCacheAdmittedBytes'),blockPeakBytes:now.performance.blockCachePeakBytes,blockLimitBytes:now.performance.blockCacheLimitBytes} });
             if (s.error) throw new Error(s.error); return;
           }
         }

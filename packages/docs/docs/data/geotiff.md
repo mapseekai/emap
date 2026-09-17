@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: 本地 GeoTIFF 栅格
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -237,7 +237,9 @@ try {
 
 `geotiff-viewer` 内置 Performance Diagnostics。点击“开始记录”，执行一次缩放、平移或样式变化，待栅格稳定后面板会自动冻结本次数据；“复制 JSON”可直接把 Windows 与 macOS 的结果带回问题分析。
 
-诊断包含总墙钟耗时、当前 LOD、视口/DPR/逻辑核心数、Worker 数量、瓦片与读取次数、主线程规划和 Canvas 上传、呈现等待、Worker 累计耗时、文件 range read、TIFF block load、窗口组装、颜色拉伸/重采样、Worker→主线程近似传输耗时，以及压缩页/解码块缓存命中率。
+诊断包含总墙钟耗时、当前 LOD、视口/DPR/逻辑核心数、Worker 数量、瓦片与读取次数、主线程规划和 Canvas 上传、呈现等待、Worker 累计耗时、文件 range read、TIFF block load、窗口组装、颜色拉伸/重采样、Worker→主线程近似传输耗时，以及压缩页/解码块缓存命中率。 `planning.passes/plannedTiles/current` 区分一次操作累计经历的规划代次与**最终当前视口**的 tile grid；`grid/tiles/idealViewportTiles/amplification/pixelSize/span` 可判断“168 tiles”是单个异常网格，还是多个缩放代次累计。当前最终网格仍受每图层显示缓存预算约束。
+
+Block Cache 同时报告 eviction 数量、淘汰/写入字节量、当前/峰值占用、容量、entry 数和超大块跳过次数。`evictionRate = evictions / misses` 接近 1 且峰值长期贴近容量时，是缓存抖动的重要信号；`evictedMiB` 是本次操作的缓存 churn，不等同于唯一 working-set 大小。
 
 ```ts
 const before = map.ctx.raster.getStats();

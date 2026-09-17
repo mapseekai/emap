@@ -421,5 +421,13 @@ test('Performance Diagnostics records one settled navigation with worker and hos
   expect(diagnostics.phasesMs.colorize).toBeGreaterThan(0);
   expect(diagnostics.phasesMs.canvasUpload).toBeGreaterThanOrEqual(0);
   expect(diagnostics.io.blockCache.hits + diagnostics.io.blockCache.misses).toBeGreaterThan(0);
+  expect(diagnostics.planning.passes).toBeGreaterThan(0);
+  expect(diagnostics.planning.plannedTiles).toBeGreaterThanOrEqual(diagnostics.planning.current.layers[0].tiles);
+  expect(diagnostics.planning.current.layers[0].grid[0] * diagnostics.planning.current.layers[0].grid[1]).toBe(diagnostics.planning.current.layers[0].tiles);
+  expect(diagnostics.planning.current.layers[0].tiles).toBeLessThanOrEqual(diagnostics.planning.current.tileBudgetPerLayer);
+  expect(diagnostics.io.blockCache.capacityMiB).toBeGreaterThan(0);
+  expect(diagnostics.io.blockCache.peakMiB).toBeLessThanOrEqual(diagnostics.io.blockCache.capacityMiB);
+  expect(diagnostics.io.blockCache.evictions).toBeGreaterThanOrEqual(0);
+  expect(diagnostics.io.blockCache.evictedMiB).toBeGreaterThanOrEqual(0);
   expect(JSON.parse(await page.locator('#performance-output').textContent())).toEqual(diagnostics);
 });

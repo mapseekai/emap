@@ -8,9 +8,28 @@ export class RasterBlockCache {
   private hits = 0;
   private misses = 0;
   private loadMs = 0;
+  private evictions = 0;
+  private evictedBytes = 0;
+  private admittedBytes = 0;
+  private oversizeSkips = 0;
+  private peakBytes = 0;
+  private peakEntries = 0;
   constructor(private readonly limit = 8 * 1024 ** 2) {}
-  getDiagnostics(): { hits: number; misses: number; loadMs: number } {
-    return { hits: this.hits, misses: this.misses, loadMs: this.loadMs };
+  getDiagnostics() {
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      loadMs: this.loadMs,
+      evictions: this.evictions,
+      evictedBytes: this.evictedBytes,
+      admittedBytes: this.admittedBytes,
+      oversizeSkips: this.oversizeSkips,
+      bytes: this.retainedBytes,
+      peakBytes: this.peakBytes,
+      entries: this.entries.size,
+      peakEntries: this.peakEntries,
+      limitBytes: this.limit,
+    };
   }
   get bytes(): number {
     return this.retainedBytes;
@@ -32,7 +51,11 @@ export class RasterBlockCache {
     this.loadMs += ms;
   }
   set(key: string, data: ArrayBufferLike): void {
-    if (this.closed || data.byteLength > this.limit) return;
+    if (this.closed) return;
+    if (data.byteLength > this.limit) {
+      this.oversizeSkips++;
+      return;
+    }
     const previous = this.entries.get(key);
     if (previous) {
       this.retainedBytes -= previous.byteLength;
@@ -40,11 +63,17 @@ export class RasterBlockCache {
     }
     this.entries.set(key, data);
     this.retainedBytes += data.byteLength;
+    this.admittedBytes += data.byteLength;
     while (this.retainedBytes > this.limit || this.entries.size > 4096) {
       const oldest = this.entries.keys().next().value!;
-      this.retainedBytes -= this.entries.get(oldest)!.byteLength;
+      const evicted = this.entries.get(oldest)!.byteLength;
+      this.retainedBytes -= evicted;
+      this.evictedBytes += evicted;
       this.entries.delete(oldest);
+      this.evictions++;
     }
+    this.peakBytes = Math.max(this.peakBytes, this.retainedBytes);
+    this.peakEntries = Math.max(this.peakEntries, this.entries.size);
   }
   dispose(): void {
     this.closed = true;

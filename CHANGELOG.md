@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and decoded-block cache, block-load, assembly, colorization, Worker/transfer,
   planning and Canvas-upload counters. The example can record one operation,
   freeze on settle, report environment/LOD, and copy JSON for Windows/macOS comparison.
+  Add final-view tile-grid/planning-generation diagnostics plus decoded-block eviction,
+  churn, occupancy, capacity, entry and oversize-skip counters to distinguish tile
+  amplification from cache thrashing.
 
 - Add a bounded GeoTIFF tile-pipeline Worker pool for genuine parallel decoding
   and off-main-thread resampling/stretch/RGBA generation. Keep raw pixel queries,
