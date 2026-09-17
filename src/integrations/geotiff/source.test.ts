@@ -56,10 +56,14 @@ class FakeWorker {
   }
 }
 const file = () => new File([new Uint8Array(8)], 'image.tif', { lastModified: 12 });
-async function opened(workerCount = 1, directoryBytes?: number) {
+async function opened(
+  workerCount = 1,
+  directoryBytes?: number,
+  rasterMetadata: RasterMetadata = metadata,
+) {
   const pending = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount }),
     worker = FakeWorker.instances.at(-1)!;
-  worker.reply({ id: 1, type: 'metadata', metadata, directoryBytes });
+  worker.reply({ id: 1, type: 'metadata', metadata: rasterMetadata, directoryBytes });
   return { worker, source: await pending };
 }
 beforeEach(() => {
@@ -231,27 +235,65 @@ describe('parallel raster pipeline pool', () => {
       type: 'result',
       result: { width: 1, height: 1, data: [new Uint8Array([value])] },
     });
-  it('runs two physical workers simultaneously and reuses shared statistics', async () => {
-    const { source, worker } = await opened(2, 1000);
+  it('keeps source-block affinity without head-of-line blocking other workers', async () => {
+    const tiledMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 1024,
+          height: 512,
+          tileWidth: 512,
+          tileHeight: 512,
+        },
+      ],
+    };
+    const { source, worker } = await opened(2, 1000, tiledMetadata);
     try {
-      const a = source.readWindow(request),
-        b = source.readWindow(request);
+      const sameBlock = { level: 0, window: [1, 0, 2, 1] as const, samples: [0] };
+      const otherBlock = { level: 0, window: [512, 0, 513, 1] as const, samples: [0] };
+      const first = source.readWindow(request),
+        secondSameBlock = source.readWindow(sameBlock),
+        thirdOtherBlock = source.readWindow(otherBlock);
       expect(FakeWorker.instances).toHaveLength(2);
-      const second = FakeWorker.instances[1];
-      expect(second.messages[0]).toMatchObject({
+      const replica = FakeWorker.instances[1];
+      expect(replica.messages[0]).toMatchObject({
         type: 'open',
         file: expect.any(File),
         cacheBytes: 4 * 1024 ** 2,
         pageLimit: 8,
       });
-      second.reply({ id: 1, type: 'metadata', metadata, directoryBytes: 1000 });
+      replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
       await Promise.resolve();
-      expect(second.messages.at(-1)?.type).toBe('read');
-      expect(source.getProcessingStats?.().busyWorkers).toBe(2);
-      answer(second, 20);
-      answer(worker, 10);
-      expect((await a).data[0][0]).toBe(10);
-      expect((await b).data[0][0]).toBe(20);
+      expect(worker.messages.filter((message) => message.type === 'read')).toHaveLength(1);
+      expect(replica.messages.at(-1)).toMatchObject({
+        id: 2,
+        type: 'read',
+        request: { window: [512, 0, 513, 1] },
+      });
+      expect(source.getProcessingStats?.()).toMatchObject({ busyWorkers: 2, queuedTasks: 1 });
+
+      answer(replica, 30);
+      worker.reply({
+        id: 2,
+        type: 'result',
+        result: { width: 1, height: 1, data: [new Uint8Array([10])] },
+      });
+      expect((await first).data[0][0]).toBe(10);
+      expect((await thirdOtherBlock).data[0][0]).toBe(30);
+      await Promise.resolve();
+      expect(worker.messages.at(-1)).toMatchObject({
+        id: 3,
+        type: 'read',
+        request: { window: [1, 0, 2, 1] },
+      });
+      expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(1);
+      worker.reply({
+        id: 3,
+        type: 'result',
+        result: { width: 1, height: 1, data: [new Uint8Array([20])] },
+      });
+      expect((await secondSameBlock).data[0][0]).toBe(20);
       expect(source.getProcessingStats?.()).toMatchObject({
         peakWorkers: 2,
         busyWorkers: 0,

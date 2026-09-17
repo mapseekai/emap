@@ -38,6 +38,27 @@ function commandLevel(command: GeoTIFFWorkerCommand): number | null {
   return null;
 }
 
+function commandWindow(command: GeoTIFFWorkerCommand): RasterReadRequest['window'] | null {
+  if (command.type === 'read') return command.request.window;
+  if (command.type === 'render') return command.request.read.window;
+  return null;
+}
+
+/** Keep requests centred in the same physical source block on the same decoder cache. */
+function sourceBlockIndex(
+  level: RasterMetadata['levels'][number],
+  command: GeoTIFFWorkerCommand,
+): number | null {
+  const window = commandWindow(command);
+  if (!window) return null;
+  const centerX = Math.max(0, Math.min(level.width - 1, (window[0] + window[2]) / 2));
+  const centerY = Math.max(0, Math.min(level.height - 1, (window[1] + window[3]) / 2));
+  const blockX = Math.floor(centerX / Math.max(1, level.tileWidth));
+  const blockY = Math.floor(centerY / Math.max(1, level.tileHeight));
+  const columns = Math.max(1, Math.ceil(level.width / Math.max(1, level.tileWidth)));
+  return blockY * columns + blockX;
+}
+
 export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
   /** Self-contained classic Worker asset. All pool replicas use this same URL. */
   readonly workerUrl?: string | URL;
@@ -284,26 +305,38 @@ class WorkerRasterSource implements RasterSource {
       this.pump();
     });
   }
+  private slotForJob(job: Job): Slot | undefined {
+    const levelId = commandLevel(job.command);
+    const level =
+      levelId === null ? undefined : this.metadata.levels.find((item) => item.id === levelId);
+    if (!level) return this.slots.find((slot) => slot.ready && !slot.client.busy);
+    if (isRowStripedLevel(level)) {
+      const primary = this.slots[0];
+      return primary?.ready && !primary.client.busy ? primary : undefined;
+    }
+    const ready = this.slots.filter((slot) => slot.ready);
+    if (!ready.length) return undefined;
+    const block = sourceBlockIndex(level, job.command);
+    const owner = block === null ? ready[0] : ready[block % ready.length];
+    return owner && !owner.client.busy ? owner : undefined;
+  }
   private pump(): void {
     if (this.closed || !this.metadata) return;
     while (this.queue.length) {
-      const job = this.queue[0];
-      const levelId = commandLevel(job.command);
-      const level =
-        levelId === null ? undefined : this.metadata.levels.find((item) => item.id === levelId);
-      const striped = level ? isRowStripedLevel(level) : false;
-      const primary = this.slots[0];
-      const slot = striped
-        ? primary?.ready && !primary.client.busy
-          ? primary
-          : undefined
-        : this.slots.find((value) => value.ready && !value.client.busy);
-      if (!slot) {
-        if (!striped) this.startReplica();
-        return;
+      if (this.slots.length < this.target) this.startReplica();
+      let index = -1;
+      let slot: Slot | undefined;
+      for (let candidate = 0; candidate < this.queue.length; candidate++) {
+        const job = this.queue[candidate];
+        if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) continue;
+        const preferred = this.slotForJob(job);
+        if (!preferred) continue;
+        index = candidate;
+        slot = preferred;
+        break;
       }
-      if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) return;
-      this.queue.shift();
+      if (index < 0 || !slot) return;
+      const [job] = this.queue.splice(index, 1);
       job.cleanup();
       if (job.command.type === 'render')
         this.queuedMeshBytes -= job.command.request.warp.points.byteLength;
