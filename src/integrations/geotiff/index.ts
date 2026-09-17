@@ -32,4 +32,5 @@ export type {
   RasterPerformanceTotals,
   RasterPlanningDiagnostics,
   RasterLayerPlanningDiagnostics,
+  RasterSelectedLevelDiagnostics,
 } from '../../runtime/services/contracts/raster';
