@@ -43,6 +43,9 @@
       ],
       "@mapseekai/emap/geopackage": [
         "../../src/integrations/geopackage/index.ts"
+      ],
+      "@mapseekai/emap/geotiff": [
+        "../../src/integrations/geotiff/index.ts"
       ]
     }
   },

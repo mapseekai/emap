@@ -10,6 +10,8 @@ verifiedVersion: 0.12.0
 
 # Data formats
 
+This page describes vector data. Local GeoTIFF/BigTIFF uses the separate [raster integration](./geotiff.md), not `TopologySource.fromBytes()`: original files remain external, and pyramids are mandatory above 2GiB.
+
 Emap loads, stores, and exports geographic data through `TopologySource`. Core formats work out of the box; optional entries provide GeoPackage, GeoParquet, and GeoArrow; FlatGeobuf needs a registered plugin.
 
 ```ts

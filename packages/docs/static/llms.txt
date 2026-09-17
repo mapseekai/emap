@@ -56,3 +56,5 @@ Current version: 0.12.0. Default documentation locale is Chinese; every page has
 - [GitHub](https://github.com/mapseekai/emap): source, issues, changelog
 - [AGENTS.md](https://github.com/mapseekai/emap/blob/master/AGENTS.md): contributor rules, verification gates
 - [Release checklist](https://github.com/mapseekai/emap/blob/master/docs/release-checklist.md): release gates and static outputs
+
+- [Local GeoTIFF](https://mapseekai.github.io/mapseekai/emap/data/geotiff): Worker range reads, external references, mandatory pyramids above 2GiB, supported variants and limits.

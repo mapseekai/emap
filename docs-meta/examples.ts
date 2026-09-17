@@ -528,6 +528,10 @@ const exampleDescriptions = {
     zh: '实时查看 Cordis Context、Fiber、Service 与 Capability 状态，并动态启停交互插件或安装 MapLibre、Arrow、DuckDB。',
     en: 'Inspects native Cordis contexts, fibers, services, and capabilities live while toggling interaction plugins or installing MapLibre, Arrow, and DuckDB.',
   },
+  'geotiff-viewer': {
+    zh: '按视口读取本地 GeoTIFF/BigTIFF；超过 2GiB 必须具备金字塔，原始文件不复制到浏览器存储。',
+    en: 'Reads local GeoTIFF/BigTIFF windows without copying source files into browser storage; overviews are mandatory above 2GiB.',
+  },
   'geopackage-viewer': {
     zh: '以 SQLite WASM 读取矢量表，直接将 GP Binary/WKB 解码成 TypedArray，并在一个 dataset 中保留多图层。支持 Web Worker。',
     en: 'Reads vector tables with SQLite WASM, decodes GP Binary/WKB directly into typed arrays, and keeps all layers in one dataset, optionally in a Web Worker.',
@@ -580,6 +584,11 @@ export const examples: readonly ExampleDefinition[] = [
     'TopologySource',
     ['kml', 'formats'],
     ['fixtures/example-kml.kml'],
+  ),
+  recipe(
+    'geotiff-viewer', 'map-data', '本地 GeoTIFF 栅格', 'Local GeoTIFF raster',
+    ['/docs/data/geotiff', docsCrs], 'openGeoTIFF',
+    ['raster', 'geotiff', 'worker', 'pyramid'], ['fixtures/example-geotiff.tif', 'fixtures/example-geotiff-uint16.tif', 'fixtures/example-geotiff-int16.tif', 'fixtures/example-geotiff-float32.tif', 'fixtures/example-geotiff-float64.tif'],
   ),
   recipe(
     'geopackage-viewer', 'map-data', 'GeoPackage 多图层直接转换', 'GeoPackage direct multi-layer import',

@@ -10,6 +10,8 @@ verifiedVersion: 0.12.0
 
 # 数据格式
 
+本页描述矢量数据。GeoTIFF/BigTIFF 使用独立的[本地栅格集成](./geotiff.md)，不走 `TopologySource.fromBytes()`：原文件保持外部引用，超过 2GiB 必须具备金字塔。
+
 Emap 通过 `TopologySource` 在浏览器中加载、保存和导出地理数据。核心格式开箱可用；可选入口提供 GeoPackage、GeoParquet、GeoArrow；FlatGeobuf 需注册插件。
 
 ```ts

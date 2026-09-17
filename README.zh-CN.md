@@ -396,3 +396,7 @@ DuckDB 集成套件通过 `pnpm run test:duckdb` 运行，该命令对 `src/inte
 ## 许可证
 
 [MPL-2.0](LICENSE)
+
+## 本地栅格文件
+
+可选的 [`/geotiff` 集成](packages/docs/docs/data/geotiff.md) 通过 Worker 按窗口读取本地 GeoTIFF/BigTIFF，不将原始文件复制到浏览器存储。超过 2GiB 的文件必须具备内部或外部金字塔后才能解码，无跳过选项。组合 `rasterPlugin()` 与 `geoTIFFPlugin()`，部署 `emap-geotiff-worker.js`；工程保存外部引用，文件句柄由宿主负责。高位深自动拉伸到 8 位显示且不修改原始数值；导航期间保留已有画面，停止后逐块更新，未就绪区域继续使用裁剪后的旧分辨率缓存。示例目录新增 `geotiff-viewer`，包含整数和浮点测试影像，以及 RGB / 单波段灰度和波段选择。当前支持 north-up 网格；其余格式限制、资源预算和未压测容量见指南。

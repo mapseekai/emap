@@ -19,6 +19,10 @@
 - **Analysis**: optional DuckDB-Wasm SQL and spatial operations through the restricted, typed `@mapseekai/emap/duckdb` entry.
 - **Basemaps**: optional MapLibre services for raster/vector basemaps and online overlays; editable Canvas layers stay managed by emap.
 
+### Local raster files
+
+The optional [`/geotiff` integration](packages/docs/docs/data/geotiff.md) reads local GeoTIFF/BigTIFF windows in a Worker without copying original bytes into browser storage. Files strictly above 2GiB require valid internal or external pyramids before decoding. Use `rasterPlugin()` with `geoTIFFPlugin()`; deploy `emap-geotiff-worker.js`. Host projects store external references rather than raster pixels. High-depth values auto-stretch to display bytes without changing samples; navigation preserves existing coverage, then presents each ready tile with clipped old-resolution fallback for unfinished regions. Try the numeric TIFF fixtures and RGB/single-band channel selectors in `geotiff-viewer`. Current inputs must be north-up; the guide lists unsupported TIFF variants and unbenchmarked large-file limits.
+
 ## Install
 
 ```bash

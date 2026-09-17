@@ -82,7 +82,12 @@
       "import": "./dist/emap-geopackage.mjs"
     },
     "./dist/emap-geopackage-worker.js": "./dist/emap-geopackage-worker.js",
-    "./dist/sql-wasm.wasm": "./dist/sql-wasm.wasm"
+    "./dist/sql-wasm.wasm": "./dist/sql-wasm.wasm",
+    "./geotiff": {
+      "types": "./dist/integrations/geotiff/index.d.ts",
+      "import": "./dist/emap-geotiff.mjs"
+    },
+    "./dist/emap-geotiff-worker.js": "./dist/emap-geotiff-worker.js"
   },
   "sideEffects": [
     "*.css",
@@ -108,7 +113,8 @@
     "CHANGELOG.md",
     "LICENSE",
     "dist/emap-geopackage-worker.js",
-    "dist/sql-wasm.wasm"
+    "dist/sql-wasm.wasm",
+    "dist/emap-geotiff-worker.js"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -155,7 +161,8 @@
     "test-layout:check": "node scripts/check-test-layout.mjs",
     "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit",
     "test:geopackage": "vitest run src/integrations/geopackage test/integration/geopackage",
-    "runtime:check": "node scripts/check-node-version.mjs"
+    "runtime:check": "node scripts/check-node-version.mjs",
+    "test:geotiff": "vitest run src/domain/raster src/integrations/geotiff src/engine/rendering/raster test/integration/raster"
   },
   "keywords": [
     "mapshaper",
@@ -207,6 +214,7 @@
     "fflate": "^0.8.3",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
+    "geotiff": "3.0.5",
     "kdbush": "^4.0.2",
     "mapshaper": "^0.6.113",
     "mproj": "^0.1.2"

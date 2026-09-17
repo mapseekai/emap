@@ -37,7 +37,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Data',
-      items: ['data/formats', 'data/geopackage', 'data/attributes', 'data/operations', 'data/duckdb'],
+      items: ['data/formats', 'data/geotiff', 'data/geopackage', 'data/attributes', 'data/operations', 'data/duckdb'],
     },
     {
       type: 'category',

@@ -42,3 +42,5 @@ export type { RoutingContract } from './contracts/routing';
 export type { RenderSignalsContract } from './contracts/signals';
 export type { SourceFactoryContract } from './source-factory';
 export type { RenderAction, AffineDelta } from '../../engine/map/types';
+
+export type { RenderPass, RenderFrame } from './contracts/render-pass';

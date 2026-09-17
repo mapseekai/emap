@@ -1,0 +1,93 @@
+/** Serializable raster metadata. No DOM, storage, decoder or plugin ownership here. */
+export type RasterWindow = readonly [number, number, number, number];
+export type RasterSamples =
+  | Uint8Array
+  | Int8Array
+  | Uint16Array
+  | Int16Array
+  | Uint32Array
+  | Int32Array
+  | Float32Array
+  | Float64Array;
+export interface RasterLevel {
+  readonly id: number;
+  readonly width: number;
+  readonly height: number;
+  readonly tileWidth: number;
+  readonly tileHeight: number;
+  readonly samples: number;
+  readonly bits: readonly number[];
+  readonly formats: readonly number[];
+  readonly photometric: number;
+  readonly subfileType: number;
+}
+/** Fixed, source-wide bounded sample statistics; never recomputed per viewport. */
+export interface RasterBandStatistics {
+  readonly min: number;
+  readonly max: number;
+  readonly p02: number;
+  readonly p98: number;
+  readonly count: number;
+  readonly approximate: boolean;
+}
+export interface RasterMetadata {
+  readonly filename: string;
+  readonly fileSize: number;
+  readonly lastModified: number;
+  readonly crs: string;
+  readonly bounds: RasterWindow;
+  /** Pixel-corner origin, not pixel-center coordinates. */
+  readonly origin: readonly [number, number];
+  readonly resolution: readonly [number, number];
+  readonly levels: readonly RasterLevel[];
+  readonly noData: number | null;
+  readonly alphaBand: number | null;
+  readonly palette?: readonly number[];
+  readonly statistics?: readonly RasterBandStatistics[];
+  readonly bigTiff: boolean;
+  readonly overviewFile?: {
+    readonly filename: string;
+    readonly fileSize: number;
+    readonly lastModified: number;
+  };
+}
+export interface RasterReadRequest {
+  readonly level: number;
+  readonly window: RasterWindow;
+  readonly samples: readonly number[];
+}
+export interface RasterReadResult {
+  readonly width: number;
+  readonly height: number;
+  readonly data: readonly RasterSamples[];
+}
+export interface RasterStyle {
+  /** auto preserves UInt8 colors and applies 2–98% stretch to other numeric types. */
+  readonly stretch?: 'auto' | 'minmax' | 'percentile' | 'none';
+  /** Zero-based source bands: one for grayscale or three in R/G/B order.
+   * Omit for automatic RGB (3+ non-alpha samples), grayscale, or the native palette.
+   * Explicit selection bypasses a native palette to display the selected values.
+   */
+  readonly bands?: readonly number[];
+  /** Stable ranges per displayed band. No per-tile min/max seams. */
+  readonly ranges?: readonly (readonly [number, number])[];
+  readonly opacity?: number;
+  readonly resampling?: 'nearest' | 'bilinear';
+}
+/** JSON-safe external reference. Never contains a File, Blob or raster samples. */
+export interface RasterReference {
+  readonly kind: 'raster';
+  readonly storage: 'external-file';
+  readonly format: 'geotiff';
+  readonly filename: string;
+  readonly fileSize: number;
+  readonly lastModified: number;
+  readonly crs: string;
+  readonly overviewFile?: RasterMetadata['overviewFile'];
+}
+export interface RasterSource {
+  readonly metadata: RasterMetadata;
+  readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult>;
+  toReference(): RasterReference;
+  dispose(): void;
+}

@@ -1,3 +1,4 @@
+import { AffineTransform } from '../../domain/geo/transform';
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -1389,3 +1390,45 @@ describe('CanvasPainter theme colors', () => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe('progressive raster clipping', () => {
+  it('clips partial old imagery on the same rounded device-pixel boundaries as replacement tiles', () => {
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const { painter } = createCanvasPainterHarness(ctx, { pixelRatio: 1.5 });
+    painter.setTransform(new AffineTransform(1.31, -1.31, 0.2, 132.8));
+    const image = {} as HTMLCanvasElement;
+    painter.drawRasterImage(image, [0, 0, 100, 100], 0.5, true, [25, 0, 50, 100]);
+    expect(ctx.rect).toHaveBeenCalledWith(49, 3, 50, 196);
+    expect(ctx.drawImage).toHaveBeenCalledWith(image, 0, 3, 197, 196);
+    expect(ctx.save).toHaveBeenCalledTimes(1);
+    expect(ctx.restore).toHaveBeenCalledTimes(1);
+  });
+  it('does not paint outside or empty clips and restores state after a draw failure', () => {
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      drawImage: vi.fn(() => {
+        throw new Error('draw failed');
+      }),
+    };
+    const { painter } = createCanvasPainterHarness(ctx);
+    painter.setTransform(new AffineTransform(1, -1, 0, 100));
+    const image = {} as HTMLCanvasElement;
+    painter.drawRasterImage(image, [0, 0, 100, 100], 1, false, [200, 0, 300, 100]);
+    expect(ctx.drawImage).not.toHaveBeenCalled();
+    expect(() =>
+      painter.drawRasterImage(image, [0, 0, 100, 100], 1, false, [25, 0, 50, 100]),
+    ).toThrow('draw failed');
+    expect(ctx.restore).toHaveBeenCalledTimes(1);
+  });
+});

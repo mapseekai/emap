@@ -1,0 +1,301 @@
+import { describe, expect, it } from 'vitest';
+import { colorizeRasterTile, planRasterTile, validateRasterStyle, rasterBands } from './tile';
+import type { RasterMetadata } from '../../../domain/raster/types';
+const metadata: RasterMetadata = {
+  filename: 'test.tif',
+  fileSize: 1000,
+  lastModified: 0,
+  crs: 'EPSG:4326',
+  origin: [0, 8],
+  resolution: [1, -1],
+  bounds: [0, 0, 8, 8],
+  noData: null,
+  alphaBand: null,
+  bigTiff: false,
+  levels: [
+    {
+      id: 0,
+      width: 8,
+      height: 8,
+      tileWidth: 8,
+      tileHeight: 8,
+      samples: 1,
+      bits: [8],
+      formats: [1],
+      photometric: 1,
+      subfileType: 0,
+    },
+  ],
+};
+const identity = (x: number, y: number): [number, number] => [x, y];
+describe('raster display tiles', () => {
+  it('normalizes floating-point unassociated alpha using the 0–1 range', () => {
+    const rgbaMetadata = {
+      ...metadata,
+      alphaBand: 3,
+      levels: [
+        {
+          ...metadata.levels[0],
+          samples: 4,
+          bits: [32, 32, 32, 32],
+          formats: [3, 3, 3, 3],
+          photometric: 2,
+        },
+      ],
+    };
+    const plan = planRasterTile(rgbaMetadata, [0, 0, 8, 8], identity, {}, 8)!;
+    const pixels = colorizeRasterTile(rgbaMetadata, plan, {
+      width: 8,
+      height: 8,
+      data: Array.from({ length: 4 }, () => new Float32Array(64).fill(0.5)),
+    });
+    expect(Array.from(pixels.slice(0, 4))).toEqual([128, 128, 128, 128]);
+  });
+
+  it('maps display pixel centers into bounded original windows without flipping or shifting rows', () => {
+    const plan = planRasterTile(metadata, [0, 0, 8, 8], identity, {}, 8)!;
+    expect(plan.request).toEqual({ level: 0, window: [0, 0, 8, 8], samples: [0] });
+    expect(plan.locate(0.5, 0.5)).toEqual([0.5, 0.5]);
+    expect(plan.locate(7.5, 7.5)).toEqual([7.5, 7.5]);
+    const data = Uint8Array.from({ length: 64 }, (_, i) => i);
+    const rgba = colorizeRasterTile(metadata, plan, { width: 8, height: 8, data: [data] });
+    expect(Array.from(rgba.slice(0, 8))).toEqual([0, 0, 0, 255, 1, 1, 1, 255]);
+    expect(Array.from(rgba.slice(-4))).toEqual([63, 63, 63, 255]);
+    expect(data[63]).toBe(63);
+  });
+  it('selects a real overview rather than requesting full-resolution pixels then resizing', () => {
+    const overview = {
+      ...metadata.levels[0],
+      id: 1,
+      width: 2,
+      height: 2,
+      tileWidth: 2,
+      tileHeight: 2,
+      subfileType: 1,
+    };
+    const plan = planRasterTile(
+      { ...metadata, levels: [metadata.levels[0], overview] },
+      [0, 0, 8, 8],
+      identity,
+      {},
+      2,
+    )!;
+    expect(plan.request.level).toBe(1);
+    expect(plan.request.window).toEqual([0, 0, 2, 2]);
+  });
+  it('renders NoData and out-of-coverage pixels transparent', () => {
+    const nd = { ...metadata, noData: 0 },
+      plan = planRasterTile(nd, [0, 0, 8, 8], identity, {}, 8)!;
+    const rgba = colorizeRasterTile(nd, plan, {
+      width: 8,
+      height: 8,
+      data: [Uint8Array.from({ length: 64 }, (_, i) => i)],
+    });
+    expect(rgba[3]).toBe(0);
+    expect(rgba[7]).toBe(255);
+    expect(planRasterTile(metadata, [20, 20, 30, 30], identity)).toBeNull();
+  });
+  it('uses stable explicit ranges for floats and supports palette display', () => {
+    const floats = { ...metadata, levels: [{ ...metadata.levels[0], bits: [32], formats: [3] }] };
+    const style = { ranges: [[0, 3000] as const] },
+      plan = planRasterTile(floats, [0, 0, 8, 8], identity, style, 8)!;
+    const rgba = colorizeRasterTile(
+      floats,
+      plan,
+      { width: 8, height: 8, data: [new Float32Array(64).fill(1500)] },
+      style,
+    );
+    expect(Array.from(rgba.slice(0, 4))).toEqual([128, 128, 128, 255]);
+    const palette = Array(768).fill(0);
+    palette[5] = 65535;
+    const pal = { ...metadata, palette, levels: [{ ...metadata.levels[0], photometric: 3 }] };
+    const palPlan = planRasterTile(pal, [0, 0, 8, 8], identity, {}, 8)!;
+    expect(
+      Array.from(
+        colorizeRasterTile(pal, palPlan, {
+          width: 8,
+          height: 8,
+          data: [new Uint8Array(64).fill(5)],
+        }).slice(0, 4),
+      ),
+    ).toEqual([255, 0, 0, 255]);
+  });
+  it('keeps band sampling independent from opacity and rejects invalid styles', () => {
+    const style = { bands: [0, 0, 0], opacity: 0.5 };
+    const plan = planRasterTile(metadata, [0, 0, 8, 8], identity, style, 8)!;
+    expect(plan.request.samples).toEqual([0]);
+    for (const invalid of [
+      { opacity: NaN },
+      { opacity: 2 },
+      { bands: [1] },
+      { ranges: [[2, 1]] },
+      { bands: [0, 0] },
+    ])
+      expect(() => validateRasterStyle(metadata, invalid)).toThrow();
+  });
+  it('bilinear interpolation ignores nodata contributors', () => {
+    const meta = { ...metadata, noData: 0 };
+    const style = { resampling: 'bilinear' as const };
+    const plan = planRasterTile(meta, [0, 0, 8, 8], identity, style, 16)!;
+    const data = new Uint8Array(64).fill(100);
+    data[0] = 0;
+    const rgba = colorizeRasterTile(meta, plan, { width: 8, height: 8, data: [data] }, style);
+    expect(rgba[3]).toBe(0);
+    expect(Array.from(rgba.slice(4, 8))).toEqual([100, 100, 100, 255]);
+  });
+  it('defaults multiband data to RGB without using an alpha band as a color channel', () => {
+    const multiband = {
+      ...metadata,
+      alphaBand: 1,
+      levels: [
+        { ...metadata.levels[0], samples: 4, bits: [16, 16, 16, 16], formats: [1, 1, 1, 1] },
+      ],
+    };
+    expect(rasterBands(multiband, {})).toEqual([0, 2, 3]);
+    expect(rasterBands(metadata, {})).toEqual([0]);
+    expect(rasterBands(multiband, { bands: [2] })).toEqual([2]);
+  });
+  it('renders an individually selected RGB channel as grayscale and preserves its alpha', () => {
+    const rgb = {
+      ...metadata,
+      alphaBand: 3,
+      levels: [
+        {
+          ...metadata.levels[0],
+          samples: 4,
+          photometric: 2,
+          bits: [8, 8, 8, 8],
+          formats: [1, 1, 1, 1],
+        },
+      ],
+    };
+    const style = { bands: [1] };
+    const plan = planRasterTile(rgb, metadata.bounds, identity, style, 8)!;
+    expect(plan.request.samples).toEqual([1, 3]);
+    const pixels = colorizeRasterTile(
+      rgb,
+      plan,
+      { width: 8, height: 8, data: [new Uint8Array(64).fill(75), new Uint8Array(64).fill(128)] },
+      style,
+    );
+    expect(Array.from(pixels.slice(0, 4))).toEqual([75, 75, 75, 128]);
+  });
+  it('uses the selected source band statistics rather than the first band statistics', () => {
+    const numeric = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          samples: 3,
+          photometric: 2,
+          bits: [16, 16, 16],
+          formats: [1, 1, 1],
+        },
+      ],
+      statistics: [
+        { min: 0, max: 100, p02: 0, p98: 100, count: 64, approximate: false },
+        { min: 1000, max: 2000, p02: 1000, p98: 2000, count: 64, approximate: false },
+        { min: 10000, max: 20000, p02: 10000, p98: 20000, count: 64, approximate: false },
+      ],
+    };
+    const style = { bands: [1] };
+    const plan = planRasterTile(numeric, metadata.bounds, identity, style, 8)!;
+    const pixels = colorizeRasterTile(
+      numeric,
+      plan,
+      { width: 8, height: 8, data: [new Uint16Array(64).fill(1500)] },
+      style,
+    );
+    expect(Array.from(pixels.slice(0, 4))).toEqual([128, 128, 128, 255]);
+  });
+  it('keeps native palette display by default but renders explicitly selected samples as gray', () => {
+    const palette = Array(768).fill(0);
+    palette[5] = 65535;
+    const pal = { ...metadata, palette, levels: [{ ...metadata.levels[0], photometric: 3 }] };
+    const style = { bands: [0] };
+    const plan = planRasterTile(pal, metadata.bounds, identity, style, 8)!;
+    expect(
+      Array.from(
+        colorizeRasterTile(
+          pal,
+          plan,
+          { width: 8, height: 8, data: [new Uint8Array(64).fill(5)] },
+          style,
+        ).slice(0, 4),
+      ),
+    ).toEqual([5, 5, 5, 255]);
+  });
+});
+
+describe('allocation-light bilinear display', () => {
+  const meta: RasterMetadata = {
+    ...metadata,
+    bounds: [0, 0, 2, 2],
+    origin: [0, 2],
+    alphaBand: 3,
+    levels: [
+      {
+        ...metadata.levels[0],
+        width: 2,
+        height: 2,
+        tileWidth: 2,
+        tileHeight: 2,
+        samples: 4,
+        bits: [32, 32, 32, 32],
+        formats: [3, 3, 3, 3],
+        photometric: 2,
+      },
+    ],
+  };
+  it('preserves channel order, interpolation weights, edge clamping and unassociated alpha', () => {
+    const style = {
+      bands: [2, 0, 1],
+      ranges: [
+        [0, 100],
+        [0, 100],
+        [0, 100],
+      ] as const,
+      resampling: 'bilinear' as const,
+    };
+    const plan = planRasterTile(meta, meta.bounds, identity, style, 4)!;
+    const data = [
+      new Float32Array([30, 50, 70, 90]),
+      new Float32Array([10, 30, 50, 70]),
+      new Float32Array([20, 40, 60, 80]),
+      new Float32Array([0.25, 0.5, 0.75, 1]),
+    ];
+    const rgba = colorizeRasterTile(meta, plan, { width: 2, height: 2, data }, style);
+    expect(Array.from(rgba.slice(20, 24))).toEqual([115, 64, 89, 64]);
+    expect(Array.from(rgba.slice(0, 4))).toEqual([77, 26, 51, 64]);
+    expect(Array.from(rgba.slice(-4))).toEqual([230, 179, 204, 255]);
+    expect(Array.from(data[0])).toEqual([30, 50, 70, 90]);
+  });
+  it('does not classify an interpolated value equal to nodata as an invalid source sample', () => {
+    const gray = {
+      ...metadata,
+      origin: [0, 2] as const,
+      bounds: [0, 0, 2, 2] as const,
+      noData: 0,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 2,
+          height: 2,
+          tileWidth: 2,
+          tileHeight: 2,
+          bits: [32],
+          formats: [3],
+        },
+      ],
+    };
+    const style = { bands: [0], ranges: [[-1, 1]] as const, resampling: 'bilinear' as const };
+    const plan = planRasterTile(gray, gray.bounds, identity, style, 1)!;
+    const rgba = colorizeRasterTile(
+      gray,
+      plan,
+      { width: 2, height: 2, data: [new Float32Array([-1, 1, 1, -1])] },
+      style,
+    );
+    expect(Array.from(rgba)).toEqual([128, 128, 128, 255]);
+  });
+});

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import { exampleIds } from '../../docs-meta/examples';
 import { runtimeAssetsPlugin } from './build/runtime-assets-plugin';
+import { upstreamBrowserBuiltinsPlugin } from './build/upstream-browser-builtins-plugin';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
@@ -664,6 +665,10 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../../src/integrations/geopackage/index.ts', import.meta.url)),
       },
       {
+        find: '@mapseekai/emap/geotiff',
+        replacement: fileURLToPath(new URL('../../src/integrations/geotiff/index.ts', import.meta.url)),
+      },
+      {
         find: '@mapseekai/emap',
         replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
       },
@@ -674,7 +679,12 @@ export default defineConfig({
     __EMAP_ASSET_MODE__: JSON.stringify(assetMode),
     __EMAP_VERSION__: JSON.stringify(version),
   },
-  plugins: [examplesBrandPlugin(), examplesRouteRewritePlugin(), runtimeAssetsPlugin()],
+  plugins: [
+    upstreamBrowserBuiltinsPlugin(),
+    examplesBrandPlugin(),
+    examplesRouteRewritePlugin(),
+    runtimeAssetsPlugin(),
+  ],
   build: {
     chunkSizeWarningLimit: 2500,
     emptyOutDir: true,

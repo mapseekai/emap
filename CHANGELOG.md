@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Reduce raster fragmentation with a configurable 60ms ready-tile presentation
+  window; flush completed batches immediately without waiting for slow siblings.
+- Reuse bounded compressed file pages and decoded TIFF blocks; accelerate numeric
+  row assembly and nearest display while preserving fallback codecs and values.
+  Release all additional caches/timers on cancellation or disposal; add opt-in
+  same-local-file throughput benchmarks and cache/correctness regressions.
+
+- Recognize three-band MINISBLACK/RGB overview tag differences without changing
+  raw sample values or memory budgets. Keep alpha and incompatible colorspaces
+  guarded, reject unusable explicitly selected `.ovr` files before pixel reads,
+  and clarify that external overviews must be explicitly selected in the example.
+
+- Remove Vite browser-build warnings from the local examples: guard the upstream
+  GeoPackage SQL.js Node-only fallbacks without broad polyfills, remove stale root
+  `/style.css` links, and mark the packaged GeoTIFF sibling Worker URL as runtime-resolved.
+
+- Release removed GeoTIFF metadata with weak plugin ownership; clear decoder
+  directory/file references on disposal and keep serial read sentinels free of
+  decoded pixel results.
+- Complete raster teardown even when a custom source throws, settle cancelled
+  waiters without retaining consumers of uncooperative read promises, and clean
+  pending Worker callbacks/listeners/timers. Clear removed example File references.
+- Explicitly release map and overlay canvas backing pixels and drop example
+  debugging Fiber/file handles on map disposal.
+- Add Chromium forced-GC regressions for repeated load/navigation/removal,
+  plugin restarts, map disposal, and externally retained cancelled reads.
+
+- Default multiband rasters to RGB while allowing an explicit single-band gray
+  view with channel selection. Preserve alpha, use the selected band's statistics,
+  and clear obsolete channel ranges when switching bands. Add example controls
+  and regressions for RGB/gray switching and automatic single-band selection.
+- Auto-stretch non-UInt8 raster values using bounded source-wide statistics,
+  preserving original samples and excluding nodata/non-finite/transparent values.
+  Add Float16 decoding, explicit stretch modes and numerical raster examples.
+- Hold raster viewport I/O during wheel/drag/camera navigation; after idle,
+  progressively present ready tiles with disjoint old-resolution fallback clips.
+  Preserve partial presentations across interruptions; never double-blend alpha
+  or show stale raster data through ready NoData regions. Failed tiles no longer
+  cancel sibling reads. Compact fallback fragments under the existing cache budget.
+  Opacity changes reuse pixels; expose progressive `presentedTiles` diagnostics.
+
+### Added
+
+- Add optional `/geotiff` with local-file range reading, a self-contained decoder
+  Worker, read-only raster services, bounded tile caching and Canvas render passes.
+- Require valid pyramids before decoding original files strictly above 2GiB;
+  validate internal IFD/SubIFD and explicitly associated `.ovr` overviews.
+- Add RGB/grayscale/palette display, numeric bands, NoData/unassociated alpha,
+  fixed ranges, nearest/bilinear resampling, display reprojection and pixel queries.
+- Add JSON-safe external references and handle-based reopening without storing
+  source bytes; host/Loom persistence remains a separate integration.
+- Add bilingual raster guides, a local-file example and browser regression tests.
+
+### Compatibility
+
+- Raster layers currently form a stack below vector layers. Rotated/sheared grids,
+  independent validity masks, associated alpha and unsupported sample/color
+  formats are rejected explicitly. Real multi-gigabyte throughput is not yet benchmarked.
+- Custom painter/render providers must implement the new `drawRasterImage` and
+  `registerPass` rendering contracts to host raster plugins.
+
 ## [0.12.0] - 2026-09-15
 
 Changes since [v0.11.2](https://github.com/mapseekai/emap/compare/v0.11.2...v0.12.0).

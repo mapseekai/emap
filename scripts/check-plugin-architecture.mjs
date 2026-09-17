@@ -81,7 +81,7 @@ function visitEntry(file) {
   for (const dependency of graph.get(file) ?? []) visitEntry(dependency);
 }
 visitEntry('src/index.ts');
-for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts', 'src/integrations/geopackage/index.ts']) {
+for (const forbidden of ['src/integrations/maplibre/plugin.ts', 'src/integrations/arrow/index.ts', 'src/integrations/duckdb/index.ts', 'src/integrations/geopackage/index.ts', 'src/integrations/geotiff/index.ts']) {
   if (reachable.has(forbidden)) violations.push(`Default entry eagerly imports optional provider: ${forbidden}`);
 }
 if (violations.length) throw new Error(violations.join('\n'));

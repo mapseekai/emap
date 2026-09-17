@@ -1216,6 +1216,52 @@ export class CanvasPainter implements EditPainter {
     }
   }
 
+  drawRasterImage(
+    image: CanvasImageSource,
+    bounds: readonly [number, number, number, number],
+    opacity = 1,
+    smoothing = true,
+    clipBounds?: readonly [number, number, number, number],
+  ): void {
+    const [left, top] = this._transform.project(bounds[0], bounds[3]);
+    const [right, bottom] = this._transform.project(bounds[2], bounds[1]);
+    if (![left, top, right, bottom, opacity].every(Number.isFinite) || opacity <= 0) return;
+    const ctx = this._ctx,
+      pr = this._pixelRatio;
+    // Every raster edge shares the same device-pixel quantization. Fractional
+    // antialiased clip edges otherwise leave seams or multiply translucent pixels.
+    const x0 = Math.round(left * pr),
+      y0 = Math.round(top * pr);
+    const x1 = Math.round(right * pr),
+      y1 = Math.round(bottom * pr);
+    if (x1 <= x0 || y1 <= y0) return;
+    let clip: [number, number, number, number] | undefined;
+    if (clipBounds) {
+      const [cl, ct] = this._transform.project(clipBounds[0], clipBounds[3]);
+      const [cr, cb] = this._transform.project(clipBounds[2], clipBounds[1]);
+      if (![cl, ct, cr, cb].every(Number.isFinite)) return;
+      const cx0 = Math.max(x0, Math.round(cl * pr)),
+        cy0 = Math.max(y0, Math.round(ct * pr));
+      const cx1 = Math.min(x1, Math.round(cr * pr)),
+        cy1 = Math.min(y1, Math.round(cb * pr));
+      if (cx1 <= cx0 || cy1 <= cy0) return;
+      clip = [cx0, cy0, cx1 - cx0, cy1 - cy0];
+    }
+    ctx.save();
+    try {
+      if (clip) {
+        ctx.beginPath();
+        ctx.rect(...clip);
+        ctx.clip();
+      }
+      ctx.globalAlpha = Math.min(1, opacity);
+      ctx.imageSmoothingEnabled = smoothing;
+      ctx.drawImage(image, x0, y0, x1 - x0, y1 - y0);
+    } finally {
+      ctx.restore();
+    }
+  }
+
   clear(): void {
     this._computedStyle = undefined;
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);

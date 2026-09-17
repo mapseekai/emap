@@ -86,6 +86,15 @@ export interface ArrowDotPathOptions {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
+  /** Draw a north-up image in map coordinates without exposing the native canvas. */
+  drawRasterImage(
+    image: CanvasImageSource,
+    bounds: readonly [number, number, number, number],
+    opacity?: number,
+    smoothing?: boolean,
+    /** Map-coordinate subregion; shared boundaries are snapped to device pixels. */
+    clipBounds?: readonly [number, number, number, number],
+  ): void;
   drawPaths(
     shapes: readonly (FeatureShape | null | undefined)[],
     style: StrokeStyle,

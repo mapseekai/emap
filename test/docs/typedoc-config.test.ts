@@ -7,6 +7,10 @@ const config = JSON.parse(readFileSync(resolve(root, 'typedoc.json'), 'utf8'));
 const plugin = readFileSync(resolve(root, 'scripts/typedoc-hide-internals.mjs'), 'utf8');
 
 describe('TypeDoc configuration', () => {
+  it('emits declarations for every documented public entry point', () => {
+    const build = JSON.parse(readFileSync(resolve(process.cwd(), 'tsconfig.build.json'), 'utf8'));
+    expect(build.include).toEqual(expect.arrayContaining(config.entryPoints));
+  });
   it('builds every supported public entry point and excludes @internal declarations', () => {
     expect(config.entryPoints).toEqual([
       'src/index.ts',
@@ -20,6 +24,7 @@ describe('TypeDoc configuration', () => {
       'src/runtime/ai/index.ts',
       'src/integrations/maplibre/index.ts',
       'src/integrations/geopackage/index.ts',
+      'src/integrations/geotiff/index.ts',
     ]);
     expect(config.excludeInternal).toBe(true);
     expect(config.treatWarningsAsErrors).toBe(true);

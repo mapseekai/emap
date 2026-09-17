@@ -21,7 +21,8 @@
     "src/integrations/arrow/index.ts",
     "src/integrations/duckdb/index.ts",
     "src/shared/types/**/*.d.ts",
-    "src/integrations/geopackage/index.ts"
+    "src/integrations/geopackage/index.ts",
+    "src/integrations/geotiff/index.ts"
   ],
   "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

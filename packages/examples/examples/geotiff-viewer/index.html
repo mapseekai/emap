@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Emap 示例 - 本地 GeoTIFF 栅格</title>
+<style>
+#metadata, #references { white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.5;max-height:240px;overflow:auto; }
+.metric { display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--emap-example-border); }
+</style>
+</head>
+<body class="emap-example-with-floating-header">
+<div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a><strong>本地 GeoTIFF 栅格</strong></div>
+<div id="map" tabindex="0"></div>
+<details class="emap-example-workbench panel" open>
+<summary><h1>原文件引用 · 按视口读取</h1></summary>
+<div class="emap-example-workbench-body">
+<section class="emap-example-section">
+<div class="emap-example-field"><label for="file-input">原始 TIFF / BigTIFF</label><input id="file-input" type="file" accept=".tif,.tiff" /></div>
+<div class="emap-example-field"><label for="overview-input">外部金字塔（可选）</label><input id="overview-input" type="file" accept=".ovr" /></div>
+<p class="emap-example-hint">使用外部金字塔时，请在上方明确选择同名 .tif.ovr；只选择原图不会自动读取同目录文件。</p>
+<div class="emap-example-field"><label for="crs">源坐标系（留空自动识别）</label><input id="crs" type="text" placeholder="EPSG:4326" /></div>
+<div class="emap-example-field"><label for="sample-type">内置测试影像</label><select id="sample-type"><option value="example-geotiff.tif">8 位 RGB</option><option value="example-geotiff-uint16.tif">16 位无符号整数</option><option value="example-geotiff-int16.tif">16 位带符号整数</option><option value="example-geotiff-float32.tif">32 位浮点 DEM</option><option value="example-geotiff-float64.tif">64 位浮点</option></select></div>
+<div class="emap-example-row"><button id="load" class="emap-example-primary-button">加载选定文件</button><button id="sample">加载示例</button><button id="cancel" disabled>取消</button></div>
+<p id="status" class="emap-example-status" role="status">初始化地图…</p>
+<p class="emap-example-hint">超过 2GiB（2,147,483,648 字节）且没有有效金字塔时，强制阻止加载。必须先创建内部金字塔，或选择同名 .tif.ovr 文件；没有跳过选项。</p>
+<details id="pyramid-help"><summary>如何创建金字塔</summary><p>可用 QGIS 构建金字塔，或在安装了 GDAL 的终端执行（不会修改原始 TIFF）：</p><pre>gdaladdo -ro -r average "image.tif"</pre><p>分类栅格使用 -r nearest。创建后同时选择原始 TIFF 和 image.tif.ovr，再加载。</p></details>
+</section>
+<section class="emap-example-section">
+<div class="metric"><span>文件大小</span><strong id="size">—</strong></div>
+<div class="metric"><span>可用分辨率层级</span><strong id="levels">0</strong></div>
+<div class="metric"><span>显示缓存</span><strong id="cache">0 MiB</strong></div>
+<div class="metric"><span>块更新 / 完整视图</span><strong id="render-progress">0 / 0</strong></div>
+<div class="emap-example-field"><label for="render-mode">渲染模式</label><select id="render-mode" disabled><option value="rgb">RGB 多波段彩色</option><option value="gray">单波段灰度</option><option value="palette" hidden>原始调色板</option></select></div>
+<div id="rgb-bands">
+<div class="emap-example-field"><label for="red-band">红色通道 R</label><select id="red-band" disabled></select></div>
+<div class="emap-example-field"><label for="green-band">绿色通道 G</label><select id="green-band" disabled></select></div>
+<div class="emap-example-field"><label for="blue-band">蓝色通道 B</label><select id="blue-band" disabled></select></div>
+</div>
+<div id="gray-bands" hidden><div class="emap-example-field"><label for="gray-band">灰度波段</label><select id="gray-band" disabled></select></div></div>
+<p id="band-hint" class="emap-example-hint">三个及以上可用波段默认 RGB；单波段自动灰度。波段编号从 1 开始。</p>
+<div class="emap-example-field"><label for="stretch">显示拉伸</label><select id="stretch"><option value="auto">自动（高位深 2%–98%）</option><option value="minmax">最小值 / 最大值</option><option value="percentile">2%–98% 百分位</option><option value="none">类型范围（不自动拉伸）</option></select></div>
+<div class="emap-example-field"><label for="opacity">透明度</label><input id="opacity" type="range" min="0" max="1" step="0.05" value="1" /></div>
+<div class="emap-example-field"><label for="resampling">重采样</label><select id="resampling"><option value="nearest">最近邻</option><option value="bilinear">双线性</option></select></div>
+<div class="emap-example-row"><button id="fit">缩放到栅格</button><button id="remove">移除栅格</button><button id="save-reference">查看工程引用</button></div>
+<p class="emap-example-hint">高位深显示统一拉伸到 8 位；原始数值不变。缩放期间保留已有影像，停止后按 60ms 短窗口成组更新，全部完成则立即呈现；未就绪区域继续显示旧缓存。文件和像素不写入 OPFS / IndexedDB。这里仅展示可保存的 JSON 引用；文件句柄的保存与恢复由宿主工程管理。</p>
+<pre id="metadata"></pre><pre id="references"></pre>
+</section>
+</div></details>
+<script type="module">
+import { attachRasterBandControls } from '/src/raster-band-controls.ts';
+import { rasterPlugin, geoTIFFPlugin } from '@mapseekai/emap/geotiff';
+import { loadExampleRuntime, installExampleMapUi } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const base = '/mapseekai/emap/examples/';
+const rasterFeature = rasterPlugin({ cacheBytes: 32 * 1024 ** 2, concurrency: 2 });
+const loader = geoTIFFPlugin({ workerUrl: base + 'emap-geotiff-worker.js' });
+const map = await emap.Emap.create({ container: 'map', preset: 'viewer' });
+const rasterFiber = map.ctx.plugin(rasterFeature); await rasterFiber.await();
+const loaderFiber = map.ctx.plugin(loader); await loaderFiber.await();
+const status = document.getElementById('status');
+let generation = 0, controller, currentId = null;
+const state = { map, rasterFiber, loaderFiber, loading: false, metadata: null, error: null, errorCode: null, currentId: null, file: null };
+window.geotiffDemo = state;
+const bandControls = attachRasterBandControls(style => {
+  if (!currentId) return;
+  try {
+    map.ctx.raster.setStyle(currentId, style);
+    status.textContent = style.bands?.length === 1 ? `单波段灰度 · 波段 ${style.bands[0]+1}` : style.bands ? `RGB 多波段彩色 · ${style.bands.map(band=>band+1).join(' / ')}` : '原始调色板';
+  } catch (error) { state.error = error.message; status.textContent = error.message; }
+});
+const fit = async () => {
+  if (!currentId) return;
+  const bounds = await map.ctx.raster.getBounds(currentId);
+  map.fitBounds(new emap.Bounds(...bounds), { padding: 40, duration: 0 });
+};
+async function load(file, overviewFile) {
+  controller?.abort(); const signal = (controller = new AbortController()).signal;
+  const run = ++generation, id = `raster-${run}`;
+  state.loading = true; state.error = null; state.errorCode = null;
+  document.getElementById('cancel').disabled = false;
+  status.textContent = '检查金字塔与资源预算，抽样统计波段范围…';
+  try {
+    const metadata = await map.ctx.geoTIFF.addFile(id, file, { overviewFile, signal, crs: document.getElementById('crs').value || undefined });
+    if (run !== generation) { map.ctx.raster.remove(id); return; }
+    if (currentId) map.ctx.raster.remove(currentId);
+    currentId = id; state.currentId = id; state.metadata = metadata; state.file = file;
+    document.getElementById('size').textContent = `${(file.size / 1024 ** 2).toFixed(2)} MiB`;
+    document.getElementById('levels').textContent = String(metadata.levels.length);
+    document.getElementById('metadata').textContent = JSON.stringify({ filename: metadata.filename, crs: metadata.crs, bounds: metadata.bounds, levels: metadata.levels.map(level => `${level.width} × ${level.height}`), bigTiff: metadata.bigTiff, externalOverview: metadata.overviewFile?.filename ?? null, bits: metadata.levels[0].bits, sampleFormats: metadata.levels[0].formats, statistics: metadata.statistics, storage: 'external-file' }, null, 2);
+    document.getElementById('opacity').value = '1';
+    document.getElementById('stretch').value = 'auto';
+    document.getElementById('resampling').value = 'nearest';
+    bandControls.setSource(metadata);
+    await fit();
+    status.textContent = `${file.name} · Web Worker · 已加载，像素按视口读取`;
+  } catch (error) {
+    if (run !== generation) return;
+    state.error = error.message; state.errorCode = error.code ?? error.name;
+    status.textContent = signal.aborted ? '已取消；之前的栅格保持不变' : error.message;
+    if (error.code === 'PYRAMID_REQUIRED') document.getElementById('pyramid-help').open = true;
+  } finally {
+    if (run === generation) { state.loading = false; document.getElementById('cancel').disabled = true; }
+  }
+}
+state.load = load;
+state.fit = fit;
+state.stats = () => map.ctx.raster.getStats();
+map.ctx.mapEvents.on('rastererror', ({ error }) => { state.error = error.message; state.errorCode = error.code ?? error.name; status.textContent = error.message; });
+async function sample() {
+  const filename = document.getElementById('sample-type').value;
+  const response = await fetch(base + 'fixtures/' + filename);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  await load(new File([await response.blob()], filename));
+}
+document.getElementById('sample').onclick = () => void sample().catch(error => { status.textContent = error.message; });
+document.getElementById('load').onclick = () => { const file = document.getElementById('file-input').files?.[0]; if (file) void load(file, document.getElementById('overview-input').files?.[0]); };
+document.getElementById('cancel').onclick = () => controller?.abort();
+document.getElementById('fit').onclick = () => void fit();
+document.getElementById('opacity').oninput = event => { if (currentId) map.ctx.raster.setStyle(currentId, { opacity: Number(event.target.value) }); };
+document.getElementById('stretch').onchange = event => { if (currentId) map.ctx.raster.setStyle(currentId, { stretch: event.target.value, ranges: undefined }); };
+document.getElementById('resampling').onchange = event => { if (currentId) map.ctx.raster.setStyle(currentId, { resampling: event.target.value }); };
+document.getElementById('remove').onclick = () => { if (currentId) map.ctx.raster.remove(currentId); currentId = state.currentId = null; state.metadata = null; state.file = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('overview-input').value = '';
+  document.getElementById('metadata').textContent = '';
+  document.getElementById('references').textContent = '';
+  bandControls.setSource(null); document.getElementById('levels').textContent = '0'; status.textContent = '栅格已移除；磁盘原文件保持不变'; };
+document.getElementById('save-reference').onclick = () => { document.getElementById('references').textContent = JSON.stringify(map.ctx.raster.toReferences(), null, 2); };
+const timer = setInterval(() => { const raster = map.ctx.get('raster'); if (raster) { const stats = raster.getStats(); document.getElementById('cache').textContent = `${(stats.cachedBytes / 1024 ** 2).toFixed(1)} MiB`; document.getElementById('render-progress').textContent = `${stats.presentedTiles} / ${stats.committedFrames}${stats.interacting ? ' · 交互中' : stats.pendingFrames ? ' · 渐进加载' : ''}`; } }, 500);
+const onPageHide = () => { void map.dispose(); };
+window.addEventListener('pagehide', onPageHide, { once: true });
+map.ctx.effect(() => () => {
+  clearInterval(timer);
+  bandControls.dispose();
+  window.removeEventListener('pagehide', onPageHide);
+  generation++;
+  controller?.abort();
+  controller = undefined;
+  currentId = state.currentId = null;
+  state.file = state.metadata = null;
+  // Debugging handles are host-owned references. Drop them when the map ends.
+  state.rasterFiber = state.loaderFiber = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('overview-input').value = '';
+  for (const id of ['sample','load','cancel','fit','remove','save-reference','opacity','stretch','resampling']) {
+    const control = document.getElementById(id);
+    control.onclick = control.oninput = control.onchange = null;
+  }
+});
+await sample();
+await installExampleMapUi(map, emap);
+</script>
+</body></html>

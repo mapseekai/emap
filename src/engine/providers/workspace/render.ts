@@ -1,3 +1,4 @@
+import type { RenderPass, RenderFrame } from '../../../runtime/services/contracts/render-pass';
 import { EventDispatcher } from '../../core/events';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { PointLodPick } from '../../map/feature-query';
@@ -41,6 +42,40 @@ interface Dependencies {
 
 /** render implementation, wired through explicit service dependencies. */
 export class CanvasRenderService {
+  private readonly _passes = new Map<RenderPass, 'before-layers' | 'after-layers'>();
+
+  registerPass(
+    pass: RenderPass,
+    stage: 'before-layers' | 'after-layers' = 'before-layers',
+  ): () => void {
+    if (this._passes.has(pass)) throw new Error('Render pass is already registered');
+    this._passes.set(pass, stage);
+    this._scheduleRender();
+    return () => {
+      if (this._passes.delete(pass)) this._scheduleRender();
+    };
+  }
+
+  private _renderPasses(stage: 'before-layers' | 'after-layers'): void {
+    if (!this._passes.size) return;
+    const viewport = this.deps.view._viewport;
+    const frame: RenderFrame = {
+      transform: viewport.transform.clone(),
+      width: viewport.width,
+      height: viewport.height,
+      pixelRatio: window.devicePixelRatio || 1,
+      painter: this._painter,
+    };
+    for (const [pass, position] of this._passes) {
+      if (position !== stage) continue;
+      try {
+        pass(frame);
+      } catch (error) {
+        this.deps.events.fire('error', { error });
+      }
+    }
+  }
+
   beginNavigation(): void {
     this._ensureNavSnapshot();
   }
@@ -58,10 +93,12 @@ export class CanvasRenderService {
     }, delay);
   }
   cancelNavigation(): void {
+    const wasNavigating = this._navSnapshotTransform !== null;
     if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
     this._wheelSettleTimer = null;
     this._navSnapshotTransform = null;
     this._clearFastTransform();
+    if (wasNavigating) this.deps.events.fire('interactionend');
     this._scheduleRender();
   }
 
@@ -99,6 +136,7 @@ export class CanvasRenderService {
     if (this._navSnapshotTransform) return;
     const t = this.deps.view._viewport.transform;
     this._navSnapshotTransform = { mx: t.mx, my: t.my, bx: t.bx, by: t.by };
+    this.deps.events.fire('interactionstart');
   }
 
   _computeNavDelta(): AffineDelta {
@@ -216,7 +254,9 @@ export class CanvasRenderService {
 
     const lineScale = this.deps.view._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
+    this._renderPasses('before-layers');
     this._renderLayers(pixelSize, lineScale);
+    this._renderPasses('after-layers');
     this._renderHighlight(transform, lineScale);
     this._renderEditOverlay();
   }
@@ -349,10 +389,17 @@ export class CanvasRenderService {
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
     this._wheelSettleTimer = null;
+    this._passes.clear();
     this._scheduler?.dispose();
     this.clearLodCache();
-    this._canvas?.remove();
-    this._overlayCanvas?.remove();
+    // Detaching a DOM node alone does not release backing pixels when a host
+    // still retains a disposed map/provider handle for diagnostics.
+    for (const canvas of [this._canvas, this._overlayCanvas]) {
+      if (!canvas) continue;
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas.remove();
+    }
   }
 
   getPointLodPick(

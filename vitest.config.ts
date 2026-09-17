@@ -49,6 +49,10 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('./src/integrations/geopackage/index.ts', import.meta.url)),
       },
       {
+        find: '@mapseekai/emap/geotiff',
+        replacement: fileURLToPath(new URL('./src/integrations/geotiff/index.ts', import.meta.url)),
+      },
+      {
         find: '@mapseekai/emap',
         replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       },

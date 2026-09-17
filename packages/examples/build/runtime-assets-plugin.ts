@@ -21,6 +21,11 @@ const examplesBuildRoot = resolve(examplesRoot, 'dist');
 
 const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
   {
+    requestPath: 'emap-geotiff-worker.js', buildPath: 'emap-geotiff-worker.js',
+    developmentSource: 'emap-geotiff-worker.js', productionSource: 'emap-geotiff-worker.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  {
     requestPath: 'vendor/mapshaper-vendor.js',
     buildPath: 'vendor/mapshaper-vendor.js',
     developmentSource: 'mapshaper-vendor.js',

@@ -10,6 +10,7 @@ const entryPoints = [
   { label: '@mapseekai/emap', path: 'src/index.ts' },
   { label: '@mapseekai/emap/arrow', path: 'src/integrations/arrow/index.ts' },
   { label: '@mapseekai/emap/duckdb', path: 'src/integrations/duckdb/index.ts' },
+  { label: '@mapseekai/emap/geotiff', path: 'src/integrations/geotiff/index.ts' },
   { label: '@mapseekai/emap/geopackage', path: 'src/integrations/geopackage/index.ts' },
   { label: '@mapseekai/emap/context', path: 'src/runtime/context/index.ts' },
   { label: '@mapseekai/emap/services', path: 'src/runtime/services/index.ts' },

@@ -212,6 +212,18 @@ function commonPlugins() {
 }
 
 export default [
+  // Optional local GeoTIFF decoder. Classic Worker, self-contained; no vendor imports.
+  {
+    input: 'src/integrations/geotiff/worker-entry.ts',
+    onwarn: quietKnownCircularWarnings,
+    output: {
+      file: 'dist/emap-geotiff-worker.js',
+      format: 'iife',
+      inlineDynamicImports: true,
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
   // Vendor IIFE — bundles mapshaper + the shim, registers
   // `globalThis.mapshaper` as a side effect of loading. Both the main and
   // worker bundles below treat `mapshaper` as an external global, so this
@@ -272,6 +284,7 @@ export default [
       'emap-ai': 'src/runtime/ai/index.ts',
       'emap-maplibre': 'src/integrations/maplibre/index.ts',
       'emap-geopackage': 'src/integrations/geopackage/index.ts',
+      'emap-geotiff': 'src/integrations/geotiff/index.ts',
     },
     external: ['cordis', 'maplibre-gl', 'mapshaper'],
     onwarn: quietKnownCircularWarnings,
