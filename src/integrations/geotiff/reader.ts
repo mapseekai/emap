@@ -405,6 +405,16 @@ export class GeoTIFFReader implements RasterSource {
     this.blockCache.clearAccessTrace();
   }
 
+  getNativeDeflateStatus() {
+    const diagnostics = getNativeDeflateDiagnostics();
+    return {
+      compressionCodes: diagnostics.compressionCodes,
+      available: diagnostics.available,
+      eligible: diagnostics.eligible,
+      disabledReason: diagnostics.disabledReason,
+    };
+  }
+
   getTaskDiagnosticsSnapshot() {
     const io = this.sources.reduce(
       (sum, source) => {

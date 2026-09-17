@@ -38,6 +38,23 @@ describe('native numeric window assembly', () => {
     expect(actual.height).toBe(4);
     expect(actual.data).toEqual(Array.from(expected));
   });
+  it('decodes TIFF Compression 32946 through the same DEFLATE fast path', async () => {
+    const input = await image({
+      width: 9,
+      height: 7,
+      bands: 3,
+      compression: 'deflate-old',
+      pixelValue: (x, y, b) => b * 30 + x * 2 + y,
+    });
+    const request = { level: 0, window: [1, 1, 8, 6] as const, samples: [0, 2] };
+    const expected = await input.readRasters({
+      window: [...request.window],
+      samples: [...request.samples],
+      interleave: false,
+    });
+    const actual = await readNumericWindow(input, request);
+    expect(actual.data).toEqual(Array.from(expected));
+  });
   it('copies the selected nonzero band from planar data, not band zero', async () => {
     const input = await image({ bits: 16, bands: 3 });
     input.planarConfiguration = 2;

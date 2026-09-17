@@ -155,6 +155,19 @@ export interface RasterLevelProcessingStats {
   readonly assembleMs: number;
   readonly colorizeMs: number;
 }
+export type RasterNativeDeflateDisabledReason =
+  | 'unsupported-compression'
+  | 'decompression-stream-unavailable'
+  | 'response-unavailable'
+  | 'unsupported-predictor'
+  | 'mixed-bits'
+  | 'unsupported-bits';
+export interface RasterNativeDeflateStatus {
+  readonly compressionCodes: readonly number[];
+  readonly available: boolean;
+  readonly eligible: boolean;
+  readonly disabledReason: RasterNativeDeflateDisabledReason | null;
+}
 export interface RasterWorkerBlockStats {
   readonly worker: number;
   readonly requests: number;
@@ -194,6 +207,7 @@ export interface RasterProcessingStats {
   readonly nativeDeflateBlocks: number;
   readonly nativeDeflateFallbacks: number;
   readonly nativeDeflateMs: number;
+  readonly nativeDeflateStatus: RasterNativeDeflateStatus;
   readonly workerMs: number;
   readonly fileReadMs: number;
   readonly fileReadBytes: number;

@@ -203,6 +203,15 @@ function performanceSnapshot() {
         nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'),
         blockLoadMs:delta('blockLoadMs'), colorizeMs:delta('colorizeMs') };
     }).filter(item => item.submitted || item.completed || item.cancelled || item.fileReadOps),
+    nativeDeflate: {
+      compressionCodes:processing?.nativeDeflateStatus?.compressionCodes ?? [],
+      available:Boolean(processing?.nativeDeflateStatus?.available),
+      eligible:Boolean(processing?.nativeDeflateStatus?.eligible),
+      disabledReason:processing?.nativeDeflateStatus?.disabledReason ?? null,
+      blocks:performanceDelta(processing,bproc,'nativeDeflateBlocks'),
+      fallbacks:performanceDelta(processing,bproc,'nativeDeflateFallbacks'),
+      ms:performanceDelta(processing,bproc,'nativeDeflateMs'),
+    },
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),

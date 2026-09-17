@@ -58,10 +58,12 @@ scope.onmessage = ({ data }) => {
         const cursor = reader.getBlockAccessCursor();
         try {
           const result = await renderRasterWindow(reader, data.request, controller.signal);
-          const blockAccess = reader.takeBlockAccessesSince(cursor);
-          scope.postMessage({ id: data.id, type: 'rendered', result, blockAccess }, [
-            result.rgba.buffer,
-          ]);
+          const blockAccess = reader.takeBlockAccessesSince(cursor),
+            nativeDeflateStatus = reader.getNativeDeflateStatus();
+          scope.postMessage(
+            { id: data.id, type: 'rendered', result, blockAccess, nativeDeflateStatus },
+            [result.rgba.buffer],
+          );
         } catch (error) {
           reader.takeBlockAccessesSince(cursor);
           throw error;
@@ -70,9 +72,13 @@ scope.onmessage = ({ data }) => {
         const cursor = reader.getBlockAccessCursor();
         try {
           const result = await reader.readWindow(data.request, controller.signal);
-          const blockAccess = reader.takeBlockAccessesSince(cursor);
+          const blockAccess = reader.takeBlockAccessesSince(cursor),
+            nativeDeflateStatus = reader.getNativeDeflateStatus();
           const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
-          scope.postMessage({ id: data.id, type: 'result', result, blockAccess }, transfer);
+          scope.postMessage(
+            { id: data.id, type: 'result', result, blockAccess, nativeDeflateStatus },
+            transfer,
+          );
         } catch (error) {
           reader.takeBlockAccessesSince(cursor);
           throw error;

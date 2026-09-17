@@ -13,6 +13,7 @@ import type {
   RasterRenderResult,
   RasterProcessingStats,
   RasterLevelProcessingStats,
+  RasterNativeDeflateStatus,
 } from '../../domain/raster/types';
 import { validateRasterRender } from '../../engine/rendering/raster/warp';
 import { validateRasterStyle } from '../../engine/rendering/raster/tile';
@@ -222,6 +223,10 @@ class WorkerRasterSource implements RasterSource {
   private nativeDeflateBlocks = 0;
   private nativeDeflateFallbacks = 0;
   private nativeDeflateMs = 0;
+  private nativeDeflateAvailable = false;
+  private nativeDeflateEligible = false;
+  private nativeDeflateDisabledReason: RasterNativeDeflateStatus['disabledReason'] = null;
+  private readonly nativeDeflateCompressionCodes = new Set<number>();
   private physicalBlockRequests = 0;
   private blockLoads = 0;
   private duplicateBlockLoads = 0;
@@ -334,6 +339,15 @@ class WorkerRasterSource implements RasterSource {
     }
     target.add(key);
     return true;
+  }
+  private recordNativeDeflateStatus(status?: RasterNativeDeflateStatus): void {
+    if (!status) return;
+    for (const compression of status.compressionCodes)
+      this.nativeDeflateCompressionCodes.add(compression);
+    this.nativeDeflateAvailable ||= status.available;
+    this.nativeDeflateEligible ||= status.eligible;
+    if (this.nativeDeflateEligible) this.nativeDeflateDisabledReason = null;
+    else if (status.disabledReason) this.nativeDeflateDisabledReason = status.disabledReason;
   }
   private recordBlockAccess(slot: Slot, access?: GeoTIFFWorkerBlockAccess): void {
     if (!access) return;
@@ -515,8 +529,10 @@ class WorkerRasterSource implements RasterSource {
       void result.then(
         (response) => {
           this.pending.delete(job);
-          if (response.type === 'rendered' || response.type === 'result')
+          if (response.type === 'rendered' || response.type === 'result') {
             this.recordBlockAccess(slot, response.blockAccess);
+            this.recordNativeDeflateStatus(response.nativeDeflateStatus);
+          }
           if (response.type === 'rendered') {
             this.renderedTiles++;
             const levelStats =
@@ -700,6 +716,12 @@ class WorkerRasterSource implements RasterSource {
       nativeDeflateBlocks: this.nativeDeflateBlocks,
       nativeDeflateFallbacks: this.nativeDeflateFallbacks,
       nativeDeflateMs: this.nativeDeflateMs,
+      nativeDeflateStatus: {
+        compressionCodes: [...this.nativeDeflateCompressionCodes].sort((a, b) => a - b),
+        available: this.nativeDeflateAvailable,
+        eligible: this.nativeDeflateEligible,
+        disabledReason: this.nativeDeflateEligible ? null : this.nativeDeflateDisabledReason,
+      },
       blockLoadMs: this.blockLoadMs,
       assembleMs: this.assembleMs,
       colorizeMs: this.colorizeMs,

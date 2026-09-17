@@ -52,10 +52,7 @@ export async function readNumericWindow(
       predictor: (await directory.loadValue('Predictor')) || 1,
     },
     upstreamDecoder = await getDecoder(compression, decoderParameters),
-    decoder =
-      compression === 8
-        ? createNativeDeflateDecoder(decoderParameters, upstreamDecoder)
-        : upstreamDecoder;
+    decoder = createNativeDeflateDecoder(compression, decoderParameters, upstreamDecoder);
   signal?.throwIfAborted();
   const output = samples.map((sample) => image.getArrayForSample(sample, w * h));
   const tw = image.getTileWidth(),

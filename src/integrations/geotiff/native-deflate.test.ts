@@ -1,7 +1,11 @@
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 import type { getDecoder } from 'geotiff';
-import { canUseNativeDeflate, createNativeDeflateDecoder } from './native-deflate';
+import {
+  canUseNativeDeflate,
+  createNativeDeflateDecoder,
+  getNativeDeflateCapability,
+} from './native-deflate';
 
 type GeoTIFFDecoder = Awaited<ReturnType<typeof getDecoder>>;
 
@@ -39,11 +43,13 @@ function fallback(): GeoTIFFDecoder {
 }
 
 describe('native DEFLATE decoder', () => {
-  it('inflates and reverses horizontal predictor 2 byte-for-byte', async () => {
+  it.each([
+    8, 32946,
+  ])('inflates TIFF DEFLATE code %i and reverses predictor 2 byte-for-byte', async (compression) => {
     const original = Uint8Array.from({ length: 24 }, (_, i) => (i * 17 + 11) & 255),
       predicted = predictor2Encode(original, 4, 2, 3),
       compressed = deflateSync(predicted),
-      decoder = createNativeDeflateDecoder(parameters, fallback()),
+      decoder = createNativeDeflateDecoder(compression, parameters, fallback()),
       result = new Uint8Array(
         await decoder.decode(
           compressed.buffer.slice(
@@ -59,11 +65,29 @@ describe('native DEFLATE decoder', () => {
     const upstream = fallback();
     vi.stubGlobal('DecompressionStream', undefined);
     try {
-      expect(canUseNativeDeflate(parameters)).toBe(false);
-      const decoder = createNativeDeflateDecoder(parameters, upstream);
+      expect(canUseNativeDeflate(8, parameters)).toBe(false);
+      expect(getNativeDeflateCapability(8, parameters)).toMatchObject({
+        available: false,
+        eligible: false,
+        disabledReason: 'decompression-stream-unavailable',
+      });
+      const decoder = createNativeDeflateDecoder(8, parameters, upstream);
       expect(decoder).toBe(upstream);
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('reports unsupported codecs separately from runtime stream support', () => {
+    expect(getNativeDeflateCapability(32946, parameters)).toMatchObject({
+      compressionCodes: [32946],
+      eligible: true,
+      disabledReason: null,
+    });
+    expect(getNativeDeflateCapability(5, parameters)).toMatchObject({
+      compressionCodes: [5],
+      eligible: false,
+      disabledReason: 'unsupported-compression',
+    });
   });
 });
