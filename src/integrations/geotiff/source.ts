@@ -12,6 +12,7 @@ import type {
   RasterRenderRequest,
   RasterRenderResult,
   RasterProcessingStats,
+  RasterLevelProcessingStats,
 } from '../../domain/raster/types';
 import { validateRasterRender } from '../../engine/rendering/raster/warp';
 import { validateRasterStyle } from '../../engine/rendering/raster/tile';
@@ -41,6 +42,12 @@ interface Slot {
   cachePeakEntries: number;
   cacheLimitBytes: number;
 }
+type MutableLevelStats = {
+  -readonly [K in keyof Omit<RasterLevelProcessingStats, 'level'>]: Omit<
+    RasterLevelProcessingStats,
+    'level'
+  >[K];
+};
 interface Job {
   command: GeoTIFFWorkerCommand;
   bytes: number;
@@ -66,6 +73,7 @@ class WorkerRasterSource implements RasterSource {
   private peakWorkers = 0;
   private renderedTiles = 0;
   private lastLevel: number | null = null;
+  private readonly levelActivity = new Map<number, MutableLevelStats>();
   private workerMs = 0;
   private fileReadMs = 0;
   private fileReadBytes = 0;
@@ -192,6 +200,32 @@ class WorkerRasterSource implements RasterSource {
       .catch((error) => this.fail(error));
     return true;
   }
+  private levelStats(level: number): MutableLevelStats {
+    let stats = this.levelActivity.get(level);
+    if (!stats) {
+      stats = {
+        submitted: 0,
+        completed: 0,
+        cancelled: 0,
+        workerMs: 0,
+        fileReadMs: 0,
+        fileReadBytes: 0,
+        fileReadOps: 0,
+        pageCacheHits: 0,
+        pageCacheMisses: 0,
+        blockCacheHits: 0,
+        blockCacheMisses: 0,
+        blockCacheEvictions: 0,
+        blockCacheEvictedBytes: 0,
+        blockCacheAdmittedBytes: 0,
+        blockLoadMs: 0,
+        assembleMs: 0,
+        colorizeMs: 0,
+      };
+      this.levelActivity.set(level, stats);
+    }
+    return stats;
+  }
   private submit(
     command: GeoTIFFWorkerCommand,
     bytes: number,
@@ -214,6 +248,7 @@ class WorkerRasterSource implements RasterSource {
         this.queue.splice(index, 1);
         this.queuedMeshBytes -= meshBytes;
         this.pending.delete(job);
+        if (command.type === 'render') this.levelStats(command.request.read.level).cancelled++;
         cleanup();
         reject(signal?.reason ?? new DOMException('Cancelled', 'AbortError'));
         this.pump();
@@ -246,6 +281,8 @@ class WorkerRasterSource implements RasterSource {
           ? [job.command.request.warp.points.buffer as ArrayBuffer]
           : [];
       job.startedAt = performance.now();
+      if (job.command.type === 'render')
+        this.levelStats(job.command.request.read.level).submitted++;
       const result = slot.client.call(job.command, job.signal, transfer);
       this.peakWorkers = Math.max(
         this.peakWorkers,
@@ -256,9 +293,32 @@ class WorkerRasterSource implements RasterSource {
           this.pending.delete(job);
           if (response.type === 'rendered') {
             this.renderedTiles++;
-            if (job.command.type === 'render') this.lastLevel = job.command.request.read.level;
+            const levelStats =
+              job.command.type === 'render'
+                ? this.levelStats(job.command.request.read.level)
+                : null;
+            if (job.command.type === 'render') {
+              this.lastLevel = job.command.request.read.level;
+              levelStats!.completed++;
+            }
             const d = response.result.diagnostics;
             if (d) {
+              if (levelStats) {
+                levelStats.workerMs += d.workerMs;
+                levelStats.fileReadMs += d.fileReadMs;
+                levelStats.fileReadBytes += d.fileReadBytes;
+                levelStats.fileReadOps += d.fileReadOps;
+                levelStats.pageCacheHits += d.pageCacheHits;
+                levelStats.pageCacheMisses += d.pageCacheMisses;
+                levelStats.blockCacheHits += d.blockCacheHits;
+                levelStats.blockCacheMisses += d.blockCacheMisses;
+                levelStats.blockCacheEvictions += d.blockCacheEvictions;
+                levelStats.blockCacheEvictedBytes += d.blockCacheEvictedBytes;
+                levelStats.blockCacheAdmittedBytes += d.blockCacheAdmittedBytes;
+                levelStats.blockLoadMs += d.blockLoadMs;
+                levelStats.assembleMs += d.assembleMs;
+                levelStats.colorizeMs += d.colorizeMs;
+              }
               this.workerMs += d.workerMs;
               this.fileReadMs += d.fileReadMs;
               this.fileReadBytes += d.fileReadBytes;
@@ -298,6 +358,12 @@ class WorkerRasterSource implements RasterSource {
         },
         (error) => {
           this.pending.delete(job);
+          if (
+            job.command.type === 'render' &&
+            error instanceof DOMException &&
+            error.name === 'AbortError'
+          )
+            this.levelStats(job.command.request.read.level).cancelled++;
           job.reject(error);
         },
       );
@@ -364,6 +430,9 @@ class WorkerRasterSource implements RasterSource {
       reservedBytes: this.reservedBytes,
       renderedTiles: this.renderedTiles,
       lastLevel: this.lastLevel,
+      levelActivity: [...this.levelActivity.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([level, stats]) => ({ level, ...stats })),
       workerMs: this.workerMs,
       fileReadMs: this.fileReadMs,
       fileReadBytes: this.fileReadBytes,

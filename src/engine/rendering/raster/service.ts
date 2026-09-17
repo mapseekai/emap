@@ -120,6 +120,7 @@ export class RasterRenderService implements RasterContract {
   private planningMs = 0;
   private planningPasses = 0;
   private plannedTiles = 0;
+  private readonly plannedLevels = new Map<number, number>();
   private planningDiagnostics: RasterPlanningDiagnostics | null = null;
   private canvasUploadMs = 0;
   private queue: Task[] = [];
@@ -276,10 +277,6 @@ export class RasterRenderService implements RasterContract {
           1,
           Math.ceil((frame.height * effectivePixelRatio) / RASTER_TILE_SIZE),
         );
-        const level =
-          layer.source.metadata.levels.find(
-            (item) => item.id === layer.source.getProcessingStats?.().lastLevel,
-          ) ?? null;
         planningLayers.push({
           id: layer.id,
           grid: [gridX, gridY],
@@ -290,14 +287,9 @@ export class RasterRenderService implements RasterContract {
           span,
           targetResolution: resolution,
           sourceResolution: layer.source.metadata.resolution,
-          selectedLevel: level?.id ?? null,
-          selectedLevelSize: level ? [level.width, level.height] : null,
-          selectedLevelReduction: level
-            ? Math.max(
-                layer.source.metadata.levels[0].width / level.width,
-                layer.source.metadata.levels[0].height / level.height,
-              )
-            : null,
+          selectedLevel: null,
+          selectedLevelSize: null,
+          selectedLevelReduction: null,
         });
 
         for (
@@ -429,6 +421,7 @@ export class RasterRenderService implements RasterContract {
     const plan = planRasterTile(source.metadata, task.bounds, task.toSource, style);
     let image: HTMLCanvasElement | null = null;
     if (plan) {
+      this.plannedLevels.set(plan.level.id, (this.plannedLevels.get(plan.level.id) ?? 0) + 1);
       this.readRequests++;
       let rgba: Uint8ClampedArray<ArrayBuffer>;
       if (source.renderTile) {
@@ -855,6 +848,9 @@ export class RasterRenderService implements RasterContract {
       readRequests: this.readRequests,
       interacting: this.gestures.size > 0 || this.settleTimer !== null,
       planning: this.planningDiagnostics,
+      plannedLevels: [...this.plannedLevels.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([level, count]) => ({ level, count })),
       performance: {
         planningMs: this.planningMs,
         planningPasses: this.planningPasses,

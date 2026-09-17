@@ -127,6 +127,26 @@ export interface RasterRenderResult {
   readonly rgba: Uint8ClampedArray<ArrayBuffer>;
   readonly diagnostics?: RasterTaskDiagnostics;
 }
+export interface RasterLevelProcessingStats {
+  readonly level: number;
+  readonly submitted: number;
+  readonly completed: number;
+  readonly cancelled: number;
+  readonly workerMs: number;
+  readonly fileReadMs: number;
+  readonly fileReadBytes: number;
+  readonly fileReadOps: number;
+  readonly pageCacheHits: number;
+  readonly pageCacheMisses: number;
+  readonly blockCacheHits: number;
+  readonly blockCacheMisses: number;
+  readonly blockCacheEvictions: number;
+  readonly blockCacheEvictedBytes: number;
+  readonly blockCacheAdmittedBytes: number;
+  readonly blockLoadMs: number;
+  readonly assembleMs: number;
+  readonly colorizeMs: number;
+}
 export interface RasterProcessingStats {
   readonly workers: number;
   readonly busyWorkers: number;
@@ -135,6 +155,8 @@ export interface RasterProcessingStats {
   readonly reservedBytes: number;
   readonly renderedTiles: number;
   readonly lastLevel: number | null;
+  /** Cumulative render activity grouped by the actual pyramid level dispatched to workers. */
+  readonly levelActivity?: readonly RasterLevelProcessingStats[];
   readonly blockCacheEvictions: number;
   readonly blockCacheEvictedBytes: number;
   readonly blockCacheAdmittedBytes: number;

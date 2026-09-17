@@ -86,6 +86,8 @@ export interface RasterCacheStats {
   readonly performance: RasterPerformanceTotals;
   /** Latest planned view geometry; diagnostic only, not cumulative. */
   readonly planning: RasterPlanningDiagnostics | null;
+  /** Cumulative display-tile plans grouped by the pyramid level selected for the current tile. */
+  readonly plannedLevels: readonly { readonly level: number; readonly count: number }[];
 }
 /** Raster sources are independent of editable vector/topology sources. */
 export interface RasterContract {

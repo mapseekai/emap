@@ -179,7 +179,7 @@ function performanceSnapshot() {
   return {
     elapsedMs, stable: !stats.interacting && !stats.activeReads && !stats.queuedReads && !stats.pendingFrames,
     source: state.metadata?.filename ?? null, overview: state.metadata?.overviewFile?.filename ?? null,
-    lod: processing?.lastLevel ?? null, levels: state.metadata?.levels.length ?? 0,
+    lastCompletedLevel: processing?.lastLevel ?? null, levels: state.metadata?.levels.length ?? 0,
     viewport: [window.innerWidth, window.innerHeight], devicePixelRatio: window.devicePixelRatio,
     logicalCores: navigator.hardwareConcurrency ?? null,
     workers: processing?.workers ?? 0, peakWorkers: performanceDelta(processing,bproc,'peakWorkers') || processing?.peakWorkers || 0,
@@ -187,12 +187,21 @@ function performanceSnapshot() {
     reads: stats.readRequests-before.stats.readRequests,
     planning: {
       passes: performanceDelta(perf,bp,'planningPasses'), plannedTiles: performanceDelta(perf,bp,'plannedTiles'),
-      current: stats.planning ? {...stats.planning, layers: stats.planning.layers.map(layer => ({...layer,
-        selectedLevel: processing?.lastLevel ?? layer.selectedLevel,
-        selectedLevelSize: state.metadata && processing?.lastLevel != null ? (() => { const level=state.metadata.levels.find(item=>item.id===processing.lastLevel); return level ? [level.width,level.height] : layer.selectedLevelSize; })() : layer.selectedLevelSize,
-        selectedLevelReduction: state.metadata && processing?.lastLevel != null ? (() => { const level=state.metadata.levels.find(item=>item.id===processing.lastLevel); const base=state.metadata.levels[0]; return level ? Math.max(base.width/level.width,base.height/level.height) : layer.selectedLevelReduction; })() : layer.selectedLevelReduction,
-      }))} : null,
+      current: stats.planning,
+      plannedLevels: stats.plannedLevels.map(item => {
+        const previous = before.stats.plannedLevels?.find(value => value.level === item.level)?.count ?? 0;
+        return { level:item.level, count:Math.max(0,item.count-previous) };
+      }).filter(item => item.count > 0),
     },
+    levelsActivity: (processing?.levelActivity ?? []).map(item => {
+      const previous = bproc?.levelActivity?.find(value => value.level === item.level);
+      const delta = key => Math.max(0, Number(item[key] ?? 0) - Number(previous?.[key] ?? 0));
+      return { level:item.level, submitted:delta('submitted'), completed:delta('completed'), cancelled:delta('cancelled'),
+        fileReadBytes:delta('fileReadBytes'), fileReadOps:delta('fileReadOps'), fileReadMs:delta('fileReadMs'),
+        blockCacheHits:delta('blockCacheHits'), blockCacheMisses:delta('blockCacheMisses'),
+        blockCacheEvictions:delta('blockCacheEvictions'), blockCacheEvictedBytes:delta('blockCacheEvictedBytes'),
+        blockLoadMs:delta('blockLoadMs'), colorizeMs:delta('colorizeMs') };
+    }).filter(item => item.submitted || item.completed || item.cancelled || item.fileReadOps),
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
