@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: Local GeoTIFF rasters
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -22,7 +22,7 @@ const map = await Emap.create({
   container: 'map', preset: 'viewer',
   plugins: [
     rasterPlugin({ cacheBytes: 64 * 1024 ** 2, concurrency: 2 }),
-    geoTIFFPlugin({ workerUrl: '/assets/emap-geotiff-worker.js' }),
+    geoTIFFPlugin({ workerUrl: '/assets/emap-geotiff-worker.js', workerCount: 2 }),
   ],
 });
 await map.ctx.geoTIFF.addFile('imagery', file, {
@@ -123,13 +123,40 @@ emap uses a shorter bounded presentation window while preserving incremental pro
 
 Small compressed byte ranges share aligned 64KiB pages and deduplicated in-flight requests. Each original or overview file retains at most 16 pages (1MiB), plus at most 16 in-flight pages. Large ranges remain direct reads. Physical reads, including prefetch, still count against the existing I/O budget.
 
-Each open raster source adds an **8MiB decoded-block LRU**, shared across original and overview IFDs and also capped at 4096 entries. Neighboring display tiles, revisits, and style changes reuse original decoded blocks. Only completed buffers are retained, never long-lived result promises. Closing the source releases the cache.
+Each open raster source adds an **8MiB decoded-block LRU**, divided across parallel Workers and shared across original and overview IFDs and also capped at 4096 entries. Neighboring display tiles, revisits, and style changes reuse original decoded blocks. Only completed buffers are retained, never long-lived result promises. Closing the source releases the cache.
 
 Uniform native-endian numeric samples in common encodings use TypedArray row copies/deinterleaving with at most four active block reads. geotiff.js still implements codecs and predictors. Float16, non-native endianness, mixed samples, and special codecs retain the upstream reader. Nearest and bilinear display both reuse coordinate/channel/interpolation state instead of allocating arrays per pixel. Source values, overview selection, and display ranges are unchanged.
 
 These are **additional to the display cache**: up to 1MiB retained compressed pages per TIFF file plus 8MiB decoded blocks per raster source. An external `.ovr` has its own compressed-page allowance. Pending reads, the current window, and browser resources add transient memory. Removing layers or unloading plugins releases buffers and Workers; no OPFS/IndexedDB copy is created.
 
 `test/browser/raster-performance.spec.mjs` performs three same-machine local-file rounds when `EMAP_GEOTIFF_LOCAL_FILE` is set. `EMAP_RASTER_BENCH_OUT` optionally records JSON. Metrics cover navigation-to-completion, first updated tile, animation frames with tile updates, and display-cache size. Source-cold rounds rebuild emap sources/caches but do not clear OS disk caches. This is not a native QGIS-versus-emap speed benchmark.
+
+## Parallel decoding and background colorization
+
+GeoTIFF uses a **tile-pipeline Worker pool**. Independent workers execute window I/O, decoding, assembly, resampling, stretching, and RGBA generation concurrently. This is not additional `Promise.all()` work on one thread, geotiff.js's block-level `Pool`, or a thread per TIFF block.
+
+```ts
+const loader = geoTIFFPlugin({
+  workerUrl: '/assets/emap-geotiff-worker.js',
+  workerCount: 2,
+});
+const renderer = rasterPlugin({ concurrency: 4 }); // Useful with workerCount: 4.
+console.log(map.ctx.raster.getProcessingStats('imagery'));
+```
+
+`workerCount` accepts 1–4, defaulting to two (one when the browser reports two or fewer logical cores). One worker still colorizes off the main thread. A module-level quota permits at most four extra workers across sources, excluding each source's primary worker. When the quota is unavailable, requests use existing workers instead of spawning unbounded threads. Every replica uses the same `emap-geotiff-worker.js`; no new deployment asset is needed.
+
+The primary worker validates TIFF/OVR metadata and collects bounded statistics. A second metadata-only replica can warm during initial view settling; further replicas start on demand. Replicas reuse identical statistics, without rescanning or introducing per-worker color seams. The mandatory >2GiB pyramid gate still runs before the first pixel read.
+
+The main thread retains viewport scheduling, LOD choice, projection-mesh construction, and Canvas compositing. `RasterWarpMesh` uses Float64 coordinates and preserves exact pixel-center fallbacks at projection validity boundaries. The worker sends `RasterRenderResult.rgba` as a transferred ArrayBuffer; the display path no longer sends all raw UInt16/Float32 bands to the UI for colorization. `queryPixel()` and `readWindow()` still return original numerical samples.
+
+`RasterSource.renderTile(RasterRenderRequest, signal)` is optional: GeoTIFF implements the background pipeline by default; third-party sources implementing only `readWindow()` retain the legacy main-thread colorization fallback. `getProcessingStats()` reports workers, busy workers, historical concurrency peak, queued jobs, reserved bytes, and rendered tiles. The example exposes worker/render counters.
+
+Parallel tasks reserve an aggregate **64MiB per source for estimated decode + warp + RGBA buffers**; tasks wait when simultaneous reservations would exceed this budget. Queued outbound meshes are limited to 32MiB. The 8MiB decoded cache and 1MiB retained compressed-page budget per TIFF are divided among configured workers. Directory arrays across replicas stay within 32MiB, reducing replication when necessary. These limits exclude general browser-process and Worker-runtime overhead.
+
+Cancellation settles the caller immediately, but the physical worker slot stays occupied until actual completion, preventing an unbounded stale CPU queue during repeated zooms. A 60-second watchdog remains. Layer/plugin disposal terminates every owned worker and releases queues, timers, listeners, and extra-worker leases. A worker crash fails and closes the source pool explicitly.
+
+Main and Worker assets must come from the same build. `RASTER_WORKER_VERSION` identifies stale deployed Worker code. This design does not require SharedArrayBuffer, cross-origin isolation, OffscreenCanvas, or GPU rendering. Canvas upload/compositing remains on the main thread. Actual Windows improvements require same-data, same-viewport, same-style measurements on the target machine.
 
 ## Project references and privacy
 
@@ -151,7 +178,7 @@ Existing vector MSX snapshots do not embed rasters. Hosts must persist raster re
 
 ## Budgets and scope
 
-Display cache defaults to 64MiB (configurable 8–256MiB). Global tile concurrency defaults to two (1–4); per-source reads are serial with at most 16 queued requests. A request is limited to 4,194,304 source pixels and an estimated 64MiB decode budget including entire compressed blocks. At most 16 rasters are open. Metadata directories, field counts, byte ranges and safe integer offsets are validated. Stale views cancel obsolete reads; layer removal and plugin disposal release workers and canvases.
+Display cache defaults to 64MiB (configurable 8–256MiB). Global tile concurrency defaults to two (1–4); per-source reads use a default two-worker pipeline pool, serial within each worker, with at most 16 queued/active requests. A request is limited to 4,194,304 source pixels and an estimated 64MiB decode budget including entire compressed blocks. At most 16 rasters are open. Metadata directories, field counts, byte ranges and safe integer offsets are validated. Stale views cancel obsolete reads; layer removal and plugin disposal release workers and canvases.
 
 These budgets are not a total browser-process memory cap. Decoder, Worker, projection and canvas intermediates require additional memory.
 

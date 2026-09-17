@@ -119,7 +119,8 @@ test('reprojection preserves the original raster CRS and sampled values', async 
 test('unloading native Cordis providers closes workers and revokes the render pass', async ({ page }) => {
   const errors = [];page.on('pageerror', error => errors.push(error.message));
   await ready(page);
-  expect(page.workers().filter(worker => worker.url().endsWith('emap-geotiff-worker.js'))).toHaveLength(1);
+  expect(page.workers().filter(worker => worker.url().endsWith('emap-geotiff-worker.js')).length).toBeGreaterThanOrEqual(1);
+  expect(page.workers().filter(worker => worker.url().endsWith('emap-geotiff-worker.js')).length).toBeLessThanOrEqual(2);
   const result = await page.evaluate(async () => {
     const state = window.geotiffDemo;
     const before = document.querySelectorAll('#map canvas').length;

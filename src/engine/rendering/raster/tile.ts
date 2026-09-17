@@ -1,3 +1,4 @@
+import { makeRasterWarp } from './warp';
 import { resolveRasterRanges, stretchRasterValue } from '../../../domain/raster/statistics';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { RasterError, validateRasterWindow } from '../../../domain/raster/policy';
@@ -8,12 +9,14 @@ import type {
   RasterReadResult,
   RasterStyle,
   RasterWindow,
+  RasterWarpMesh,
 } from '../../../domain/raster/types';
 import type { RasterCoordinateTransform } from './projector';
 
 export const RASTER_TILE_SIZE = 256;
 export interface RasterTilePlan {
   readonly request: RasterReadRequest;
+  readonly warp: RasterWarpMesh;
   readonly level: RasterLevel;
   readonly width: number;
   readonly height: number;
@@ -66,6 +69,8 @@ export function planRasterTile(
   style: RasterStyle = {},
   size = RASTER_TILE_SIZE,
 ): RasterTilePlan | null {
+  if (!Number.isInteger(size) || size < 1 || size > 1024)
+    throw new RasterError('INVALID_RASTER_RENDER', 'Display tile edge must be 1–1024 pixels.');
   validateRasterStyle(metadata, style);
   const base = metadata.levels[0];
   const pixelTransform = new AffineTransform(
@@ -186,6 +191,7 @@ export function planRasterTile(
   };
   return {
     request: { level: level.id, window, samples },
+    warp: makeRasterWarp(grid, columns, step, size, locate),
     level,
     width: size,
     height: size,

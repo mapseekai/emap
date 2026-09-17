@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: 本地 GeoTIFF 栅格
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterWarpMesh", "RasterProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -23,7 +23,7 @@ const map = await Emap.create({
   preset: 'viewer',
   plugins: [
     rasterPlugin({ cacheBytes: 64 * 1024 ** 2, concurrency: 2 }),
-    geoTIFFPlugin({ workerUrl: '/assets/emap-geotiff-worker.js' }),
+    geoTIFFPlugin({ workerUrl: '/assets/emap-geotiff-worker.js', workerCount: 2 }),
   ],
 });
 
@@ -124,15 +124,44 @@ emap 使用更短的有界更新窗口，并保留块级进度：优先减少读
 
 `presentationInterval` 控制就绪块的最长合并窗口，范围 0–250ms，默认 60ms；0 恢复单块即时呈现。它与“停止移动后再开始读取”的 `settleDelay` 不同。慢块不会阻塞已经完成的组，失败、取消或卸载会清理等待队列与计时器。相比即时单块提交，最早一块可能多等不超过一个合并窗口，换取更少的局部闪变；整批提前完成则立即提交。
 
-原始文件读取使用 64KiB 对齐的压缩字节页，同一页的并发请求合并，减少大量小块的 Blob I/O。每个文件最多保留 16 页（1MiB），另有最多 16 页在途；大请求仍直接按范围读取。实际物理读取量（含预读）仍计入原有 I/O 预算。
+原始文件读取使用 64KiB 对齐的压缩字节页，同一页的并发请求合并，减少大量小块的 Blob I/O。每个文件在并行 Worker 之间分摊最多 16 页（1MiB），另有最多 16 页在途；大请求仍直接按范围读取。实际物理读取量（含预读）仍计入原有 I/O 预算。
 
-每个打开的数据源增加 **8MiB 的解码块 LRU 缓存**，原图和概览共享该预算，上限同时受 4096 个条目约束；相邻显示瓦片、重访和样式变化可复用原始数据块。缓存只保存已完成的解码缓冲，关闭源文件时清空，不保存长期 Promise 或输出像素数组。
+每个打开的数据源增加 **8MiB 的解码块 LRU 缓存**，原图、概览及并行 Worker 共同分摊该预算，每个 Worker 同时受 4096 个条目约束；相邻显示瓦片、重访和样式变化可复用原始数据块。缓存只保存已完成的解码缓冲，关闭源文件时清空，不保存长期 Promise 或输出像素数组。
 
 数值窗口针对原生端序、均一位深的常见编码使用 TypedArray 行复制／解交错，并将块读取管线限制为最多 4 个；编码解压与 Predictor 处理仍由 geotiff.js 执行。Float16、不同端序、混合样本与特殊编码继续使用上游读取路径。最近邻和双线性显示均复用坐标、通道与插值状态，减少逐像素临时数组。没有修改源文件数值、金字塔选择或拉伸范围。
 
 这些缓存是**显示缓存以外**的额外预算：单个 TIFF 最多约 1MiB 已保留压缩页，加上该栅格源共享的 8MiB 解码缓存；外置 `.ovr` 有自己的压缩页预算。在途读取、当前窗口及浏览器资源仍另有开销。多文件不会无限累积，移除图层／卸载插件时释放缓存和 Worker，不写 OPFS/IndexedDB。
 
 可用 `test/browser/raster-performance.spec.mjs` 对同一台机器、同一个本地 TIFF/.ovr 进行三轮前后对比。设置 `EMAP_GEOTIFF_LOCAL_FILE` 后运行，`EMAP_RASTER_BENCH_OUT` 可选指定 JSON 输出。指标包含导航开始至完成的时间、首个新块呈现时间、不同动画帧上的块更新次数和显示缓存；所谓源冷启动只重建 emap 源和缓存，不清除操作系统磁盘缓存。该测试不是 QGIS/emap 原生运行速度的直接对比。
+
+## 真正并行的解码与后台着色
+
+GeoTIFF 采用**瓦片管线 Worker 池**：同一影像的不同窗口在独立 Worker 中执行读取、解码、窗口组装、重采样、拉伸和 RGBA 生成，而不是在一个 Worker 中增加 `Promise.all()`。这里没有直接套用 geotiff.js 的块级 `Pool`，也没有为每个 TIFF block 创建线程。
+
+```ts
+const loader = geoTIFFPlugin({
+  workerUrl: '/assets/emap-geotiff-worker.js',
+  workerCount: 2,
+});
+// 同时调到 4 个任务才可充分使用显式配置的 4 个 Worker：
+const renderer = rasterPlugin({ concurrency: 4 });
+// 诊断当前图层实际工作线程与资源预约：
+console.log(map.ctx.raster.getProcessingStats('imagery'));
+```
+
+`workerCount` 范围为 1–4，默认 2；浏览器报告逻辑核数不超过 2 时默认 1。设置 1 仍在后台完成着色，只是不会同时解码多个窗口。模块级资源限制最多允许 4 个额外 Worker（不含每个源必需的首个 Worker），达到限额时使用已有线程排队，不创建无限线程。每个副本仍使用同一个 `emap-geotiff-worker.js`，没有新增 Worker 部署文件。
+
+首个 Worker 完成必需的 TIFF/OVR 验证与抽样统计；第二个 Worker 可在初始视口等待期间预热元数据，其余按需建立。副本复用相同统计范围，不重复抽样扫描，不因不同线程产生颜色接缝。超过 2GiB 无有效金字塔的输入仍在首次像素读取之前被拒绝；副本不会绕过该规则。
+
+主线程只做视口调度、LOD 选择、投影网格构建和 Canvas 合成。`RasterWarpMesh` 使用 Float64 可序列化网格；投影有效性边界保留精确像素中心回退，不降低投影精度。Worker 返回 `RasterRenderResult.rgba`，通过可转移 ArrayBuffer 回传；显示路径不再把 UInt16/Float32 全部波段发送到主线程后着色。`queryPixel()`/`readWindow()` 仍返回原始数值。
+
+`RasterSource.renderTile(RasterRenderRequest, signal)` 是可选能力：GeoTIFF 默认实现并走后台路径；只有 `readWindow()` 的第三方数据源继续兼容原来的主线程着色路径。`getProcessingStats()` 返回实际 Worker 数、忙碌数、历史峰值、等待任务、预约字节数和已后台着色瓦片数。示例显示“后台 Workers / 已着色块”，用来核对实际生效的管线。
+
+资源保护也按池汇总：同一源并行任务的**估算解码＋投影网格＋RGBA 在途预约合计不超过 64MiB**，超出并行余额的任务排队而非同时分配；待发送网格最多保留 32MiB。8MiB 解码缓存、每文件 1MiB 已保留压缩页按配置 Worker 数均分。TIFF 目录数组在副本间合计控制在 32MiB，必要时自动减少副本数。这些仍不是浏览器整个进程的硬内存上限，独立 Worker 的运行时开销也需计入实际观测。
+
+取消任务时调用方立即结束等待，物理 Worker 槽在任务实际响应后才可重用，避免快速缩放把旧 CPU 工作无限排队；保留 60 秒超时保护。移除图层或卸载插件会终止所有源属 Worker，释放队列、计时器、监听器和全局附加线程名额。一个 Worker 崩溃会关闭同源池并显式报错，不留半损坏管线。
+
+新主线程代码要求同版本 Worker；旧缓存 Worker 会报告 `RASTER_WORKER_VERSION`，请部署同一构建的 Worker 文件并刷新页面。能力不依赖 SharedArrayBuffer、跨源隔离、OffscreenCanvas 或 GPU；Canvas 最终写入与合成仍在主线程。Windows 上的实际收益需以同数据、同视口和同渲染参数复测。
 
 ## 工程引用与隐私
 
@@ -159,7 +188,7 @@ map.ctx.raster.setVisibility(references[0].id, references[0].visible);
 | --- | --- |
 | 显示缓存 | 默认 64MiB，可配置 8–256MiB |
 | 全局瓦片读取并发 | 默认 2，可配置 1–4 |
-| 单源读取 | 串行，等待队列最多 16 |
+| 单源读取 | 默认 2 个独立 Worker，单 Worker 串行；总队列最多 16 |
 | 单次读取 | 最多 4,194,304 源像素，估算解码预算 64MiB |
 | 同时打开栅格 | 最多 16 个图层 |
 | 元数据防护 | 目录数量、字段数组、字节偏移和范围读取均校验 |

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a bounded GeoTIFF tile-pipeline Worker pool for genuine parallel decoding
+  and off-main-thread resampling/stretch/RGBA generation. Keep raw pixel queries,
+  share source statistics, divide caches, reserve aggregate in-flight memory,
+  and retain physical slots until cancelled work acknowledges completion.
+- Add optional source `renderTile`/processing diagnostics, serialized Float64 warp
+  meshes, Worker version validation and multi-worker lifecycle/correctness tests.
+
 - Let the GeoTIFF example authorize a local directory and automatically associate
   `a.tif` with sibling `a.tif.ovr`, while retaining manual file selection for
   browsers without directory-handle support.

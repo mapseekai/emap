@@ -33,6 +33,7 @@
 <section class="emap-example-section">
 <div class="metric"><span>文件大小</span><strong id="size">—</strong></div>
 <div class="metric"><span>可用分辨率层级</span><strong id="levels">0</strong></div>
+<div class="metric"><span>后台 Workers / 已着色块</span><strong id="worker-progress">0 / 0</strong></div>
 <div class="metric"><span>显示缓存</span><strong id="cache">0 MiB</strong></div>
 <div class="metric"><span>块更新 / 完整视图</span><strong id="render-progress">0 / 0</strong></div>
 <div class="emap-example-field"><label for="render-mode">渲染模式</label><select id="render-mode" disabled><option value="rgb">RGB 多波段彩色</option><option value="gray">单波段灰度</option><option value="palette" hidden>原始调色板</option></select></div>
@@ -158,6 +159,7 @@ async function load(file, overviewFile) {
 state.load = load;
 state.fit = fit;
 state.stats = () => map.ctx.raster.getStats();
+state.processing = () => { const raster = map.ctx.get('raster'); return currentId && raster?.getLayers().some(layer => layer.id === currentId) ? raster.getProcessingStats(currentId) : null; };
 map.ctx.mapEvents.on('rastererror', ({ error }) => { state.error = error.message; state.errorCode = error.code ?? error.name; status.textContent = error.message; });
 async function sample() {
   const filename = document.getElementById('sample-type').value;
@@ -195,7 +197,7 @@ document.getElementById('remove').onclick = () => { if (currentId) map.ctx.raste
   document.getElementById('references').textContent = '';
   bandControls.setSource(null); document.getElementById('levels').textContent = '0'; status.textContent = '栅格已移除；磁盘原文件保持不变'; };
 document.getElementById('save-reference').onclick = () => { document.getElementById('references').textContent = JSON.stringify(map.ctx.raster.toReferences(), null, 2); };
-const timer = setInterval(() => { const raster = map.ctx.get('raster'); if (raster) { const stats = raster.getStats(); document.getElementById('cache').textContent = `${(stats.cachedBytes / 1024 ** 2).toFixed(1)} MiB`; document.getElementById('render-progress').textContent = `${stats.presentedTiles} / ${stats.committedFrames}${stats.interacting ? ' · 交互中' : stats.pendingFrames ? ' · 渐进加载' : ''}`; } }, 500);
+const timer = setInterval(() => { const raster = map.ctx.get('raster'); if (raster) { const stats = raster.getStats(); const processing = state.processing(); document.getElementById('worker-progress').textContent = `${processing?.workers ?? 0} / ${processing?.renderedTiles ?? 0}`; document.getElementById('cache').textContent = `${(stats.cachedBytes / 1024 ** 2).toFixed(1)} MiB`; document.getElementById('render-progress').textContent = `${stats.presentedTiles} / ${stats.committedFrames}${stats.interacting ? ' · 交互中' : stats.pendingFrames ? ' · 渐进加载' : ''}`; } }, 500);
 const onPageHide = () => { void map.dispose(); };
 window.addEventListener('pagehide', onPageHide, { once: true });
 map.ctx.effect(() => () => {

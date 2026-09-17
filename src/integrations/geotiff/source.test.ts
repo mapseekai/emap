@@ -1,3 +1,4 @@
+import { planRasterTile } from '../../engine/rendering/raster/tile';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openGeoTIFF, openGeoTIFFHandle } from './source';
 import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
@@ -45,14 +46,16 @@ class FakeWorker {
     this.messages.push(message);
   }
   reply(message: GeoTIFFWorkerResponse) {
-    this.onmessage?.({ data: message } as MessageEvent<GeoTIFFWorkerResponse>);
+    this.onmessage?.({
+      data: message.type === 'metadata' ? { protocolVersion: 2, ...message } : message,
+    } as MessageEvent<GeoTIFFWorkerResponse>);
   }
 }
 const file = () => new File([new Uint8Array(8)], 'image.tif', { lastModified: 12 });
-async function opened() {
-  const pending = openGeoTIFF(file(), { workerUrl: '/worker.js' }),
+async function opened(workerCount = 1, directoryBytes?: number) {
+  const pending = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount }),
     worker = FakeWorker.instances.at(-1)!;
-  worker.reply({ id: 1, type: 'metadata', metadata });
+  worker.reply({ id: 1, type: 'metadata', metadata, directoryBytes });
   return { worker, source: await pending };
 }
 beforeEach(() => {
@@ -179,6 +182,10 @@ describe('Worker-backed external raster sources', () => {
         const failure = expect(read).rejects.toMatchObject({ name: 'AbortError' });
         controller.abort();
         await failure;
+        // Cancelled callers settle immediately, but a bounded physical slot and
+        // watchdog remain until the Worker acknowledges its actual completion.
+        expect(vi.getTimerCount()).toBe(1);
+        worker.reply({ id, type: 'error', name: 'AbortError', message: 'cancelled' });
       } else {
         worker.reply({
           id,
@@ -187,8 +194,8 @@ describe('Worker-backed external raster sources', () => {
         });
         await read;
       }
-      expect(add).toHaveBeenCalledTimes(1);
-      expect(remove).toHaveBeenCalledTimes(1);
+      expect(add).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenCalledTimes(2);
       expect(vi.getTimerCount()).toBe(0);
     }
     expect(Reflect.get(source, 'pending').size).toBe(0);
@@ -209,5 +216,228 @@ describe('Worker-backed external raster sources', () => {
     await failure;
     expect(worker.terminate).toHaveBeenCalledOnce();
     expect(Reflect.get(source, 'pending').size).toBe(0);
+  });
+});
+
+describe('parallel raster pipeline pool', () => {
+  const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
+  const answer = (worker: FakeWorker, value: number) =>
+    worker.reply({
+      id: 2,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([value])] },
+    });
+  it('runs two physical workers simultaneously and reuses shared statistics', async () => {
+    const { source, worker } = await opened(2, 1000);
+    try {
+      const a = source.readWindow(request),
+        b = source.readWindow(request);
+      expect(FakeWorker.instances).toHaveLength(2);
+      const second = FakeWorker.instances[1];
+      expect(second.messages[0]).toMatchObject({
+        type: 'open',
+        file: expect.any(File),
+        cacheBytes: 4 * 1024 ** 2,
+        pageLimit: 8,
+      });
+      second.reply({ id: 1, type: 'metadata', metadata, directoryBytes: 1000 });
+      await Promise.resolve();
+      expect(second.messages.at(-1)?.type).toBe('read');
+      expect(source.getProcessingStats?.().busyWorkers).toBe(2);
+      answer(second, 20);
+      answer(worker, 10);
+      expect((await a).data[0][0]).toBe(10);
+      expect((await b).data[0][0]).toBe(20);
+      expect(source.getProcessingStats?.()).toMatchObject({
+        peakWorkers: 2,
+        busyWorkers: 0,
+        reservedBytes: 0,
+      });
+    } finally {
+      source.dispose();
+    }
+    expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
+  });
+  it('returns RGBA directly for rendering without dispatching a raw window to the main thread', async () => {
+    const { source, worker } = await opened();
+    const plan = planRasterTile(metadata, metadata.bounds, (x, y) => [x, y], {}, 8)!;
+    const task = { read: plan.request, warp: plan.warp, width: 8, height: 8, style: {} };
+    const pending = source.renderTile!(task);
+    expect(worker.messages.at(-1)).toMatchObject({
+      type: 'render',
+      request: { width: 8, height: 8 },
+    });
+    expect(plan.warp.points.byteLength).toBeGreaterThan(0);
+    worker.reply({
+      id: 2,
+      type: 'rendered',
+      result: { width: 8, height: 8, rgba: new Uint8ClampedArray(8 * 8 * 4) },
+    });
+    expect((await pending).rgba.byteLength).toBe(256);
+    expect(source.getProcessingStats?.().renderedTiles).toBe(1);
+    source.dispose();
+  });
+  it('does not reuse a cancelled busy slot before the Worker replies', async () => {
+    const { source, worker } = await opened(),
+      controller = new AbortController();
+    const a = source.readWindow(request, controller.signal),
+      failure = expect(a).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await failure;
+    const b = source.readWindow(request);
+    expect(worker.messages.at(-1)?.type).toBe('cancel');
+    expect(source.getProcessingStats?.()).toMatchObject({ busyWorkers: 1, queuedTasks: 1 });
+    worker.reply({ id: 2, type: 'error', name: 'AbortError', message: 'cancelled' });
+    expect(worker.messages.at(-1)).toMatchObject({ id: 3, type: 'read' });
+    worker.reply({
+      id: 3,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([1])] },
+    });
+    await b;
+    source.dispose();
+  });
+  it('bounds extra workers across sources and returns leases after disposal', async () => {
+    const readers = [];
+    try {
+      for (let i = 0; i < 6; i++) {
+        const { source } = await opened(2, 1000);
+        readers.push(source);
+        void source.readWindow(request).catch(() => {});
+        void source.readWindow(request).catch(() => {});
+      }
+      expect(FakeWorker.instances).toHaveLength(10); // six primaries + four extra slots
+    } finally {
+      readers.forEach((source) => source.dispose());
+    }
+    const { source } = await opened(2, 1000);
+    void source.readWindow(request).catch(() => {});
+    void source.readWindow(request).catch(() => {});
+    expect(FakeWorker.instances).toHaveLength(12);
+    source.dispose();
+  });
+  it('reduces metadata replication rather than multiplying the 32MiB metadata budget', async () => {
+    const { source, worker } = await opened(4, 20 * 1024 ** 2);
+    const a = source.readWindow(request),
+      b = source.readWindow(request);
+    expect(FakeWorker.instances).toHaveLength(1);
+    answer(worker, 1);
+    await a;
+    worker.reply({
+      id: 3,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([2])] },
+    });
+    await b;
+    source.dispose();
+  });
+  it('validates parallelism before starting workers', async () => {
+    for (const workerCount of [0, 5, NaN, 1.5])
+      await expect(openGeoTIFF(file(), { workerCount })).rejects.toMatchObject({
+        code: 'INVALID_RASTER_WORKERS',
+      });
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+});
+
+describe('parallel pool failure and reservation bounds', () => {
+  it('serializes memory-heavy tasks under an aggregate 64MiB decode budget', async () => {
+    const meta = {
+      ...metadata,
+      levels: [
+        { ...metadata.levels[0], width: 8192, height: 8192, tileWidth: 4096, tileHeight: 4096 },
+      ],
+    };
+    const opened = openGeoTIFF(file(), { workerCount: 2 });
+    const first = FakeWorker.instances[0];
+    first.reply({ id: 1, type: 'metadata', metadata: meta, directoryBytes: 1000 });
+    const source = await opened;
+    const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
+    try {
+      const a = source.readWindow(request),
+        b = source.readWindow(request);
+      const second = FakeWorker.instances[1];
+      second.reply({ id: 1, type: 'metadata', metadata: meta, directoryBytes: 1000 });
+      await Promise.resolve();
+      expect(source.getProcessingStats?.()).toMatchObject({ busyWorkers: 1, queuedTasks: 1 });
+      expect(source.getProcessingStats!().reservedBytes).toBeLessThanOrEqual(64 * 1024 ** 2);
+      first.reply({
+        id: 2,
+        type: 'result',
+        result: { width: 1, height: 1, data: [new Uint8Array([1])] },
+      });
+      await a;
+      expect(source.getProcessingStats!().reservedBytes).toBeLessThanOrEqual(64 * 1024 ** 2);
+      first.reply({
+        id: 3,
+        type: 'result',
+        result: { width: 1, height: 1, data: [new Uint8Array([2])] },
+      });
+      await b;
+    } finally {
+      source.dispose();
+    }
+  });
+  it('drops a queued cancellation without dispatching stale CPU work', async () => {
+    const { source, worker } = await opened();
+    const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
+    const first = source.readWindow(request),
+      controller = new AbortController();
+    const second = source.readWindow(request, controller.signal),
+      failure = expect(second).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await failure;
+    expect(source.getProcessingStats!().queuedTasks).toBe(0);
+    expect(worker.messages.filter((m) => m.type === 'read')).toHaveLength(1);
+    worker.reply({
+      id: 2,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([1])] },
+    });
+    await first;
+    source.dispose();
+  });
+  it('terminates all replicas and queued callbacks on a worker crash', async () => {
+    const { source } = await opened(2, 1000);
+    const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
+    const a = source.readWindow(request),
+      b = source.readWindow(request),
+      c = source.readWindow(request);
+    const failures = [a, b, c].map((p) =>
+      expect(p).rejects.toMatchObject({ code: 'RASTER_WORKER_FAILED' }),
+    );
+    FakeWorker.instances[1].onerror?.({ message: 'simulated worker crash' });
+    await Promise.all(failures);
+    expect(source.getProcessingStats?.()).toMatchObject({
+      workers: 0,
+      queuedTasks: 0,
+      reservedBytes: 0,
+    });
+    expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
+    source.dispose();
+  });
+  it('reports a stale distributed Worker rather than issuing unsupported render commands', async () => {
+    const pending = openGeoTIFF(file()),
+      failure = expect(pending).rejects.toMatchObject({ code: 'RASTER_WORKER_VERSION' });
+    FakeWorker.instances[0].reply({ id: 1, type: 'metadata', metadata, protocolVersion: 1 });
+    await failure;
+    expect(FakeWorker.instances[0].terminate).toHaveBeenCalledOnce();
+  });
+  it('rejects opening if constructing the initial replica fails and releases its slot', async () => {
+    let count = 0;
+    vi.stubGlobal(
+      'Worker',
+      class extends FakeWorker {
+        constructor(url: string | URL, options: WorkerOptions) {
+          if (++count === 2) throw new Error('worker quota exhausted');
+          super(url, options);
+        }
+      },
+    );
+    const pending = openGeoTIFF(file(), { workerCount: 2 });
+    const failure = expect(pending).rejects.toThrow('worker quota exhausted');
+    FakeWorker.instances[0].reply({ id: 1, type: 'metadata', metadata, directoryBytes: 1000 });
+    await failure;
+    expect(FakeWorker.instances[0].terminate).toHaveBeenCalledOnce();
   });
 });

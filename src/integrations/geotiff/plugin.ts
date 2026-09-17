@@ -7,6 +7,7 @@ import { openGeoTIFF, openGeoTIFFHandle, type OpenGeoTIFFOptions } from './sourc
 
 export interface GeoTIFFPluginOptions {
   readonly workerUrl?: string | URL;
+  readonly workerCount?: number;
 }
 export interface GeoTIFFAddOptions extends OpenGeoTIFFOptions {
   readonly style?: RasterStyle;

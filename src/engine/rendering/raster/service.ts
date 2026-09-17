@@ -11,7 +11,12 @@ import {
 } from './coverage';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { RasterError } from '../../../domain/raster/policy';
-import type { RasterSource, RasterStyle, RasterWindow } from '../../../domain/raster/types';
+import type {
+  RasterSource,
+  RasterStyle,
+  RasterWindow,
+  RasterProcessingStats,
+} from '../../../domain/raster/types';
 import type {
   RasterContract,
   RasterCacheStats,
@@ -361,9 +366,38 @@ export class RasterRenderService implements RasterContract {
     let image: HTMLCanvasElement | null = null;
     if (plan) {
       this.readRequests++;
-      const result = await awaitWithSignal(source.readWindow(plan.request, signal), signal);
-      signal.throwIfAborted();
-      const rgba = colorizeRasterTile(source.metadata, plan, result, style);
+      let rgba: Uint8ClampedArray<ArrayBuffer>;
+      if (source.renderTile) {
+        const rendered = await awaitWithSignal(
+          source.renderTile(
+            {
+              read: plan.request,
+              width: plan.width,
+              height: plan.height,
+              warp: plan.warp,
+              style,
+            },
+            signal,
+          ),
+          signal,
+        );
+        signal.throwIfAborted();
+        rgba = rendered.rgba;
+        if (
+          rendered.width !== plan.width ||
+          rendered.height !== plan.height ||
+          rgba.byteLength !== plan.width * plan.height * 4
+        )
+          throw new RasterError(
+            'INVALID_RASTER_RENDER',
+            'Provider returned an invalid display tile.',
+          );
+      } else {
+        // Compatibility for third-party sources implementing only the raw-window contract.
+        const result = await awaitWithSignal(source.readWindow(plan.request, signal), signal);
+        signal.throwIfAborted();
+        rgba = colorizeRasterTile(source.metadata, plan, result, style);
+      }
       image = document.createElement('canvas');
       image.width = plan.width;
       image.height = plan.height;
@@ -734,6 +768,9 @@ export class RasterRenderService implements RasterContract {
       style: cloneStyle(layer.style),
       visible: layer.visible,
     }));
+  }
+  getProcessingStats(id: string): RasterProcessingStats | null {
+    return this.layer(id).source.getProcessingStats?.() ?? null;
   }
   getStats(): RasterCacheStats {
     return {

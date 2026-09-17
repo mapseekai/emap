@@ -19,8 +19,8 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
         });
       }
       postMessage(message, ...args) {
-        if (message.type === 'read') {
-          const event = { start: performance.now(), end: 0, level: message.request.level };
+        if (message.type === 'read' || message.type === 'render') {
+          const event = { start: performance.now(), end: 0, level: message.type === 'read' ? message.request.level : message.request.read.level };
           this.pending.set(message.id, event); window.rasterReadEvents.push(event);
         }
         super.postMessage(message, ...args);
@@ -31,6 +31,7 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
   await expect(page.locator('#levels')).toHaveText('4');
   await page.locator('#file-input').setInputFiles(file);
   await page.locator('#overview-input').setInputFiles(file + '.ovr');
+  await expect.poll(() => page.evaluate(() => {const s=window.geotiffDemo;const v=s.stats();return Number(s.loading)+v.activeReads+v.queuedReads+v.pendingFrames+Number(v.interacting);})).toBe(0);
   const results = [];
   for (let round = 0; round < 3; round++) {
     const metrics = await page.evaluate(async round => {

@@ -1,3 +1,4 @@
+import { renderRasterWindow } from './render-window';
 import { RasterError } from '../../domain/raster/policy';
 import { GeoTIFFReader } from './reader';
 import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
@@ -22,20 +23,40 @@ scope.onmessage = ({ data }) => {
         throw new RasterError('SOURCE_ALREADY_OPEN', 'Worker already owns a raster file.');
       opening = true;
       try {
-        reader = await GeoTIFFReader.open(data.file, {
-          overviewFile: data.overviewFile,
-          crs: data.crs,
-          signal: controller.signal,
+        reader = await GeoTIFFReader.open(
+          data.file,
+          {
+            overviewFile: data.overviewFile,
+            crs: data.crs,
+            signal: controller.signal,
+          },
+          {
+            cacheBytes: data.cacheBytes,
+            pageLimit: data.pageLimit,
+            maxMetadataBytes: data.maxMetadataBytes,
+            statistics: data.statistics,
+          },
+        );
+        scope.postMessage({
+          id: data.id,
+          type: 'metadata',
+          metadata: reader.metadata,
+          directoryBytes: reader.directoryBytes,
+          protocolVersion: 2,
         });
-        scope.postMessage({ id: data.id, type: 'metadata', metadata: reader.metadata });
       } finally {
         opening = false;
       }
     } else {
       if (!reader) throw new RasterError('SOURCE_NOT_OPEN', 'Raster file is not open.');
-      const result = await reader.readWindow(data.request, controller.signal);
-      const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
-      scope.postMessage({ id: data.id, type: 'result', result }, transfer);
+      if (data.type === 'render') {
+        const result = await renderRasterWindow(reader, data.request, controller.signal);
+        scope.postMessage({ id: data.id, type: 'rendered', result }, [result.rgba.buffer]);
+      } else {
+        const result = await reader.readWindow(data.request, controller.signal);
+        const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
+        scope.postMessage({ id: data.id, type: 'result', result }, transfer);
+      }
     }
   };
   void run()

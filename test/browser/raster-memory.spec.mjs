@@ -15,6 +15,7 @@ async function collect(cdp){
 test('removed GeoTIFF metadata is collectible while its loader plugin remains mounted',async({page,browserName})=>{
   test.skip(browserName!=='chromium','Requires explicit Chromium GC to test weak references deterministically');
   await ready(page);
+  const baselineWorkers=page.workers().filter(worker=>worker.url().endsWith('emap-geotiff-worker.js')).length;
   const cdp=await page.context().newCDPSession(page);
   try{
     await page.evaluate(async()=>{
@@ -29,7 +30,7 @@ test('removed GeoTIFF metadata is collectible while its loader plugin remains mo
     await collect(cdp);
     const alive=await page.evaluate(()=>window.rasterMemoryRefs.filter(ref=>ref.deref()).length);
     expect(alive).toBe(0);
-    await expect.poll(()=>page.workers().filter(worker=>worker.url().endsWith('emap-geotiff-worker.js')).length).toBe(1);
+    await expect.poll(()=>page.workers().filter(worker=>worker.url().endsWith('emap-geotiff-worker.js')).length).toBe(baselineWorkers);
   }finally{await cdp.detach();}
 });
 

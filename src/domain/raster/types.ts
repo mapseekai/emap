@@ -85,9 +85,39 @@ export interface RasterReference {
   readonly crs: string;
   readonly overviewFile?: RasterMetadata['overviewFile'];
 }
+/** Serializable inverse warp; numbers remain Float64 to preserve map precision. */
+export interface RasterWarpMesh {
+  readonly mode: 'grid' | 'pixels';
+  readonly columns: number;
+  readonly step: number;
+  readonly points: Float64Array;
+}
+export interface RasterRenderRequest {
+  readonly read: RasterReadRequest;
+  readonly width: number;
+  readonly height: number;
+  readonly warp: RasterWarpMesh;
+  readonly style: RasterStyle;
+}
+export interface RasterRenderResult {
+  readonly width: number;
+  readonly height: number;
+  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+}
+export interface RasterProcessingStats {
+  readonly workers: number;
+  readonly busyWorkers: number;
+  readonly peakWorkers: number;
+  readonly queuedTasks: number;
+  readonly reservedBytes: number;
+  readonly renderedTiles: number;
+}
 export interface RasterSource {
   readonly metadata: RasterMetadata;
   readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult>;
+  /** Optional provider capability: render off-thread instead of returning raw windows. */
+  renderTile?(request: RasterRenderRequest, signal?: AbortSignal): Promise<RasterRenderResult>;
+  getProcessingStats?(): RasterProcessingStats;
   toReference(): RasterReference;
   dispose(): void;
 }

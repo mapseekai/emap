@@ -468,4 +468,21 @@ describe('settled, progressive raster frames', () => {
     service.dispose();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('uses a provider-rendered RGBA tile instead of reading/colorizing samples on the main thread', async () => {
+    const { service, original, read, frame } = await harness();
+    const renderTile = vi.fn(async (request) => ({
+      width: request.width,
+      height: request.height,
+      rgba: new Uint8ClampedArray(request.width * request.height * 4),
+    }));
+    Object.assign(original, { renderTile });
+    read.mockRejectedValue(new Error('raw main-thread path should not run'));
+    service.setStyle('test', { stretch: 'minmax' });
+    service.render(frame);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(renderTile).toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(service.getStats().pendingFrames).toBe(0);
+    service.dispose();
+  });
 });

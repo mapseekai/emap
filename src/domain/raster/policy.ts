@@ -64,7 +64,7 @@ export function validateRasterWindow(
   level: RasterLevel,
   window: RasterWindow,
   samples: readonly number[],
-): void {
+): number {
   const [left, top, right, bottom] = window;
   if (
     window.some((value) => !Number.isSafeInteger(value)) ||
@@ -114,6 +114,7 @@ export function validateRasterWindow(
       '源窗口或压缩块解码超出内存预算。请创建更完整的金字塔或转换为分块 TIFF 后重试。',
     );
   }
+  return budget;
 }
 
 export function validateRasterRead(

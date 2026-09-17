@@ -1,119 +1,298 @@
-import { RasterError } from '../../domain/raster/policy';
+import {
+  RasterError,
+  validateRasterWindow,
+  RASTER_MAX_DECODE_BYTES,
+} from '../../domain/raster/policy';
 import type {
   RasterMetadata,
   RasterReadRequest,
   RasterReadResult,
   RasterReference,
   RasterSource,
+  RasterRenderRequest,
+  RasterRenderResult,
+  RasterProcessingStats,
 } from '../../domain/raster/types';
+import { validateRasterRender } from '../../engine/rendering/raster/warp';
+import { validateRasterStyle } from '../../engine/rendering/raster/tile';
 import type { GeoTIFFOpenOptions } from './reader';
-import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
+import type {
+  GeoTIFFWorkerCommand,
+  GeoTIFFWorkerResponse,
+  GeoTIFFWorkerOpen,
+} from './worker-protocol';
+import { RasterWorkerClient } from './worker-client';
+import { acquireParallelWorker, rasterWorkerCount } from './worker-capacity';
 
 export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
-  /** URL of the packaged, self-contained classic Worker asset. */
+  /** Self-contained classic Worker asset. All pool replicas use this same URL. */
   readonly workerUrl?: string | URL;
+  /** 1–4 independent decoding/rendering workers; default 2 (1 on <=2 logical cores). */
+  readonly workerCount?: number;
 }
-type Pending = {
-  resolve(value: GeoTIFFWorkerResponse): void;
-  reject(error: unknown): void;
-  cleanup(): void;
-};
+interface Slot {
+  client: RasterWorkerClient;
+  ready: boolean;
+  bytes: number;
+  release?: () => void;
+}
+interface Job {
+  command: GeoTIFFWorkerCommand;
+  bytes: number;
+  signal?: AbortSignal;
+  resolve: (value: GeoTIFFWorkerResponse) => void;
+  reject: (error: unknown) => void;
+  cleanup: () => void;
+}
 
+/** Source-owned tile pipeline pool. Independent workers can execute CPU decoding
+ * and colorization simultaneously; each worker's I/O budget remains serialized.
+ * Shared source metadata/statistics are validated once, then reused by replicas.
+ */
 class WorkerRasterSource implements RasterSource {
   metadata!: RasterMetadata;
-  private nextId = 0;
+  private readonly slots: Slot[] = [];
+  private queue: Job[] = [];
+  private readonly pending = new Set<Job>();
+  private readonly lifetime = new AbortController();
   private closed = false;
-  private readonly pending = new Map<number, Pending>();
-  constructor(private readonly worker: Worker) {
-    worker.onmessage = ({ data }: MessageEvent<GeoTIFFWorkerResponse>) => {
-      const entry = this.pending.get(data.id);
-      if (!entry) return;
-      this.pending.delete(data.id);
-      entry.cleanup();
-      if (data.type === 'error') {
-        const error = new Error(data.message) as Error & { code?: string };
-        error.name = data.name;
-        error.code = data.code;
-        entry.reject(error);
-      } else entry.resolve(data);
-    };
-    worker.onerror = (event) =>
-      this.fail(
-        new RasterError(
-          'RASTER_WORKER_FAILED',
-          event.message || 'Unable to start raster Worker. Check workerUrl and CSP.',
-        ),
-      );
-    worker.onmessageerror = () =>
-      this.fail(new RasterError('RASTER_WORKER_FAILED', 'Invalid raster Worker message.'));
-  }
+  private reservedBytes = 0;
+  private peakWorkers = 0;
+  private renderedTiles = 0;
+  private queuedMeshBytes = 0;
+  private target = 1;
+  private openCommand?: GeoTIFFWorkerOpen;
+  constructor(
+    private readonly url: string | URL,
+    private readonly requested: number,
+  ) {}
   async open(file: File, options: OpenGeoTIFFOptions): Promise<void> {
-    const result = await this.call(
-      { type: 'open', file, overviewFile: options.overviewFile, crs: options.crs },
-      options.signal,
-    );
+    this.openCommand = {
+      type: 'open',
+      file,
+      overviewFile: options.overviewFile,
+      crs: options.crs,
+      cacheBytes: Math.floor((8 * 1024 ** 2) / this.requested),
+      pageLimit: Math.floor(16 / this.requested),
+    };
+    const primary = this.createSlot();
+    const result = await primary.client.call(this.openCommand, options.signal);
+    if (result.type === 'metadata' && result.protocolVersion !== 2)
+      throw new RasterError(
+        'RASTER_WORKER_VERSION',
+        'GeoTIFF Worker asset is outdated. Deploy emap-geotiff-worker.js from the same build and reload.',
+      );
     if (result.type !== 'metadata')
       throw new RasterError('RASTER_WORKER_PROTOCOL', 'Expected raster metadata.');
+    this.lifetime.signal.throwIfAborted();
     this.metadata = result.metadata;
+    // Keep duplicated directory arrays within the original 32MiB per-source envelope.
+    const cost = result.directoryBytes ?? 32 * 1024 ** 2;
+    this.target = Math.min(
+      this.requested,
+      Math.max(1, Math.floor((32 * 1024 ** 2) / Math.max(1, cost))),
+    );
+    primary.ready = true;
+    // Warm the second metadata-only replica during the host's initial view settle.
+    // This starts no pixel reads and never runs before mandatory pyramid validation.
+    if (this.target > 1) this.startReplica();
+    this.lifetime.signal.throwIfAborted();
   }
-  private call(
-    message:
-      | Omit<Extract<GeoTIFFWorkerRequest, { type: 'open' }>, 'id'>
-      | Omit<Extract<GeoTIFFWorkerRequest, { type: 'read' }>, 'id'>,
+  private createSlot(release?: () => void): Slot {
+    let worker: Worker;
+    try {
+      worker = new Worker(this.url, { type: 'classic', name: `emap-geotiff-${this.slots.length}` });
+    } catch (error) {
+      release?.();
+      throw error;
+    }
+    const slot: Slot = {
+      client: undefined as unknown as RasterWorkerClient,
+      ready: false,
+      bytes: 0,
+      release,
+    };
+    slot.client = new RasterWorkerClient(
+      worker,
+      () => {
+        this.reservedBytes -= slot.bytes;
+        slot.bytes = 0;
+        this.pump();
+      },
+      (error) => this.fail(error),
+    );
+    this.slots.push(slot);
+    return slot;
+  }
+  private startReplica(): boolean {
+    if (this.slots.length >= this.target || !this.openCommand) return false;
+    const release = acquireParallelWorker();
+    if (!release) return false;
+    let slot: Slot;
+    try {
+      slot = this.createSlot(release);
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+    const command = {
+      ...this.openCommand,
+      statistics: this.metadata.statistics,
+      maxMetadataBytes: Math.floor((32 * 1024 ** 2) / this.target),
+    };
+    void slot.client
+      .call(command, this.lifetime.signal)
+      .then((result) => {
+        if (this.closed) return;
+        if (
+          result.type !== 'metadata' ||
+          result.protocolVersion !== 2 ||
+          result.metadata.crs !== this.metadata.crs ||
+          JSON.stringify(result.metadata.levels) !== JSON.stringify(this.metadata.levels) ||
+          JSON.stringify(result.metadata.bounds) !== JSON.stringify(this.metadata.bounds)
+        )
+          throw new RasterError(
+            'RASTER_FILE_CHANGED',
+            'Raster metadata changed while opening a parallel reader.',
+          );
+        slot.ready = true;
+        this.pump();
+      })
+      .catch((error) => this.fail(error));
+    return true;
+  }
+  private submit(
+    command: GeoTIFFWorkerCommand,
+    bytes: number,
     signal?: AbortSignal,
   ): Promise<GeoTIFFWorkerResponse> {
     signal?.throwIfAborted();
     if (this.closed)
       return Promise.reject(new RasterError('SOURCE_CLOSED', 'Raster source has been disposed.'));
-    if (this.pending.size >= 16)
+    if (this.queue.length + this.slots.filter((slot) => slot.client.busy).length >= 16)
       return Promise.reject(
-        new RasterError('RASTER_QUEUE_BUDGET', 'Too many pending raster reads.'),
+        new RasterError('RASTER_QUEUE_BUDGET', 'Too many pending raster requests.'),
       );
-    const id = ++this.nextId;
     return new Promise((resolve, reject) => {
+      const meshBytes = command.type === 'render' ? command.request.warp.points.byteLength : 0;
+      const cleanup = () => signal?.removeEventListener('abort', abort);
+      const job: Job = { command, bytes, signal, resolve, reject, cleanup };
       const abort = () => {
-        const entry = this.pending.get(id);
-        if (!entry) return;
-        this.pending.delete(id);
-        entry.cleanup();
-        try {
-          this.worker.postMessage({ id, type: 'cancel' } satisfies GeoTIFFWorkerRequest);
-        } catch (error) {
-          this.fail(error);
-        } finally {
-          reject(signal?.reason ?? new DOMException('Cancelled', 'AbortError'));
-        }
-      };
-      const timer = setTimeout(
-        () =>
-          this.fail(
-            new RasterError(
-              'RASTER_WORKER_TIMEOUT',
-              'Raster Worker exceeded the bounded request timeout.',
-            ),
-          ),
-        60000,
-      );
-      const cleanup = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', abort);
-      };
-      this.pending.set(id, { resolve, reject, cleanup });
-      signal?.addEventListener('abort', abort, { once: true });
-      try {
-        this.worker.postMessage({ ...message, id });
-      } catch (error) {
-        this.pending.delete(id);
+        const index = this.queue.indexOf(job);
+        if (index < 0) return;
+        this.queue.splice(index, 1);
+        this.queuedMeshBytes -= meshBytes;
+        this.pending.delete(job);
         cleanup();
-        reject(error);
-      }
+        reject(signal?.reason ?? new DOMException('Cancelled', 'AbortError'));
+        this.pump();
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      this.pending.add(job);
+      this.queuedMeshBytes += meshBytes;
+      this.queue.push(job);
+      this.pump();
     });
   }
+  private pump(): void {
+    if (this.closed || !this.metadata) return;
+    while (this.queue.length) {
+      const slot = this.slots.find((value) => value.ready && !value.client.busy);
+      if (!slot) {
+        this.startReplica();
+        return;
+      }
+      const job = this.queue[0];
+      if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) return;
+      this.queue.shift();
+      job.cleanup();
+      if (job.command.type === 'render')
+        this.queuedMeshBytes -= job.command.request.warp.points.byteLength;
+      slot.bytes = job.bytes;
+      this.reservedBytes += job.bytes;
+      const transfer: Transferable[] =
+        job.command.type === 'render'
+          ? [job.command.request.warp.points.buffer as ArrayBuffer]
+          : [];
+      const result = slot.client.call(job.command, job.signal, transfer);
+      this.peakWorkers = Math.max(
+        this.peakWorkers,
+        this.slots.filter((value) => value.ready && value.client.busy).length,
+      );
+      void result.then(
+        (response) => {
+          this.pending.delete(job);
+          if (response.type === 'rendered') this.renderedTiles++;
+          job.resolve(response);
+        },
+        (error) => {
+          this.pending.delete(job);
+          job.reject(error);
+        },
+      );
+    }
+  }
   async readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
-    const result = await this.call({ type: 'read', request }, signal);
-    if (result.type !== 'result')
-      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Expected raster pixel data.');
-    return result.result;
+    const level = this.metadata.levels.find((value) => value.id === request.level);
+    if (!level) throw new RasterError('INVALID_LEVEL', 'Unknown raster level.');
+    const bytes = validateRasterWindow(level, request.window, request.samples);
+    const snapshot = {
+      ...request,
+      window: [...request.window] as [number, number, number, number],
+      samples: [...request.samples],
+    };
+    const response = await this.submit({ type: 'read', request: snapshot }, bytes, signal);
+    if (response.type !== 'result')
+      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Expected original raster samples.');
+    return response.result;
+  }
+  async renderTile(
+    request: RasterRenderRequest,
+    signal?: AbortSignal,
+  ): Promise<RasterRenderResult> {
+    validateRasterStyle(this.metadata, request.style);
+    const bytes = validateRasterRender(this.metadata, request);
+    signal?.throwIfAborted();
+    if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster source has been disposed.');
+    if (this.queuedMeshBytes + request.warp.points.byteLength > 32 * 1024 ** 2)
+      throw new RasterError('RASTER_QUEUE_BUDGET', 'Queued warp meshes exceed 32MiB.');
+    // Caller keeps ownership of its reusable mesh; transfer only an independent copy.
+    const style = {
+      ...request.style,
+      ...(request.style.bands ? { bands: [...request.style.bands] } : {}),
+      ...(request.style.ranges
+        ? { ranges: request.style.ranges.map((r) => [r[0], r[1]] as const) }
+        : {}),
+    };
+    const message = {
+      ...request,
+      read: {
+        ...request.read,
+        window: [...request.read.window] as [number, number, number, number],
+        samples: [...request.read.samples],
+      },
+      style,
+      warp: { ...request.warp, points: request.warp.points.slice() },
+    };
+    const response = await this.submit({ type: 'render', request: message }, bytes, signal);
+    if (
+      response.type !== 'rendered' ||
+      response.result.width !== request.width ||
+      response.result.height !== request.height ||
+      response.result.rgba.byteLength !== request.width * request.height * 4
+    )
+      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Invalid rendered raster tile.');
+    return response.result;
+  }
+  getProcessingStats(): RasterProcessingStats {
+    return {
+      workers: this.slots.length,
+      busyWorkers: this.slots.filter((slot) => slot.ready && slot.client.busy).length,
+      peakWorkers: this.peakWorkers,
+      queuedTasks: this.queue.length,
+      reservedBytes: this.reservedBytes,
+      renderedTiles: this.renderedTiles,
+    };
   }
   toReference(): RasterReference {
     const { filename, fileSize, lastModified, crs, overviewFile } = this.metadata;
@@ -131,30 +310,37 @@ class WorkerRasterSource implements RasterSource {
   private fail(error: unknown): void {
     if (this.closed) return;
     this.closed = true;
-    this.worker.terminate();
-    for (const entry of this.pending.values()) {
-      entry.cleanup();
-      entry.reject(error);
+    this.lifetime.abort(error);
+    for (const slot of this.slots) {
+      slot.client.dispose(error);
+      slot.release?.();
     }
+    this.slots.length = 0;
+    for (const job of this.queue) {
+      job.cleanup();
+      job.reject(error);
+    }
+    this.queue = [];
     this.pending.clear();
-    this.worker.onmessage = null;
-    this.worker.onerror = null;
-    this.worker.onmessageerror = null;
+    this.reservedBytes = 0;
+    this.queuedMeshBytes = 0;
+    this.openCommand = undefined;
   }
   dispose(): void {
     this.fail(new DOMException('Raster source disposed', 'AbortError'));
   }
 }
 
-/** Keep source bytes in the original File; only bounded pixel windows cross the Worker boundary. */
+/** True parallel tile workers; original files are referenced, never copied into browser storage. */
 export async function openGeoTIFF(
   file: File,
   options: OpenGeoTIFFOptions = {},
 ): Promise<RasterSource> {
   options.signal?.throwIfAborted();
+  const count = rasterWorkerCount(options.workerCount);
   const url =
     options.workerUrl ?? new URL(/* @vite-ignore */ './emap-geotiff-worker.js', import.meta.url);
-  const source = new WorkerRasterSource(new Worker(url, { type: 'classic', name: 'emap-geotiff' }));
+  const source = new WorkerRasterSource(url, count);
   try {
     await source.open(file, options);
     return source;

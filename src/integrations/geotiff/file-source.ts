@@ -10,9 +10,16 @@ export class LocalRasterFileSource {
   private readonly pages = new Map<number, ArrayBuffer>();
   private readonly pendingPages = new Map<number, Promise<ArrayBuffer>>();
   private readonly pageSize = 64 * 1024;
-  private readonly pageLimit = 16; // 1MiB retained plus at most 1MiB pending per file.
+  // Replicas divide this capacity instead of multiplying retained compressed pages.
+  private readonly pageLimit: number;
   readonly fileSize: number;
-  constructor(private file: Blob | null) {
+  constructor(
+    private file: Blob | null,
+    pageLimit = 16,
+  ) {
+    if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 16)
+      throw new RasterError('INVALID_RASTER_BUDGET', 'Page count must be 1–16.');
+    this.pageLimit = pageLimit;
     if (!file) throw new RasterError('INVALID_RASTER', 'Missing local raster file.');
     this.fileSize = file.size;
   }

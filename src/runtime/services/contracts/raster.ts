@@ -1,5 +1,6 @@
 import type {
   RasterMetadata,
+  RasterProcessingStats,
   RasterReference,
   RasterSource,
   RasterStyle,
@@ -50,4 +51,6 @@ export interface RasterContract {
   ): Promise<readonly number[] | null>;
   toReferences(): readonly RasterLayerReference[];
   getStats(): RasterCacheStats;
+  /** Provider-specific background processing counters, or null for legacy sources. */
+  getProcessingStats(id: string): RasterProcessingStats | null;
 }

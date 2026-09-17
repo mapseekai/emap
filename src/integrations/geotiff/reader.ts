@@ -11,6 +11,7 @@ import {
 } from '../../domain/raster/policy';
 import type {
   RasterLevel,
+  RasterBandStatistics,
   RasterMetadata,
   RasterReadRequest,
   RasterReadResult,
@@ -24,6 +25,13 @@ export interface GeoTIFFOpenOptions {
   /** Required override when the source does not carry a supported EPSG GeoKey. */
   readonly crs?: string;
   readonly signal?: AbortSignal;
+}
+
+export interface GeoTIFFReaderRuntime {
+  readonly cacheBytes?: number;
+  readonly pageLimit?: number;
+  readonly maxMetadataBytes?: number;
+  readonly statistics?: readonly RasterBandStatistics[];
 }
 
 function descriptor(image: GeoTIFFImage, id: number): RasterLevel {
@@ -128,13 +136,18 @@ export class GeoTIFFReader implements RasterSource {
     private readonly images: Map<number, GeoTIFFImage>,
     private readonly sources: LocalRasterFileSource[],
     private readonly blockCache: RasterBlockCache,
+    readonly directoryBytes: number,
   ) {}
 
   get metadata(): RasterMetadata {
     return this._metadata;
   }
 
-  static async open(file: File, options: GeoTIFFOpenOptions = {}): Promise<GeoTIFFReader> {
+  static async open(
+    file: File,
+    options: GeoTIFFOpenOptions = {},
+    runtime: GeoTIFFReaderRuntime = {},
+  ): Promise<GeoTIFFReader> {
     options.signal?.throwIfAborted();
     if (!Number.isSafeInteger(file.size) || file.size < 8)
       throw new RasterError('INVALID_RASTER', 'Invalid TIFF file size.');
@@ -152,12 +165,12 @@ export class GeoTIFFReader implements RasterSource {
     let base: GeoTIFFImage | undefined, baseTiff: GeoTIFF | undefined;
     let hasValidityMask = false;
     let metadataBytes = 0;
-    const blockCache = new RasterBlockCache();
+    const blockCache = new RasterBlockCache(runtime.cacheBytes);
     let imageId = 0;
     try {
       for (const input of [file, ...(options.overviewFile ? [options.overviewFile] : [])]) {
         const firstLevel = levels.length;
-        const source = new LocalRasterFileSource(input);
+        const source = new LocalRasterFileSource(input, runtime.pageLimit);
         sources.push(source);
         const tiff = await GeoTIFF.fromSource(source, { cache: false }, options.signal);
         baseTiff ??= tiff;
@@ -181,7 +194,7 @@ export class GeoTIFFReader implements RasterSource {
             tiff.bigTiff,
             options.signal,
           );
-          if (metadataBytes > 32 * 1024 ** 2)
+          if (metadataBytes > (runtime.maxMetadataBytes ?? 32 * 1024 ** 2))
             throw new RasterError(
               'TIFF_DIRECTORY_BUDGET',
               'Combined TIFF directory arrays exceed 32MiB.',
@@ -343,13 +356,16 @@ export class GeoTIFFReader implements RasterSource {
           : {}),
       };
       options.signal?.throwIfAborted();
-      const reader = new GeoTIFFReader(metadata, images, sources, blockCache);
+      const reader = new GeoTIFFReader(metadata, images, sources, blockCache, metadataBytes);
       // Mandatory pyramid checks above precede even the first statistics read.
       try {
         if (!metadata.palette)
           reader._metadata = {
             ...metadata,
-            statistics: await collectRasterStatistics(reader, options.signal),
+            statistics:
+              runtime.statistics?.length === metadata.levels[0].samples
+                ? runtime.statistics
+                : await collectRasterStatistics(reader, options.signal),
           };
         return reader;
       } catch (error) {
