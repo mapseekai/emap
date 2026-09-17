@@ -117,6 +117,11 @@ describe('local GeoTIFF source', () => {
       file({ overviews: [2, 4] }, 'large.tif', RASTER_PYRAMID_THRESHOLD + 1),
     );
     expect(source.metadata.levels).toHaveLength(3);
+    expect(source.metadata.levels.map((level) => level.source)).toEqual([
+      'base',
+      'internal-overview',
+      'internal-overview',
+    ]);
     const result = await source.readWindow({ level: 2, window: [0, 0, 1, 1], samples: [0] });
     expect(result.data[0][0]).toBe(180);
     source.dispose();
@@ -156,6 +161,10 @@ describe('local GeoTIFF source', () => {
     );
     const source = await GeoTIFFReader.open(original, { overviewFile });
     expect(source.metadata.levels).toHaveLength(2);
+    expect(source.metadata.levels.map((level) => level.source)).toEqual([
+      'base',
+      'external-overview',
+    ]);
     expect(source.toReference().overviewFile?.filename).toBe('external.tif.ovr');
     const pixels = await source.readWindow({ level: 1, window: [0, 0, 1, 1], samples: [0] });
     expect(pixels.data[0][0]).toBe(180);

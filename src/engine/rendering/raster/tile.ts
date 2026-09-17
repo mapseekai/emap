@@ -14,6 +14,75 @@ import type {
 import type { RasterCoordinateTransform } from './projector';
 
 export const RASTER_TILE_SIZE = 256;
+export interface RasterLevelSelection {
+  readonly level: RasterLevel;
+  /** Approximate base-source pixels represented by one display pixel at tile center. */
+  readonly sourcePixelsPerDisplayPixel: number;
+}
+interface RasterLevelContext extends RasterLevelSelection {
+  readonly base: RasterLevel;
+  readonly locateBase: (x: number, y: number) => [number, number] | null;
+}
+function rasterLevelContext(
+  metadata: RasterMetadata,
+  bounds: RasterWindow,
+  toSource: RasterCoordinateTransform,
+  size: number,
+): RasterLevelContext {
+  const base = metadata.levels[0];
+  const pixelTransform = new AffineTransform(
+    metadata.resolution[0],
+    metadata.resolution[1],
+    metadata.origin[0],
+    metadata.origin[1],
+  );
+  const screen = new AffineTransform(
+    (bounds[2] - bounds[0]) / size,
+    (bounds[1] - bounds[3]) / size,
+    bounds[0],
+    bounds[3],
+  );
+  const locateBase = (x: number, y: number): [number, number] | null => {
+    const world = screen.project(x, y),
+      source = toSource(world[0], world[1]);
+    if (!source || !source.every(Number.isFinite)) return null;
+    return pixelTransform.unproject(source[0], source[1]);
+  };
+  const center = locateBase(size / 2, size / 2),
+    dx = locateBase(size / 2 + 1, size / 2),
+    dy = locateBase(size / 2, size / 2 + 1);
+  let sourcePixelsPerDisplayPixel = 1;
+  if (center && dx && dy)
+    sourcePixelsPerDisplayPixel = Math.min(
+      Math.hypot(dx[0] - center[0], dx[1] - center[1]),
+      Math.hypot(dy[0] - center[0], dy[1] - center[1]),
+    );
+  let level = base;
+  for (const candidate of metadata.levels.slice(1)) {
+    const reduction = Math.max(base.width / candidate.width, base.height / candidate.height);
+    if (reduction <= sourcePixelsPerDisplayPixel && candidate.width < level.width)
+      level = candidate;
+  }
+  return { base, level, locateBase, sourcePixelsPerDisplayPixel };
+}
+
+/** Lightweight LOD selection used both by planning diagnostics and the actual tile plan. */
+export function selectRasterLevel(
+  metadata: RasterMetadata,
+  bounds: RasterWindow,
+  toSource: RasterCoordinateTransform,
+  size = RASTER_TILE_SIZE,
+): RasterLevelSelection {
+  if (!Number.isInteger(size) || size < 1 || size > 1024)
+    throw new RasterError('INVALID_RASTER_RENDER', 'Display tile edge must be 1–1024 pixels.');
+  const { level, sourcePixelsPerDisplayPixel } = rasterLevelContext(
+    metadata,
+    bounds,
+    toSource,
+    size,
+  );
+  return { level, sourcePixelsPerDisplayPixel };
+}
 export interface RasterTilePlan {
   readonly request: RasterReadRequest;
   readonly warp: RasterWarpMesh;
@@ -72,39 +141,7 @@ export function planRasterTile(
   if (!Number.isInteger(size) || size < 1 || size > 1024)
     throw new RasterError('INVALID_RASTER_RENDER', 'Display tile edge must be 1–1024 pixels.');
   validateRasterStyle(metadata, style);
-  const base = metadata.levels[0];
-  const pixelTransform = new AffineTransform(
-    metadata.resolution[0],
-    metadata.resolution[1],
-    metadata.origin[0],
-    metadata.origin[1],
-  );
-  const screen = new AffineTransform(
-    (bounds[2] - bounds[0]) / size,
-    (bounds[1] - bounds[3]) / size,
-    bounds[0],
-    bounds[3],
-  );
-  const locateBase = (x: number, y: number): [number, number] | null => {
-    const world = screen.project(x, y),
-      source = toSource(world[0], world[1]);
-    if (!source || !source.every(Number.isFinite)) return null;
-    return pixelTransform.unproject(source[0], source[1]);
-  };
-  const center = locateBase(size / 2, size / 2),
-    dx = locateBase(size / 2 + 1, size / 2),
-    dy = locateBase(size / 2, size / 2 + 1);
-  let desired = 1;
-  if (center && dx && dy)
-    desired = Math.min(
-      Math.hypot(dx[0] - center[0], dx[1] - center[1]),
-      Math.hypot(dy[0] - center[0], dy[1] - center[1]),
-    );
-  let level = base;
-  for (const candidate of metadata.levels.slice(1)) {
-    const reduction = Math.max(base.width / candidate.width, base.height / candidate.height);
-    if (reduction <= desired && candidate.width < level.width) level = candidate;
-  }
+  const { base, level, locateBase } = rasterLevelContext(metadata, bounds, toSource, size);
   const rx = level.width / base.width,
     ry = level.height / base.height;
   const exact = (x: number, y: number): [number, number] | null => {

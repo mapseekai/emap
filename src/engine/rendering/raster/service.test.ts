@@ -187,6 +187,21 @@ describe('settled, progressive raster frames', () => {
     expect(layer?.tiles).toBeGreaterThan(0);
     expect(layer?.tiles).toBeLessThanOrEqual(64);
     expect(layer?.grid[0] * layer?.grid[1]).toBe(layer?.tiles);
+    expect(layer?.selectedLevel).toBe(0);
+    expect(layer?.selectedLevelSource).toBe('base');
+    expect(layer?.selectedLevelSize).toEqual([8, 8]);
+    expect(layer?.selectedLevelReduction).toBe(1);
+    expect(layer?.sourcePixelsPerDisplayPixel?.[0]).toBeGreaterThan(0);
+    expect(layer?.selectedLevels).toEqual([
+      expect.objectContaining({
+        level: 0,
+        tiles: layer?.tiles,
+        size: [8, 8],
+        blockSize: [8, 8],
+        reduction: 1,
+        source: 'base',
+      }),
+    ]);
     const passes = before.performance.planningPasses;
     const planned = before.performance.plannedTiles;
     const next = { ...frame, transform: frame.transform.clone() };

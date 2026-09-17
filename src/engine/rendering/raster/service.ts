@@ -33,6 +33,7 @@ import {
 import {
   RASTER_TILE_SIZE,
   planRasterTile,
+  selectRasterLevel,
   colorizeRasterTile,
   validateRasterStyle,
   rasterBands,
@@ -277,21 +278,7 @@ export class RasterRenderService implements RasterContract {
           1,
           Math.ceil((frame.height * effectivePixelRatio) / RASTER_TILE_SIZE),
         );
-        planningLayers.push({
-          id: layer.id,
-          grid: [gridX, gridY],
-          tiles: gridX * gridY,
-          idealViewportTiles: idealX * idealY,
-          amplification: (gridX * gridY) / (idealX * idealY),
-          pixelSize,
-          span,
-          targetResolution: resolution,
-          sourceResolution: layer.source.metadata.resolution,
-          selectedLevel: null,
-          selectedLevelSize: null,
-          selectedLevelReduction: null,
-        });
-
+        const layerTasks: Task[] = [];
         for (
           let y = Math.floor((clipped[1] - extent[1]) / span);
           y < Math.ceil((clipped[3] - extent[1]) / span);
@@ -303,7 +290,7 @@ export class RasterRenderService implements RasterContract {
             x++
           ) {
             const key = JSON.stringify([layer.id, layer.revision, crs, span, x, y]);
-            tasks.push({
+            const task: Task = {
               key,
               layer,
               revision: layer.revision,
@@ -316,8 +303,70 @@ export class RasterRenderService implements RasterContract {
               ],
               toSource,
               span,
-            });
+            };
+            tasks.push(task);
+            layerTasks.push(task);
           }
+        const base = layer.source.metadata.levels[0];
+        const selections = new Map<
+          number,
+          {
+            level: (typeof layer.source.metadata.levels)[number];
+            tiles: number;
+            min: number;
+            max: number;
+          }
+        >();
+        for (const task of layerTasks) {
+          const selection = selectRasterLevel(layer.source.metadata, task.bounds, task.toSource);
+          const current = selections.get(selection.level.id);
+          if (current) {
+            current.tiles++;
+            current.min = Math.min(current.min, selection.sourcePixelsPerDisplayPixel);
+            current.max = Math.max(current.max, selection.sourcePixelsPerDisplayPixel);
+          } else
+            selections.set(selection.level.id, {
+              level: selection.level,
+              tiles: 1,
+              min: selection.sourcePixelsPerDisplayPixel,
+              max: selection.sourcePixelsPerDisplayPixel,
+            });
+        }
+        const selectedLevels = [...selections.values()]
+          .sort((a, b) => a.level.id - b.level.id)
+          .map(({ level, tiles, min, max }) => ({
+            level: level.id,
+            tiles,
+            size: [level.width, level.height] as const,
+            blockSize: [level.tileWidth, level.tileHeight] as const,
+            reduction: Math.max(base.width / level.width, base.height / level.height),
+            source: level.source ?? ('unknown' as const),
+            sourcePixelsPerDisplayPixel: [min, max] as const,
+          }));
+        const uniform = selectedLevels.length === 1 ? selectedLevels[0] : null;
+        const sourcePixels = selectedLevels.length
+          ? ([
+              Math.min(...selectedLevels.map((item) => item.sourcePixelsPerDisplayPixel[0])),
+              Math.max(...selectedLevels.map((item) => item.sourcePixelsPerDisplayPixel[1])),
+            ] as const)
+          : null;
+        planningLayers.push({
+          id: layer.id,
+          grid: [gridX, gridY],
+          tiles: gridX * gridY,
+          idealViewportTiles: idealX * idealY,
+          amplification: (gridX * gridY) / (idealX * idealY),
+          pixelSize,
+          span,
+          targetResolution: resolution,
+          sourceResolution: layer.source.metadata.resolution,
+          sourcePixelsPerDisplayPixel: sourcePixels,
+          selectedLevel: uniform?.level ?? null,
+          selectedLevelSize: uniform?.size ?? null,
+          selectedLevelReduction: uniform?.reduction ?? null,
+          selectedLevelSource: uniform?.source ?? null,
+          selectedLevels,
+        });
       } catch (error) {
         if (epoch === this.epoch && !this.disposed) this.deps.reportError(layer.id, error);
       }

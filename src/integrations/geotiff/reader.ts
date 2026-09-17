@@ -34,13 +34,18 @@ export interface GeoTIFFReaderRuntime {
   readonly statistics?: readonly RasterBandStatistics[];
 }
 
-function descriptor(image: GeoTIFFImage, id: number): RasterLevel {
+function descriptor(
+  image: GeoTIFFImage,
+  id: number,
+  source: NonNullable<RasterLevel['source']>,
+): RasterLevel {
   const fd = image.getFileDirectory(),
     samples = image.getSamplesPerPixel();
   const bits = Array.from({ length: samples }, (_, i) => image.getBitsPerSample(i));
   const formats = Array.from({ length: samples }, (_, i) => image.getSampleFormat(i));
   const result: RasterLevel = {
     id,
+    source,
     width: image.getWidth(),
     height: image.getHeight(),
     tileWidth: image.getTileWidth(),
@@ -210,8 +215,12 @@ export class GeoTIFFReader implements RasterSource {
           base ??= image;
           const subfileType = fd.getValue('NewSubfileType') ?? 0;
           if (subfileType & 4) hasValidityMask = true;
+          const levelSource: NonNullable<RasterLevel['source']> =
+            image === base ? 'base' : input === file ? 'internal-overview' : 'external-overview';
           const level =
-            image !== base && subfileType & 6 ? undefined : descriptor(image, levels.length);
+            image !== base && subfileType & 6
+              ? undefined
+              : descriptor(image, levels.length, levelSource);
           if (level && (image === base || isRasterOverview(levels[0], level))) {
             // A MINISBLACK/RGB tag difference is safe only for raw color bands,
             // never when an extra sample acquires or loses alpha semantics.

@@ -11,6 +11,8 @@ export type RasterSamples =
   | Float64Array;
 export interface RasterLevel {
   readonly id: number;
+  /** Physical image backing this level. Third-party RasterSource implementations may omit it. */
+  readonly source?: 'base' | 'internal-overview' | 'external-overview';
   readonly width: number;
   readonly height: number;
   readonly tileWidth: number;

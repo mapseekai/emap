@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { colorizeRasterTile, planRasterTile, validateRasterStyle, rasterBands } from './tile';
+import {
+  colorizeRasterTile,
+  planRasterTile,
+  rasterBands,
+  selectRasterLevel,
+  validateRasterStyle,
+} from './tile';
 import type { RasterMetadata } from '../../../domain/raster/types';
 const metadata: RasterMetadata = {
   filename: 'test.tif',
@@ -82,6 +88,40 @@ describe('raster display tiles', () => {
     )!;
     expect(plan.request.level).toBe(1);
     expect(plan.request.window).toEqual([0, 0, 2, 2]);
+  });
+  it('uses the same source-pixel ratio thresholds for lightweight LOD diagnostics', () => {
+    const twoX = {
+      ...metadata.levels[0],
+      id: 1,
+      source: 'external-overview' as const,
+      width: 4,
+      height: 4,
+      tileWidth: 2,
+      tileHeight: 2,
+      subfileType: 1,
+    };
+    const fourX = {
+      ...twoX,
+      id: 2,
+      width: 2,
+      height: 2,
+    };
+    const pyramid = {
+      ...metadata,
+      levels: [{ ...metadata.levels[0], source: 'base' as const }, twoX, fourX],
+    };
+    const zoomed = selectRasterLevel(pyramid, [0, 0, 8, 8], identity, 16);
+    expect(zoomed.level.id).toBe(0);
+    expect(zoomed.sourcePixelsPerDisplayPixel).toBeCloseTo(0.5);
+    const medium = selectRasterLevel(pyramid, [0, 0, 8, 8], identity, 4);
+    expect(medium.level.id).toBe(1);
+    expect(medium.sourcePixelsPerDisplayPixel).toBeCloseTo(2);
+    const distant = selectRasterLevel(pyramid, [0, 0, 8, 8], identity, 2);
+    expect(distant.level.id).toBe(2);
+    expect(distant.sourcePixelsPerDisplayPixel).toBeCloseTo(4);
+    expect(planRasterTile(pyramid, [0, 0, 8, 8], identity, {}, 2)?.request.level).toBe(
+      distant.level.id,
+    );
   });
   it('renders NoData and out-of-coverage pixels transparent', () => {
     const nd = { ...metadata, noData: 0 },

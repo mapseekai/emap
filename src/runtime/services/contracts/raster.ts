@@ -1,4 +1,5 @@
 import type {
+  RasterLevel,
   RasterMetadata,
   RasterProcessingStats,
   RasterReference,
@@ -56,6 +57,16 @@ export interface RasterPlanningDiagnostics {
   readonly displayTileSize: number;
   readonly layers: readonly RasterLayerPlanningDiagnostics[];
 }
+export interface RasterSelectedLevelDiagnostics {
+  readonly level: number;
+  readonly tiles: number;
+  readonly size: readonly [number, number];
+  readonly blockSize: readonly [number, number];
+  readonly reduction: number;
+  readonly source: NonNullable<RasterLevel['source']> | 'unknown';
+  /** Min/max base-source pixels represented by one display pixel across tiles using this level. */
+  readonly sourcePixelsPerDisplayPixel: readonly [number, number];
+}
 export interface RasterLayerPlanningDiagnostics {
   readonly id: string;
   readonly grid: readonly [number, number];
@@ -66,9 +77,15 @@ export interface RasterLayerPlanningDiagnostics {
   readonly span: number;
   readonly targetResolution: number;
   readonly sourceResolution: readonly [number, number];
+  /** Min/max base-source pixels represented by one display pixel across the current tile grid. */
+  readonly sourcePixelsPerDisplayPixel: readonly [number, number] | null;
+  /** Populated only when every current display tile chooses the same pyramid level. */
   readonly selectedLevel: number | null;
   readonly selectedLevelSize: readonly [number, number] | null;
   readonly selectedLevelReduction: number | null;
+  readonly selectedLevelSource: NonNullable<RasterLevel['source']> | 'unknown' | null;
+  /** Exact current tile-plan distribution, independent of worker completion order or cache reuse. */
+  readonly selectedLevels: readonly RasterSelectedLevelDiagnostics[];
 }
 export interface RasterCacheStats {
   readonly cachedBytes: number;
