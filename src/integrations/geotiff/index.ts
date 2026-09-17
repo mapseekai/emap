@@ -17,6 +17,7 @@ export type {
   RasterTaskDiagnostics,
   RasterWarpMesh,
   RasterProcessingStats,
+  RasterLevelProcessingStats,
   RasterReadRequest,
   RasterReadResult,
   RasterSamples,
