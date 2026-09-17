@@ -17,6 +17,7 @@ import type {
 import { validateRasterRender } from '../../engine/rendering/raster/warp';
 import { validateRasterStyle } from '../../engine/rendering/raster/tile';
 import type { GeoTIFFOpenOptions } from './reader';
+import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
 import type {
   GeoTIFFWorkerCommand,
   GeoTIFFWorkerResponse,
@@ -24,6 +25,18 @@ import type {
 } from './worker-protocol';
 import { RasterWorkerClient } from './worker-client';
 import { acquireParallelWorker, rasterWorkerCount } from './worker-capacity';
+
+const STRIPED_PRIMARY_CACHE_BYTES = 32 * 1024 ** 2;
+
+function isRowStripedLevel(level: RasterMetadata['levels'][number]): boolean {
+  return level.tileWidth >= level.width && level.tileHeight < level.height;
+}
+
+function commandLevel(command: GeoTIFFWorkerCommand): number | null {
+  if (command.type === 'read') return command.request.level;
+  if (command.type === 'render') return command.request.read.level;
+  return null;
+}
 
 export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
   /** Self-contained classic Worker asset. All pool replicas use this same URL. */
@@ -111,7 +124,7 @@ class WorkerRasterSource implements RasterSource {
     };
     const primary = this.createSlot();
     const result = await primary.client.call(this.openCommand, options.signal);
-    if (result.type === 'metadata' && result.protocolVersion !== 2)
+    if (result.type === 'metadata' && result.protocolVersion !== GEOTIFF_WORKER_PROTOCOL_VERSION)
       throw new RasterError(
         'RASTER_WORKER_VERSION',
         'GeoTIFF Worker asset is outdated. Deploy emap-geotiff-worker.js from the same build and reload.',
@@ -126,6 +139,17 @@ class WorkerRasterSource implements RasterSource {
       this.requested,
       Math.max(1, Math.floor((32 * 1024 ** 2) / Math.max(1, cost))),
     );
+    if (this.metadata.levels.some(isRowStripedLevel)) {
+      const configured = await primary.client.call(
+        { type: 'configure', cacheBytes: STRIPED_PRIMARY_CACHE_BYTES },
+        options.signal,
+      );
+      if (configured.type !== 'configured')
+        throw new RasterError(
+          'RASTER_WORKER_PROTOCOL',
+          'Expected raster cache configuration acknowledgement.',
+        );
+    }
     primary.ready = true;
     // Warm the second metadata-only replica during the host's initial view settle.
     // This starts no pixel reads and never runs before mandatory pyramid validation.
@@ -185,7 +209,7 @@ class WorkerRasterSource implements RasterSource {
         if (this.closed) return;
         if (
           result.type !== 'metadata' ||
-          result.protocolVersion !== 2 ||
+          result.protocolVersion !== GEOTIFF_WORKER_PROTOCOL_VERSION ||
           result.metadata.crs !== this.metadata.crs ||
           JSON.stringify(result.metadata.levels) !== JSON.stringify(this.metadata.levels) ||
           JSON.stringify(result.metadata.bounds) !== JSON.stringify(this.metadata.bounds)
@@ -263,12 +287,21 @@ class WorkerRasterSource implements RasterSource {
   private pump(): void {
     if (this.closed || !this.metadata) return;
     while (this.queue.length) {
-      const slot = this.slots.find((value) => value.ready && !value.client.busy);
+      const job = this.queue[0];
+      const levelId = commandLevel(job.command);
+      const level =
+        levelId === null ? undefined : this.metadata.levels.find((item) => item.id === levelId);
+      const striped = level ? isRowStripedLevel(level) : false;
+      const primary = this.slots[0];
+      const slot = striped
+        ? primary?.ready && !primary.client.busy
+          ? primary
+          : undefined
+        : this.slots.find((value) => value.ready && !value.client.busy);
       if (!slot) {
-        this.startReplica();
+        if (!striped) this.startReplica();
         return;
       }
-      const job = this.queue[0];
       if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) return;
       this.queue.shift();
       job.cleanup();

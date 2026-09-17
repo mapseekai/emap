@@ -1,6 +1,7 @@
 import { planRasterTile } from '../../engine/rendering/raster/tile';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openGeoTIFF, openGeoTIFFHandle } from './source';
+import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
 import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
 import type { RasterMetadata } from '../../domain/raster/types';
 const metadata: RasterMetadata = {
@@ -47,7 +48,10 @@ class FakeWorker {
   }
   reply(message: GeoTIFFWorkerResponse) {
     this.onmessage?.({
-      data: message.type === 'metadata' ? { protocolVersion: 2, ...message } : message,
+      data:
+        message.type === 'metadata'
+          ? { protocolVersion: GEOTIFF_WORKER_PROTOCOL_VERSION, ...message }
+          : message,
     } as MessageEvent<GeoTIFFWorkerResponse>);
   }
 }
@@ -257,6 +261,57 @@ describe('parallel raster pipeline pool', () => {
       source.dispose();
     }
     expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
+  });
+  it('pins row-striped levels to an enlarged primary Worker cache', async () => {
+    const stripedMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 1024,
+          height: 1024,
+          tileWidth: 1024,
+          tileHeight: 1,
+        },
+      ],
+    };
+    const opening = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount: 2 });
+    const primary = FakeWorker.instances[0];
+    primary.reply({ id: 1, type: 'metadata', metadata: stripedMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    expect(primary.messages.at(-1)).toMatchObject({
+      id: 2,
+      type: 'configure',
+      cacheBytes: 32 * 1024 ** 2,
+    });
+    primary.reply({ id: 2, type: 'configured' });
+    const source = await opening;
+    const replica = FakeWorker.instances[1];
+    replica.reply({ id: 1, type: 'metadata', metadata: stripedMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+
+    const stripedRequest = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
+    const first = source.readWindow(stripedRequest);
+    const second = source.readWindow(stripedRequest);
+    expect(primary.messages.filter((message) => message.type === 'read')).toHaveLength(1);
+    expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(0);
+    expect(source.getProcessingStats?.()).toMatchObject({ busyWorkers: 1, queuedTasks: 1 });
+    primary.reply({
+      id: 3,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([10])] },
+    });
+    expect((await first).data[0][0]).toBe(10);
+    await Promise.resolve();
+    expect(primary.messages.at(-1)).toMatchObject({ id: 4, type: 'read' });
+    expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(0);
+    primary.reply({
+      id: 4,
+      type: 'result',
+      result: { width: 1, height: 1, data: [new Uint8Array([20])] },
+    });
+    expect((await second).data[0][0]).toBe(20);
+    source.dispose();
   });
   it('returns RGBA directly for rendering without dispatching a raw window to the main thread', async () => {
     const { source, worker } = await opened();

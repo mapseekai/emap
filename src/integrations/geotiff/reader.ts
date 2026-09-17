@@ -148,6 +148,10 @@ export class GeoTIFFReader implements RasterSource {
     return this._metadata;
   }
 
+  setBlockCacheLimit(bytes: number): void {
+    this.blockCache.setLimit(bytes);
+  }
+
   static async open(
     file: File,
     options: GeoTIFFOpenOptions = {},

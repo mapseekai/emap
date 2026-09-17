@@ -1,6 +1,7 @@
 import { renderRasterWindow } from './render-window';
 import { RasterError } from '../../domain/raster/policy';
 import { GeoTIFFReader } from './reader';
+import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
 import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
 
 const scope = self as unknown as {
@@ -42,14 +43,17 @@ scope.onmessage = ({ data }) => {
           type: 'metadata',
           metadata: reader.metadata,
           directoryBytes: reader.directoryBytes,
-          protocolVersion: 2,
+          protocolVersion: GEOTIFF_WORKER_PROTOCOL_VERSION,
         });
       } finally {
         opening = false;
       }
     } else {
       if (!reader) throw new RasterError('SOURCE_NOT_OPEN', 'Raster file is not open.');
-      if (data.type === 'render') {
+      if (data.type === 'configure') {
+        reader.setBlockCacheLimit(data.cacheBytes);
+        scope.postMessage({ id: data.id, type: 'configured' });
+      } else if (data.type === 'render') {
         const result = await renderRasterWindow(reader, data.request, controller.signal);
         scope.postMessage({ id: data.id, type: 'rendered', result }, [result.rgba.buffer]);
       } else {

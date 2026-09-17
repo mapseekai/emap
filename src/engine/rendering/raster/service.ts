@@ -73,6 +73,9 @@ interface Task {
   bounds: RasterWindow;
   toSource: RasterCoordinateTransform;
   span: number;
+  selectedLevel: number;
+  rowStriped: boolean;
+  gridRow: number;
 }
 interface TileBatch {
   readonly keys: ReadonlySet<string>;
@@ -290,19 +293,26 @@ export class RasterRenderService implements RasterContract {
             x++
           ) {
             const key = JSON.stringify([layer.id, layer.revision, crs, span, x, y]);
+            const bounds: RasterWindow = [
+              extent[0] + x * span,
+              extent[1] + y * span,
+              extent[0] + (x + 1) * span,
+              extent[1] + (y + 1) * span,
+            ];
+            const selection = selectRasterLevel(layer.source.metadata, bounds, toSource);
             const task: Task = {
               key,
               layer,
               revision: layer.revision,
               crs,
-              bounds: [
-                extent[0] + x * span,
-                extent[1] + y * span,
-                extent[0] + (x + 1) * span,
-                extent[1] + (y + 1) * span,
-              ],
+              bounds,
               toSource,
               span,
+              selectedLevel: selection.level.id,
+              rowStriped:
+                selection.level.tileWidth >= selection.level.width &&
+                selection.level.tileHeight < selection.level.height,
+              gridRow: y,
             };
             tasks.push(task);
             layerTasks.push(task);
@@ -407,9 +417,23 @@ export class RasterRenderService implements RasterContract {
         (task.bounds[0] + task.bounds[2]) / 2 - cx,
         (task.bounds[1] + task.bounds[3]) / 2 - cy,
       );
+    const stripRowDistance = (task: Task) => Math.abs((task.bounds[1] + task.bounds[3]) / 2 - cy);
+    const priority = (task: Task) => (task.rowStriped ? stripRowDistance(task) : distance(task));
     this.queue = tasks
       .filter((task) => !this.cache.has(task.key) && !this.failures.has(task.key))
-      .sort((a, b) => distance(a) - distance(b));
+      .sort((a, b) => {
+        const ordered = priority(a) - priority(b);
+        if (ordered) return ordered;
+        if (
+          a.rowStriped &&
+          b.rowStriped &&
+          a.layer === b.layer &&
+          a.selectedLevel === b.selectedLevel &&
+          a.gridRow !== b.gridRow
+        )
+          return a.gridRow - b.gridRow;
+        return distance(a) - distance(b);
+      });
     for (const task of tasks) if (this.cache.has(task.key)) this.publishTile(task.key);
     this.deps.requestRender();
     this.trimCache();

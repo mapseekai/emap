@@ -31,6 +31,22 @@ describe('bounded decoded TIFF block cache', () => {
       oversizeSkips: 1,
     });
   });
+  it('resizes a striped working set while preserving byte-bounded LRU eviction', () => {
+    const cache = new RasterBlockCache(8);
+    cache.set('a', new ArrayBuffer(4));
+    cache.set('b', new ArrayBuffer(4));
+    cache.setLimit(16);
+    cache.set('c', new ArrayBuffer(4));
+    cache.set('d', new ArrayBuffer(4));
+    expect(cache.bytes).toBe(16);
+    expect(cache.getDiagnostics().limitBytes).toBe(16);
+    cache.setLimit(8);
+    expect(cache.bytes).toBe(8);
+    expect(cache.size).toBe(2);
+    expect(cache.get('a')).toBeUndefined();
+    expect(cache.get('b')).toBeUndefined();
+    expect(cache.getDiagnostics()).toMatchObject({ limitBytes: 8, evictions: 2, evictedBytes: 8 });
+  });
   it('accounts replacements and prevents late completion from repopulating disposed caches', () => {
     const cache = new RasterBlockCache(16);
     cache.set('a', new ArrayBuffer(8));

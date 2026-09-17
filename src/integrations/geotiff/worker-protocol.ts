@@ -1,3 +1,5 @@
+export const GEOTIFF_WORKER_PROTOCOL_VERSION = 3;
+
 import type {
   RasterMetadata,
   RasterReadRequest,
@@ -19,6 +21,7 @@ export type GeoTIFFWorkerOpen = {
 };
 export type GeoTIFFWorkerCommand =
   | GeoTIFFWorkerOpen
+  | { type: 'configure'; cacheBytes: number }
   | { type: 'read'; request: RasterReadRequest }
   | { type: 'render'; request: RasterRenderRequest };
 export type GeoTIFFWorkerRequest =
@@ -34,4 +37,5 @@ export type GeoTIFFWorkerResponse =
     }
   | { id: number; type: 'result'; result: RasterReadResult }
   | { id: number; type: 'rendered'; result: RasterRenderResult }
+  | { id: number; type: 'configured' }
   | { id: number; type: 'error'; code?: string; name: string; message: string };

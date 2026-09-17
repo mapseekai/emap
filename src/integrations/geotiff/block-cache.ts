@@ -14,7 +14,21 @@ export class RasterBlockCache {
   private oversizeSkips = 0;
   private peakBytes = 0;
   private peakEntries = 0;
-  constructor(private readonly limit = 8 * 1024 ** 2) {}
+  constructor(private limit = 8 * 1024 ** 2) {}
+  setLimit(limit: number): void {
+    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 64 * 1024 ** 2)
+      throw new RangeError('Raster block cache limit must be 0–64MiB.');
+    this.limit = limit;
+    while (this.retainedBytes > this.limit || this.entries.size > 4096) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      const evicted = this.entries.get(oldest)!.byteLength;
+      this.retainedBytes -= evicted;
+      this.evictedBytes += evicted;
+      this.entries.delete(oldest);
+      this.evictions++;
+    }
+  }
   getDiagnostics() {
     return {
       hits: this.hits,
