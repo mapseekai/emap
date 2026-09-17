@@ -14,20 +14,24 @@ verifiedVersion: 0.12.0
 
 
 ```ts
-const result = await map.ops.checkGeometry({ source: "main" }) // 执行操作
-if (!result.ok) { // 读取结果前先分支
-  switch (result.error.kind) { // 收窄结构化错误
-    case "not-found": // source、layer、mask、divider 或 field 缺失
-      console.error(`Missing ${result.error.what}: ${result.error.id}`) // 标识缺失项
-      break // 结束此错误分支
-    case "validation": // 操作输入无效
-      console.error(`${result.error.field}: ${result.error.reason}`) // 显示字段错误
-      break // 结束此错误分支
+const result = await map.ops.checkGeometry({ source: 'main' }); // 执行操作
+if (!result.ok) {
+  // 读取结果前先分支
+  switch (
+    result.error.kind // 收窄结构化错误
+  ) {
+    case 'not-found': // source、layer、mask、divider 或 field 缺失
+      console.error(`Missing ${result.error.what}: ${result.error.id}`); // 标识缺失项
+      break; // 结束此错误分支
+    case 'validation': // 操作输入无效
+      console.error(`${result.error.field}: ${result.error.reason}`); // 显示字段错误
+      break; // 结束此错误分支
     default: // 其他结构化错误
-      console.error(result.error.kind) // 报告错误类别
+      console.error(result.error.kind); // 报告错误类别
   }
-} else { // 操作成功
-  console.log(result.value) // 使用检查报告
+} else {
+  // 操作成功
+  console.log(result.value); // 使用检查报告
 }
 ```
 
@@ -68,14 +72,14 @@ if (!result.ok) { // 读取结果前先分支
 `TopologySource.setData()` 在当前加载失败时触发 `error`，并以相同错误 reject。事件可集中展示错误，`await` 路径会停止后续加载。
 
 ```ts
-source.on<{ error: unknown }>("error", ({ error }) => {
-  console.error("Source import failed", error)
-})
+source.on<{ error: unknown }>('error', ({ error }) => {
+  console.error('Source import failed', error);
+});
 
 try {
-  await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) })
+  await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
 } catch (error) {
-  console.error("Keep the import UI open", error)
+  console.error('Keep the import UI open', error);
 }
 ```
 
@@ -90,19 +94,19 @@ try {
 
 ```ts
 async function previewThenCancel(map: Emap) {
-  const transaction = map.beginTransaction()
+  const transaction = map.beginTransaction();
   try {
-    const result = await map.ops.dropLayer({ source: "main", target: "draft" })
+    const result = await map.ops.dropLayer({ source: 'main', target: 'draft' });
     if (!result.ok) {
-      transaction.rollback()
-      return result
+      transaction.rollback();
+      return result;
     }
 
-    transaction.rollback()
-    return result
+    transaction.rollback();
+    return result;
   } catch (error) {
-    if (transaction.isOpen) transaction.rollback()
-    throw error
+    if (transaction.isOpen) transaction.rollback();
+    throw error;
   }
 }
 ```

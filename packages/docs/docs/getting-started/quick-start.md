@@ -18,8 +18,18 @@ import '@mapseekai/emap/style.css'; // 导入地图样式
 const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // 创建安全的交互地图
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // 加载 GeoJSON
 await map.addSource('districts', source); // 注册数据源
-map.addLayer({ id: 'district-fill', type: 'fill', source: 'districts', paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.45 } }); // 绘制填充
-map.addLayer({ id: 'district-outline', type: 'line', source: 'districts', paint: { 'line-color': '#1e3a8a', 'line-width': 1.5 } }); // 绘制边界
+map.addLayer({
+  id: 'district-fill',
+  type: 'fill',
+  source: 'districts',
+  paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.45 },
+}); // 绘制填充
+map.addLayer({
+  id: 'district-outline',
+  type: 'line',
+  source: 'districts',
+  paint: { 'line-color': '#1e3a8a', 'line-width': 1.5 },
+}); // 绘制边界
 map.setExtent(source.getExtent()); // 适配数据范围
 ```
 

@@ -15,7 +15,8 @@ Emap 使用 dataset/map 坐标保存几何和空间计算，使用 Canvas 像素
 ```ts
 const map = await Emap.create({ container: '#map' }); // 创建地图实例
 map.setCRS('EPSG:3857'); // 为空地图建立 CRS
-const source = await TopologySource.create('places', { // 创建带 CRS 的空 source
+const source = await TopologySource.create('places', {
+  // 创建带 CRS 的空 source
   name: 'places', // 设置数据 layer 名称
   geometryType: 'point', // 设置几何类型
   crs: 'EPSG:3857', // 指定输入坐标 CRS
@@ -66,14 +67,16 @@ await map.reproject('EPSG:3857'); // 重投影地图及其已登记 source
 | `output.format` / `output.filename` | `ExportFormat` / `string` | `'geojson'` / `${target}.${format}` | Blob 格式 / 建议文件名。 |
 
 ```ts
-const result = await map.ops.projectLayer({ // 导出重投影后的 layer 副本
+const result = await map.ops.projectLayer({
+  // 导出重投影后的 layer 副本
   source: 'main', // 选择 source
   target: 'districts', // 选择 layer
   crs: 'EPSG:3857', // 选择输出 CRS
   output: { format: 'geojson', filename: 'districts-3857.geojson' }, // 设置导出文件
 });
 
-if (result.ok) { // 仅在成功时读取结果
+if (result.ok) {
+  // 仅在成功时读取结果
   const { blob, filename } = result.value; // 取得 Blob 和文件名
   console.log(blob, filename); // 使用导出结果
 }
@@ -125,7 +128,8 @@ if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 }); // 
 | `options.curve` / `speed` | `number` | `1.42` / 自动计算 | `flyTo` van Wijk 曲率 / 飞行速度。 |
 
 ```ts
-map.jumpTo({ // 立即更新相机
+map.jumpTo({
+  // 立即更新相机
   center: [500000, 3400000], // 使用投影坐标设置中心
   scale: 0.002, // 为任意 CRS 设置比例
 });

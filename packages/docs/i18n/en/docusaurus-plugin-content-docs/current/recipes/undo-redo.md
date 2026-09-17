@@ -13,8 +13,8 @@ verifiedVersion: 0.12.0
 `Emap` tracks edit commands, data operations, and transactions.
 
 ```ts
-await map.addControl(new HistoryControl(), "top-right") // add undo and redo buttons
-map.bindHistoryShortcuts() // bind Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y on the canvas
+await map.addControl(new HistoryControl(), 'top-right'); // add undo and redo buttons
+map.bindHistoryShortcuts(); // bind Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y on the canvas
 ```
 
 ## Core parameters
@@ -46,12 +46,12 @@ Custom buttons can read current state after every `historychange`, including ful
 
 ```ts
 function syncHistoryButtons() {
-  undoButton.disabled = !map.canUndo()
-  redoButton.disabled = !map.canRedo()
+  undoButton.disabled = !map.canUndo();
+  redoButton.disabled = !map.canRedo();
 }
 
-map.on('historychange', syncHistoryButtons)
-syncHistoryButtons()
+map.on('historychange', syncHistoryButtons);
+syncHistoryButtons();
 ```
 
 `Emap` history methods:

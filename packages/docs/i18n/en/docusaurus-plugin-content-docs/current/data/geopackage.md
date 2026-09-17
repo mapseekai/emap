@@ -82,11 +82,13 @@ import { Emap, TopologySource } from '@mapseekai/emap';
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
 
 const map = await Emap.create({ container: 'map' });
-const fiber = map.ctx.plugin(geoPackagePlugin({
-  workerUrl: '/assets/emap-geopackage-worker.js',
-  wasmUrl: '/assets/sql-wasm.wasm',
-  layers: ['roads'],
-}));
+const fiber = map.ctx.plugin(
+  geoPackagePlugin({
+    workerUrl: '/assets/emap-geopackage-worker.js',
+    wasmUrl: '/assets/sql-wasm.wasm',
+    layers: ['roads'],
+  }),
+);
 await fiber.await();
 
 const source = new TopologySource('gpkg', { formats: map.formats });

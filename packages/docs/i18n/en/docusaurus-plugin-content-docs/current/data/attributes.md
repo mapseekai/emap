@@ -13,10 +13,12 @@ verifiedVersion: 0.12.0
 Emap stores layer attributes in a data table; feature IDs locate geometry and attributes. `map.features` reads; `map.attributes` or `map.ops` writes.
 
 ```ts
-const hits = map.queryFeatures([240, 180], { // pick features at a screen position
+const hits = map.queryFeatures([240, 180], {
+  // pick features at a screen position
   layers: ['districts'],
 });
-const feature = map.features.get({ // read one feature by source, layer, and ID
+const feature = map.features.get({
+  // read one feature by source, layer, and ID
   source: 'main',
   layer: 'districts',
   id: 3,
@@ -66,7 +68,12 @@ The underlying table is `source.getLayers()[layerIndex].data`; feature IDs match
 You can also declare a filter when calling `addLayer` through the layer specification's `filter` field:
 
 ```ts
-map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
+map.addLayer({
+  id: 'cities',
+  type: 'circle',
+  source: 'src1',
+  filter: ['>', ['get', 'pop'], 100000],
+});
 ```
 
 `map.getFilter(layerId)` reads the filter.

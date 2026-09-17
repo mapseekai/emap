@@ -19,7 +19,8 @@ import { Emap, Bounds } from '@mapseekai/emap';
 import { rasterPlugin, geoTIFFPlugin } from '@mapseekai/emap/geotiff';
 
 const map = await Emap.create({
-  container: 'map', preset: 'viewer',
+  container: 'map',
+  preset: 'viewer',
   plugins: [
     rasterPlugin({ cacheBytes: 64 * 1024 ** 2, concurrency: 2 }),
     geoTIFFPlugin({ workerUrl: '/assets/emap-geotiff-worker.js', workerCount: 2 }),
@@ -97,8 +98,10 @@ During wheel/drag gestures and camera animations, only previously completed imag
 
 ```ts
 rasterPlugin({
-  cacheBytes: 64 * 1024 ** 2, concurrency: 2,
-  settleDelay: 150, presentationInterval: 60,
+  cacheBytes: 64 * 1024 ** 2,
+  concurrency: 2,
+  settleDelay: 150,
+  presentationInterval: 60,
 });
 map.ctx.raster.setStyle('imagery', { stretch: 'minmax', ranges: undefined });
 ```

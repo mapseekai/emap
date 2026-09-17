@@ -13,10 +13,7 @@ verifiedVersion: 0.12.0
 `@mapseekai/emap/duckdb` 是可选的浏览器端 DuckDB-Wasm GIS 子入口，提供 GeoParquet 查询、Dataset 处理函数和 `duckDbToolbox`。处理函数返回新 Dataset。
 
 ```ts
-import {
-  createDuckDbRuntimeFromJsDelivr,
-  closeDuckDbRuntime,
-} from '@mapseekai/emap/duckdb';
+import { createDuckDbRuntimeFromJsDelivr, closeDuckDbRuntime } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr(); // 创建独立 DuckDB-Wasm 运行时
 await closeDuckDbRuntime(runtime); // 应用关闭时释放运行时
@@ -70,9 +67,14 @@ import { buffer, clip, dissolve, spatialJoin } from '@mapseekai/emap/duckdb';
 const buffered = await buffer(roads, { distance: 20 }, runtime);
 const clipped = await clip(buffered, boundary, {}, runtime);
 const districts = await dissolve(clipped, { groupBy: ['district'] }, runtime);
-const joined = await spatialJoin(districts, points, {
-  predicate: 'contains',
-}, runtime);
+const joined = await spatialJoin(
+  districts,
+  points,
+  {
+    predicate: 'contains',
+  },
+  runtime,
+);
 ```
 
 调用形式为 `(input, options, runtime)` 或 `(input, reference, options, runtime)`；`runtime` 为 `DuckDbRuntime | null`，默认 `null`。单输入工具共享：
@@ -158,9 +160,13 @@ const result = await duckDbToolbox.execute('buffer', {
 ```ts
 import { queryGeoParquetWithDuckDb } from '@mapseekai/emap/duckdb';
 
-const result = await queryGeoParquetWithDuckDb(bytes, {
-  sql: 'SELECT geometry, name FROM input WHERE active = true',
-}, runtime);
+const result = await queryGeoParquetWithDuckDb(
+  bytes,
+  {
+    sql: 'SELECT geometry, name FROM input WHERE active = true',
+  },
+  runtime,
+);
 ```
 
 `validateDuckDbSelectSql(sql, options)` 使用同一校验器；`availableColumns`、`physicalTableName` 必填。GeoParquet 查询传入 `allowGeometryProjection: true`、`rowIdColumn: null`。

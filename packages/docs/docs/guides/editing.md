@@ -13,7 +13,8 @@ verifiedVersion: 0.12.0
 Emap 将交互编辑、选择变换和可撤销命令写入同一地图状态。
 
 ```ts
-map.drawFeature.setOptions({ // 配置面要素绘制
+map.drawFeature.setOptions({
+  // 配置面要素绘制
   source: 'parcels', // 接收新要素的 source
   sourceLayer: 'lots', // 目标数据图层
   type: 'polygon', // 草图几何类型

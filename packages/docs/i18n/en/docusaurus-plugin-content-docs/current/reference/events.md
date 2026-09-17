@@ -13,9 +13,10 @@ verifiedVersion: 0.12.0
 `Emap` subscribes with `on`, `once`, and `off`; known event names infer payload types.
 
 ```ts
-map.once("moveend", (event) => { // Listen for the next movement end only
-  console.log(event.center, event.zoom) // Read the final view
-}) // Unsubscribe automatically
+map.once('moveend', (event) => {
+  // Listen for the next movement end only
+  console.log(event.center, event.zoom); // Read the final view
+}); // Unsubscribe automatically
 ```
 
 ## Core methods
@@ -128,9 +129,10 @@ Every state event has its literal `type`; `crschange` and `resize` have no other
 `FeatureRef` is the `{ source, layer, id }` feature identifier.
 
 ```ts
-map.on("feature:click", { source: "parcels", layers: ["lots"] }, (event) => { // Listen only to parcels lots
-  console.log(event.ref, event.lngLat) // Read the feature and hit coordinate
-}) // Register a continuing listener
+map.on('feature:click', { source: 'parcels', layers: ['lots'] }, (event) => {
+  // Listen only to parcels lots
+  console.log(event.ref, event.lngLat); // Read the feature and hit coordinate
+}); // Register a continuing listener
 ```
 
 ## API

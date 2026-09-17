@@ -19,7 +19,8 @@ const map = await Emap.create({ container: 'map', interactive: true }); // 创�
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson'); // 从 URL 导入数据
 await map.addSource('main', source); // 以 source ID 登记数据
 
-map.addLayer({ // 为数据声明绘制层
+map.addLayer({
+  // 为数据声明绘制层
   id: 'districts', // 唯一 render layer ID
   type: 'fill', // 面绘制器
   source: 'main', // 引用登记的 source ID

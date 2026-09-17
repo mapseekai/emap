@@ -18,8 +18,18 @@ import '@mapseekai/emap/style.css'; // import map styles
 const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // create a safe interactive map
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // load GeoJSON
 await map.addSource('districts', source); // register the data source
-map.addLayer({ id: 'district-fill', type: 'fill', source: 'districts', paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.45 } }); // draw the fill
-map.addLayer({ id: 'district-outline', type: 'line', source: 'districts', paint: { 'line-color': '#1e3a8a', 'line-width': 1.5 } }); // draw the outline
+map.addLayer({
+  id: 'district-fill',
+  type: 'fill',
+  source: 'districts',
+  paint: { 'fill-color': '#60a5fa', 'fill-opacity': 0.45 },
+}); // draw the fill
+map.addLayer({
+  id: 'district-outline',
+  type: 'line',
+  source: 'districts',
+  paint: { 'line-color': '#1e3a8a', 'line-width': 1.5 },
+}); // draw the outline
 map.setExtent(source.getExtent()); // fit the data extent
 ```
 

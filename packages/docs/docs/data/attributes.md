@@ -13,10 +13,12 @@ verifiedVersion: 0.12.0
 Emap 将 layer 属性保存在 data table；要素 ID 定位 geometry 和属性。`map.features` 读取，`map.attributes` 或 `map.ops` 修改。
 
 ```ts
-const hits = map.queryFeatures([240, 180], { // 按屏幕位置拾取要素
+const hits = map.queryFeatures([240, 180], {
+  // 按屏幕位置拾取要素
   layers: ['districts'],
 });
-const feature = map.features.get({ // 按 source、图层和 ID 读取要素
+const feature = map.features.get({
+  // 按 source、图层和 ID 读取要素
   source: 'main',
   layer: 'districts',
   id: 3,
@@ -65,7 +67,12 @@ console.log(hits[0]?.properties, feature?.properties); // 读取冻结属性快�
 过滤器也可在 `addLayer` 时通过图层 spec 的 `filter` 字段声明：
 
 ```ts
-map.addLayer({ id: 'cities', type: 'circle', source: 'src1', filter: ['>', ['get', 'pop'], 100000] });
+map.addLayer({
+  id: 'cities',
+  type: 'circle',
+  source: 'src1',
+  filter: ['>', ['get', 'pop'], 100000],
+});
 ```
 
 `map.getFilter(layerId)` 读取过滤器。

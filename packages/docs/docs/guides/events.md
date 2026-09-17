@@ -66,11 +66,7 @@ const showFeature = (event: FeatureEvent) => {
   map.setHighlightedFeatures([event.ref]);
 };
 
-map.on(
-  'feature:click',
-  { layers: ['lots'] },
-  (event) => map.select([event.ref]),
-);
+map.on('feature:click', { layers: ['lots'] }, (event) => map.select([event.ref]));
 map.once('feature:enter', { source: 'parcels' }, showFeature);
 map.off('feature:enter', showFeature);
 ```

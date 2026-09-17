@@ -15,7 +15,8 @@ Emap separates geospatial data from presentation: `TopologySource` holds a mapsh
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // import data from a URL
 await map.addSource('roads', source); // register it under a map source ID
-map.addLayer({ // declare a render layer for the data
+map.addLayer({
+  // declare a render layer for the data
   id: 'roads-line', // use a unique render layer ID
   type: 'line', // choose the line renderer
   source: 'roads', // reference the registered map source ID
@@ -64,7 +65,8 @@ The constructor, `fromUrl`, and `fromBytes` share `TopologySourceOptions`; `setD
 
 ```ts
 await map.addSource('main', source); // register the source under a map source ID
-map.addLayer({ // reference a dataset source layer
+map.addLayer({
+  // reference a dataset source layer
   id: 'district-fill', // set the render layer ID
   type: 'fill', // choose the fill renderer
   source: 'main', // reference the map source ID
@@ -84,7 +86,8 @@ Omit `source-layer` for the first layer; a canonical ID matches `layer.name`, th
 ## More layer styling
 
 ```ts
-map.addLayer({ // draw the fill first
+map.addLayer({
+  // draw the fill first
   id: 'parcel-fill', // set the fill layer ID
   type: 'fill', // choose the fill renderer
   source: 'parcels', // reference the map source
@@ -92,7 +95,8 @@ map.addLayer({ // draw the fill first
   paint: { 'fill-color': '#bbf7d0', 'fill-opacity': 0.6 }, // set the fill
 });
 
-map.addLayer({ // draw the outline afterwards
+map.addLayer({
+  // draw the outline afterwards
   id: 'parcel-outline', // set the line layer ID
   type: 'line', // choose the line renderer
   source: 'parcels', // reference the same map source
@@ -116,7 +120,8 @@ MapLibre service-layer `minzoom` / `maxzoom` configure zoom ranges.
 
 ```ts
 let result = await map.preflightSource({ id: 'main', source }); // preflight the source
-if (result.status === 'needs-input') { // provide CRS input when requested
+if (result.status === 'needs-input') {
+  // provide CRS input when requested
   result = await map.preflightSource(result.draft, { sourceCrs: 'EPSG:3857' }); // retry with the draft
 }
 if (result.status === 'ready') await map.confirmSource(result.plan); // confirm the single-use ready plan

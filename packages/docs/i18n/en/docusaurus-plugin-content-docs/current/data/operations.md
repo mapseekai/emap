@@ -13,7 +13,8 @@ verifiedVersion: 0.12.0
 `map.ops` is Emap's mapshaper data-processing interface and returns `Promise<OpResult>`.
 
 ```ts
-const result = await map.ops.bufferLayer({ // buffer the roads layer by 250 units
+const result = await map.ops.bufferLayer({
+  // buffer the roads layer by 250 units
   source: 'main',
   target: 'roads',
   radius: 250,

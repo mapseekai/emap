@@ -19,7 +19,8 @@ const map = await Emap.create({ container: 'map', interactive: true }); // creat
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson'); // import data from a URL
 await map.addSource('main', source); // register it under a source ID
 
-map.addLayer({ // declare a render layer for the data
+map.addLayer({
+  // declare a render layer for the data
   id: 'districts', // unique render layer ID
   type: 'fill', // polygon renderer
   source: 'main', // reference the registered source ID

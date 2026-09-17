@@ -13,9 +13,9 @@ verifiedVersion: 0.12.0
 Common questions about map setup, data loading, and runtime configuration.
 
 ```ts
-const source = await TopologySource.fromUrl("roads", "/data/roads.geojson") // Load data from a URL
-await map.addSource("roads", source) // Register it with the same ID
-map.setExtent(source.getExtent()) // Fit its data extent
+const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // Load data from a URL
+await map.addSource('roads', source); // Register it with the same ID
+map.setExtent(source.getExtent()); // Fit its data extent
 ```
 
 ## Core questions

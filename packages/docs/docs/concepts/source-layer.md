@@ -15,7 +15,8 @@ Emap 分离地理数据与显示配置：`TopologySource` 保存 mapshaper datas
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // 从 URL 导入数据
 await map.addSource('roads', source); // 以地图 source ID 登记数据
-map.addLayer({ // 为数据声明绘制层
+map.addLayer({
+  // 为数据声明绘制层
   id: 'roads-line', // 使用唯一 render layer ID
   type: 'line', // 选择线绘制器
   source: 'roads', // 引用登记后的 map source ID
@@ -64,7 +65,8 @@ map.addLayer({ // 为数据声明绘制层
 
 ```ts
 await map.addSource('main', source); // 以地图 source ID 登记 source
-map.addLayer({ // 引用 dataset 内的指定 source layer
+map.addLayer({
+  // 引用 dataset 内的指定 source layer
   id: 'district-fill', // 指定 render layer ID
   type: 'fill', // 选择面绘制器
   source: 'main', // 引用 map source ID
@@ -84,7 +86,8 @@ map.addLayer({ // 引用 dataset 内的指定 source layer
 ## 更多图层样式
 
 ```ts
-map.addLayer({ // 先绘制面
+map.addLayer({
+  // 先绘制面
   id: 'parcel-fill', // 指定面层 ID
   type: 'fill', // 选择面绘制器
   source: 'parcels', // 引用地图 source
@@ -92,7 +95,8 @@ map.addLayer({ // 先绘制面
   paint: { 'fill-color': '#bbf7d0', 'fill-opacity': 0.6 }, // 设置填充
 });
 
-map.addLayer({ // 后绘制边线
+map.addLayer({
+  // 后绘制边线
   id: 'parcel-outline', // 指定线层 ID
   type: 'line', // 选择线绘制器
   source: 'parcels', // 引用同一地图 source
@@ -116,7 +120,8 @@ map.addLayer({ // 后绘制边线
 
 ```ts
 let result = await map.preflightSource({ id: 'main', source }); // 预检 source
-if (result.status === 'needs-input') { // 在 CRS 信息不足时补充答案
+if (result.status === 'needs-input') {
+  // 在 CRS 信息不足时补充答案
   result = await map.preflightSource(result.draft, { sourceCrs: 'EPSG:3857' }); // 以 draft 重试
 }
 if (result.status === 'ready') await map.confirmSource(result.plan); // 确认一次性 ready 计划

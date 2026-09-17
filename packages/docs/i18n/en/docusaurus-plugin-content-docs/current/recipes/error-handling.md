@@ -14,20 +14,24 @@ verifiedVersion: 0.12.0
 
 
 ```ts
-const result = await map.ops.checkGeometry({ source: "main" }) // run the operation
-if (!result.ok) { // branch before reading the result
-  switch (result.error.kind) { // narrow the structured error
-    case "not-found": // missing source, layer, mask, divider, or field
-      console.error(`Missing ${result.error.what}: ${result.error.id}`) // identify it
-      break // finish this error case
-    case "validation": // invalid operation input
-      console.error(`${result.error.field}: ${result.error.reason}`) // show the field error
-      break // finish this error case
+const result = await map.ops.checkGeometry({ source: 'main' }); // run the operation
+if (!result.ok) {
+  // branch before reading the result
+  switch (
+    result.error.kind // narrow the structured error
+  ) {
+    case 'not-found': // missing source, layer, mask, divider, or field
+      console.error(`Missing ${result.error.what}: ${result.error.id}`); // identify it
+      break; // finish this error case
+    case 'validation': // invalid operation input
+      console.error(`${result.error.field}: ${result.error.reason}`); // show the field error
+      break; // finish this error case
     default: // any other structured error
-      console.error(result.error.kind) // report its kind
+      console.error(result.error.kind); // report its kind
   }
-} else { // successful operation
-  console.log(result.value) // use the report
+} else {
+  // successful operation
+  console.log(result.value); // use the report
 }
 ```
 
@@ -68,14 +72,14 @@ if (!result.ok) { // branch before reading the result
 `TopologySource.setData()` emits `error` and rejects with the same error when the current load fails. The event centralizes presentation; `await` stops follow-on loading.
 
 ```ts
-source.on<{ error: unknown }>("error", ({ error }) => {
-  console.error("Source import failed", error)
-})
+source.on<{ error: unknown }>('error', ({ error }) => {
+  console.error('Source import failed', error);
+});
 
 try {
-  await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) })
+  await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
 } catch (error) {
-  console.error("Keep the import UI open", error)
+  console.error('Keep the import UI open', error);
 }
 ```
 
@@ -90,19 +94,19 @@ try {
 
 ```ts
 async function previewThenCancel(map: Emap) {
-  const transaction = map.beginTransaction()
+  const transaction = map.beginTransaction();
   try {
-    const result = await map.ops.dropLayer({ source: "main", target: "draft" })
+    const result = await map.ops.dropLayer({ source: 'main', target: 'draft' });
     if (!result.ok) {
-      transaction.rollback()
-      return result
+      transaction.rollback();
+      return result;
     }
 
-    transaction.rollback()
-    return result
+    transaction.rollback();
+    return result;
   } catch (error) {
-    if (transaction.isOpen) transaction.rollback()
-    throw error
+    if (transaction.isOpen) transaction.rollback();
+    throw error;
   }
 }
 ```

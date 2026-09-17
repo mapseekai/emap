@@ -15,7 +15,8 @@ Emap uses dataset/map coordinates for geometry and spatial operations, Canvas pi
 ```ts
 const map = await Emap.create({ container: '#map' }); // create the map instance
 map.setCRS('EPSG:3857'); // establish CRS for an empty map
-const source = await TopologySource.create('places', { // create an empty source with CRS
+const source = await TopologySource.create('places', {
+  // create an empty source with CRS
   name: 'places', // set the data-layer name
   geometryType: 'point', // set the geometry type
   crs: 'EPSG:3857', // set the input-coordinate CRS
@@ -66,14 +67,16 @@ await map.reproject('EPSG:3857'); // reproject the map and its registered source
 | `output.format` / `output.filename` | `ExportFormat` / `string` | `'geojson'` / `${target}.${format}` | Blob format / suggested filename. |
 
 ```ts
-const result = await map.ops.projectLayer({ // export a reprojected layer copy
+const result = await map.ops.projectLayer({
+  // export a reprojected layer copy
   source: 'main', // select the source
   target: 'districts', // select the layer
   crs: 'EPSG:3857', // choose the output CRS
   output: { format: 'geojson', filename: 'districts-3857.geojson' }, // configure output
 });
 
-if (result.ok) { // read output only after success
+if (result.ok) {
+  // read output only after success
   const { blob, filename } = result.value; // get the Blob and filename
   console.log(blob, filename); // use the export result
 }
@@ -125,7 +128,8 @@ if (extent.hasBounds()) map.fitBounds(extent, { padding: 32, duration: 0 }); // 
 | `options.curve` / `speed` | `number` | `1.42` / Automatically calculated | `flyTo` van Wijk curvature / flight speed. |
 
 ```ts
-map.jumpTo({ // update the camera immediately
+map.jumpTo({
+  // update the camera immediately
   center: [500000, 3400000], // set the center in projected coordinates
   scale: 0.002, // set scale for any CRS
 });

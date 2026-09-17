@@ -12,14 +12,15 @@ verifiedVersion: 0.12.0
 
 `StatusControl` 显示鼠标坐标和地图 CRS。
 ```ts
-await map.addControl( // 挂载控件
+await map.addControl(
+  // 挂载控件
   new StatusControl({
     showMousePos: true, // 显示指针坐标
     showEPSG: true, // 显示地图 CRS
-    alignment: "right", // 对齐读数
+    alignment: 'right', // 对齐读数
   }),
-  "bottom-left", // 选择控件角落
-)
+  'bottom-left', // 选择控件角落
+);
 ```
 
 ## 核心参数

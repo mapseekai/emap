@@ -13,9 +13,10 @@ verifiedVersion: 0.12.0
 `Emap` 用 `on`、`once` 和 `off` 订阅事件；已知事件名会推断 payload 类型。
 
 ```ts
-map.once("moveend", (event) => { // 仅监听下一次移动结束
-  console.log(event.center, event.zoom) // 读取最终视图
-}) // 自动取消监听
+map.once('moveend', (event) => {
+  // 仅监听下一次移动结束
+  console.log(event.center, event.zoom); // 读取最终视图
+}); // 自动取消监听
 ```
 
 ## 核心方法
@@ -128,9 +129,10 @@ map.once("moveend", (event) => { // 仅监听下一次移动结束
 `FeatureRef` 为 `{ source, layer, id }` 要素标识。
 
 ```ts
-map.on("feature:click", { source: "parcels", layers: ["lots"] }, (event) => { // 仅监听 parcels 的 lots
-  console.log(event.ref, event.lngLat) // 读取要素和命中坐标
-}) // 注册持续监听
+map.on('feature:click', { source: 'parcels', layers: ['lots'] }, (event) => {
+  // 仅监听 parcels 的 lots
+  console.log(event.ref, event.lngLat); // 读取要素和命中坐标
+}); // 注册持续监听
 ```
 
 ## API

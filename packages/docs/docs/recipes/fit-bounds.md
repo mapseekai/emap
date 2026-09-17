@@ -14,9 +14,10 @@ verifiedVersion: 0.12.0
 
 
 ```ts
-const extent = source.getExtent() // 读取已加载数据的范围
-if (extent.hasBounds()) { // 空 source 不能适配
-  map.fitBounds(extent, { padding: 48, duration: 0 }) // 首次视图不使用动画
+const extent = source.getExtent(); // 读取已加载数据的范围
+if (extent.hasBounds()) {
+  // 空 source 不能适配
+  map.fitBounds(extent, { padding: 48, duration: 0 }); // 首次视图不使用动画
 }
 ```
 
@@ -44,11 +45,11 @@ if (extent.hasBounds()) { // 空 source 不能适配
 `Bounds` 使用数据坐标，构造顺序为西、南、东、北：
 
 ```ts
-const district = new Bounds(116.2, 39.7, 116.6, 40.1)
-const districtFromArray = Bounds.fromArray([116.2, 39.7, 116.6, 40.1])
+const district = new Bounds(116.2, 39.7, 116.6, 40.1);
+const districtFromArray = Bounds.fromArray([116.2, 39.7, 116.6, 40.1]);
 
 if (district.hasBounds()) {
-  map.fitBounds(district)
+  map.fitBounds(district);
 }
 ```
 

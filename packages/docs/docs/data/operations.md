@@ -13,7 +13,8 @@ verifiedVersion: 0.12.0
 `map.ops` 是 Emap 的 mapshaper 数据处理接口，返回 `Promise<OpResult>`。
 
 ```ts
-const result = await map.ops.bufferLayer({ // 对 roads 图层创建 250 单位缓冲区
+const result = await map.ops.bufferLayer({
+  // 对 roads 图层创建 250 单位缓冲区
   source: 'main',
   target: 'roads',
   radius: 250,

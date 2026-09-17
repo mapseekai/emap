@@ -162,10 +162,12 @@ Install `flatgeobuf`, then register `registerFormat(map.formats, codec)`; the pl
 
 ```ts
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
-await map.ctx.plugin(geoPackagePlugin({
-  workerUrl: '/assets/emap-geopackage-worker.js',
-  wasmUrl: '/assets/sql-wasm.wasm',
-}));
+await map.ctx.plugin(
+  geoPackagePlugin({
+    workerUrl: '/assets/emap-geopackage-worker.js',
+    wasmUrl: '/assets/sql-wasm.wasm',
+  }),
+);
 ```
 
 Parameters: `layers`, `targetCrs`, `wasmUrl`, `workerUrl`, `signal`, `onProgress`; export GeoParquet to write. See [direct GeoPackage import](geopackage.md).
@@ -209,13 +211,14 @@ A plugin format implements `DatasetFormatPlugin`:
 
 ```ts
 interface DatasetFormatPlugin {
-  name: string;                       // unique registration key, used for unregister and conflict detection
-  extensions: readonly string[];      // import matches by extension (no dot)
+  name: string; // unique registration key, used for unregister and conflict detection
+  extensions: readonly string[]; // import matches by extension (no dot)
   importBinary(content: Uint8Array, filename: string): Promise<MapshaperDataset>;
-  exportFormats: {                    // export({ format }) matches keys here
+  exportFormats: {
+    // export({ format }) matches keys here
     [format: string]: (dataset, options?) => Promise<ExportedFormatFile[]>;
   };
-  mimeTypes?: { [format: string]: string };  // Blob MIME per export format
+  mimeTypes?: { [format: string]: string }; // Blob MIME per export format
 }
 ```
 
@@ -258,29 +261,33 @@ const geoCsvCodec: DatasetFormatPlugin = {
       records.push({ name, lon: Number(lon), lat: Number(lat) });
     }
     return {
-      layers: [{
-        name: filename.replace(/\.geocsv$/, ''),
-        geometry_type: 'point',
-        shapes,
-        data: { // attribute table: mapshaper DataTable (layer.data)
-          getRecords: () => records,
-          getRecordAt: (i) => records[i],
-          getFields: () => ['name', 'lon', 'lat'],
-          size: () => records.length,
+      layers: [
+        {
+          name: filename.replace(/\.geocsv$/, ''),
+          geometry_type: 'point',
+          shapes,
+          data: {
+            // attribute table: mapshaper DataTable (layer.data)
+            getRecords: () => records,
+            getRecordAt: (i) => records[i],
+            getFields: () => ['name', 'lon', 'lat'],
+            size: () => records.length,
+          },
         },
-      }],
+      ],
       info: { crs_string: 'EPSG:4326' },
     };
   },
   exportFormats: {
     geocsv: async (dataset) => {
       const layer = dataset.layers[0];
-      const rows = (layer.data?.getRecords() ?? [])
-        .map((r) => `${r.name},${r.lon},${r.lat}`);
-      return [{
-        filename: `${layer.name ?? 'layer'}.geocsv`,
-        content: ['name,lon,lat', ...rows].join('\n'),
-      }];
+      const rows = (layer.data?.getRecords() ?? []).map((r) => `${r.name},${r.lon},${r.lat}`);
+      return [
+        {
+          filename: `${layer.name ?? 'layer'}.geocsv`,
+          content: ['name,lon,lat', ...rows].join('\n'),
+        },
+      ];
     },
   },
   mimeTypes: { geocsv: 'text/csv' },

@@ -13,7 +13,8 @@ verifiedVersion: 0.12.0
 Emap connects interactive editing, selection transforms, and undoable commands to one map state.
 
 ```ts
-map.drawFeature.setOptions({ // configure polygon drawing
+map.drawFeature.setOptions({
+  // configure polygon drawing
   source: 'parcels', // source receiving new features
   sourceLayer: 'lots', // target data layer
   type: 'polygon', // sketch geometry type

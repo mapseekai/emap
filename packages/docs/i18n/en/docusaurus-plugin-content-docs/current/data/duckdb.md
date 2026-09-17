@@ -13,10 +13,7 @@ verifiedVersion: 0.12.0
 `@mapseekai/emap/duckdb` is an optional browser-side DuckDB-Wasm GIS entry point with GeoParquet queries, Dataset processing functions, and `duckDbToolbox`. Processing functions return new Datasets.
 
 ```ts
-import {
-  createDuckDbRuntimeFromJsDelivr,
-  closeDuckDbRuntime,
-} from '@mapseekai/emap/duckdb';
+import { createDuckDbRuntimeFromJsDelivr, closeDuckDbRuntime } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr(); // create an independent DuckDB-Wasm runtime
 await closeDuckDbRuntime(runtime); // release the runtime when the application closes
@@ -70,9 +67,14 @@ import { buffer, clip, dissolve, spatialJoin } from '@mapseekai/emap/duckdb';
 const buffered = await buffer(roads, { distance: 20 }, runtime);
 const clipped = await clip(buffered, boundary, {}, runtime);
 const districts = await dissolve(clipped, { groupBy: ['district'] }, runtime);
-const joined = await spatialJoin(districts, points, {
-  predicate: 'contains',
-}, runtime);
+const joined = await spatialJoin(
+  districts,
+  points,
+  {
+    predicate: 'contains',
+  },
+  runtime,
+);
 ```
 
 Call `(input, options, runtime)` or `(input, reference, options, runtime)`; `runtime` is `DuckDbRuntime | null`, defaulting to `null`. Single-input tools share:
@@ -158,9 +160,13 @@ Tool definitions include inputs, parameters, CRS/units, outputs, cost, and agent
 ```ts
 import { queryGeoParquetWithDuckDb } from '@mapseekai/emap/duckdb';
 
-const result = await queryGeoParquetWithDuckDb(bytes, {
-  sql: 'SELECT geometry, name FROM input WHERE active = true',
-}, runtime);
+const result = await queryGeoParquetWithDuckDb(
+  bytes,
+  {
+    sql: 'SELECT geometry, name FROM input WHERE active = true',
+  },
+  runtime,
+);
 ```
 
 `validateDuckDbSelectSql(sql, options)` uses the same validator; `availableColumns` and `physicalTableName` are required. GeoParquet calls it with `allowGeometryProjection: true`, `rowIdColumn: null`.

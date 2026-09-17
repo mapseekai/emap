@@ -14,9 +14,10 @@ After a source loads, use its `Bounds` to fit the camera. Empty sources, includi
 
 
 ```ts
-const extent = source.getExtent() // read the loaded data extent
-if (extent.hasBounds()) { // empty sources cannot be fitted
-  map.fitBounds(extent, { padding: 48, duration: 0 }) // fit the first view without animation
+const extent = source.getExtent(); // read the loaded data extent
+if (extent.hasBounds()) {
+  // empty sources cannot be fitted
+  map.fitBounds(extent, { padding: 48, duration: 0 }); // fit the first view without animation
 }
 ```
 
@@ -44,11 +45,11 @@ if (extent.hasBounds()) { // empty sources cannot be fitted
 `Bounds` uses data coordinates ordered west, south, east, north:
 
 ```ts
-const district = new Bounds(116.2, 39.7, 116.6, 40.1)
-const districtFromArray = Bounds.fromArray([116.2, 39.7, 116.6, 40.1])
+const district = new Bounds(116.2, 39.7, 116.6, 40.1);
+const districtFromArray = Bounds.fromArray([116.2, 39.7, 116.6, 40.1]);
 
 if (district.hasBounds()) {
-  map.fitBounds(district)
+  map.fitBounds(district);
 }
 ```
 

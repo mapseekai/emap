@@ -12,14 +12,15 @@ verifiedVersion: 0.12.0
 
 `StatusControl` displays the pointer coordinate and map CRS.
 ```ts
-await map.addControl( // mount the control
+await map.addControl(
+  // mount the control
   new StatusControl({
     showMousePos: true, // show the pointer coordinate
     showEPSG: true, // show the map CRS
-    alignment: "right", // align the readout
+    alignment: 'right', // align the readout
   }),
-  "bottom-left", // choose the control corner
-)
+  'bottom-left', // choose the control corner
+);
 ```
 
 ## Core parameters

@@ -78,7 +78,8 @@ Vertex edits change the referenced arc. `splitSharedArcs: true` splits arcs shar
 | `splitSharedArcs` | `boolean` | `true` | Split arcs shared by selected and unselected neighbor features. |
 
 ```ts
-const result = await map.ops.rebuildTopology({ // recompute intersections and shared boundaries
+const result = await map.ops.rebuildTopology({
+  // recompute intersections and shared boundaries
   source: 'main', // select the source to rebuild
   snapInterval: 0.001, // set vertex snap distance in source-CRS units
 });

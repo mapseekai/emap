@@ -100,8 +100,10 @@ map.ctx.raster.setStyle('imagery', { bands: [0], ranges: [[0, 3000]] });
 
 ```ts
 rasterPlugin({
-  cacheBytes: 64 * 1024 ** 2, concurrency: 2,
-  settleDelay: 150, presentationInterval: 60,
+  cacheBytes: 64 * 1024 ** 2,
+  concurrency: 2,
+  settleDelay: 150,
+  presentationInterval: 60,
 });
 map.ctx.raster.setStyle('imagery', { stretch: 'minmax', ranges: undefined });
 ```

@@ -14,7 +14,8 @@ Emap 渲染 `fill`、`line`、`circle` 图层；图层引用 source 和可选 `s
 
 
 ```ts
-map.addLayer({ // 添加面填充图层
+map.addLayer({
+  // 添加面填充图层
   id: 'parcel-fill', // 图层唯一 ID
   type: 'fill', // 绘制面
   source: 'parcels', // 已添加的 source ID
@@ -22,7 +23,8 @@ map.addLayer({ // 添加面填充图层
   paint: { 'fill-color': '#4c956c', 'fill-opacity': 0.35 }, // 填充外观
 });
 
-map.addLayer({ // 添加面轮廓图层
+map.addLayer({
+  // 添加面轮廓图层
   id: 'parcel-outline', // 图层唯一 ID
   type: 'line', // 绘制路径和轮廓
   source: 'parcels', // 已添加的 source ID
@@ -30,7 +32,8 @@ map.addLayer({ // 添加面轮廓图层
   paint: { 'line-color': '#1d3557', 'line-width': 2, 'line-dasharray': [6, 3] }, // 线条外观
 });
 
-map.addLayer({ // 添加点标记图层
+map.addLayer({
+  // 添加点标记图层
   id: 'stations', // 图层唯一 ID
   type: 'circle', // 绘制点标记
   source: 'stations', // 已添加的 source ID
@@ -122,9 +125,12 @@ map.setLayerVisibility('stations', 'none');
 
 ```ts
 map.setPaintProperty('parcel-fill', 'fill-color', [
-  'match', ['get', 'zone'],
-  'residential', '#8ecae6',
-  'industrial', '#ffb703',
+  'match',
+  ['get', 'zone'],
+  'residential',
+  '#8ecae6',
+  'industrial',
+  '#ffb703',
   '#adb5bd',
 ]);
 ```

@@ -78,7 +78,8 @@ MapshaperDataset
 | `splitSharedArcs` | `boolean` | `true` | 拆分选中与未选邻要素的共享 arc。 |
 
 ```ts
-const result = await map.ops.rebuildTopology({ // 重算交点和共享边界
+const result = await map.ops.rebuildTopology({
+  // 重算交点和共享边界
   source: 'main', // 指定待重建的 source
   snapInterval: 0.001, // 以 source CRS 单位设置顶点吸附距离
 });

@@ -13,9 +13,9 @@ verifiedVersion: 0.12.0
 常见的地图初始化、数据加载和运行时配置问题。
 
 ```ts
-const source = await TopologySource.fromUrl("roads", "/data/roads.geojson") // 从 URL 加载数据
-await map.addSource("roads", source) // 以同一 ID 注册数据源
-map.setExtent(source.getExtent()) // 适配数据范围
+const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // 从 URL 加载数据
+await map.addSource('roads', source); // 以同一 ID 注册数据源
+map.setExtent(source.getExtent()); // 适配数据范围
 ```
 
 ## 核心问题

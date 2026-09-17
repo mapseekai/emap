@@ -14,7 +14,8 @@ Emap renders `fill`, `line`, and `circle` layers. Layers reference a source and 
 
 
 ```ts
-map.addLayer({ // add a polygon fill layer
+map.addLayer({
+  // add a polygon fill layer
   id: 'parcel-fill', // unique layer ID
   type: 'fill', // render polygons
   source: 'parcels', // added source ID
@@ -22,7 +23,8 @@ map.addLayer({ // add a polygon fill layer
   paint: { 'fill-color': '#4c956c', 'fill-opacity': 0.35 }, // fill appearance
 });
 
-map.addLayer({ // add a polygon outline layer
+map.addLayer({
+  // add a polygon outline layer
   id: 'parcel-outline', // unique layer ID
   type: 'line', // render paths and outlines
   source: 'parcels', // added source ID
@@ -30,7 +32,8 @@ map.addLayer({ // add a polygon outline layer
   paint: { 'line-color': '#1d3557', 'line-width': 2, 'line-dasharray': [6, 3] }, // line appearance
 });
 
-map.addLayer({ // add a point marker layer
+map.addLayer({
+  // add a point marker layer
   id: 'stations', // unique layer ID
   type: 'circle', // render point markers
   source: 'stations', // added source ID
@@ -122,9 +125,12 @@ Color fields plus `line-dashstyle` and `circle-shape` accept `StyleExpression`; 
 
 ```ts
 map.setPaintProperty('parcel-fill', 'fill-color', [
-  'match', ['get', 'zone'],
-  'residential', '#8ecae6',
-  'industrial', '#ffb703',
+  'match',
+  ['get', 'zone'],
+  'residential',
+  '#8ecae6',
+  'industrial',
+  '#ffb703',
   '#adb5bd',
 ]);
 ```

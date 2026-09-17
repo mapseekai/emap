@@ -13,8 +13,8 @@ verifiedVersion: 0.12.0
 `Emap` 跟踪编辑命令、数据操作和事务。
 
 ```ts
-await map.addControl(new HistoryControl(), "top-right") // 添加撤销和重做按钮
-map.bindHistoryShortcuts() // 在 canvas 上绑定 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z 或 Ctrl/Cmd+Y
+await map.addControl(new HistoryControl(), 'top-right'); // 添加撤销和重做按钮
+map.bindHistoryShortcuts(); // 在 canvas 上绑定 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z 或 Ctrl/Cmd+Y
 ```
 
 ## 核心参数
@@ -46,12 +46,12 @@ map.bindHistoryShortcuts() // 在 canvas 上绑定 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z
 
 ```ts
 function syncHistoryButtons() {
-  undoButton.disabled = !map.canUndo()
-  redoButton.disabled = !map.canRedo()
+  undoButton.disabled = !map.canUndo();
+  redoButton.disabled = !map.canRedo();
 }
 
-map.on('historychange', syncHistoryButtons)
-syncHistoryButtons()
+map.on('historychange', syncHistoryButtons);
+syncHistoryButtons();
 ```
 
 `Emap` 的历史方法：
