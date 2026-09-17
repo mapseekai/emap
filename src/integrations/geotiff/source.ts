@@ -26,10 +26,38 @@ import type {
 import { RasterWorkerClient } from './worker-client';
 import { acquireParallelWorker, rasterWorkerCount } from './worker-capacity';
 
-const STRIPED_PRIMARY_CACHE_BYTES = 32 * 1024 ** 2;
+const MIB = 1024 ** 2;
+const SOURCE_BLOCK_CACHE_BYTES = 8 * MIB;
+const TILED_WORKING_SET_BLOCKS = 10;
+const TILED_WORKER_CACHE_MAX_BYTES = 16 * MIB;
+const STRIPED_PRIMARY_CACHE_BYTES = 32 * MIB;
 
 function isRowStripedLevel(level: RasterMetadata['levels'][number]): boolean {
   return level.tileWidth >= level.width && level.tileHeight < level.height;
+}
+
+function isTiledLevel(level: RasterMetadata['levels'][number]): boolean {
+  return (
+    !isRowStripedLevel(level) && (level.tileWidth < level.width || level.tileHeight < level.height)
+  );
+}
+
+function decodedBlockBytes(level: RasterMetadata['levels'][number]): number {
+  const bytesPerPixel = level.bits.reduce((sum, bits, band) => {
+    const bytes = level.formats[band] === 3 && bits === 16 ? 4 : Math.max(1, Math.ceil(bits / 8));
+    return sum + bytes;
+  }, 0);
+  return level.tileWidth * level.tileHeight * bytesPerPixel;
+}
+
+function workerBlockCacheBytes(metadata: RasterMetadata, workers: number): number {
+  const baseline = Math.floor(SOURCE_BLOCK_CACHE_BYTES / Math.max(1, workers));
+  const largestTiledBlock = metadata.levels
+    .filter(isTiledLevel)
+    .reduce((largest, level) => Math.max(largest, decodedBlockBytes(level)), 0);
+  if (!largestTiledBlock) return baseline;
+  const workingSet = Math.ceil((largestTiledBlock * TILED_WORKING_SET_BLOCKS) / MIB) * MIB;
+  return Math.min(TILED_WORKER_CACHE_MAX_BYTES, Math.max(baseline, workingSet));
 }
 
 function commandLevel(command: GeoTIFFWorkerCommand): number | null {
@@ -135,12 +163,13 @@ class WorkerRasterSource implements RasterSource {
     private readonly requested: number,
   ) {}
   async open(file: File, options: OpenGeoTIFFOptions): Promise<void> {
+    const initialCacheBytes = Math.floor(SOURCE_BLOCK_CACHE_BYTES / this.requested);
     this.openCommand = {
       type: 'open',
       file,
       overviewFile: options.overviewFile,
       crs: options.crs,
-      cacheBytes: Math.floor((8 * 1024 ** 2) / this.requested),
+      cacheBytes: initialCacheBytes,
       pageLimit: Math.floor(16 / this.requested),
     };
     const primary = this.createSlot();
@@ -160,9 +189,14 @@ class WorkerRasterSource implements RasterSource {
       this.requested,
       Math.max(1, Math.floor((32 * 1024 ** 2) / Math.max(1, cost))),
     );
-    if (this.metadata.levels.some(isRowStripedLevel)) {
+    const workerCacheBytes = workerBlockCacheBytes(this.metadata, this.target);
+    this.openCommand = { ...this.openCommand, cacheBytes: workerCacheBytes };
+    const primaryCacheBytes = this.metadata.levels.some(isRowStripedLevel)
+      ? Math.max(STRIPED_PRIMARY_CACHE_BYTES, workerCacheBytes)
+      : workerCacheBytes;
+    if (primaryCacheBytes !== initialCacheBytes) {
       const configured = await primary.client.call(
-        { type: 'configure', cacheBytes: STRIPED_PRIMARY_CACHE_BYTES },
+        { type: 'configure', cacheBytes: primaryCacheBytes },
         options.signal,
       );
       if (configured.type !== 'configured')

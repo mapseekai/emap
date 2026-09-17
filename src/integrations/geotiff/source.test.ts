@@ -64,6 +64,9 @@ async function opened(
   const pending = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount }),
     worker = FakeWorker.instances.at(-1)!;
   worker.reply({ id: 1, type: 'metadata', metadata: rasterMetadata, directoryBytes });
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  const configure = worker.messages.at(-1);
+  if (configure?.type === 'configure') worker.reply({ id: configure.id, type: 'configured' });
   return { worker, source: await pending };
 }
 beforeEach(() => {
@@ -231,7 +234,7 @@ describe('parallel raster pipeline pool', () => {
   const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
   const answer = (worker: FakeWorker, value: number) =>
     worker.reply({
-      id: 2,
+      id: worker.messages.at(-1)!.id,
       type: 'result',
       result: { width: 1, height: 1, data: [new Uint8Array([value])] },
     });
@@ -303,6 +306,78 @@ describe('parallel raster pipeline pool', () => {
       source.dispose();
     }
     expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
+  });
+  it('sizes tiled Worker caches for a bounded decoded-block working set', async () => {
+    const tiledMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 4096,
+          height: 4096,
+          tileWidth: 512,
+          tileHeight: 512,
+          samples: 3,
+          bits: [8, 8, 8],
+          formats: [1, 1, 1],
+          photometric: 2,
+        },
+      ],
+    };
+    const opening = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount: 2 });
+    const primary = FakeWorker.instances[0];
+    primary.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    expect(primary.messages.at(-1)).toMatchObject({
+      id: 2,
+      type: 'configure',
+      cacheBytes: 8 * 1024 ** 2,
+    });
+    primary.reply({ id: 2, type: 'configured' });
+    const source = await opening;
+    const replica = FakeWorker.instances[1];
+    expect(replica.messages[0]).toMatchObject({
+      type: 'open',
+      cacheBytes: 8 * 1024 ** 2,
+      pageLimit: 8,
+    });
+    replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    source.dispose();
+  });
+  it('caps a tiled Worker decoded-block cache at 16MiB', async () => {
+    const tiledMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 8192,
+          height: 8192,
+          tileWidth: 1024,
+          tileHeight: 1024,
+          samples: 3,
+          bits: [8, 8, 8],
+          formats: [1, 1, 1],
+          photometric: 2,
+        },
+      ],
+    };
+    const opening = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount: 2 });
+    const primary = FakeWorker.instances[0];
+    primary.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    expect(primary.messages.at(-1)).toMatchObject({
+      id: 2,
+      type: 'configure',
+      cacheBytes: 16 * 1024 ** 2,
+    });
+    primary.reply({ id: 2, type: 'configured' });
+    const source = await opening;
+    const replica = FakeWorker.instances[1];
+    expect(replica.messages[0]).toMatchObject({ type: 'open', cacheBytes: 16 * 1024 ** 2 });
+    replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    source.dispose();
   });
   it('pins row-striped levels to an enlarged primary Worker cache', async () => {
     const stripedMetadata: RasterMetadata = {
@@ -421,7 +496,7 @@ describe('parallel raster pipeline pool', () => {
     answer(worker, 1);
     await a;
     worker.reply({
-      id: 3,
+      id: worker.messages.at(-1)!.id,
       type: 'result',
       result: { width: 1, height: 1, data: [new Uint8Array([2])] },
     });
@@ -448,6 +523,9 @@ describe('parallel pool failure and reservation bounds', () => {
     const opened = openGeoTIFF(file(), { workerCount: 2 });
     const first = FakeWorker.instances[0];
     first.reply({ id: 1, type: 'metadata', metadata: meta, directoryBytes: 1000 });
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    const configure = first.messages.at(-1);
+    if (configure?.type === 'configure') first.reply({ id: configure.id, type: 'configured' });
     const source = await opened;
     const request = { level: 0, window: [0, 0, 1, 1] as const, samples: [0] };
     try {
@@ -459,14 +537,14 @@ describe('parallel pool failure and reservation bounds', () => {
       expect(source.getProcessingStats?.()).toMatchObject({ busyWorkers: 1, queuedTasks: 1 });
       expect(source.getProcessingStats!().reservedBytes).toBeLessThanOrEqual(64 * 1024 ** 2);
       first.reply({
-        id: 2,
+        id: first.messages.at(-1)!.id,
         type: 'result',
         result: { width: 1, height: 1, data: [new Uint8Array([1])] },
       });
       await a;
       expect(source.getProcessingStats!().reservedBytes).toBeLessThanOrEqual(64 * 1024 ** 2);
       first.reply({
-        id: 3,
+        id: first.messages.at(-1)!.id,
         type: 'result',
         result: { width: 1, height: 1, data: [new Uint8Array([2])] },
       });
