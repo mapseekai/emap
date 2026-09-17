@@ -115,3 +115,37 @@ test('local external-pyramid imagery remains complete through navigation', async
   await page.screenshot({ path: testInfo.outputPath('local-overview.png') });
   await page.evaluate(() => window.geotiffDemo.map.dispose());
 });
+
+test('directory authorization auto-resolves a same-folder .tif.ovr companion', async ({ page }) => {
+  const original = Array.from(makeRasterFixture({ width: 64, height: 32, bits: 16, bands: 3, photometric: 1 }));
+  const overview = Array.from(makeRasterFixture({ width: 32, height: 16, bits: 16, bands: 3, photometric: 2, subfileType: 1, scaleFactor: 2, overviews: [2, 4] }));
+  await page.addInitScript(({ original, overview }) => {
+    const files = new Map([
+      ['auto.tif', new File([new Uint8Array(original)], 'auto.tif', { lastModified: 10 })],
+      ['auto.tif.ovr', new File([new Uint8Array(overview)], 'auto.tif.ovr', { lastModified: 11 })],
+      ['notes.txt', new File(['ignore'], 'notes.txt')],
+    ]);
+    window.showDirectoryPicker = async () => ({
+      kind: 'directory',
+      name: 'imagery',
+      async *entries() {
+        for (const [name, file] of files) yield [name, { kind: 'file', name, getFile: async () => file }];
+      },
+      async getFileHandle(name) {
+        const file = files.get(name);
+        if (!file) throw new DOMException('Not found', 'NotFoundError');
+        return { kind: 'file', name, getFile: async () => file };
+      },
+    });
+  }, { original, overview });
+  await page.goto(url);
+  await expect(page.locator('#levels')).toHaveText('4');
+  await page.locator('#directory-picker').click();
+  await expect(page.locator('#directory-raster')).toHaveValue('auto.tif');
+  await expect(page.locator('#directory-status')).toContainText('auto.tif + auto.tif.ovr');
+  await expect.poll(() => page.evaluate(() => window.geotiffDemo.metadata?.filename)).toBe('auto.tif');
+  await expect(page.locator('#metadata')).toContainText('auto.tif.ovr');
+  await expect(page.locator('#levels')).toHaveText('4');
+  await idle(page);
+  expect(await page.evaluate(() => window.geotiffDemo.error)).toBeNull();
+});

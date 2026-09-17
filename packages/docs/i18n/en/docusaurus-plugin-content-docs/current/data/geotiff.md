@@ -41,7 +41,9 @@ The non-configurable policy is **`file.size > 2 * 1024 ** 3` requires valid over
 
 Internal IFDs, SubIFDs and explicitly selected `filename.tif.ovr` files are supported. Full-size pages, masks, incompatible dimensions or bands do not count as overviews. External names must match the source filename plus `.ovr`. Where georeferencing exists, CRS and extent are checked. A georeference-free external overview still depends on the user selecting the correct companion; filename matching is not cryptographic identity verification.
 
-Three-band originals and overviews may use different `MINISBLACK`/`RGB` tags when their numerical band types match and no alpha semantics change. Raw bands are preserved; palette, WhiteIsZero, and other colorspace checks are not relaxed. An explicitly supplied `.ovr` with no compatible levels fails with `OVERVIEW_MISMATCH` before pixel decoding rather than being silently ignored. The example displays accepted levels and the external filename; selecting only the TIFF does not automatically open sibling files.
+Three-band originals and overviews may use different `MINISBLACK`/`RGB` tags when their numerical band types match and no alpha semantics change. Raw bands are preserved; palette, WhiteIsZero, and other colorspace checks are not relaxed. An explicitly supplied `.ovr` with no compatible levels fails with `OVERVIEW_MISMATCH` before pixel decoding rather than being silently ignored.
+
+The example now prefers directory authorization: after the user grants read access to an imagery directory, selecting `a.tif` automatically looks up and associates sibling `a.tif.ovr`; a directory containing only one TIFF is selected and loaded immediately. Browser security does not let a plain `<input type="file">` discover the selected file's parent directory, so browsers without directory-handle support retain manual TIFF/OVR selection as a fallback. emap core still receives only user-authorized Files/handles and never bypasses browser permissions to inspect local siblings.
 
 Build overviews using QGIS or a locally installed GDAL:
 

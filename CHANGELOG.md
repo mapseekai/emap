@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Let the GeoTIFF example authorize a local directory and automatically associate
+  `a.tif` with sibling `a.tif.ovr`, while retaining manual file selection for
+  browsers without directory-handle support.
+
 ### Fixed
 
 - Reduce raster fragmentation with a configurable 60ms ready-tile presentation
