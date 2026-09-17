@@ -1,5 +1,6 @@
 import { readNumericWindow } from './read-window';
 import { CachedGeoTIFFImage, RasterBlockCache } from './block-cache';
+import { getNativeDeflateDiagnostics } from './native-deflate';
 import { collectRasterStatistics } from '../../domain/raster/statistics';
 import { GeoTIFF, GeoTIFFImage } from 'geotiff';
 import { AffineTransform } from '../../domain/geo/transform';
@@ -392,6 +393,18 @@ export class GeoTIFFReader implements RasterSource {
     }
   }
 
+  getBlockAccessCursor(): number {
+    return this.blockCache.getAccessCursor();
+  }
+
+  takeBlockAccessesSince(cursor: number): { requested: string[]; loaded: string[] } {
+    return this.blockCache.takeAccessesSince(cursor);
+  }
+
+  clearBlockAccessTrace(): void {
+    this.blockCache.clearAccessTrace();
+  }
+
   getTaskDiagnosticsSnapshot() {
     const io = this.sources.reduce(
       (sum, source) => {
@@ -405,7 +418,8 @@ export class GeoTIFFReader implements RasterSource {
       },
       { fileReadMs: 0, fileReadBytes: 0, fileReadOps: 0, pageCacheHits: 0, pageCacheMisses: 0 },
     );
-    const blocks = this.blockCache.getDiagnostics();
+    const blocks = this.blockCache.getDiagnostics(),
+      nativeDeflate = getNativeDeflateDiagnostics();
     return {
       ...io,
       blockCacheHits: blocks.hits,
@@ -419,6 +433,9 @@ export class GeoTIFFReader implements RasterSource {
       blockCachePeakEntries: blocks.peakEntries,
       blockCacheLimitBytes: blocks.limitBytes,
       blockCacheOversizeSkips: blocks.oversizeSkips,
+      nativeDeflateBlocks: nativeDeflate.blocks,
+      nativeDeflateFallbacks: nativeDeflate.fallbacks,
+      nativeDeflateMs: nativeDeflate.ms,
       blockLoadMs: blocks.loadMs,
       transferMs: 0,
     };

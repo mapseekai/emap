@@ -307,7 +307,7 @@ describe('parallel raster pipeline pool', () => {
     }
     expect(FakeWorker.instances.every((w) => w.terminate.mock.calls.length === 1)).toBe(true);
   });
-  it('routes a cross-block request by its full spatial footprint rather than its center block', async () => {
+  it('keeps adjacent block pairs on the same Worker while preserving spatial sharding', async () => {
     const tiledMetadata: RasterMetadata = {
       ...metadata,
       levels: [
@@ -320,25 +320,86 @@ describe('parallel raster pipeline pool', () => {
         },
       ],
     };
+    const { source } = await opened(2, 1000, tiledMetadata);
+    try {
+      const replica = FakeWorker.instances[1];
+      replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
+      await Promise.resolve();
+      const block1 = source.readWindow({ level: 0, window: [600, 0, 700, 1], samples: [0] });
+      const block2 = source.readWindow({ level: 0, window: [1100, 0, 1200, 1], samples: [0] });
+      expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(1);
+      answer(replica, 10);
+      await block1;
+      await Promise.resolve();
+      expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(2);
+      answer(replica, 20);
+      await block2;
+    } finally {
+      source.dispose();
+    }
+  });
+  it('reports exact duplicate and cross-Worker physical block loads', async () => {
+    const tiledMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width: 1024,
+          height: 512,
+          tileWidth: 512,
+          tileHeight: 512,
+        },
+      ],
+    };
     const { source, worker } = await opened(2, 1000, tiledMetadata);
     try {
       const replica = FakeWorker.instances[1];
       replica.reply({ id: 1, type: 'metadata', metadata: tiledMetadata, directoryBytes: 1000 });
       await Promise.resolve();
-      // The center is in block 1 (replica), but blocks 0 and 2 together cover slightly
-      // more source pixels, so the complete footprint keeps the request on the primary.
-      const pending = source.readWindow({
-        level: 0,
-        window: [500, 0, 1530, 1],
-        samples: [0],
+      const left = source.readWindow({ level: 0, window: [400, 0, 600, 1], samples: [0] }),
+        right = source.readWindow({ level: 0, window: [500, 0, 700, 1], samples: [0] });
+      expect(source.getProcessingStats?.().busyWorkers).toBe(2);
+      const keys = ['0:0:0:0', '0:1:0:0'];
+      worker.reply({
+        id: worker.messages.at(-1)!.id,
+        type: 'result',
+        result: { width: 200, height: 1, data: [new Uint8Array(200)] },
+        blockAccess: { requested: keys, loaded: keys },
       });
-      expect(worker.messages.at(-1)).toMatchObject({
-        type: 'read',
-        request: { window: [500, 0, 1530, 1] },
+      replica.reply({
+        id: replica.messages.at(-1)!.id,
+        type: 'result',
+        result: { width: 200, height: 1, data: [new Uint8Array(200)] },
+        blockAccess: { requested: keys, loaded: keys },
       });
-      expect(replica.messages.filter((message) => message.type === 'read')).toHaveLength(0);
-      answer(worker, 40);
-      expect((await pending).data[0][0]).toBe(40);
+      await Promise.all([left, right]);
+      expect(source.getProcessingStats?.()).toMatchObject({
+        physicalBlockRequests: 4,
+        uniquePhysicalBlocks: 2,
+        blockLoads: 4,
+        uniqueLoadedBlocks: 2,
+        duplicateBlockLoads: 2,
+        crossWorkerDuplicateLoads: 2,
+        blockDiagnosticsTruncated: false,
+        workerBlockStats: [
+          {
+            worker: 0,
+            requests: 2,
+            uniqueBlocks: 2,
+            loads: 2,
+            uniqueLoadedBlocks: 2,
+            duplicateLoads: 0,
+          },
+          {
+            worker: 1,
+            requests: 2,
+            uniqueBlocks: 2,
+            loads: 2,
+            uniqueLoadedBlocks: 2,
+            duplicateLoads: 0,
+          },
+        ],
+      });
     } finally {
       source.dispose();
     }

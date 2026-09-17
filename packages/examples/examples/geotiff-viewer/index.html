@@ -200,11 +200,13 @@ function performanceSnapshot() {
         fileReadBytes:delta('fileReadBytes'), fileReadOps:delta('fileReadOps'), fileReadMs:delta('fileReadMs'),
         blockCacheHits:delta('blockCacheHits'), blockCacheMisses:delta('blockCacheMisses'),
         blockCacheEvictions:delta('blockCacheEvictions'), blockCacheEvictedBytes:delta('blockCacheEvictedBytes'),
+        nativeDeflateBlocks:delta('nativeDeflateBlocks'), nativeDeflateFallbacks:delta('nativeDeflateFallbacks'), nativeDeflateMs:delta('nativeDeflateMs'),
         blockLoadMs:delta('blockLoadMs'), colorizeMs:delta('colorizeMs') };
     }).filter(item => item.submitted || item.completed || item.cancelled || item.fileReadOps),
     phasesMs: {
       planning: performanceDelta(perf,bp,'planningMs'), fileRead: fileReadMs,
       blockLoad: blockLoadMs, decodeApprox: Math.max(0,blockLoadMs-fileReadMs),
+      nativeDeflate:performanceDelta(processing,bproc,'nativeDeflateMs'),
       assemble: performanceDelta(perf,bp,'assembleMs'), colorize: performanceDelta(perf,bp,'colorizeMs'),
       workerTotal: performanceDelta(perf,bp,'workerMs'), transferApprox: performanceDelta(perf,bp,'transferMs'),
       canvasUpload: performanceDelta(perf,bp,'canvasUploadMs'), presentationWait: performanceDelta(perf,bp,'presentationWaitMs'),
@@ -217,6 +219,21 @@ function performanceSnapshot() {
         evictedMiB:performanceDelta(perf,bp,'blockCacheEvictedBytes')/1024**2,
         admittedMiB:performanceDelta(perf,bp,'blockCacheAdmittedBytes')/1024**2,
         oversizeSkips:performanceDelta(perf,bp,'blockCacheOversizeSkips'),
+        physicalRequests:performanceDelta(processing,bproc,'physicalBlockRequests'),
+        newUniquePhysicalBlocks:performanceDelta(processing,bproc,'uniquePhysicalBlocks'),
+        sourceUniquePhysicalBlocks:processing?.uniquePhysicalBlocks ?? 0,
+        loads:performanceDelta(processing,bproc,'blockLoads'),
+        newUniqueLoadedBlocks:performanceDelta(processing,bproc,'uniqueLoadedBlocks'),
+        duplicateLoads:performanceDelta(processing,bproc,'duplicateBlockLoads'),
+        crossWorkerDuplicateLoads:performanceDelta(processing,bproc,'crossWorkerDuplicateLoads'),
+        nativeDeflateBlocks:performanceDelta(processing,bproc,'nativeDeflateBlocks'),
+        nativeDeflateFallbacks:performanceDelta(processing,bproc,'nativeDeflateFallbacks'),
+        diagnosticsTruncated:Boolean(processing?.blockDiagnosticsTruncated),
+        workers:(processing?.workerBlockStats ?? []).map(item => {
+          const previous=bproc?.workerBlockStats?.find(value => value.worker === item.worker);
+          const delta=key => Math.max(0,Number(item[key] ?? 0)-Number(previous?.[key] ?? 0));
+          return {worker:item.worker,requests:delta('requests'),newUniqueBlocks:delta('uniqueBlocks'),loads:delta('loads'),newUniqueLoadedBlocks:delta('uniqueLoadedBlocks'),duplicateLoads:delta('duplicateLoads')};
+        }),
         currentMiB:(processing?.blockCacheBytes ?? 0)/1024**2,
         peakMiB:(processing?.blockCachePeakBytes ?? 0)/1024**2,
         capacityMiB:(processing?.blockCacheLimitBytes ?? 0)/1024**2,

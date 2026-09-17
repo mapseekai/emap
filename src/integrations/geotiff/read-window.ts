@@ -1,5 +1,6 @@
 import { getDecoder, type GeoTIFFImage } from 'geotiff';
 import type { RasterReadRequest, RasterReadResult, RasterSamples } from '../../domain/raster/types';
+import { createNativeDeflateDecoder } from './native-deflate';
 
 const NATIVE_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
@@ -41,15 +42,20 @@ export async function readNumericWindow(
       data: Array.from(result) as RasterSamples[],
     };
   }
-  const decoder = await getDecoder(compression, {
-    tileWidth: image.getTileWidth(),
-    tileHeight: image.getTileHeight(),
-    planarConfiguration: image.planarConfiguration,
-    bitsPerSample: Array.from({ length: image.getSamplesPerPixel() }, (_, i) =>
-      image.getBitsPerSample(i),
-    ),
-    predictor: (await directory.loadValue('Predictor')) || 1,
-  });
+  const decoderParameters = {
+      tileWidth: image.getTileWidth(),
+      tileHeight: image.getTileHeight(),
+      planarConfiguration: image.planarConfiguration,
+      bitsPerSample: Array.from({ length: image.getSamplesPerPixel() }, (_, i) =>
+        image.getBitsPerSample(i),
+      ),
+      predictor: (await directory.loadValue('Predictor')) || 1,
+    },
+    upstreamDecoder = await getDecoder(compression, decoderParameters),
+    decoder =
+      compression === 8
+        ? createNativeDeflateDecoder(decoderParameters, upstreamDecoder)
+        : upstreamDecoder;
   signal?.throwIfAborted();
   const output = samples.map((sample) => image.getArrayForSample(sample, w * h));
   const tw = image.getTileWidth(),

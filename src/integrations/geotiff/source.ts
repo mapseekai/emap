@@ -22,6 +22,7 @@ import type {
   GeoTIFFWorkerCommand,
   GeoTIFFWorkerResponse,
   GeoTIFFWorkerOpen,
+  GeoTIFFWorkerBlockAccess,
 } from './worker-protocol';
 import { RasterWorkerClient } from './worker-client';
 import { acquireParallelWorker, rasterWorkerCount } from './worker-capacity';
@@ -31,6 +32,7 @@ const SOURCE_BLOCK_CACHE_BYTES = 8 * MIB;
 const TILED_WORKING_SET_BLOCKS = 10;
 const TILED_WORKER_CACHE_MAX_BYTES = 16 * MIB;
 const STRIPED_PRIMARY_CACHE_BYTES = 32 * MIB;
+const MAX_BLOCK_DIAGNOSTIC_KEYS = 65_536;
 
 function isRowStripedLevel(level: RasterMetadata['levels'][number]): boolean {
   return level.tileWidth >= level.width && level.tileHeight < level.height;
@@ -121,7 +123,9 @@ function affinitySlotIndex(
   const footprint = sourceBlockFootprint(level, command);
   if (!footprint) return 0;
   const weights = new Array<number>(slots).fill(0);
-  const ownerFor = (blockX: number) => blockX % slots;
+  // Shift pairs by one column so common 3-column viewports keep both Workers active
+  // while cutting affinity boundaries roughly in half versus alternating every column.
+  const ownerFor = (blockX: number) => Math.floor((blockX + 1) / 2) % slots;
   for (let y = footprint.minY; y <= footprint.maxY; y++) {
     const blockTop = y * footprint.tileHeight;
     const blockBottom = Math.min(level.height, blockTop + footprint.tileHeight);
@@ -162,6 +166,11 @@ interface Slot {
   cachePeakBytes: number;
   cachePeakEntries: number;
   cacheLimitBytes: number;
+  blockRequests: number;
+  blockLoads: number;
+  duplicateBlockLoads: number;
+  requestedBlocks: Set<string>;
+  loadedBlocks: Set<string>;
 }
 type MutableLevelStats = {
   -readonly [K in keyof Omit<RasterLevelProcessingStats, 'level'>]: Omit<
@@ -210,6 +219,17 @@ class WorkerRasterSource implements RasterSource {
   private blockCachePeakEntries = 0;
   private blockCacheLimitBytes = 0;
   private blockCacheOversizeSkips = 0;
+  private nativeDeflateBlocks = 0;
+  private nativeDeflateFallbacks = 0;
+  private nativeDeflateMs = 0;
+  private physicalBlockRequests = 0;
+  private blockLoads = 0;
+  private duplicateBlockLoads = 0;
+  private crossWorkerDuplicateLoads = 0;
+  private blockDiagnosticsTruncated = false;
+  private readonly requestedPhysicalBlocks = new Set<string>();
+  private readonly loadedPhysicalBlocks = new Set<string>();
+  private readonly blockWorkers = new Map<string, Set<number>>();
   private blockLoadMs = 0;
   private assembleMs = 0;
   private colorizeMs = 0;
@@ -288,6 +308,11 @@ class WorkerRasterSource implements RasterSource {
       cachePeakBytes: 0,
       cachePeakEntries: 0,
       cacheLimitBytes: 0,
+      blockRequests: 0,
+      blockLoads: 0,
+      duplicateBlockLoads: 0,
+      requestedBlocks: new Set(),
+      loadedBlocks: new Set(),
     };
     slot.client = new RasterWorkerClient(
       worker,
@@ -300,6 +325,44 @@ class WorkerRasterSource implements RasterSource {
     );
     this.slots.push(slot);
     return slot;
+  }
+  private addDiagnosticKey(target: Set<string>, key: string): boolean {
+    if (target.has(key)) return true;
+    if (target.size >= MAX_BLOCK_DIAGNOSTIC_KEYS) {
+      this.blockDiagnosticsTruncated = true;
+      return false;
+    }
+    target.add(key);
+    return true;
+  }
+  private recordBlockAccess(slot: Slot, access?: GeoTIFFWorkerBlockAccess): void {
+    if (!access) return;
+    const worker = this.slots.indexOf(slot);
+    slot.blockRequests += access.requested.length;
+    this.physicalBlockRequests += access.requested.length;
+    for (const key of access.requested) {
+      this.addDiagnosticKey(slot.requestedBlocks, key);
+      this.addDiagnosticKey(this.requestedPhysicalBlocks, key);
+    }
+    for (const key of access.loaded) {
+      slot.blockLoads++;
+      this.blockLoads++;
+      if (slot.loadedBlocks.has(key)) slot.duplicateBlockLoads++;
+      else this.addDiagnosticKey(slot.loadedBlocks, key);
+      if (this.loadedPhysicalBlocks.has(key)) this.duplicateBlockLoads++;
+      else this.addDiagnosticKey(this.loadedPhysicalBlocks, key);
+      let workers = this.blockWorkers.get(key);
+      if (!workers) {
+        if (this.blockWorkers.size >= MAX_BLOCK_DIAGNOSTIC_KEYS) {
+          this.blockDiagnosticsTruncated = true;
+          continue;
+        }
+        workers = new Set();
+        this.blockWorkers.set(key, workers);
+      }
+      if (workers.size && !workers.has(worker)) this.crossWorkerDuplicateLoads++;
+      workers.add(worker);
+    }
   }
   private startReplica(): boolean {
     if (this.slots.length >= this.target || !this.openCommand) return false;
@@ -356,6 +419,9 @@ class WorkerRasterSource implements RasterSource {
         blockCacheEvictions: 0,
         blockCacheEvictedBytes: 0,
         blockCacheAdmittedBytes: 0,
+        nativeDeflateBlocks: 0,
+        nativeDeflateFallbacks: 0,
+        nativeDeflateMs: 0,
         blockLoadMs: 0,
         assembleMs: 0,
         colorizeMs: 0,
@@ -449,6 +515,8 @@ class WorkerRasterSource implements RasterSource {
       void result.then(
         (response) => {
           this.pending.delete(job);
+          if (response.type === 'rendered' || response.type === 'result')
+            this.recordBlockAccess(slot, response.blockAccess);
           if (response.type === 'rendered') {
             this.renderedTiles++;
             const levelStats =
@@ -473,6 +541,9 @@ class WorkerRasterSource implements RasterSource {
                 levelStats.blockCacheEvictions += d.blockCacheEvictions;
                 levelStats.blockCacheEvictedBytes += d.blockCacheEvictedBytes;
                 levelStats.blockCacheAdmittedBytes += d.blockCacheAdmittedBytes;
+                levelStats.nativeDeflateBlocks += d.nativeDeflateBlocks;
+                levelStats.nativeDeflateFallbacks += d.nativeDeflateFallbacks;
+                levelStats.nativeDeflateMs += d.nativeDeflateMs;
                 levelStats.blockLoadMs += d.blockLoadMs;
                 levelStats.assembleMs += d.assembleMs;
                 levelStats.colorizeMs += d.colorizeMs;
@@ -503,6 +574,9 @@ class WorkerRasterSource implements RasterSource {
                 d.blockCacheLimitBytes,
               );
               this.blockCacheOversizeSkips += d.blockCacheOversizeSkips;
+              this.nativeDeflateBlocks += d.nativeDeflateBlocks;
+              this.nativeDeflateFallbacks += d.nativeDeflateFallbacks;
+              this.nativeDeflateMs += d.nativeDeflateMs;
               this.blockLoadMs += d.blockLoadMs;
               this.assembleMs += d.assembleMs;
               this.colorizeMs += d.colorizeMs;
@@ -608,6 +682,24 @@ class WorkerRasterSource implements RasterSource {
       blockCachePeakEntries: this.slots.reduce((sum, slot) => sum + slot.cachePeakEntries, 0),
       blockCacheLimitBytes: this.slots.reduce((sum, slot) => sum + slot.cacheLimitBytes, 0),
       blockCacheOversizeSkips: this.blockCacheOversizeSkips,
+      physicalBlockRequests: this.physicalBlockRequests,
+      uniquePhysicalBlocks: this.requestedPhysicalBlocks.size,
+      blockLoads: this.blockLoads,
+      uniqueLoadedBlocks: this.loadedPhysicalBlocks.size,
+      duplicateBlockLoads: this.duplicateBlockLoads,
+      crossWorkerDuplicateLoads: this.crossWorkerDuplicateLoads,
+      blockDiagnosticsTruncated: this.blockDiagnosticsTruncated,
+      workerBlockStats: this.slots.map((slot, worker) => ({
+        worker,
+        requests: slot.blockRequests,
+        uniqueBlocks: slot.requestedBlocks.size,
+        loads: slot.blockLoads,
+        uniqueLoadedBlocks: slot.loadedBlocks.size,
+        duplicateLoads: slot.duplicateBlockLoads,
+      })),
+      nativeDeflateBlocks: this.nativeDeflateBlocks,
+      nativeDeflateFallbacks: this.nativeDeflateFallbacks,
+      nativeDeflateMs: this.nativeDeflateMs,
       blockLoadMs: this.blockLoadMs,
       assembleMs: this.assembleMs,
       colorizeMs: this.colorizeMs,
@@ -642,6 +734,9 @@ class WorkerRasterSource implements RasterSource {
     }
     this.queue = [];
     this.pending.clear();
+    this.requestedPhysicalBlocks.clear();
+    this.loadedPhysicalBlocks.clear();
+    this.blockWorkers.clear();
     this.reservedBytes = 0;
     this.queuedMeshBytes = 0;
     this.openCommand = undefined;

@@ -45,6 +45,7 @@ scope.onmessage = ({ data }) => {
           directoryBytes: reader.directoryBytes,
           protocolVersion: GEOTIFF_WORKER_PROTOCOL_VERSION,
         });
+        reader.clearBlockAccessTrace();
       } finally {
         opening = false;
       }
@@ -54,12 +55,28 @@ scope.onmessage = ({ data }) => {
         reader.setBlockCacheLimit(data.cacheBytes);
         scope.postMessage({ id: data.id, type: 'configured' });
       } else if (data.type === 'render') {
-        const result = await renderRasterWindow(reader, data.request, controller.signal);
-        scope.postMessage({ id: data.id, type: 'rendered', result }, [result.rgba.buffer]);
+        const cursor = reader.getBlockAccessCursor();
+        try {
+          const result = await renderRasterWindow(reader, data.request, controller.signal);
+          const blockAccess = reader.takeBlockAccessesSince(cursor);
+          scope.postMessage({ id: data.id, type: 'rendered', result, blockAccess }, [
+            result.rgba.buffer,
+          ]);
+        } catch (error) {
+          reader.takeBlockAccessesSince(cursor);
+          throw error;
+        }
       } else {
-        const result = await reader.readWindow(data.request, controller.signal);
-        const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
-        scope.postMessage({ id: data.id, type: 'result', result }, transfer);
+        const cursor = reader.getBlockAccessCursor();
+        try {
+          const result = await reader.readWindow(data.request, controller.signal);
+          const blockAccess = reader.takeBlockAccessesSince(cursor);
+          const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
+          scope.postMessage({ id: data.id, type: 'result', result, blockAccess }, transfer);
+        } catch (error) {
+          reader.takeBlockAccessesSince(cursor);
+          throw error;
+        }
       }
     }
   };

@@ -3,6 +3,8 @@ import { GeoTIFFImage } from 'geotiff';
 /** All IFDs/overviews in one source share a small, explicitly bounded cache. */
 export class RasterBlockCache {
   private readonly entries = new Map<string, ArrayBufferLike>();
+  private readonly accessTrace: { serial: number; key: string; loaded: boolean }[] = [];
+  private accessSerial = 0;
   private retainedBytes = 0;
   private closed = false;
   private hits = 0;
@@ -45,6 +47,26 @@ export class RasterBlockCache {
       limitBytes: this.limit,
     };
   }
+  getAccessCursor(): number {
+    return this.accessSerial;
+  }
+  takeAccessesSince(cursor: number): { requested: string[]; loaded: string[] } {
+    const requested: string[] = [],
+      loaded: string[] = [];
+    for (const event of this.accessTrace) {
+      if (event.serial <= cursor) continue;
+      if (event.loaded) loaded.push(event.key);
+      else requested.push(event.key);
+    }
+    this.accessTrace.length = 0;
+    return { requested, loaded };
+  }
+  clearAccessTrace(): void {
+    this.accessTrace.length = 0;
+  }
+  private trace(key: string, loaded: boolean): void {
+    this.accessTrace.push({ serial: ++this.accessSerial, key, loaded });
+  }
   get bytes(): number {
     return this.retainedBytes;
   }
@@ -52,6 +74,7 @@ export class RasterBlockCache {
     return this.entries.size;
   }
   get(key: string): ArrayBufferLike | undefined {
+    this.trace(key, false);
     const data = this.entries.get(key);
     if (data) {
       this.hits++;
@@ -66,6 +89,7 @@ export class RasterBlockCache {
   }
   set(key: string, data: ArrayBufferLike): void {
     if (this.closed) return;
+    this.trace(key, true);
     if (data.byteLength > this.limit) {
       this.oversizeSkips++;
       return;
@@ -92,6 +116,7 @@ export class RasterBlockCache {
   dispose(): void {
     this.closed = true;
     this.entries.clear();
+    this.accessTrace.length = 0;
     this.retainedBytes = 0;
   }
 }

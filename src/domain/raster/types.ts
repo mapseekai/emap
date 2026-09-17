@@ -119,6 +119,9 @@ export interface RasterTaskDiagnostics {
   readonly blockCachePeakEntries: number;
   readonly blockCacheLimitBytes: number;
   readonly blockCacheOversizeSkips: number;
+  readonly nativeDeflateBlocks: number;
+  readonly nativeDeflateFallbacks: number;
+  readonly nativeDeflateMs: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
@@ -145,9 +148,20 @@ export interface RasterLevelProcessingStats {
   readonly blockCacheEvictions: number;
   readonly blockCacheEvictedBytes: number;
   readonly blockCacheAdmittedBytes: number;
+  readonly nativeDeflateBlocks: number;
+  readonly nativeDeflateFallbacks: number;
+  readonly nativeDeflateMs: number;
   readonly blockLoadMs: number;
   readonly assembleMs: number;
   readonly colorizeMs: number;
+}
+export interface RasterWorkerBlockStats {
+  readonly worker: number;
+  readonly requests: number;
+  readonly uniqueBlocks: number;
+  readonly loads: number;
+  readonly uniqueLoadedBlocks: number;
+  readonly duplicateLoads: number;
 }
 export interface RasterProcessingStats {
   readonly workers: number;
@@ -168,6 +182,18 @@ export interface RasterProcessingStats {
   readonly blockCachePeakEntries: number;
   readonly blockCacheLimitBytes: number;
   readonly blockCacheOversizeSkips: number;
+  /** Actual decoded TIFF tile/strip access across all source-owned Workers. */
+  readonly physicalBlockRequests: number;
+  readonly uniquePhysicalBlocks: number;
+  readonly blockLoads: number;
+  readonly uniqueLoadedBlocks: number;
+  readonly duplicateBlockLoads: number;
+  readonly crossWorkerDuplicateLoads: number;
+  readonly blockDiagnosticsTruncated: boolean;
+  readonly workerBlockStats: readonly RasterWorkerBlockStats[];
+  readonly nativeDeflateBlocks: number;
+  readonly nativeDeflateFallbacks: number;
+  readonly nativeDeflateMs: number;
   readonly workerMs: number;
   readonly fileReadMs: number;
   readonly fileReadBytes: number;
