@@ -258,6 +258,7 @@ class WorkerRasterSource implements RasterSource {
       file,
       overviewFile: options.overviewFile,
       crs: options.crs,
+      noData: options.noData,
       cacheBytes: initialCacheBytes,
       pageLimit: Math.floor(16 / this.requested),
     };

@@ -101,6 +101,22 @@ describe('Worker-backed external raster sources', () => {
     source.dispose();
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
+  it('forwards the NoData override to the GeoTIFF Worker open command', async () => {
+    const pending = openGeoTIFF(file(), { noData: -9999 });
+    const worker = FakeWorker.instances[0];
+    expect(worker.messages[0]).toMatchObject({ type: 'open', noData: -9999 });
+    worker.reply({
+      id: 1,
+      type: 'metadata',
+      protocolVersion: GEOTIFF_WORKER_PROTOCOL_VERSION,
+      metadata: { ...metadata, noData: -9999 },
+      directoryBytes: 1024,
+    });
+    const source = await pending;
+    expect(source.metadata.noData).toBe(-9999);
+    source.dispose();
+  });
+
   it('preserves structured pyramid failures and terminates failed opens', async () => {
     const pending = openGeoTIFF(file()),
       worker = FakeWorker.instances[0];

@@ -29,6 +29,7 @@ scope.onmessage = ({ data }) => {
           {
             overviewFile: data.overviewFile,
             crs: data.crs,
+            noData: data.noData,
             signal: controller.signal,
           },
           {

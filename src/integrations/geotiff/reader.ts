@@ -31,6 +31,8 @@ export interface GeoTIFFOpenOptions {
   readonly overviewFile?: File;
   /** Required override when the source does not carry a supported EPSG GeoKey. */
   readonly crs?: string;
+  /** undefined: use TIFF GDAL_NODATA; number: override it; null: disable NoData. */
+  readonly noData?: number | null;
   readonly signal?: AbortSignal;
 }
 
@@ -165,6 +167,11 @@ export class GeoTIFFReader implements RasterSource {
     runtime: GeoTIFFReaderRuntime = {},
   ): Promise<GeoTIFFReader> {
     options.signal?.throwIfAborted();
+    if (options.noData !== undefined && options.noData !== null && !Number.isFinite(options.noData))
+      throw new RasterError(
+        'INVALID_NODATA',
+        'NoData override must be a finite number, null, or undefined.',
+      );
     if (!Number.isSafeInteger(file.size) || file.size < 8)
       throw new RasterError('INVALID_RASTER', 'Invalid TIFF file size.');
     if (
@@ -361,7 +368,7 @@ export class GeoTIFFReader implements RasterSource {
         resolution,
         bounds: [origin[0], bottom, right, origin[1]],
         levels,
-        noData: base.getGDALNoData(),
+        noData: options.noData === undefined ? base.getGDALNoData() : options.noData,
         alphaBand,
         palette,
         bigTiff: baseTiff.bigTiff,

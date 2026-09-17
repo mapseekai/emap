@@ -1,4 +1,4 @@
-export const GEOTIFF_WORKER_PROTOCOL_VERSION = 7;
+export const GEOTIFF_WORKER_PROTOCOL_VERSION = 8;
 
 import type {
   RasterMetadata,
@@ -15,6 +15,7 @@ export type GeoTIFFWorkerOpen = {
   file: File;
   overviewFile?: File;
   crs?: string;
+  noData?: number | null;
   cacheBytes?: number;
   pageLimit?: number;
   maxMetadataBytes?: number;

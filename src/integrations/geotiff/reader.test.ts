@@ -50,6 +50,35 @@ describe('local GeoTIFF source', () => {
     expect(rgba[3]).toBe(255);
     source.dispose();
   });
+  it('allows NoData to inherit, override, or explicitly disable the TIFF value', async () => {
+    const input = file({
+      bits: 16,
+      bands: 1,
+      noData: 0,
+      pixelValue: (x, y) => (x === 0 && y === 0 ? 0 : x + y + 1),
+    });
+    const inherited = await GeoTIFFReader.open(input);
+    expect(inherited.metadata.noData).toBe(0);
+    expect(inherited.metadata.statistics?.[0].count).toBe(63);
+    inherited.dispose();
+
+    const overridden = await GeoTIFFReader.open(input, { noData: 2 });
+    expect(overridden.metadata.noData).toBe(2);
+    expect(overridden.metadata.statistics?.[0].count).toBe(62);
+    overridden.dispose();
+
+    const disabled = await GeoTIFFReader.open(input, { noData: null });
+    expect(disabled.metadata.noData).toBeNull();
+    expect(disabled.metadata.statistics?.[0].count).toBe(64);
+    disabled.dispose();
+  });
+
+  it('rejects non-finite manual NoData overrides before TIFF decoding', async () => {
+    await expect(GeoTIFFReader.open(file(), { noData: Number.NaN })).rejects.toMatchObject({
+      code: 'INVALID_NODATA',
+    });
+  });
+
   it('excludes NaN, infinity and nodata from Float32 statistics and visible coverage', async () => {
     const input = file({
       bits: 32,

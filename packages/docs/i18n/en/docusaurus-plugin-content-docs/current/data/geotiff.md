@@ -2,7 +2,7 @@
 id: geotiff
 slug: /data/geotiff
 title: Local GeoTIFF rasters
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer"]
 stability: experimental
 verifiedVersion: 0.12.0
@@ -80,7 +80,7 @@ map.ctx.raster.setStyle('imagery', { bands: undefined }); // Automatic/native pa
 
 Changing bands clears inherited channel-specific ranges unless new `ranges` are explicitly supplied in the same call. Grayscale uses the selected band's source statistics, not the first band's statistics. Alpha remains a transparency channel and is excluded from default color selection. Band choices persist in external project references. Explicitly selecting an indexed image's band displays its numerical class values as gray rather than expanding its palette.
 
-Nearest/bilinear resampling, NoData, unassociated alpha, palettes, opacity, and fixed ranges are supported. Grayscale writes equal R/G/B display values. Pixel queries still return original full-resolution samples; rendering-mode changes never modify them.
+Nearest/bilinear resampling, NoData, unassociated alpha, palettes, opacity, and fixed ranges are supported. Grayscale writes equal R/G/B display values. Pixel queries still return original full-resolution samples; rendering-mode changes never modify them. `openGeoTIFF` / `GeoTIFFAddOptions` can override GDAL NoData with `noData`: omit it to inherit the TIFF value, pass a number to override it, or pass `null` to explicitly disable NoData.
 
 The default `stretch: 'auto'` preserves UInt8 colors and applies a 2–98% percentile stretch to Int8, UInt16/Int16, UInt32/Int32, and Float16/Float32/Float64 display pixels. Original samples and pixel-query values are unchanged; Float16 samples decode to Float32 buffers.
 
@@ -126,11 +126,13 @@ emap uses a shorter bounded presentation window while preserving incremental pro
 
 Small compressed byte ranges share aligned 64KiB pages and deduplicated in-flight requests. Each original or overview file retains at most 16 pages (1MiB), plus at most 16 in-flight pages. Large ranges remain direct reads. Physical reads, including prefetch, still count against the existing I/O budget.
 
-Each open raster source adds an **8MiB decoded-block LRU**, divided across parallel Workers and shared across original and overview IFDs and also capped at 4096 entries. Neighboring display tiles, revisits, and style changes reuse original decoded blocks. Only completed buffers are retained, never long-lived result promises. Closing the source releases the cache.
+Each open raster source adds a decoded-block LRU: a **baseline of 8MiB per source** divided across parallel Workers, each also capped at 4096 entries. Sources with spatially tiled levels are sized by working set — each Worker can hold about 10 of the largest decoded block (rounded up to MiB), capped at 16MiB per Worker; sources with row-striped levels give the primary Worker at least 32MiB. Original and overview IFDs share the cache. Neighboring display tiles, revisits, and style changes reuse original decoded blocks. Only completed buffers are retained, never long-lived result promises. Closing the source releases the cache.
 
 Uniform native-endian numeric samples in common encodings use TypedArray row copies/deinterleaving with at most four active block reads. geotiff.js still implements codecs and predictors. Float16, non-native endianness, mixed samples, and special codecs retain the upstream reader. Nearest and bilinear display both reuse coordinate/channel/interpolation state instead of allocating arrays per pixel. Source values, overview selection, and display ranges are unchanged.
 
-These are **additional to the display cache**: up to 1MiB retained compressed pages per TIFF file plus 8MiB decoded blocks per raster source. An external `.ovr` has its own compressed-page allowance. Pending reads, the current window, and browser resources add transient memory. Removing layers or unloading plugins releases buffers and Workers; no OPFS/IndexedDB copy is created.
+Row-striped TIFF display tiles are scheduled by row: tiles of the same layer and pyramid level are read in row order, prioritizing the rows closest to the viewport center, which together with the primary Worker's striped cache avoids repeated decompression of the same long strip. Near a pyramid level boundary, the next tiled overview is used directly when its upsampling stays within 1.4×, avoiding I/O and decoding spikes from full-resolution tiled blocks; strip-backed base levels keep strict selection and are not relaxed at boundaries.
+
+These are **additional to the display cache**: up to 1MiB retained compressed pages per TIFF file plus the source's decoded-block cache (8MiB baseline, enlarged by the working-set rules above). An external `.ovr` has its own compressed-page allowance. Pending reads, the current window, and browser resources add transient memory. Removing layers or unloading plugins releases buffers and Workers; no OPFS/IndexedDB copy is created.
 
 `test/browser/raster-performance.spec.mjs` performs three same-machine local-file rounds when `EMAP_GEOTIFF_LOCAL_FILE` is set. `EMAP_RASTER_BENCH_OUT` optionally records JSON. Metrics cover navigation-to-completion, first updated tile, animation frames with tile updates, and display-cache size. Source-cold rounds rebuild emap sources/caches but do not clear OS disk caches. This is not a native QGIS-versus-emap speed benchmark.
 
@@ -151,11 +153,13 @@ console.log(map.ctx.raster.getProcessingStats('imagery'));
 
 The primary worker validates TIFF/OVR metadata and collects bounded statistics. A second metadata-only replica can warm during initial view settling; further replicas start on demand. Replicas reuse identical statistics, without rescanning or introducing per-worker color seams. The mandatory >2GiB pyramid gate still runs before the first pixel read.
 
+Tiled-level requests are routed by block footprint: adjacent block columns are paired onto the same Worker, and requests crossing column boundaries choose the Worker with the most pixel overlap, reducing duplicate decoding of the same compressed block across Workers. Striped levels skip affinity routing and use the first idle Worker. The block-level `crossWorkerDuplicateLoads` diagnostic verifies the affinity effect.
+
 The main thread retains viewport scheduling, LOD choice, projection-mesh construction, and Canvas compositing. `RasterWarpMesh` uses Float64 coordinates and preserves exact pixel-center fallbacks at projection validity boundaries. The worker sends `RasterRenderResult.rgba` as a transferred ArrayBuffer; the display path no longer sends all raw UInt16/Float32 bands to the UI for colorization. `queryPixel()` and `readWindow()` still return original numerical samples.
 
 `RasterSource.renderTile(RasterRenderRequest, signal)` is optional: GeoTIFF implements the background pipeline by default; third-party sources implementing only `readWindow()` retain the legacy main-thread colorization fallback. `getProcessingStats()` reports workers, busy workers, historical concurrency peak, queued jobs, reserved bytes, and rendered tiles. The example exposes worker/render counters.
 
-Parallel tasks reserve an aggregate **64MiB per source for estimated decode + warp + RGBA buffers**; tasks wait when simultaneous reservations would exceed this budget. Queued outbound meshes are limited to 32MiB. The 8MiB decoded cache and 1MiB retained compressed-page budget per TIFF are divided among configured workers. Directory arrays across replicas stay within 32MiB, reducing replication when necessary. These limits exclude general browser-process and Worker-runtime overhead.
+Parallel tasks reserve an aggregate **64MiB per source for estimated decode + warp + RGBA buffers**; tasks wait when simultaneous reservations would exceed this budget. Queued outbound meshes are limited to 32MiB. The decoded-cache baseline (8MiB) and 1MiB retained compressed-page budget per TIFF are divided among configured workers, then enlarged by the working-set rules above. Directory arrays across replicas stay within 32MiB, reducing replication when necessary. These limits exclude general browser-process and Worker-runtime overhead.
 
 Cancellation settles the caller immediately, but the physical worker slot stays occupied until actual completion, preventing an unbounded stale CPU queue during repeated zooms. A 60-second watchdog remains. Layer/plugin disposal terminates every owned worker and releases queues, timers, listeners, and extra-worker leases. A worker crash fails and closes the source pool explicitly.
 
@@ -193,7 +197,7 @@ Tests cover small real TIFFs, BigTIFF, pyramids and a sparse file above the 2GiB
 
 ## Public contracts and standalone reads
 
-`GeoTIFFPluginOptions` configures the Worker URL; `GeoTIFFAddOptions` adds CRS, external overviews, display style, cancellation and expected references. `RasterRenderOptions` sets cache/concurrency budgets. `RasterContract` manages the raster stack; `GeoTIFFContract` opens local files.
+`GeoTIFFPluginOptions` configures the Worker URL; `GeoTIFFAddOptions` adds CRS, NoData overrides, external overviews, display style, cancellation and expected references. `RasterRenderOptions` sets cache/concurrency budgets. `RasterContract` manages the raster stack; `GeoTIFFContract` opens local files.
 
 ```ts
 import { openGeoTIFF } from '@mapseekai/emap/geotiff';
@@ -228,6 +232,8 @@ External `RasterSource` providers must respond to `AbortSignal` and close their 
 `geotiff-viewer` includes a Performance Diagnostics panel. Press **Start recording**, perform one zoom, pan, or style change, and the panel freezes when raster work settles. **Copy JSON** makes Windows/macOS comparisons reproducible.
 
 The report includes wall time, LOD, viewport/DPR/logical cores, workers, tile/read counts, host planning and Canvas upload, presentation wait, cumulative Worker time, file range reads, TIFF block loads, window assembly, colorization/resampling, approximate Worker-to-host transfer, and compressed-page/decoded-block cache hit rates. `planning.passes/plannedTiles/current` separates cumulative planning generations during one operation from the **final current viewport** tile grid. `grid/tiles/idealViewportTiles/amplification/pixelSize/span` shows whether a count such as 168 tiles is one oversized final grid or accumulated work across view generations. The final grid remains bounded by the per-layer display-cache budget.
+
+Pyramid selection is verifiable too: `RasterLayerPlanningDiagnostics.selectedLevels` reports the actual tile plan per selected level — tile count, size, block size, reduction versus the base, and the `sourcePixelsPerDisplayPixel` range — independent of Worker completion order or cache hits. `selectedLevel`/`selectedLevelSource` summarize only when every tile chose the same level. `RasterLevel.source` distinguishes `base`, `internal-overview`, and `external-overview`; third-party sources that omit it report `unknown`.
 
 Decoded-block diagnostics also expose eviction count, admitted/evicted bytes, current/peak occupancy, capacity, entry counts, and oversize skips. An `evictionRate = evictions / misses` near one while peak occupancy stays near capacity is a strong cache-thrashing signal. `evictedMiB` measures operation churn, not a unique working-set size.
 
