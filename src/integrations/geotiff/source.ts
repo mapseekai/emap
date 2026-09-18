@@ -32,7 +32,9 @@ const MIB = 1024 ** 2;
 const SOURCE_BLOCK_CACHE_BYTES = 8 * MIB;
 const TILED_WORKING_SET_BLOCKS = 10;
 const TILED_WORKER_CACHE_MAX_BYTES = 16 * MIB;
-const STRIPED_PRIMARY_CACHE_BYTES = 32 * MIB;
+const STRIPED_WORKING_SET_BLOCKS = 384;
+const STRIPED_PRIMARY_CACHE_MIN_BYTES = 32 * MIB;
+const STRIPED_PRIMARY_CACHE_MAX_BYTES = 64 * MIB;
 const MAX_BLOCK_DIAGNOSTIC_KEYS = 65_536;
 
 function isRowStripedLevel(level: RasterMetadata['levels'][number]): boolean {
@@ -61,6 +63,20 @@ function workerBlockCacheBytes(metadata: RasterMetadata, workers: number): numbe
   if (!largestTiledBlock) return baseline;
   const workingSet = Math.ceil((largestTiledBlock * TILED_WORKING_SET_BLOCKS) / MIB) * MIB;
   return Math.min(TILED_WORKER_CACHE_MAX_BYTES, Math.max(baseline, workingSet));
+}
+
+function stripedPrimaryCacheBytes(metadata: RasterMetadata, baseline: number): number {
+  const largestStripedBlock = metadata.levels
+    .filter(isRowStripedLevel)
+    .reduce((largest, level) => Math.max(largest, decodedBlockBytes(level)), 0);
+  if (!largestStripedBlock) return baseline;
+  // A 256px display tile can approach ~1.4 source rows/display-pixel before a 2x tiled
+  // overview becomes preferable. 384 strips covers that row working set plus warp padding.
+  const workingSet = Math.ceil((largestStripedBlock * STRIPED_WORKING_SET_BLOCKS) / MIB) * MIB;
+  return Math.min(
+    STRIPED_PRIMARY_CACHE_MAX_BYTES,
+    Math.max(STRIPED_PRIMARY_CACHE_MIN_BYTES, baseline, workingSet),
+  );
 }
 
 function commandLevel(command: GeoTIFFWorkerCommand): number | null {
@@ -285,9 +301,7 @@ class WorkerRasterSource implements RasterSource {
     );
     const workerCacheBytes = workerBlockCacheBytes(this.metadata, this.target);
     this.openCommand = { ...this.openCommand, cacheBytes: workerCacheBytes };
-    const primaryCacheBytes = this.metadata.levels.some(isRowStripedLevel)
-      ? Math.max(STRIPED_PRIMARY_CACHE_BYTES, workerCacheBytes)
-      : workerCacheBytes;
+    const primaryCacheBytes = stripedPrimaryCacheBytes(this.metadata, workerCacheBytes);
     if (primaryCacheBytes !== initialCacheBytes) {
       const configured = await primary.client.call(
         { type: 'configure', cacheBytes: primaryCacheBytes },
