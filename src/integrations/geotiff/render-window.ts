@@ -6,7 +6,13 @@ import {
 import { rasterWarpLocator, validateRasterRender } from '../../engine/rendering/raster/warp';
 import { RasterError } from '../../domain/raster/policy';
 import { resolveRasterRanges, stretchRasterValue } from '../../domain/raster/statistics';
-import type { RasterRenderRequest, RasterRenderResult } from '../../domain/raster/types';
+import type {
+  RasterReadRequest,
+  RasterReadResult,
+  RasterRenderRequest,
+  RasterRenderResult,
+  RasterTaskDiagnostics,
+} from '../../domain/raster/types';
 import type { GeoTIFFReader } from './reader';
 import type { InterleavedRgb8Window } from './read-window';
 
@@ -80,88 +86,173 @@ function colorizeInterleavedRgb8(
   return out;
 }
 
+function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadRequest {
+  const first = requests[0].read;
+  if (
+    requests.some(
+      (request) =>
+        request.read.level !== first.level ||
+        request.read.samples.length !== first.samples.length ||
+        request.read.samples.some((sample, index) => sample !== first.samples[index]),
+    )
+  )
+    throw new RasterError('INVALID_RASTER_BATCH', 'Batched raster tiles must use one level and sample set.');
+  return {
+    level: first.level,
+    samples: [...first.samples],
+    window: [
+      Math.min(...requests.map((request) => request.read.window[0])),
+      Math.min(...requests.map((request) => request.read.window[1])),
+      Math.max(...requests.map((request) => request.read.window[2])),
+      Math.max(...requests.map((request) => request.read.window[3])),
+    ],
+  };
+}
+
+function mergeOpaque(target: Uint8ClampedArray<ArrayBuffer>, source: Uint8ClampedArray<ArrayBuffer>) {
+  for (let offset = 0; offset < source.length; offset += 4)
+    if (source[offset + 3]) {
+      target[offset] = source[offset];
+      target[offset + 1] = source[offset + 1];
+      target[offset + 2] = source[offset + 2];
+      target[offset + 3] = source[offset + 3];
+    }
+}
+
+function diagnostics(
+  source: GeoTIFFReader,
+  before: ReturnType<GeoTIFFReader['getTaskDiagnosticsSnapshot']>,
+  workerStarted: number,
+  readMs: number,
+  colorizeMs: number,
+  directRgb8Tiles: number,
+): RasterTaskDiagnostics {
+  const after = source.getTaskDiagnosticsSnapshot();
+  const delta = (key: keyof typeof before) => after[key] - before[key];
+  const blockLoadMs = delta('blockLoadMs');
+  return {
+    workerMs: performance.now() - workerStarted,
+    fileReadMs: delta('fileReadMs'),
+    fileReadBytes: delta('fileReadBytes'),
+    fileReadOps: delta('fileReadOps'),
+    pageCacheHits: delta('pageCacheHits'),
+    pageCacheMisses: delta('pageCacheMisses'),
+    blockCacheHits: delta('blockCacheHits'),
+    blockCacheMisses: delta('blockCacheMisses'),
+    blockCacheEvictions: delta('blockCacheEvictions'),
+    blockCacheEvictedBytes: delta('blockCacheEvictedBytes'),
+    blockCacheAdmittedBytes: delta('blockCacheAdmittedBytes'),
+    blockCacheBytes: after.blockCacheBytes,
+    blockCachePeakBytes: after.blockCachePeakBytes,
+    blockCacheEntries: after.blockCacheEntries,
+    blockCachePeakEntries: after.blockCachePeakEntries,
+    blockCacheLimitBytes: after.blockCacheLimitBytes,
+    blockCacheOversizeSkips: delta('blockCacheOversizeSkips'),
+    nativeDeflateBlocks: delta('nativeDeflateBlocks'),
+    nativeDeflateFallbacks: delta('nativeDeflateFallbacks'),
+    nativeDeflateMs: delta('nativeDeflateMs'),
+    fastLzwBlocks: delta('fastLzwBlocks'),
+    fastLzwFallbacks: delta('fastLzwFallbacks'),
+    fastLzwMs: delta('fastLzwMs'),
+    deinterleaveMs: delta('deinterleaveMs'),
+    directRgb8Tiles,
+    blockLoadMs,
+    assembleMs: Math.max(0, readMs - blockLoadMs),
+    colorizeMs,
+  };
+}
+
+/** Storage-aware row batching: one union source read is shared by sibling display tiles. */
+export async function renderRasterBatch(
+  source: GeoTIFFReader,
+  requests: readonly RasterRenderRequest[],
+  signal?: AbortSignal,
+): Promise<readonly RasterRenderResult[]> {
+  signal?.throwIfAborted();
+  if (!requests.length || requests.length > 16)
+    throw new RasterError('INVALID_RASTER_BATCH', 'Raster render batches must contain 1–16 tiles.');
+  const workerStarted = performance.now();
+  const before = source.getTaskDiagnosticsSnapshot();
+  for (const request of requests) {
+    validateRasterRender(source.metadata, request);
+    validateRasterStyle(source.metadata, request.style);
+  }
+  const combined = unionReadRequest(requests);
+  const bandsByRequest = requests.map((request) => {
+    const bands = rasterBands(source.metadata, request.style);
+    const needed = [
+      ...bands,
+      ...(source.metadata.alphaBand === null ? [] : [source.metadata.alphaBand]),
+    ];
+    if (needed.some((band) => !request.read.samples.includes(band)))
+      throw new RasterError('INVALID_BANDS', 'Display request omits a selected color or alpha band.');
+    return bands;
+  });
+  const level = source.metadata.levels.find((value) => value.id === combined.level)!;
+  const directRgb8 = requests.every((request, index) =>
+    canRenderDirectRgb8(source, request, bandsByRequest[index]),
+  );
+  const outputs = requests.map(
+    (request) => new Uint8ClampedArray(request.width * request.height * 4),
+  );
+  let readMs = 0,
+    colorizeMs = 0;
+  const chunks = source.splitRowStripedReadRequests(
+    combined,
+    requests.some((request) => request.style.resampling === 'bilinear') ? 1 : 0,
+  );
+  for (const chunk of chunks) {
+    signal?.throwIfAborted();
+    const readStarted = performance.now();
+    const data = directRgb8
+      ? await source.readInterleavedRgb8Window(chunk, signal)
+      : await source.readWindow(chunk, signal);
+    readMs += performance.now() - readStarted;
+    const colorStarted = performance.now();
+    for (let index = 0; index < requests.length; index++) {
+      const request = { ...requests[index], read: chunk };
+      const partial = directRgb8
+        ? colorizeInterleavedRgb8(source, request, bandsByRequest[index], data as InterleavedRgb8Window)
+        : colorizeRasterTile(
+            source.metadata,
+            {
+              request: chunk,
+              warp: request.warp,
+              level,
+              bands: bandsByRequest[index],
+              width: request.width,
+              height: request.height,
+              locate: rasterWarpLocator(request.warp, request.width),
+            },
+            data as RasterReadResult,
+            request.style,
+          );
+      mergeOpaque(outputs[index], partial);
+    }
+    colorizeMs += performance.now() - colorStarted;
+  }
+  signal?.throwIfAborted();
+  const taskDiagnostics = diagnostics(
+    source,
+    before,
+    workerStarted,
+    readMs,
+    colorizeMs,
+    directRgb8 ? requests.length : 0,
+  );
+  return requests.map((request, index) => ({
+    width: request.width,
+    height: request.height,
+    rgba: outputs[index],
+    ...(index === 0 ? { diagnostics: taskDiagnostics } : {}),
+  }));
+}
+
 /** Runs in the GeoTIFF Worker. Raw samples never cross the UI boundary for display. */
 export async function renderRasterWindow(
   source: GeoTIFFReader,
   request: RasterRenderRequest,
   signal?: AbortSignal,
 ): Promise<RasterRenderResult> {
-  signal?.throwIfAborted();
-  const workerStarted = performance.now();
-  const before = source.getTaskDiagnosticsSnapshot?.();
-  validateRasterRender(source.metadata, request);
-  validateRasterStyle(source.metadata, request.style);
-  const bands = rasterBands(source.metadata, request.style);
-  const needed = [
-    ...bands,
-    ...(source.metadata.alphaBand === null ? [] : [source.metadata.alphaBand]),
-  ];
-  if (needed.some((band) => !request.read.samples.includes(band)))
-    throw new RasterError('INVALID_BANDS', 'Display request omits a selected color or alpha band.');
-  const level = source.metadata.levels.find((value) => value.id === request.read.level)!;
-  const directRgb8 = canRenderDirectRgb8(source, request, bands);
-  const readStarted = performance.now();
-  const data = directRgb8
-    ? await source.readInterleavedRgb8Window(request.read, signal)
-    : await source.readWindow(request.read, signal);
-  const readMs = performance.now() - readStarted;
-  signal?.throwIfAborted();
-  const colorStarted = performance.now();
-  const rgba = directRgb8
-    ? colorizeInterleavedRgb8(source, request, bands, data as InterleavedRgb8Window)
-    : colorizeRasterTile(
-        source.metadata,
-        {
-          request: request.read,
-          warp: request.warp,
-          level,
-          bands,
-          width: request.width,
-          height: request.height,
-          locate: rasterWarpLocator(request.warp, request.width),
-        },
-        data as Awaited<ReturnType<GeoTIFFReader['readWindow']>>,
-        request.style,
-      );
-  const colorizeMs = performance.now() - colorStarted;
-  signal?.throwIfAborted();
-  const after = source.getTaskDiagnosticsSnapshot?.();
-  const delta = (key: keyof NonNullable<typeof before>) =>
-    before && after ? after[key] - before[key] : 0;
-  const blockLoadMs = delta('blockLoadMs');
-  return {
-    width: request.width,
-    height: request.height,
-    rgba,
-    diagnostics: {
-      workerMs: performance.now() - workerStarted,
-      fileReadMs: delta('fileReadMs'),
-      fileReadBytes: delta('fileReadBytes'),
-      fileReadOps: delta('fileReadOps'),
-      pageCacheHits: delta('pageCacheHits'),
-      pageCacheMisses: delta('pageCacheMisses'),
-      blockCacheHits: delta('blockCacheHits'),
-      blockCacheMisses: delta('blockCacheMisses'),
-      blockCacheEvictions: delta('blockCacheEvictions'),
-      blockCacheEvictedBytes: delta('blockCacheEvictedBytes'),
-      blockCacheAdmittedBytes: delta('blockCacheAdmittedBytes'),
-      blockCacheBytes: after?.blockCacheBytes ?? 0,
-      blockCachePeakBytes: after?.blockCachePeakBytes ?? 0,
-      blockCacheEntries: after?.blockCacheEntries ?? 0,
-      blockCachePeakEntries: after?.blockCachePeakEntries ?? 0,
-      blockCacheLimitBytes: after?.blockCacheLimitBytes ?? 0,
-      blockCacheOversizeSkips: delta('blockCacheOversizeSkips'),
-      nativeDeflateBlocks: delta('nativeDeflateBlocks'),
-      nativeDeflateFallbacks: delta('nativeDeflateFallbacks'),
-      nativeDeflateMs: delta('nativeDeflateMs'),
-      fastLzwBlocks: delta('fastLzwBlocks'),
-      fastLzwFallbacks: delta('fastLzwFallbacks'),
-      fastLzwMs: delta('fastLzwMs'),
-      deinterleaveMs: delta('deinterleaveMs'),
-      directRgb8Tiles: directRgb8 ? 1 : 0,
-      blockLoadMs,
-      assembleMs: Math.max(0, readMs - blockLoadMs),
-      colorizeMs,
-    },
-  };
+  return (await renderRasterBatch(source, [request], signal))[0];
 }

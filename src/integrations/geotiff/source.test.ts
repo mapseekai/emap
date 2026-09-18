@@ -598,6 +598,31 @@ describe('parallel raster pipeline pool', () => {
     expect(source.getProcessingStats?.().renderedTiles).toBe(1);
     source.dispose();
   });
+  it('dispatches sibling display tiles as one Worker render batch', async () => {
+    const { source, worker } = await opened();
+    const plan = planRasterTile(metadata, metadata.bounds, (x, y) => [x, y], {}, 8)!;
+    const task = { read: plan.request, warp: plan.warp, width: 8, height: 8, style: {} };
+    const pending = source.renderTiles!([task, task]);
+    expect(worker.messages.at(-1)).toMatchObject({
+      type: 'render-batch',
+      requests: [{ width: 8, height: 8 }, { width: 8, height: 8 }],
+    });
+    worker.reply({
+      id: 2,
+      type: 'rendered-batch',
+      results: [
+        { width: 8, height: 8, rgba: new Uint8ClampedArray(8 * 8 * 4) },
+        { width: 8, height: 8, rgba: new Uint8ClampedArray(8 * 8 * 4) },
+      ],
+    });
+    expect(await pending).toHaveLength(2);
+    expect(source.getProcessingStats?.()).toMatchObject({ renderedTiles: 2 });
+    expect(source.getProcessingStats?.().levelActivity?.[0]).toMatchObject({
+      submitted: 2,
+      completed: 2,
+    });
+    source.dispose();
+  });
   it('does not reuse a cancelled busy slot before the Worker replies', async () => {
     const { source, worker } = await opened(),
       controller = new AbortController();

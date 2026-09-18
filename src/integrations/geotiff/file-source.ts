@@ -48,9 +48,9 @@ export class LocalRasterFileSource {
     if (
       !Number.isSafeInteger(cumulativeLimit) ||
       cumulativeLimit < 64 * 1024 ** 2 ||
-      cumulativeLimit > 128 * 1024 ** 2
+      cumulativeLimit > 256 * 1024 ** 2
     )
-      throw new RasterError('INVALID_RASTER_BUDGET', 'Read budget must be 64–128MiB.');
+      throw new RasterError('INVALID_RASTER_BUDGET', 'Read budget must be 64–256MiB.');
     this.bytes = 0;
     this.cumulativeLimit = cumulativeLimit;
     this.singleRangeLimit = 64 * 1024 ** 2;

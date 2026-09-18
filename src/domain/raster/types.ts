@@ -253,6 +253,11 @@ export interface RasterSource {
   readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult>;
   /** Optional provider capability: render off-thread instead of returning raw windows. */
   renderTile?(request: RasterRenderRequest, signal?: AbortSignal): Promise<RasterRenderResult>;
+  /** Optional storage-aware batch path. Providers may share one physical source read across tiles. */
+  renderTiles?(
+    requests: readonly RasterRenderRequest[],
+    signal?: AbortSignal,
+  ): Promise<readonly RasterRenderResult[]>;
   getProcessingStats?(): RasterProcessingStats;
   /** Internal cumulative counters used to derive per-task diagnostics in a Worker. */
   getTaskDiagnosticsSnapshot?(): Omit<

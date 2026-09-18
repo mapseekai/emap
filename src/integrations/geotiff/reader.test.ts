@@ -1,7 +1,7 @@
 import { colorizeRasterTile, planRasterTile } from '../../engine/rendering/raster/tile';
 import { describe, expect, it, vi } from 'vitest';
 import { GeoTIFFImage } from 'geotiff';
-import { GeoTIFFReader, readBudgetForLevel } from './reader';
+import { GeoTIFFReader, readBudgetForRequest } from './reader';
 import { RASTER_PYRAMID_THRESHOLD } from '../../domain/raster/policy';
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
 
@@ -50,29 +50,45 @@ describe('local GeoTIFF source', () => {
     expect(rgba[3]).toBe(255);
     source.dispose();
   });
-  it('uses the larger cumulative I/O budget only for bounded row-striped levels', async () => {
+  it('sizes bounded row-striped cumulative I/O from the requested strip working set', async () => {
     const source = await GeoTIFFReader.open(file({ bits: 16, bands: 3, compression: 'deflate' }));
     const level = source.metadata.levels[0];
-    expect(readBudgetForLevel(level)).toBe(64 * 1024 ** 2);
+    const smallRequest = { level: 0, window: [0, 0, 8, 8] as const, samples: [0, 1, 2] };
+    expect(readBudgetForRequest(level, smallRequest)).toBe(64 * 1024 ** 2);
+    const striped = {
+      ...level,
+      width: 54798,
+      height: 56561,
+      tileWidth: 54798,
+      tileHeight: 1,
+      decodedBlockConcurrency: 4,
+    };
     expect(
-      readBudgetForLevel({
-        ...level,
-        width: 54798,
-        height: 56561,
-        tileWidth: 54798,
-        tileHeight: 1,
-        decodedBlockConcurrency: 4,
+      readBudgetForRequest(striped, {
+        level: 0,
+        window: [0, 0, 256, 236],
+        samples: [0, 1, 2],
       }),
     ).toBe(128 * 1024 ** 2);
     expect(
-      readBudgetForLevel({
-        ...level,
-        width: 54798,
-        height: 56561,
-        tileWidth: 54798,
-        tileHeight: 1,
-        decodedBlockConcurrency: undefined,
+      readBudgetForRequest(striped, {
+        level: 0,
+        window: [0, 0, 256, 420],
+        samples: [0, 1, 2],
       }),
+    ).toBe(198 * 1024 ** 2);
+    expect(
+      readBudgetForRequest(striped, {
+        level: 0,
+        window: [0, 0, 256, 600],
+        samples: [0, 1, 2],
+      }),
+    ).toBe(256 * 1024 ** 2);
+    expect(
+      readBudgetForRequest(
+        { ...striped, decodedBlockConcurrency: undefined },
+        { level: 0, window: [0, 0, 256, 420], samples: [0, 1, 2] },
+      ),
     ).toBe(64 * 1024 ** 2);
     source.dispose();
   });

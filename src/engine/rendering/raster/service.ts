@@ -239,6 +239,7 @@ export class RasterRenderService implements RasterContract {
     epoch: number,
   ): Promise<void> {
     const planningStarted = performance.now();
+    this.taskErrors.length = 0;
     const visible = [...this.layers.values()].filter((layer) => layer.visible);
     // Reserve at least half the byte budget for previous views while panning.
     const perLayer = Math.max(
@@ -471,6 +472,43 @@ export class RasterRenderService implements RasterContract {
     this.planningMs += performance.now() - planningStarted;
     this.pump();
   }
+  private takeRowBatch(first: Task): Task[] {
+    if (!first.rowStriped || !first.layer.source.renderTiles) return [first];
+    const batch = [first];
+    for (let index = 0; index < this.queue.length && batch.length < 16; ) {
+      const candidate = this.queue[index];
+      if (
+        candidate.rowStriped &&
+        candidate.layer === first.layer &&
+        candidate.revision === first.revision &&
+        candidate.crs === first.crs &&
+        candidate.selectedLevel === first.selectedLevel &&
+        candidate.gridRow === first.gridRow &&
+        this.wanted.has(candidate.key) &&
+        !this.cache.has(candidate.key) &&
+        !this.active.has(candidate.key)
+      ) {
+        batch.push(candidate);
+        this.queue.splice(index, 1);
+      } else index++;
+    }
+    return batch;
+  }
+
+  private recordTaskError(task: Task, stage: 'planRasterTile' | 'loadTile', error: unknown): void {
+    if (this.taskErrors.length >= 5) return;
+    const value = error as { name?: unknown; code?: unknown; message?: unknown };
+    const level = task.layer.source.metadata.levels.find((item) => item.id === task.selectedLevel);
+    this.taskErrors.push({
+      stage,
+      name: typeof value?.name === 'string' ? value.name : 'Error',
+      code: typeof value?.code === 'string' ? value.code : null,
+      message: typeof value?.message === 'string' ? value.message : String(error),
+      selectedLevel: task.selectedLevel,
+      blockSize: level ? [level.tileWidth, level.tileHeight] : null,
+    });
+  }
+
   private pump(): void {
     if (this.disposed) return;
     if (this.gestures.size) {
@@ -485,48 +523,153 @@ export class RasterRenderService implements RasterContract {
       const task = this.queue.shift()!;
       if (this.active.has(task.key) || this.cache.has(task.key) || !this.wanted.has(task.key))
         continue;
+      const tasks = this.takeRowBatch(task);
       const controller = new AbortController();
-      this.active.set(task.key, controller);
-      void this.loadTile(task, controller.signal)
+      for (const item of tasks) this.active.set(item.key, controller);
+      const work = tasks.length > 1 ? this.loadTileBatch(tasks, controller.signal) : this.loadTile(task, controller.signal);
+      void work
         .catch((error) => {
-          if (this.disposed || controller.signal.aborted || !this.wanted.has(task.key)) return;
-          this.loadTileFailed++;
-          if (this.taskErrors.length < 5) {
-            const value = error as { name?: unknown; code?: unknown; message?: unknown };
-            const level = task.layer.source.metadata.levels.find(
-              (item) => item.id === task.selectedLevel,
-            );
-            this.taskErrors.push({
-              stage: 'loadTile',
-              name: typeof value?.name === 'string' ? value.name : 'Error',
-              code: typeof value?.code === 'string' ? value.code : null,
-              message: typeof value?.message === 'string' ? value.message : String(error),
-              selectedLevel: task.selectedLevel,
-              blockSize: level ? [level.tileWidth, level.tileHeight] : null,
-            });
+          if (this.disposed || controller.signal.aborted) return;
+          let reported = false;
+          for (const item of tasks) {
+            if (!this.wanted.has(item.key) || this.cache.has(item.key)) continue;
+            this.loadTileFailed++;
+            this.recordTaskError(item, 'loadTile', error);
+            this.failures.add(item.key);
+            this.completeBatch(item.layer.id);
+            if (!reported) {
+              this.deps.reportError(item.layer.id, error);
+              reported = true;
+            }
           }
-          this.failures.add(task.key);
           this.presentation.flush();
-          // A slow or failed tile must not cancel ready/queued siblings.
-          this.completeBatch(task.layer.id);
-          this.deps.reportError(task.layer.id, error);
         })
         .finally(() => {
-          this.active.delete(task.key);
-          if (
-            !this.disposed &&
-            controller.signal.aborted &&
-            this.wanted.has(task.key) &&
-            !this.cache.has(task.key) &&
-            !this.failures.has(task.key) &&
-            this.layers.get(task.layer.id)?.revision === task.revision &&
-            !this.queue.some((queued) => queued.key === task.key)
-          )
-            this.queue.push(this.currentTasks.get(task.key) ?? task);
+          for (const item of tasks) {
+            this.active.delete(item.key);
+            if (
+              !this.disposed &&
+              controller.signal.aborted &&
+              this.wanted.has(item.key) &&
+              !this.cache.has(item.key) &&
+              !this.failures.has(item.key) &&
+              this.layers.get(item.layer.id)?.revision === item.revision &&
+              !this.queue.some((queued) => queued.key === item.key)
+            )
+              this.queue.push(this.currentTasks.get(item.key) ?? item);
+          }
           this.pump();
         });
     }
   }
+  private uploadRasterTile(
+    rgba: Uint8ClampedArray<ArrayBuffer>,
+    width: number,
+    height: number,
+  ): HTMLCanvasElement {
+    const uploadStarted = performance.now();
+    const image = document.createElement('canvas');
+    image.width = width;
+    image.height = height;
+    const context = image.getContext('2d');
+    if (!context)
+      throw new RasterError('RASTER_CANVAS_UNAVAILABLE', 'Cannot create raster tile context.');
+    context.putImageData(new ImageData(rgba, width, height), 0, 0);
+    this.canvasUploadMs += performance.now() - uploadStarted;
+    return image;
+  }
+
+  private commitLoadedTile(task: Task, image: HTMLCanvasElement | null, signal: AbortSignal): void {
+    if (
+      this.disposed ||
+      signal.aborted ||
+      !this.wanted.has(task.key) ||
+      this.layers.get(task.layer.id)?.revision !== task.revision
+    ) {
+      if (image) {
+        image.width = 0;
+        image.height = 0;
+      }
+      return;
+    }
+    const tile: Tile = {
+      key: task.key,
+      layer: task.layer.id,
+      revision: task.revision,
+      crs: task.crs,
+      bounds: task.bounds,
+      image,
+      bytes: image ? image.width * image.height * 4 : 0,
+      span: task.span,
+    };
+    this.cache.set(task.key, tile);
+    this.bytes += tile.bytes;
+    this.publishTile(task.key);
+    this.trimCache();
+  }
+
+  private async loadTileBatch(tasks: readonly Task[], signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    const { source, style } = tasks[0].layer;
+    if (!source.renderTiles) throw new RasterError('RASTER_BATCH_UNAVAILABLE', 'Raster batch rendering is unavailable.');
+    const planned: Array<{ task: Task; plan: NonNullable<ReturnType<typeof planRasterTile>> }> = [];
+    for (const task of tasks) {
+      this.loadTileStarted++;
+      let plan: ReturnType<typeof planRasterTile>;
+      try {
+        plan = planRasterTile(source.metadata, task.bounds, task.toSource, style);
+      } catch (error) {
+        this.loadTileFailed++;
+        this.recordTaskError(task, 'planRasterTile', error);
+        this.failures.add(task.key);
+        this.completeBatch(task.layer.id);
+        this.deps.reportError(task.layer.id, error);
+        continue;
+      }
+      if (!plan) {
+        this.planEmpty++;
+        this.commitLoadedTile(task, null, signal);
+        continue;
+      }
+      this.planSucceeded++;
+      this.plannedLevels.set(plan.level.id, (this.plannedLevels.get(plan.level.id) ?? 0) + 1);
+      this.readRequests++;
+      planned.push({ task, plan });
+    }
+    if (!planned.length) return;
+    const rendered = await awaitWithSignal(
+      source.renderTiles(
+        planned.map(({ plan }) => ({
+          read: plan.request,
+          width: plan.width,
+          height: plan.height,
+          warp: plan.warp,
+          style,
+        })),
+        signal,
+      ),
+      signal,
+    );
+    signal.throwIfAborted();
+    if (rendered.length !== planned.length)
+      throw new RasterError('INVALID_RASTER_RENDER', 'Provider returned an invalid raster batch length.');
+    for (let index = 0; index < planned.length; index++) {
+      const { task, plan } = planned[index];
+      const result = rendered[index];
+      if (
+        result.width !== plan.width ||
+        result.height !== plan.height ||
+        result.rgba.byteLength !== plan.width * plan.height * 4
+      )
+        throw new RasterError('INVALID_RASTER_RENDER', 'Provider returned an invalid display tile.');
+      this.commitLoadedTile(
+        task,
+        this.uploadRasterTile(result.rgba, plan.width, plan.height),
+        signal,
+      );
+    }
+  }
+
   private async loadTile(task: Task, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     this.loadTileStarted++;

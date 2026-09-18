@@ -506,6 +506,32 @@ describe('settled, progressive raster frames', () => {
     service.dispose();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('batches row-striped sibling tiles by display grid row', async () => {
+    const { service, original, read, frame } = await harness(800);
+    Object.assign(original.metadata.levels[0], {
+      tileWidth: original.metadata.levels[0].width,
+      tileHeight: 1,
+      decodedBlockConcurrency: 4,
+    });
+    const renderTiles = vi.fn(async (requests: readonly { width: number; height: number }[]) =>
+      requests.map((request) => ({
+        width: request.width,
+        height: request.height,
+        rgba: new Uint8ClampedArray(request.width * request.height * 4),
+      })),
+    );
+    Object.assign(original, { renderTiles });
+    read.mockRejectedValue(new Error('row-striped batch should not use the main-thread read path'));
+    service.setStyle('test', { stretch: 'minmax' });
+    service.render(frame);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(renderTiles).toHaveBeenCalled();
+    expect(renderTiles.mock.calls.some(([requests]) => requests.length > 1)).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+    expect(service.getStats().taskLifecycle.loadTileFailed).toBe(0);
+    service.dispose();
+  });
+
   it('uses a provider-rendered RGBA tile instead of reading/colorizing samples on the main thread', async () => {
     const { service, original, read, frame } = await harness();
     const renderTile = vi.fn(async (request) => ({

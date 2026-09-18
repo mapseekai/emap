@@ -15,6 +15,7 @@ import {
   RasterError,
   assertRasterPyramid,
   isRasterOverview,
+  RASTER_MAX_WINDOW_PIXELS,
   validateRasterRead,
 } from '../../domain/raster/policy';
 import type {
@@ -37,14 +38,34 @@ export interface GeoTIFFOpenOptions {
   readonly signal?: AbortSignal;
 }
 
-const DEFAULT_READ_BUDGET_BYTES = 64 * 1024 ** 2;
-const ROW_STRIPED_READ_BUDGET_BYTES = 128 * 1024 ** 2;
+const MIB = 1024 ** 2;
+const DEFAULT_READ_BUDGET_BYTES = 64 * MIB;
+const ROW_STRIPED_READ_BUDGET_MIN_BYTES = 128 * MIB;
+const ROW_STRIPED_READ_BUDGET_MAX_BYTES = 256 * MIB;
+const ROW_STRIPED_READ_HEADROOM = 1.5;
+const ROW_STRIPED_CHUNK_PHYSICAL_BYTES = 96 * MIB;
+const ROW_STRIPED_CHUNK_DECODED_BYTES = 64 * MIB;
 
-export function readBudgetForLevel(level: RasterLevel): number {
+function decodedBlockBytes(level: RasterLevel): number {
+  const bytesPerPixel = level.bits.reduce((sum, bits, band) => {
+    const bytes = level.formats[band] === 3 && bits === 16 ? 4 : Math.max(1, Math.ceil(bits / 8));
+    return sum + bytes;
+  }, 0);
+  return level.tileWidth * level.tileHeight * bytesPerPixel;
+}
+
+export function readBudgetForRequest(level: RasterLevel, request: RasterReadRequest): number {
   const rowStriped = level.tileWidth >= level.width && level.tileHeight < level.height;
-  return rowStriped && (level.decodedBlockConcurrency ?? 0) > 0
-    ? ROW_STRIPED_READ_BUDGET_BYTES
-    : DEFAULT_READ_BUDGET_BYTES;
+  if (!rowStriped || (level.decodedBlockConcurrency ?? 0) <= 0) return DEFAULT_READ_BUDGET_BYTES;
+  const blockRows =
+    Math.ceil(request.window[3] / level.tileHeight) -
+    Math.floor(request.window[1] / level.tileHeight);
+  const estimatedPhysicalBytes = blockRows * decodedBlockBytes(level) * ROW_STRIPED_READ_HEADROOM;
+  const workingSetBudget = Math.ceil(estimatedPhysicalBytes / MIB) * MIB;
+  return Math.min(
+    ROW_STRIPED_READ_BUDGET_MAX_BYTES,
+    Math.max(ROW_STRIPED_READ_BUDGET_MIN_BYTES, workingSetBudget),
+  );
 }
 
 export interface GeoTIFFReaderRuntime {
@@ -162,6 +183,7 @@ export class GeoTIFFReader implements RasterSource {
     private readonly images: Map<number, GeoTIFFImage>,
     private readonly sources: LocalRasterFileSource[],
     private readonly blockCache: RasterBlockCache,
+    private readonly physicalBlockBytes: ReadonlyMap<number, readonly number[]>,
     readonly directoryBytes: number,
   ) {}
 
@@ -171,6 +193,94 @@ export class GeoTIFFReader implements RasterSource {
 
   setBlockCacheLimit(bytes: number): void {
     this.blockCache.setLimit(bytes);
+  }
+
+  private exactPhysicalBytes(level: RasterLevel, request: RasterReadRequest): number | null {
+    const counts = this.physicalBlockBytes.get(level.id);
+    if (!counts) return null;
+    const first = Math.floor(request.window[1] / level.tileHeight);
+    const last = Math.ceil(request.window[3] / level.tileHeight);
+    let bytes = 0;
+    for (let block = first; block < last; block++) {
+      bytes += counts[block] ?? 0;
+      if (!Number.isSafeInteger(bytes))
+        throw new RasterError('INVALID_TIFF_DIRECTORY', 'TIFF strip byte counts exceed safe limits.');
+    }
+    return bytes;
+  }
+
+  private requestReadBudget(level: RasterLevel, request: RasterReadRequest): number {
+    const exact = this.exactPhysicalBytes(level, request);
+    if (exact === null) return readBudgetForRequest(level, request);
+    // Strip byte counts are the exact stored payload. Leave bounded room for decoder/tag reads.
+    const withHeadroom = Math.ceil((exact + 8 * MIB) / MIB) * MIB;
+    return Math.min(
+      ROW_STRIPED_READ_BUDGET_MAX_BYTES,
+      Math.max(ROW_STRIPED_READ_BUDGET_MIN_BYTES, withHeadroom),
+    );
+  }
+
+  splitRowStripedReadRequests(
+    request: RasterReadRequest,
+    overlapPixels = 0,
+  ): readonly RasterReadRequest[] {
+    const level = this.metadata.levels.find((item) => item.id === request.level);
+    if (!level) throw new RasterError('INVALID_LEVEL', 'Unknown raster level.');
+    const rowStriped = level.tileWidth >= level.width && level.tileHeight < level.height;
+    if (!rowStriped || (level.decodedBlockConcurrency ?? 0) <= 0) return [request];
+    const width = request.window[2] - request.window[0];
+    if (width <= 0) return [request];
+    const firstBlock = Math.floor(request.window[1] / level.tileHeight);
+    const lastBlock = Math.ceil(request.window[3] / level.tileHeight);
+    const decodedBytes = decodedBlockBytes(level);
+    const maxDecodedBlocks = Math.max(
+      1,
+      Math.floor(ROW_STRIPED_CHUNK_DECODED_BYTES / Math.max(1, decodedBytes)),
+    );
+    const maxRowsByPixels = Math.max(1, Math.floor(RASTER_MAX_WINDOW_PIXELS / width));
+    const counts = this.physicalBlockBytes.get(level.id);
+    const chunks: RasterReadRequest[] = [];
+    let startBlock = firstBlock,
+      physicalBytes = 0;
+    const push = (endBlock: number) => {
+      const top = Math.max(request.window[1], startBlock * level.tileHeight);
+      const bottom = Math.min(request.window[3], endBlock * level.tileHeight);
+      if (bottom <= top) return;
+      chunks.push({
+        ...request,
+        window: [
+          request.window[0],
+          Math.max(request.window[1], top - overlapPixels),
+          request.window[2],
+          Math.min(request.window[3], bottom + overlapPixels),
+        ],
+      });
+      startBlock = endBlock;
+      physicalBytes = 0;
+    };
+    for (let block = firstBlock; block < lastBlock; block++) {
+      const blockBytes = counts?.[block] ?? decodedBytes;
+      if (blockBytes > 64 * MIB)
+        throw new RasterError(
+          'RASTER_IO_BUDGET',
+          'A single TIFF strip exceeds the bounded physical range limit.',
+        );
+      const prospectiveBlocks = block - startBlock + 1;
+      const chunkTop = Math.max(request.window[1], startBlock * level.tileHeight);
+      const chunkBottom = Math.min(request.window[3], (block + 1) * level.tileHeight);
+      const prospectiveRows = chunkBottom - chunkTop;
+      const physicalLimit = counts ? ROW_STRIPED_CHUNK_PHYSICAL_BYTES : Infinity;
+      if (
+        block > startBlock &&
+        (prospectiveBlocks > maxDecodedBlocks ||
+          prospectiveRows > maxRowsByPixels ||
+          physicalBytes + blockBytes > physicalLimit)
+      )
+        push(block);
+      physicalBytes += blockBytes;
+    }
+    push(lastBlock);
+    return chunks.length ? chunks : [request];
   }
 
   static async open(
@@ -196,6 +306,7 @@ export class GeoTIFFReader implements RasterSource {
       );
     const sources: LocalRasterFileSource[] = [],
       images = new Map<number, GeoTIFFImage>(),
+      physicalBlockBytes = new Map<number, readonly number[]>(),
       levels: RasterLevel[] = [];
     let base: GeoTIFFImage | undefined, baseTiff: GeoTIFF | undefined;
     let hasValidityMask = false;
@@ -298,6 +409,21 @@ export class GeoTIFFReader implements RasterSource {
               }
             }
             images.set(level.id, image);
+            if (
+              level.tileWidth >= level.width &&
+              level.tileHeight < level.height &&
+              image.planarConfiguration === 1 &&
+              fd.hasTag('StripByteCounts')
+            ) {
+              const rawCounts = Array.from((await fd.loadValue('StripByteCounts')) ?? [], Number);
+              const expected = Math.ceil(level.height / level.tileHeight);
+              if (
+                rawCounts.length < expected ||
+                rawCounts.slice(0, expected).some((value) => !Number.isSafeInteger(value) || value < 0)
+              )
+                throw new RasterError('INVALID_TIFF_DIRECTORY', 'Invalid TIFF strip byte counts.');
+              physicalBlockBytes.set(level.id, rawCounts.slice(0, expected));
+            }
             levels.push(level);
           }
           if (fd.nextIFDByteOffset) queue.push(fd.nextIFDByteOffset);
@@ -395,7 +521,14 @@ export class GeoTIFFReader implements RasterSource {
           : {}),
       };
       options.signal?.throwIfAborted();
-      const reader = new GeoTIFFReader(metadata, images, sources, blockCache, metadataBytes);
+      const reader = new GeoTIFFReader(
+        metadata,
+        images,
+        sources,
+        blockCache,
+        physicalBlockBytes,
+        metadataBytes,
+      );
       // Mandatory pyramid checks above precede even the first statistics read.
       try {
         if (!metadata.palette)
@@ -514,7 +647,7 @@ export class GeoTIFFReader implements RasterSource {
       signal?.addEventListener('abort', abort, { once: true });
       this.lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
-        const readBudget = readBudgetForLevel(level);
+        const readBudget = this.requestReadBudget(level, request);
         for (const source of this.sources) source.beginRead(readBudget);
         const image = this.images.get(request.level)!;
         const result = await readInterleavedRgb8Window(image, request, controller.signal);
@@ -551,7 +684,7 @@ export class GeoTIFFReader implements RasterSource {
       signal?.addEventListener('abort', abort, { once: true });
       this.lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
-        const readBudget = readBudgetForLevel(level);
+        const readBudget = this.requestReadBudget(level, request);
         for (const source of this.sources) source.beginRead(readBudget);
         const image = this.images.get(request.level)!;
         const result = await readNumericWindow(image, request, controller.signal);

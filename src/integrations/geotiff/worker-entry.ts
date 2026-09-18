@@ -1,4 +1,4 @@
-import { renderRasterWindow } from './render-window';
+import { renderRasterBatch, renderRasterWindow } from './render-window';
 import { RasterError } from '../../domain/raster/policy';
 import { GeoTIFFReader } from './reader';
 import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
@@ -55,16 +55,26 @@ scope.onmessage = ({ data }) => {
       if (data.type === 'configure') {
         reader.setBlockCacheLimit(data.cacheBytes);
         scope.postMessage({ id: data.id, type: 'configured' });
-      } else if (data.type === 'render') {
+      } else if (data.type === 'render' || data.type === 'render-batch') {
         const cursor = reader.getBlockAccessCursor();
         try {
-          const result = await renderRasterWindow(reader, data.request, controller.signal);
-          const blockAccess = reader.takeBlockAccessesSince(cursor),
-            nativeDeflateStatus = reader.getNativeDeflateStatus();
-          scope.postMessage(
-            { id: data.id, type: 'rendered', result, blockAccess, nativeDeflateStatus },
-            [result.rgba.buffer],
-          );
+          if (data.type === 'render') {
+            const result = await renderRasterWindow(reader, data.request, controller.signal);
+            const blockAccess = reader.takeBlockAccessesSince(cursor),
+              nativeDeflateStatus = reader.getNativeDeflateStatus();
+            scope.postMessage(
+              { id: data.id, type: 'rendered', result, blockAccess, nativeDeflateStatus },
+              [result.rgba.buffer],
+            );
+          } else {
+            const results = await renderRasterBatch(reader, data.requests, controller.signal);
+            const blockAccess = reader.takeBlockAccessesSince(cursor),
+              nativeDeflateStatus = reader.getNativeDeflateStatus();
+            scope.postMessage(
+              { id: data.id, type: 'rendered-batch', results, blockAccess, nativeDeflateStatus },
+              results.map((result) => result.rgba.buffer),
+            );
+          }
         } catch (error) {
           reader.takeBlockAccessesSince(cursor);
           throw error;

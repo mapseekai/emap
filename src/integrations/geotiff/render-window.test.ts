@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GeoTIFFReader } from './reader';
-import { renderRasterWindow } from './render-window';
+import { renderRasterBatch, renderRasterWindow } from './render-window';
 import { planRasterTile, colorizeRasterTile } from '../../engine/rendering/raster/tile';
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
 
@@ -96,6 +96,62 @@ describe('off-thread raster pipeline', () => {
         });
       expect(actual.rgba).toEqual(expected);
       expect(actual.diagnostics).toMatchObject({ directRgb8Tiles: 1, deinterleaveMs: 0 });
+    } finally {
+      reader.dispose();
+    }
+  });
+
+  it('shares one union source read across sibling display tiles', async () => {
+    const reader = await GeoTIFFReader.open(
+      new File([makeRasterFixture({ width: 32, height: 16, bits: 16, bands: 3 })], 'image.tif'),
+    );
+    try {
+      const plan = planRasterTile(reader.metadata, reader.metadata.bounds, (x, y) => [x, y], {}, 64)!;
+      const request = {
+        read: plan.request,
+        warp: plan.warp,
+        width: plan.width,
+        height: plan.height,
+        style: {},
+      };
+      const read = vi.spyOn(reader, 'readWindow');
+      const results = await renderRasterBatch(reader, [request, structuredClone(request)]);
+      expect(results).toHaveLength(2);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(results[0].rgba).toEqual(results[1].rgba);
+      expect(results[0].diagnostics).toBeDefined();
+      expect(results[1].diagnostics).toBeUndefined();
+    } finally {
+      reader.dispose();
+    }
+  });
+
+  it('chunks a large row-striped union window before physical reads', async () => {
+    const reader = await GeoTIFFReader.open(
+      new File([makeRasterFixture({ bits: 16, bands: 3 })], 'image.tif'),
+    );
+    try {
+      Object.assign(reader.metadata.levels[0], {
+        width: 54_798,
+        height: 1_000,
+        tileWidth: 54_798,
+        tileHeight: 1,
+        decodedBlockConcurrency: 4,
+      });
+      const bytes = 54_798 * 3 * 2;
+      (
+        reader as unknown as { physicalBlockBytes: Map<number, readonly number[]> }
+      ).physicalBlockBytes = new Map([[0, Array(1_000).fill(bytes)]]);
+      const chunks = reader.splitRowStripedReadRequests({
+        level: 0,
+        window: [10_000, 0, 13_000, 500],
+        samples: [0, 1, 2],
+      });
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0].window[1]).toBe(0);
+      expect(chunks.at(-1)?.window[3]).toBe(500);
+      for (const chunk of chunks)
+        expect((chunk.window[3] - chunk.window[1]) * bytes).toBeLessThanOrEqual(64 * 1024 ** 2);
     } finally {
       reader.dispose();
     }

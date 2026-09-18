@@ -82,13 +82,27 @@ function stripedPrimaryCacheBytes(metadata: RasterMetadata, baseline: number): n
 function commandLevel(command: GeoTIFFWorkerCommand): number | null {
   if (command.type === 'read') return command.request.level;
   if (command.type === 'render') return command.request.read.level;
+  if (command.type === 'render-batch') return command.requests[0]?.read.level ?? null;
   return null;
 }
 
 function commandWindow(command: GeoTIFFWorkerCommand): RasterReadRequest['window'] | null {
   if (command.type === 'read') return command.request.window;
   if (command.type === 'render') return command.request.read.window;
+  if (command.type === 'render-batch' && command.requests.length)
+    return [
+      Math.min(...command.requests.map((request) => request.read.window[0])),
+      Math.min(...command.requests.map((request) => request.read.window[1])),
+      Math.max(...command.requests.map((request) => request.read.window[2])),
+      Math.max(...command.requests.map((request) => request.read.window[3])),
+    ];
   return null;
+}
+
+function commandRenderRequests(command: GeoTIFFWorkerCommand): readonly RasterRenderRequest[] {
+  if (command.type === 'render') return [command.request];
+  if (command.type === 'render-batch') return command.requests;
+  return [];
 }
 
 interface SourceBlockFootprint {
@@ -486,7 +500,8 @@ class WorkerRasterSource implements RasterSource {
         new RasterError('RASTER_QUEUE_BUDGET', 'Too many pending raster requests.'),
       );
     return new Promise((resolve, reject) => {
-      const meshBytes = command.type === 'render' ? command.request.warp.points.byteLength : 0;
+      const renderRequests = commandRenderRequests(command);
+      const meshBytes = renderRequests.reduce((sum, request) => sum + request.warp.points.byteLength, 0);
       const cleanup = () => signal?.removeEventListener('abort', abort);
       const job: Job = { command, bytes, signal, resolve, reject, cleanup };
       this.acceptedTasks++;
@@ -497,7 +512,9 @@ class WorkerRasterSource implements RasterSource {
         this.queue.splice(index, 1);
         this.queuedMeshBytes -= meshBytes;
         this.pending.delete(job);
-        if (command.type === 'render') this.levelStats(command.request.read.level).cancelled++;
+        const level = commandLevel(command);
+        if (level !== null && renderRequests.length)
+          this.levelStats(level).cancelled += renderRequests.length;
         cleanup();
         reject(signal?.reason ?? new DOMException('Cancelled', 'AbortError'));
         this.pump();
@@ -544,18 +561,21 @@ class WorkerRasterSource implements RasterSource {
       if (index < 0 || !slot) return;
       const [job] = this.queue.splice(index, 1);
       job.cleanup();
-      if (job.command.type === 'render')
-        this.queuedMeshBytes -= job.command.request.warp.points.byteLength;
+      const renderRequests = commandRenderRequests(job.command);
+      this.queuedMeshBytes -= renderRequests.reduce(
+        (sum, request) => sum + request.warp.points.byteLength,
+        0,
+      );
       slot.bytes = job.bytes;
       this.reservedBytes += job.bytes;
       this.dispatchedTasks++;
-      const transfer: Transferable[] =
-        job.command.type === 'render'
-          ? [job.command.request.warp.points.buffer as ArrayBuffer]
-          : [];
+      const transfer: Transferable[] = renderRequests.map(
+        (request) => request.warp.points.buffer as ArrayBuffer,
+      );
       job.startedAt = performance.now();
-      if (job.command.type === 'render')
-        this.levelStats(job.command.request.read.level).submitted++;
+      const renderLevel = commandLevel(job.command);
+      if (renderLevel !== null && renderRequests.length)
+        this.levelStats(renderLevel).submitted += renderRequests.length;
       const result = slot.client.call(job.command, job.signal, transfer);
       this.peakWorkers = Math.max(
         this.peakWorkers,
@@ -564,21 +584,24 @@ class WorkerRasterSource implements RasterSource {
       void result.then(
         (response) => {
           this.pending.delete(job);
-          if (response.type === 'rendered' || response.type === 'result') {
+          if (
+            response.type === 'rendered' ||
+            response.type === 'rendered-batch' ||
+            response.type === 'result'
+          ) {
             this.recordBlockAccess(slot, response.blockAccess);
             this.recordNativeDeflateStatus(response.nativeDeflateStatus);
           }
-          if (response.type === 'rendered') {
-            this.renderedTiles++;
-            const levelStats =
-              job.command.type === 'render'
-                ? this.levelStats(job.command.request.read.level)
-                : null;
-            if (job.command.type === 'render') {
-              this.lastLevel = job.command.request.read.level;
-              levelStats!.completed++;
+          if (response.type === 'rendered' || response.type === 'rendered-batch') {
+            const rendered = response.type === 'rendered' ? [response.result] : response.results;
+            this.renderedTiles += rendered.length;
+            const level = commandLevel(job.command);
+            const levelStats = level === null ? null : this.levelStats(level);
+            if (levelStats) {
+              this.lastLevel = level;
+              levelStats.completed += rendered.length;
             }
-            const d = response.result.diagnostics;
+            const d = rendered[0]?.diagnostics;
             if (d) {
               if (levelStats) {
                 levelStats.workerMs += d.workerMs;
@@ -651,12 +674,15 @@ class WorkerRasterSource implements RasterSource {
         },
         (error) => {
           this.pending.delete(job);
+          const renderRequests = commandRenderRequests(job.command);
+          const level = commandLevel(job.command);
           if (
-            job.command.type === 'render' &&
+            level !== null &&
+            renderRequests.length &&
             error instanceof DOMException &&
             error.name === 'AbortError'
           )
-            this.levelStats(job.command.request.read.level).cancelled++;
+            this.levelStats(level).cancelled += renderRequests.length;
           job.reject(error);
         },
       );
@@ -680,39 +706,79 @@ class WorkerRasterSource implements RasterSource {
     request: RasterRenderRequest,
     signal?: AbortSignal,
   ): Promise<RasterRenderResult> {
-    validateRasterStyle(this.metadata, request.style);
-    const bytes = validateRasterRender(this.metadata, request);
+    return (await this.renderTiles([request], signal))[0];
+  }
+
+  async renderTiles(
+    requests: readonly RasterRenderRequest[],
+    signal?: AbortSignal,
+  ): Promise<readonly RasterRenderResult[]> {
     signal?.throwIfAborted();
+    if (!requests.length || requests.length > 16)
+      throw new RasterError('INVALID_RASTER_BATCH', 'Raster render batches must contain 1–16 tiles.');
     if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster source has been disposed.');
-    if (this.queuedMeshBytes + request.warp.points.byteLength > 32 * 1024 ** 2)
+    const reservations = requests.map((request) => {
+      validateRasterStyle(this.metadata, request.style);
+      return validateRasterRender(this.metadata, request);
+    });
+    const first = requests[0].read;
+    if (
+      requests.some(
+        (request) =>
+          request.read.level !== first.level ||
+          request.read.samples.length !== first.samples.length ||
+          request.read.samples.some((sample, index) => sample !== first.samples[index]),
+      )
+    )
+      throw new RasterError('INVALID_RASTER_BATCH', 'Batched raster tiles must use one level and sample set.');
+    const extraOutputs = requests
+      .slice(1)
+      .reduce((sum, request) => sum + request.width * request.height * 4, 0);
+    const bytes = Math.max(...reservations) + extraOutputs;
+    if (bytes > RASTER_MAX_DECODE_BYTES)
+      throw new RasterError('RASTER_READ_BUDGET', 'Batched raster output exceeds 64MiB.');
+    const meshBytes = requests.reduce((sum, request) => sum + request.warp.points.byteLength, 0);
+    if (this.queuedMeshBytes + meshBytes > 32 * 1024 ** 2)
       throw new RasterError('RASTER_QUEUE_BUDGET', 'Queued warp meshes exceed 32MiB.');
-    // Caller keeps ownership of its reusable mesh; transfer only an independent copy.
-    const style = {
-      ...request.style,
-      ...(request.style.bands ? { bands: [...request.style.bands] } : {}),
-      ...(request.style.ranges
-        ? { ranges: request.style.ranges.map((r) => [r[0], r[1]] as const) }
-        : {}),
-    };
-    const message = {
+    const messages = requests.map((request) => ({
       ...request,
       read: {
         ...request.read,
         window: [...request.read.window] as [number, number, number, number],
         samples: [...request.read.samples],
       },
-      style,
+      style: {
+        ...request.style,
+        ...(request.style.bands ? { bands: [...request.style.bands] } : {}),
+        ...(request.style.ranges
+          ? { ranges: request.style.ranges.map((range) => [range[0], range[1]] as const) }
+          : {}),
+      },
       warp: { ...request.warp, points: request.warp.points.slice() },
-    };
-    const response = await this.submit({ type: 'render', request: message }, bytes, signal);
+    }));
+    const command =
+      messages.length === 1
+        ? ({ type: 'render', request: messages[0] } as const)
+        : ({ type: 'render-batch', requests: messages } as const);
+    const response = await this.submit(command, bytes, signal);
+    const results =
+      response.type === 'rendered'
+        ? [response.result]
+        : response.type === 'rendered-batch'
+          ? response.results
+          : null;
     if (
-      response.type !== 'rendered' ||
-      response.result.width !== request.width ||
-      response.result.height !== request.height ||
-      response.result.rgba.byteLength !== request.width * request.height * 4
+      !results ||
+      results.length !== requests.length ||
+      results.some(
+        (result, index) =>
+          result.width !== requests[index].width ||
+          result.height !== requests[index].height ||
+          result.rgba.byteLength !== requests[index].width * requests[index].height * 4,
+      )
     )
-      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Invalid rendered raster tile.');
-    return response.result;
+      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Invalid rendered raster batch.');
+    return results;
   }
   getProcessingStats(): RasterProcessingStats {
     return {
