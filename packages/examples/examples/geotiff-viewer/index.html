@@ -194,6 +194,26 @@ function performanceSnapshot() {
     workers: processing?.workers ?? 0, peakWorkers: performanceDelta(processing,bproc,'peakWorkers') || processing?.peakWorkers || 0,
     tiles: performanceDelta(processing,bproc,'renderedTiles'), presentedTiles: stats.presentedTiles-before.stats.presentedTiles,
     reads: stats.readRequests-before.stats.readRequests,
+    taskLifecycle: {
+      queued:performanceDelta(stats.taskLifecycle,before.stats.taskLifecycle,'queued'),
+      loadTileStarted:performanceDelta(stats.taskLifecycle,before.stats.taskLifecycle,'loadTileStarted'),
+      planSucceeded:performanceDelta(stats.taskLifecycle,before.stats.taskLifecycle,'planSucceeded'),
+      planEmpty:performanceDelta(stats.taskLifecycle,before.stats.taskLifecycle,'planEmpty'),
+      loadTileFailed:performanceDelta(stats.taskLifecycle,before.stats.taskLifecycle,'loadTileFailed'),
+    },
+    pumpBlocked: {
+      gestures:performanceDelta(stats.pumpBlocked,before.stats.pumpBlocked,'gestures'),
+      settleTimer:performanceDelta(stats.pumpBlocked,before.stats.pumpBlocked,'settleTimer'),
+    },
+    sourceDispatch: {
+      accepted:performanceDelta(processing,bproc,'acceptedTasks'),
+      dispatched:performanceDelta(processing,bproc,'dispatchedTasks'),
+      decodeBudgetBlocks:performanceDelta(processing,bproc,'decodeBudgetBlocks'),
+      queued:processing?.queuedTasks ?? 0,
+      reservedMiB:(processing?.reservedBytes ?? 0)/1024**2,
+      largestJobMiB:(processing?.largestJobBytes ?? 0)/1024**2,
+      decodeBudgetMiB:(processing?.decodeBudgetBytes ?? 0)/1024**2,
+    },
     planning: {
       passes: performanceDelta(perf,bp,'planningPasses'), plannedTiles: performanceDelta(perf,bp,'plannedTiles'),
       current: stats.planning,

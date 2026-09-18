@@ -98,6 +98,14 @@ export interface RasterCacheStats {
   /** Accepted tile presentations, including partial view updates. */
   readonly presentedTiles: number;
   readonly readRequests: number;
+  readonly taskLifecycle: {
+    readonly queued: number;
+    readonly loadTileStarted: number;
+    readonly planSucceeded: number;
+    readonly planEmpty: number;
+    readonly loadTileFailed: number;
+  };
+  readonly pumpBlocked: { readonly gestures: number; readonly settleTimer: number };
   readonly interacting: boolean;
   /** Cumulative counters; snapshot twice to diagnose one navigation operation. */
   readonly performance: RasterPerformanceTotals;

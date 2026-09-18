@@ -124,6 +124,13 @@ export class RasterRenderService implements RasterContract {
   private planningMs = 0;
   private planningPasses = 0;
   private plannedTiles = 0;
+  private taskQueued = 0;
+  private loadTileStarted = 0;
+  private planSucceeded = 0;
+  private planEmpty = 0;
+  private loadTileFailed = 0;
+  private pumpBlockedGestures = 0;
+  private pumpBlockedSettleTimer = 0;
   private readonly plannedLevels = new Map<number, number>();
   private planningDiagnostics: RasterPlanningDiagnostics | null = null;
   private canvasUploadMs = 0;
@@ -434,6 +441,7 @@ export class RasterRenderService implements RasterContract {
           return a.gridRow - b.gridRow;
         return distance(a) - distance(b);
       });
+    this.taskQueued += this.queue.length;
     for (const task of tasks) if (this.cache.has(task.key)) this.publishTile(task.key);
     this.deps.requestRender();
     this.trimCache();
@@ -456,7 +464,15 @@ export class RasterRenderService implements RasterContract {
     this.pump();
   }
   private pump(): void {
-    if (this.disposed || this.gestures.size || this.settleTimer !== null) return;
+    if (this.disposed) return;
+    if (this.gestures.size) {
+      this.pumpBlockedGestures++;
+      return;
+    }
+    if (this.settleTimer !== null) {
+      this.pumpBlockedSettleTimer++;
+      return;
+    }
     while (this.active.size < this.concurrency && this.queue.length) {
       const task = this.queue.shift()!;
       if (this.active.has(task.key) || this.cache.has(task.key) || !this.wanted.has(task.key))
@@ -466,6 +482,7 @@ export class RasterRenderService implements RasterContract {
       void this.loadTile(task, controller.signal)
         .catch((error) => {
           if (this.disposed || controller.signal.aborted || !this.wanted.has(task.key)) return;
+          this.loadTileFailed++;
           this.failures.add(task.key);
           this.presentation.flush();
           // A slow or failed tile must not cancel ready/queued siblings.
@@ -490,10 +507,12 @@ export class RasterRenderService implements RasterContract {
   }
   private async loadTile(task: Task, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
+    this.loadTileStarted++;
     const { source, style } = task.layer;
     const plan = planRasterTile(source.metadata, task.bounds, task.toSource, style);
     let image: HTMLCanvasElement | null = null;
     if (plan) {
+      this.planSucceeded++;
       this.plannedLevels.set(plan.level.id, (this.plannedLevels.get(plan.level.id) ?? 0) + 1);
       this.readRequests++;
       let rgba: Uint8ClampedArray<ArrayBuffer>;
@@ -537,7 +556,7 @@ export class RasterRenderService implements RasterContract {
         throw new RasterError('RASTER_CANVAS_UNAVAILABLE', 'Cannot create raster tile context.');
       context.putImageData(new ImageData(rgba, plan.width, plan.height), 0, 0);
       this.canvasUploadMs += performance.now() - uploadStarted;
-    }
+    } else this.planEmpty++;
     if (
       this.disposed ||
       signal.aborted ||
@@ -919,6 +938,14 @@ export class RasterRenderService implements RasterContract {
       committedFrames: this.committedFrames,
       presentedTiles: this.presentedTiles,
       readRequests: this.readRequests,
+      taskLifecycle: {
+        queued: this.taskQueued,
+        loadTileStarted: this.loadTileStarted,
+        planSucceeded: this.planSucceeded,
+        planEmpty: this.planEmpty,
+        loadTileFailed: this.loadTileFailed,
+      },
+      pumpBlocked: { gestures: this.pumpBlockedGestures, settleTimer: this.pumpBlockedSettleTimer },
       interacting: this.gestures.size > 0 || this.settleTimer !== null,
       planning: this.planningDiagnostics,
       plannedLevels: [...this.plannedLevels.entries()]
