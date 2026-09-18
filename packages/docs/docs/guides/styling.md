@@ -5,7 +5,7 @@ title: 样式图层
 api: ["ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 样式图层

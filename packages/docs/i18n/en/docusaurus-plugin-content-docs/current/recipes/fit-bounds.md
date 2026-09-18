@@ -5,7 +5,7 @@ title: Fit bounds
 api: ["Emap", "Bounds", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # Fit bounds

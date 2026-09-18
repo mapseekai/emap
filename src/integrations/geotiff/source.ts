@@ -463,7 +463,10 @@ class WorkerRasterSource implements RasterSource {
       );
     return new Promise((resolve, reject) => {
       const renderRequests = commandRenderRequests(command);
-      const meshBytes = renderRequests.reduce((sum, request) => sum + request.warp.points.byteLength, 0);
+      const meshBytes = renderRequests.reduce(
+        (sum, request) => sum + request.warp.points.byteLength,
+        0,
+      );
       const cleanup = () => signal?.removeEventListener('abort', abort);
       const job: Job = { command, bytes, signal, resolve, reject, cleanup };
       this.acceptedTasks++;
@@ -675,7 +678,10 @@ class WorkerRasterSource implements RasterSource {
   ): Promise<readonly RasterRenderResult[]> {
     signal?.throwIfAborted();
     if (!requests.length || requests.length > 16)
-      throw new RasterError('INVALID_RASTER_BATCH', 'Raster render batches must contain 1–16 tiles.');
+      throw new RasterError(
+        'INVALID_RASTER_BATCH',
+        'Raster render batches must contain 1–16 tiles.',
+      );
     if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster source has been disposed.');
     const reservations = requests.map((request) => {
       validateRasterStyle(this.metadata, request.style);
@@ -690,7 +696,10 @@ class WorkerRasterSource implements RasterSource {
           request.read.samples.some((sample, index) => sample !== first.samples[index]),
       )
     )
-      throw new RasterError('INVALID_RASTER_BATCH', 'Batched raster tiles must use one level and sample set.');
+      throw new RasterError(
+        'INVALID_RASTER_BATCH',
+        'Batched raster tiles must use one level and sample set.',
+      );
     const extraOutputs = requests
       .slice(1)
       .reduce((sum, request) => sum + request.width * request.height * 4, 0);

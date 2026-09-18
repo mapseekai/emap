@@ -5,7 +5,7 @@ title: 核心概念
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 核心概念

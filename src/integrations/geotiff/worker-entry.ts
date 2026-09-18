@@ -58,10 +58,9 @@ scope.onmessage = ({ data }) => {
         if (data.type === 'render') {
           const result = await renderRasterWindow(reader, data.request, controller.signal),
             nativeDeflateStatus = reader.getNativeDeflateStatus();
-          scope.postMessage(
-            { id: data.id, type: 'rendered', result, nativeDeflateStatus },
-            [result.rgba.buffer],
-          );
+          scope.postMessage({ id: data.id, type: 'rendered', result, nativeDeflateStatus }, [
+            result.rgba.buffer,
+          ]);
         } else {
           const results = await renderRasterBatch(reader, data.requests, controller.signal),
             nativeDeflateStatus = reader.getNativeDeflateStatus();

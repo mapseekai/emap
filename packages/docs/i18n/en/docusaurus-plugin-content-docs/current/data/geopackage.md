@@ -5,7 +5,7 @@ title: Direct GeoPackage vector import
 api: ["importGeoPackage", "importGeoPackageInWorker", "geoPackagePlugin", "ImportGeoPackageOptions", "GeoPackageWorkerOptions", "GeoPackagePluginOptions", "GeoPackageLimits", "GeoPackageProgress", "GeoPackageDataset", "GeoPackageMetadata", "GeoPackageTableMetadata"]
 examples: ["geopackage-viewer"]
 stability: experimental
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # Direct GeoPackage vector import

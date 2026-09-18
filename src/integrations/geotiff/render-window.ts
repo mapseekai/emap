@@ -96,7 +96,10 @@ function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadR
         request.read.samples.some((sample, index) => sample !== first.samples[index]),
     )
   )
-    throw new RasterError('INVALID_RASTER_BATCH', 'Batched raster tiles must use one level and sample set.');
+    throw new RasterError(
+      'INVALID_RASTER_BATCH',
+      'Batched raster tiles must use one level and sample set.',
+    );
   return {
     level: first.level,
     samples: [...first.samples],
@@ -109,7 +112,10 @@ function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadR
   };
 }
 
-function mergeOpaque(target: Uint8ClampedArray<ArrayBuffer>, source: Uint8ClampedArray<ArrayBuffer>) {
+function mergeOpaque(
+  target: Uint8ClampedArray<ArrayBuffer>,
+  source: Uint8ClampedArray<ArrayBuffer>,
+) {
   for (let offset = 0; offset < source.length; offset += 4)
     if (source[offset + 3]) {
       target[offset] = source[offset];
@@ -185,7 +191,10 @@ export async function renderRasterBatch(
       ...(source.metadata.alphaBand === null ? [] : [source.metadata.alphaBand]),
     ];
     if (needed.some((band) => !request.read.samples.includes(band)))
-      throw new RasterError('INVALID_BANDS', 'Display request omits a selected color or alpha band.');
+      throw new RasterError(
+        'INVALID_BANDS',
+        'Display request omits a selected color or alpha band.',
+      );
     return bands;
   });
   const level = source.metadata.levels.find((value) => value.id === combined.level)!;
@@ -212,7 +221,12 @@ export async function renderRasterBatch(
     for (let index = 0; index < requests.length; index++) {
       const request = { ...requests[index], read: chunk };
       const partial = directRgb8
-        ? colorizeInterleavedRgb8(source, request, bandsByRequest[index], data as InterleavedRgb8Window)
+        ? colorizeInterleavedRgb8(
+            source,
+            request,
+            bandsByRequest[index],
+            data as InterleavedRgb8Window,
+          )
         : colorizeRasterTile(
             source.metadata,
             {

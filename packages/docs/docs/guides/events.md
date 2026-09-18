@@ -5,7 +5,7 @@ title: 事件
 api: ["CameraEvent", "Emap", "EmapEventMap", "EventDispatcher", "EventListener", "FeatureEvent", "FeatureEventFilter"]
 examples: ["feature-attributes","interaction-handlers"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 事件

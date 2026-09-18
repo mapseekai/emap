@@ -86,7 +86,9 @@ describe('allocation-light TIFF LZW decoder', () => {
     const upstream = await getDecoder(5, parameters),
       decode = vi.spyOn(upstream, 'decode'),
       decoder = createFastLzwDecoder(5, parameters, upstream),
-      compressed = encodeTiffLzw(new Uint8Array(parameters.tileWidth * parameters.tileHeight * 3 + 1));
+      compressed = encodeTiffLzw(
+        new Uint8Array(parameters.tileWidth * parameters.tileHeight * 3 + 1),
+      );
     await expect(decoder.decode(compressed.buffer)).rejects.toThrow(/exceeds decoded size/);
     expect(decode).not.toHaveBeenCalled();
   });

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-18
+
+Changes since [v0.12.0](https://github.com/mapseekai/emap/compare/v0.12.0...v0.13.0).
+
 ### Added
 
 - Add GeoTIFF Performance Diagnostics with cumulative file-I/O, compressed-page
@@ -27,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Let the GeoTIFF example authorize a local directory and automatically associate
   `a.tif` with sibling `a.tif.ovr`, while retaining manual file selection for
   browsers without directory-handle support.
+- Allow GeoTIFF callers and the example to override file NoData with a numeric value or explicitly disable NoData with `null`.
+
+### Changed
+
+- Improve GeoTIFF throughput with tiled block-footprint Worker affinity, decoded-block working-set sizing, striped row scheduling/cache locality, faster LZW/DEFLATE decode paths, direct chunky RGB8 rendering, and bounded block-decode memory. Near LOD boundaries, tiled overviews may be selected with up to 1.4× upsampling to avoid base-level I/O spikes.
+- Extend GeoTIFF diagnostics with exact selected-level processing, dispatch/task errors, cache working-set/eviction metrics, and native Deflate status while keeping diagnostic block-identity tracking bounded.
+- Expand examples so the GeoTIFF viewer can load multiple raster files and the mixed-data viewer can display multiple vector formats together with multiple local GeoTIFF layers.
 
 ### Fixed
 
@@ -70,8 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or show stale raster data through ready NoData regions. Failed tiles no longer
   cancel sibling reads. Compact fallback fragments under the existing cache budget.
   Opacity changes reuse pixels; expose progressive `presentedTiles` diagnostics.
-
-### Added
 
 - Add optional `/geotiff` with local-file range reading, a self-contained decoder
   Worker, read-only raster services, bounded tile caching and Canvas render passes.

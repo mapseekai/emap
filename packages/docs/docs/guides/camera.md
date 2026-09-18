@@ -5,7 +5,7 @@ title: 相机
 api: ["Emap", "Bounds", "Viewport", "CameraOptions", "AnimationOptions", "FlyToOptions", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer","crs-switch"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 相机

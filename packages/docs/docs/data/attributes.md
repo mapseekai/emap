@@ -5,7 +5,7 @@ title: 属性
 api: ["Emap", "Feature", "ApplyExpressionOptions", "JoinTableOptions", "CreateLayerOptions", "LayerFieldDefinition"]
 examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 属性

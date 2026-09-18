@@ -5,7 +5,7 @@ title: GeoPackage 矢量直接导入
 api: ["importGeoPackage", "importGeoPackageInWorker", "geoPackagePlugin", "ImportGeoPackageOptions", "GeoPackageWorkerOptions", "GeoPackagePluginOptions", "GeoPackageLimits", "GeoPackageProgress", "GeoPackageDataset", "GeoPackageMetadata", "GeoPackageTableMetadata"]
 examples: ["geopackage-viewer"]
 stability: experimental
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # GeoPackage 矢量直接导入

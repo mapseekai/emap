@@ -323,7 +323,9 @@ export class RasterRenderService implements RasterContract {
             ];
             const sourceCenter = toSource(worldCenter[0], worldCenter[1]);
             const sourceRow =
-              sourceCenter && Number.isFinite(sourceCenter[1]) && layer.source.metadata.resolution[1]
+              sourceCenter &&
+              Number.isFinite(sourceCenter[1]) &&
+              layer.source.metadata.resolution[1]
                 ? (sourceCenter[1] - layer.source.metadata.origin[1]) /
                   layer.source.metadata.resolution[1]
                 : Number.POSITIVE_INFINITY;
@@ -540,7 +542,10 @@ export class RasterRenderService implements RasterContract {
       const tasks = this.takeRowBatch(task);
       const controller = new AbortController();
       for (const item of tasks) this.active.set(item.key, controller);
-      const work = tasks.length > 1 ? this.loadTileBatch(tasks, controller.signal) : this.loadTile(task, controller.signal);
+      const work =
+        tasks.length > 1
+          ? this.loadTileBatch(tasks, controller.signal)
+          : this.loadTile(task, controller.signal);
       void work
         .catch((error) => {
           if (this.disposed || controller.signal.aborted) return;
@@ -625,7 +630,8 @@ export class RasterRenderService implements RasterContract {
   private async loadTileBatch(tasks: readonly Task[], signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     const { source, style } = tasks[0].layer;
-    if (!source.renderTiles) throw new RasterError('RASTER_BATCH_UNAVAILABLE', 'Raster batch rendering is unavailable.');
+    if (!source.renderTiles)
+      throw new RasterError('RASTER_BATCH_UNAVAILABLE', 'Raster batch rendering is unavailable.');
     const planned: Array<{ task: Task; plan: NonNullable<ReturnType<typeof planRasterTile>> }> = [];
     for (const task of tasks) {
       this.loadTileStarted++;
@@ -666,7 +672,10 @@ export class RasterRenderService implements RasterContract {
     );
     signal.throwIfAborted();
     if (rendered.length !== planned.length)
-      throw new RasterError('INVALID_RASTER_RENDER', 'Provider returned an invalid raster batch length.');
+      throw new RasterError(
+        'INVALID_RASTER_RENDER',
+        'Provider returned an invalid raster batch length.',
+      );
     for (let index = 0; index < planned.length; index++) {
       const { task, plan } = planned[index];
       const result = rendered[index];
@@ -675,7 +684,10 @@ export class RasterRenderService implements RasterContract {
         result.height !== plan.height ||
         result.rgba.byteLength !== plan.width * plan.height * 4
       )
-        throw new RasterError('INVALID_RASTER_RENDER', 'Provider returned an invalid display tile.');
+        throw new RasterError(
+          'INVALID_RASTER_RENDER',
+          'Provider returned an invalid display tile.',
+        );
       this.commitLoadedTile(
         task,
         this.uploadRasterTile(result.rgba, plan.width, plan.height),

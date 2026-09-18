@@ -93,9 +93,7 @@ describe('local GeoTIFF source', () => {
     source.dispose();
   });
   it('publishes bounded decode concurrency only for levels using the native block pipeline', async () => {
-    const bounded = await GeoTIFFReader.open(
-      file({ bits: 16, bands: 3, compression: 'deflate' }),
-    );
+    const bounded = await GeoTIFFReader.open(file({ bits: 16, bands: 3, compression: 'deflate' }));
     expect(bounded.metadata.levels[0].decodedBlockConcurrency).toBe(4);
     bounded.dispose();
 

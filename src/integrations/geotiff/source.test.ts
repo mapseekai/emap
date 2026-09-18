@@ -476,38 +476,35 @@ describe('parallel raster pipeline pool', () => {
     [20_000, 44],
     [54_798, 121],
     [100_000, 128],
-  ] as const)(
-    'sizes a %i-pixel row-striped primary cache from its decoded working set',
-    async (width, expectedMiB) => {
-      const stripedMetadata: RasterMetadata = {
-        ...metadata,
-        levels: [
-          {
-            ...metadata.levels[0],
-            width,
-            height: 4096,
-            tileWidth: width,
-            tileHeight: 1,
-            samples: 3,
-            bits: [16, 16, 16],
-            formats: [1, 1, 1],
-          },
-        ],
-      };
-      const opening = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount: 1 });
-      const primary = FakeWorker.instances[0];
-      primary.reply({ id: 1, type: 'metadata', metadata: stripedMetadata, directoryBytes: 1000 });
-      await Promise.resolve();
-      expect(primary.messages.at(-1)).toMatchObject({
-        id: 2,
-        type: 'configure',
-        cacheBytes: expectedMiB * 1024 ** 2,
-      });
-      primary.reply({ id: 2, type: 'configured' });
-      const source = await opening;
-      source.dispose();
-    },
-  );
+  ] as const)('sizes a %i-pixel row-striped primary cache from its decoded working set', async (width, expectedMiB) => {
+    const stripedMetadata: RasterMetadata = {
+      ...metadata,
+      levels: [
+        {
+          ...metadata.levels[0],
+          width,
+          height: 4096,
+          tileWidth: width,
+          tileHeight: 1,
+          samples: 3,
+          bits: [16, 16, 16],
+          formats: [1, 1, 1],
+        },
+      ],
+    };
+    const opening = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount: 1 });
+    const primary = FakeWorker.instances[0];
+    primary.reply({ id: 1, type: 'metadata', metadata: stripedMetadata, directoryBytes: 1000 });
+    await Promise.resolve();
+    expect(primary.messages.at(-1)).toMatchObject({
+      id: 2,
+      type: 'configure',
+      cacheBytes: expectedMiB * 1024 ** 2,
+    });
+    primary.reply({ id: 2, type: 'configured' });
+    const source = await opening;
+    source.dispose();
+  });
   it('pins row-striped levels to an enlarged primary Worker cache', async () => {
     const stripedMetadata: RasterMetadata = {
       ...metadata,
@@ -585,7 +582,10 @@ describe('parallel raster pipeline pool', () => {
     const pending = source.renderTiles!([task, task]);
     expect(worker.messages.at(-1)).toMatchObject({
       type: 'render-batch',
-      requests: [{ width: 8, height: 8 }, { width: 8, height: 8 }],
+      requests: [
+        { width: 8, height: 8 },
+        { width: 8, height: 8 },
+      ],
     });
     worker.reply({
       id: 2,

@@ -5,7 +5,7 @@ title: Status control
 api: ["Emap", "StatusControl", "StatusOptions"]
 examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # Status control

@@ -204,7 +204,10 @@ export class GeoTIFFReader implements RasterSource {
     for (let block = first; block < last; block++) {
       bytes += counts[block] ?? 0;
       if (!Number.isSafeInteger(bytes))
-        throw new RasterError('INVALID_TIFF_DIRECTORY', 'TIFF strip byte counts exceed safe limits.');
+        throw new RasterError(
+          'INVALID_TIFF_DIRECTORY',
+          'TIFF strip byte counts exceed safe limits.',
+        );
     }
     return bytes;
   }
@@ -425,7 +428,10 @@ export class GeoTIFFReader implements RasterSource {
               for (let index = 0; index < expected; index++) {
                 const value = Number(rawCounts[index]);
                 if (!Number.isSafeInteger(value) || value < 0)
-                  throw new RasterError('INVALID_TIFF_DIRECTORY', 'Invalid TIFF strip byte counts.');
+                  throw new RasterError(
+                    'INVALID_TIFF_DIRECTORY',
+                    'Invalid TIFF strip byte counts.',
+                  );
                 counts[index] = value;
               }
               physicalBlockBytes.set(level.id, counts);

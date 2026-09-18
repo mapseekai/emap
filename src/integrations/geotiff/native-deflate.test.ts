@@ -67,7 +67,10 @@ describe('native DEFLATE decoder', () => {
       compressed = deflateSync(new Uint8Array(25));
     await expect(
       decoder.decode(
-        compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength),
+        compressed.buffer.slice(
+          compressed.byteOffset,
+          compressed.byteOffset + compressed.byteLength,
+        ),
       ),
     ).rejects.toThrow(/exceeds decoded size/);
     expect(upstream.decode).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ title: Emap map instance
 api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
 examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # Emap map instance

@@ -33,11 +33,7 @@ export function acquireRasterBlockCache(initialBytes: number): RasterBlockCacheL
     },
     resize(bytes: number): number {
       if (released) return 0;
-      if (
-        !Number.isSafeInteger(bytes) ||
-        bytes < 0 ||
-        bytes > RASTER_BLOCK_CACHE_BUDGET_BYTES
-      )
+      if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > RASTER_BLOCK_CACHE_BUDGET_BYTES)
         throw new RasterError('INVALID_RASTER_BUDGET', 'Invalid raster block-cache reservation.');
       const available = RASTER_BLOCK_CACHE_BUDGET_BYTES - (reservedBlockCacheBytes - held),
         next = Math.min(bytes, available);

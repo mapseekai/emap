@@ -5,7 +5,7 @@ title: FAQ
 api: ["Emap", "MapOptions", "TopologySource", "SourceLoadError"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # FAQ

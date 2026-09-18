@@ -106,7 +106,13 @@ describe('off-thread raster pipeline', () => {
       new File([makeRasterFixture({ width: 32, height: 16, bits: 16, bands: 3 })], 'image.tif'),
     );
     try {
-      const plan = planRasterTile(reader.metadata, reader.metadata.bounds, (x, y) => [x, y], {}, 64)!;
+      const plan = planRasterTile(
+        reader.metadata,
+        reader.metadata.bounds,
+        (x, y) => [x, y],
+        {},
+        64,
+      )!;
       const request = {
         read: plan.request,
         warp: plan.warp,

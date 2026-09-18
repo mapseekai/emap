@@ -5,7 +5,7 @@ title: File upload
 api: ["TopologySource.fromBytes", "TopologySource", "TopologySourceFromBytesOptions"]
 examples: ["flatgeobuf-viewer", "geoparquet-viewer", "getting-started/points"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # File upload

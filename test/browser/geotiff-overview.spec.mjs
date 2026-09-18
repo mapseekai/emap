@@ -177,8 +177,11 @@ test('directory authorization auto-resolves a same-folder .tif.ovr companion', a
   await page.goto(url);
   await expect(page.locator('#levels')).toHaveText('4');
   await page.locator('#directory-picker').click();
-  await expect(page.locator('#directory-raster')).toHaveValue('auto.tif');
-  await expect(page.locator('#directory-status')).toContainText('auto.tif + auto.tif.ovr');
+  const raster = page.locator('#directory-raster-list input[type="checkbox"]');
+  await expect(raster).toHaveCount(1);
+  await expect(raster).toHaveValue('auto.tif');
+  await expect(raster).toBeChecked();
+  await expect(page.locator('#directory-status')).toContainText('已关联 auto.tif.ovr');
   await expect.poll(() => page.evaluate(() => window.geotiffDemo.metadata?.filename)).toBe('auto.tif');
   await expect(page.locator('#metadata')).toContainText('auto.tif.ovr');
   await expect(page.locator('#levels')).toHaveText('4');

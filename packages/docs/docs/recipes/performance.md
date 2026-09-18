@@ -5,7 +5,7 @@ title: 性能
 api: ["Emap", "MapOptions", "SimplifyOptions"]
 examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # 性能

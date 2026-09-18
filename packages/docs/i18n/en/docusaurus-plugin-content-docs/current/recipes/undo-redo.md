@@ -5,7 +5,7 @@ title: Undo and redo
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.12.0
+verifiedVersion: 0.13.0
 ---
 
 # Undo and redo
