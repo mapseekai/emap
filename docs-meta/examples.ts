@@ -532,6 +532,10 @@ const exampleDescriptions = {
     zh: '按视口读取本地 GeoTIFF/BigTIFF；超过 2GiB 必须具备金字塔，原始文件不复制到浏览器存储。',
     en: 'Reads local GeoTIFF/BigTIFF windows without copying source files into browser storage; overviews are mandatory above 2GiB.',
   },
+  'mixed-data-viewer': {
+    zh: '在同一地图中同时加载多个矢量文件与多个本地 GeoTIFF；矢量覆盖 emap 支持的全部导入格式，栅格通过目录授权并自动关联 .ovr。',
+    en: 'Loads multiple vector files and local GeoTIFFs together; vector input covers every emap import format while raster input uses directory access with automatic .ovr pairing.',
+  },
   'geopackage-viewer': {
     zh: '以 SQLite WASM 读取矢量表，直接将 GP Binary/WKB 解码成 TypedArray，并在一个 dataset 中保留多图层。支持 Web Worker。',
     en: 'Reads vector tables with SQLite WASM, decodes GP Binary/WKB directly into typed arrays, and keeps all layers in one dataset, optionally in a Web Worker.',
@@ -589,6 +593,11 @@ export const examples: readonly ExampleDefinition[] = [
     'geotiff-viewer', 'map-data', '本地 GeoTIFF 栅格', 'Local GeoTIFF raster',
     ['/docs/data/geotiff', docsCrs], 'openGeoTIFF',
     ['raster', 'geotiff', 'worker', 'pyramid'], ['fixtures/example-geotiff.tif', 'fixtures/example-geotiff-uint16.tif', 'fixtures/example-geotiff-int16.tif', 'fixtures/example-geotiff-float32.tif', 'fixtures/example-geotiff-float64.tif'],
+  ),
+  recipe(
+    'mixed-data-viewer', 'map-data', '矢量与栅格混合加载', 'Mixed vector and raster loading',
+    [docsFormats, '/docs/data/geotiff', '/docs/data/geopackage', docsFileUpload], 'TopologySource',
+    ['formats', 'raster', 'geotiff', 'geopackage', 'arrow', 'flatgeobuf', 'multi-layer'], [],
   ),
   recipe(
     'geopackage-viewer', 'map-data', 'GeoPackage 多图层直接转换', 'GeoPackage direct multi-layer import',

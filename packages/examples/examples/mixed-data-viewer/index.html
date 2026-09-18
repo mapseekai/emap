@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Emap 示例 - 矢量与栅格混合加载</title>
+<style>
+.layer-list { display:grid;gap:6px;max-height:220px;overflow:auto;padding:4px 0; }
+.layer-row { display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px; }
+.vector-row { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px; }
+.layer-row span, .vector-row span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.layer-row button, .vector-row button { padding:3px 8px; }
+.metric { display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--emap-example-border); }
+</style>
+</head>
+<body class="emap-example-with-floating-header">
+<div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a><strong>矢量与栅格混合加载</strong></div>
+<div id="map" tabindex="0"></div>
+<details class="emap-example-workbench panel" open>
+<summary><h1>多矢量图层 + 多 GeoTIFF</h1></summary>
+<div class="emap-example-workbench-body">
+<section class="emap-example-section">
+<h2>矢量数据</h2>
+<div class="emap-example-field"><label for="vector-input">添加矢量文件（可多选）</label><input id="vector-input" type="file" multiple accept=".geojson,.json,.topojson,.zip,.kml,.msx,.gpkg,.fgb,.parquet,.geoparquet,.arrow,.arrows,.feather" /></div>
+<p class="emap-example-hint">支持 GeoJSON、TopoJSON、Shapefile ZIP、KML、MSX、GeoPackage、FlatGeobuf、GeoParquet、GeoArrow。每个文件作为独立 source 添加，文件中的全部图层同时显示。</p>
+<div id="vector-list" class="layer-list"></div>
+<h2>栅格数据</h2>
+<div class="emap-example-field"><label>影像目录（自动关联 .ovr）</label><button id="directory-picker" type="button">选择影像目录</button></div>
+<div id="raster-row" class="emap-example-field" hidden><label>目录中的 TIFF / BigTIFF（可多选）</label><div id="raster-list" class="layer-list" role="group" aria-label="目录中的 TIFF / BigTIFF"></div></div>
+<p id="directory-status" class="emap-example-hint">授权目录后，可勾选多个 TIFF；每个文件自动查找同目录的 .ovr。</p>
+<div class="emap-example-row"><button id="fit-all" class="emap-example-primary-button">缩放到全部数据</button><button id="clear-all">清空全部</button></div>
+<p id="status" class="emap-example-status" role="status">初始化地图…</p>
+</section>
+<section class="emap-example-section">
+<div class="metric"><span>矢量 sources</span><strong id="vector-source-count">0</strong></div>
+<div class="metric"><span>矢量图层</span><strong id="vector-layer-count">0</strong></div>
+<div class="metric"><span>栅格图层</span><strong id="raster-layer-count">0</strong></div>
+<div class="metric"><span>当前地图 CRS</span><strong id="map-crs">—</strong></div>
+<pre id="log"></pre>
+</section>
+</div>
+</details>
+<script type="module">
+import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
+import { listGeoTIFFs, openRasterPair } from '/src/local-raster-directory.ts';
+import { loadExampleArrow, loadExampleRuntime, installExampleMapUi } from '/src/example-runtime.ts';
+import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
+import { rasterPlugin, geoTIFFPlugin } from '@mapseekai/emap/geotiff';
+const emap = await loadExampleRuntime();
+const emapArrow = await loadExampleArrow();
+const base = '/mapseekai/emap/examples/';
+await emapArrow.initParquetWasm();
+const map = await emap.Emap.create({ container: 'map', preset: 'viewer' });
+await map.ctx.plugin(emapArrow.arrowFormatsPlugin);
+await map.ctx.plugin(geoPackagePlugin({ workerUrl: base + 'emap-geopackage-worker.js', wasmUrl: base + 'sql-wasm.wasm' }));
+const releaseFlatGeobuf = installFlatGeobufFormat(emap, map.formats);
+const rasterFiber = map.ctx.plugin(rasterPlugin({ cacheBytes: 48 * 1024 ** 2, concurrency: 2 }));
+await rasterFiber.await();
+const geotiffFiber = map.ctx.plugin(geoTIFFPlugin({ workerUrl: base + 'emap-geotiff-worker.js' }));
+await geotiffFiber.await();
+
+const status = document.getElementById('status');
+const vectorSources = new Map();
+const rasterLayers = new Map();
+let sequence = 0;
+let directoryHandle = null;
+let rasterQueue = Promise.resolve();
+const colors = [
+  { fill:'#5b8ff9', line:'#3867d6', point:'#3867d6' },
+  { fill:'#61dDAa', line:'#2d9d78', point:'#2d9d78' },
+  { fill:'#f6bd16', line:'#c28d00', point:'#c28d00' },
+  { fill:'#e8684a', line:'#c24f34', point:'#c24f34' },
+  { fill:'#9270ca', line:'#6f50aa', point:'#6f50aa' },
+];
+
+function updateCounts() {
+  document.getElementById('vector-source-count').textContent = String(vectorSources.size);
+  document.getElementById('vector-layer-count').textContent = String(Array.from(vectorSources.values()).reduce((sum, item) => sum + item.layerIds.length, 0));
+  document.getElementById('raster-layer-count').textContent = String(rasterLayers.size);
+  document.getElementById('map-crs').textContent = map.getCRS?.() ?? map.ctx.view?.getCRS?.() ?? '—';
+  document.getElementById('log').textContent = JSON.stringify({
+    vector: Array.from(vectorSources.values(), item => ({ filename:item.filename, layers:item.source.getLayers().map(layer => layer.name) })),
+    raster: Array.from(rasterLayers.keys()),
+  }, null, 2);
+}
+
+function addVectorRenderLayers(sourceId, source, colorIndex) {
+  const color = colors[colorIndex % colors.length];
+  const layerIds = [];
+  for (const [index, layer] of source.getLayers().entries()) {
+    const type = layer.geometry_type === 'point' ? 'circle' : layer.geometry_type === 'polyline' ? 'line' : layer.geometry_type === 'polygon' ? 'fill' : null;
+    if (!type) continue;
+    const layerId = `${sourceId}-layer-${index}`;
+    const paint = type === 'fill'
+      ? { 'fill-color': color.fill, 'fill-opacity': 0.38 }
+      : type === 'line'
+        ? { 'line-color': color.line, 'line-width': 2.5 }
+        : { 'circle-color': color.point, 'circle-radius': 5 };
+    map.addLayer({ id: layerId, source: sourceId, 'source-layer': layer.name, type, paint });
+    layerIds.push(layerId);
+  }
+  return layerIds;
+}
+
+function removeVectorSource(id) {
+  const item = vectorSources.get(id);
+  if (!item) return;
+  for (const layerId of item.layerIds) if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(id)) map.removeSource(id);
+  item.row.remove();
+  vectorSources.delete(id);
+  updateCounts();
+}
+async function addVectorFile(file) {
+  const id = `vector-${++sequence}`;
+  status.textContent = `正在加载矢量：${file.name}`;
+  const source = new emap.TopologySource(id, { formats: map.formats });
+  await source.setData({ filename:file.name, content:new Uint8Array(await file.arrayBuffer()) });
+  await map.addSource(id, source);
+  const layerIds = addVectorRenderLayers(id, source, vectorSources.size);
+  const row = document.createElement('div');
+  row.className = 'vector-row';
+  const label = document.createElement('span');
+  label.textContent = `${file.name} · ${source.getLayers().length} 图层`;
+  const remove = document.createElement('button');
+  remove.type = 'button'; remove.textContent = '移除';
+  row.append(label, remove);
+  document.getElementById('vector-list').append(row);
+  remove.onclick = () => removeVectorSource(id);
+  vectorSources.set(id, { filename:file.name, source, layerIds, row });
+  updateCounts();
+  status.textContent = `已加载矢量：${file.name}`;
+}
+
+function removeRaster(filename) {
+  const item = rasterLayers.get(filename);
+  if (!item) return;
+  map.ctx.raster.remove(item.id);
+  rasterLayers.delete(filename);
+  updateCounts();
+}
+
+async function setRasterChecked(filename, checked) {
+  if (!directoryHandle) return;
+  if (!checked) {
+    removeRaster(filename);
+    status.textContent = `已移除栅格：${filename}`;
+    return;
+  }
+  if (rasterLayers.has(filename)) return;
+  status.textContent = `正在加载栅格：${filename}`;
+  const pair = await openRasterPair(directoryHandle, filename);
+  const id = `raster-${++sequence}`;
+  try {
+    const metadata = await map.ctx.geoTIFF.addFile(id, pair.file, { overviewFile:pair.overviewFile });
+    rasterLayers.set(filename, { id, metadata, file:pair.file });
+    updateCounts();
+    status.textContent = pair.overviewFile
+      ? `已加载栅格：${filename} + ${pair.overviewFile.name}`
+      : `已加载栅格：${filename}`;
+  } catch (error) {
+    map.ctx.raster.remove(id);
+    const input = Array.from(document.querySelectorAll('#raster-list input[type="checkbox"]')).find(node => node.value === filename);
+    if (input) input.checked = false;
+    throw error;
+  }
+}
+
+async function chooseRasterDirectory() {
+  if (typeof window.showDirectoryPicker !== 'function') return;
+  try {
+    const handle = await window.showDirectoryPicker({ mode:'read' });
+    for (const filename of Array.from(rasterLayers.keys())) removeRaster(filename);
+    directoryHandle = handle;
+    const names = await listGeoTIFFs(handle);
+    const list = document.getElementById('raster-list');
+    list.replaceChildren();
+    for (const name of names) {
+      const row = document.createElement('label');
+      row.className = 'layer-row';
+      const input = document.createElement('input');
+      input.type = 'checkbox'; input.value = name;
+      const text = document.createElement('span'); text.textContent = name;
+      row.append(input, text, document.createElement('span'));
+      list.append(row);
+    }
+    document.getElementById('raster-row').hidden = false;
+    document.getElementById('directory-status').textContent = names.length
+      ? `已授权 ${handle.name}，找到 ${names.length} 个 TIFF。`
+      : '该目录没有 .tif / .tiff 文件。';
+    updateCounts();
+  } catch (error) {
+    if (error?.name !== 'AbortError') status.textContent = `目录选择失败：${error.message}`;
+  }
+}
+async function fitAll() {
+  const bounds = new emap.Bounds();
+  for (const item of vectorSources.values()) {
+    const extent = item.source.getExtent();
+    if (extent.hasBounds()) bounds.merge(extent);
+  }
+  for (const item of rasterLayers.values()) {
+    const rasterBounds = await map.ctx.raster.getBounds(item.id);
+    bounds.merge(new emap.Bounds(...rasterBounds));
+  }
+  if (bounds.hasBounds()) map.fitBounds(bounds, { padding:40, duration:0 });
+}
+
+async function clearAll() {
+  for (const id of Array.from(vectorSources.keys())) removeVectorSource(id);
+  for (const filename of Array.from(rasterLayers.keys())) removeRaster(filename);
+  document.getElementById('vector-list').replaceChildren();
+  document.querySelectorAll('#raster-list input[type="checkbox"]').forEach(input => { input.checked = false; });
+  updateCounts();
+  status.textContent = '已清空全部矢量与栅格数据';
+}
+
+document.getElementById('vector-input').onchange = async event => {
+  const files = Array.from(event.target.files ?? []);
+  for (const file of files) {
+    try { await addVectorFile(file); }
+    catch (error) { console.error(error); status.textContent = `矢量导入失败（${file.name}）：${error.message}`; }
+  }
+  event.target.value = '';
+};
+const directoryPicker = document.getElementById('directory-picker');
+if (typeof window.showDirectoryPicker !== 'function') {
+  directoryPicker.disabled = true;
+  directoryPicker.textContent = '当前浏览器不支持目录授权';
+}
+directoryPicker.onclick = () => void chooseRasterDirectory();
+document.getElementById('raster-list').onchange = event => {
+  const input = event.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const filename = input.value, checked = input.checked;
+  rasterQueue = rasterQueue.then(() => setRasterChecked(filename, checked)).catch(error => {
+    console.error(error);
+    status.textContent = `栅格导入失败（${filename}）：${error.message}`;
+  });
+};
+document.getElementById('fit-all').onclick = () => void fitAll();
+document.getElementById('clear-all').onclick = () => void clearAll();
+
+window.addEventListener('pagehide', () => {
+  releaseFlatGeobuf();
+  void map.dispose();
+}, { once:true });
+
+updateCounts();
+status.textContent = '可同时添加多个矢量文件，并从目录勾选多个 GeoTIFF。';
+await installExampleMapUi(map, emap);
+</script>
+</body>
+</html>
