@@ -32,24 +32,6 @@ describe('RenderScheduler', () => {
     expect(fullRedraw).not.toHaveBeenCalled();
   });
 
-  it('uses fast-nav when an in-progress redraw was interrupted, even after a fast committed frame', () => {
-    const fullRedraw = vi.fn();
-    const fastNav = vi.fn();
-    const scheduler = new RenderScheduler({
-      fullRedraw,
-      requestRedraw: vi.fn(),
-      fastNav,
-      getSnapshot: () => snapshot(),
-    });
-
-    scheduler.recordFrame(16, snapshot());
-    scheduler.notifyFrameInterrupted();
-    scheduler.schedule({ action: 'nav', navDelta: { tx: 8, ty: 3, sx: 1, sy: 1 } });
-
-    expect(fastNav).toHaveBeenCalledWith({ tx: 8, ty: 3, sx: 1, sy: 1 });
-    expect(fullRedraw).not.toHaveBeenCalled();
-  });
-
   it('falls back to a full redraw when the latest frame was fast', () => {
     const fullRedraw = vi.fn();
     const scheduler = new RenderScheduler({

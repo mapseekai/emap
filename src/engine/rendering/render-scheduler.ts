@@ -24,7 +24,6 @@ export class RenderScheduler {
   private _redrawPending = false;
   private _settleRequested = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
-  private _preferFastNav = false;
 
   constructor(private _callbacks: RenderCallbacks) {}
 
@@ -44,12 +43,6 @@ export class RenderScheduler {
   recordFrame(ms: number, snapshot: RenderSnapshot): void {
     this._lastFrameMs = ms;
     this._snapshot = snapshot;
-    this._preferFastNav = false;
-  }
-
-  /** Prefer the last committed frame when an in-progress redraw was interrupted by navigation. */
-  notifyFrameInterrupted(): void {
-    this._preferFastNav = true;
   }
 
   notifyInteractionEnd(hasPendingNav = false): void {
@@ -89,7 +82,7 @@ export class RenderScheduler {
 
   private _shouldUseFastNav(): boolean {
     if (!this._snapshot) return false;
-    if (!this._preferFastNav && this._lastFrameMs <= SLOW_FRAME_MS) return false;
+    if (this._lastFrameMs <= SLOW_FRAME_MS) return false;
 
     const current = this._callbacks.getSnapshot();
     if (current.canvasWidth !== this._snapshot.canvasWidth) return false;

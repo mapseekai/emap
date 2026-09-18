@@ -20,8 +20,6 @@ export interface LayerRendererContext {
   sources: ReadonlyMap<string, MutableTopologySource>;
   viewport: Viewport;
   painter: CorePainter;
-  /** Stable painter identity used by point-LOD caches when drawing is recorded. */
-  lodPainter?: CorePainter;
   /** 可选：缺省时表达式/烘焙样式不解析（静态路径）。 */
   styleResolver?: StyleResolver;
   /** 可选：图层显示过滤器掩码解析器。 */
@@ -102,7 +100,7 @@ export function renderLayers(
   pixelSize: number,
   lineScale: number,
 ): void {
-  const pointLod = pointLodForPainter(ctx.lodPainter ?? ctx.painter);
+  const pointLod = pointLodForPainter(ctx.painter);
   pointLod.retainLayers(new Set(ctx.layers.map((layer) => layer.id)));
   for (const layer of ctx.layers) {
     if (layer.layout?.visibility === 'none') continue;
