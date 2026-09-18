@@ -201,6 +201,10 @@ class WorkerRasterSource implements RasterSource {
   private readonly lifetime = new AbortController();
   private closed = false;
   private reservedBytes = 0;
+  private acceptedTasks = 0;
+  private dispatchedTasks = 0;
+  private decodeBudgetBlocks = 0;
+  private largestJobBytes = 0;
   private peakWorkers = 0;
   private renderedTiles = 0;
   private lastLevel: number | null = null;
@@ -471,6 +475,8 @@ class WorkerRasterSource implements RasterSource {
       const meshBytes = command.type === 'render' ? command.request.warp.points.byteLength : 0;
       const cleanup = () => signal?.removeEventListener('abort', abort);
       const job: Job = { command, bytes, signal, resolve, reject, cleanup };
+      this.acceptedTasks++;
+      this.largestJobBytes = Math.max(this.largestJobBytes, bytes);
       const abort = () => {
         const index = this.queue.indexOf(job);
         if (index < 0) return;
@@ -511,7 +517,10 @@ class WorkerRasterSource implements RasterSource {
       let slot: Slot | undefined;
       for (let candidate = 0; candidate < this.queue.length; candidate++) {
         const job = this.queue[candidate];
-        if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) continue;
+        if (this.reservedBytes + job.bytes > RASTER_MAX_DECODE_BYTES) {
+          this.decodeBudgetBlocks++;
+          continue;
+        }
         const preferred = this.slotForJob(job);
         if (!preferred) continue;
         index = candidate;
@@ -525,6 +534,7 @@ class WorkerRasterSource implements RasterSource {
         this.queuedMeshBytes -= job.command.request.warp.points.byteLength;
       slot.bytes = job.bytes;
       this.reservedBytes += job.bytes;
+      this.dispatchedTasks++;
       const transfer: Transferable[] =
         job.command.type === 'render'
           ? [job.command.request.warp.points.buffer as ArrayBuffer]
@@ -697,6 +707,11 @@ class WorkerRasterSource implements RasterSource {
       peakWorkers: this.peakWorkers,
       queuedTasks: this.queue.length,
       reservedBytes: this.reservedBytes,
+      acceptedTasks: this.acceptedTasks,
+      dispatchedTasks: this.dispatchedTasks,
+      decodeBudgetBlocks: this.decodeBudgetBlocks,
+      largestJobBytes: this.largestJobBytes,
+      decodeBudgetBytes: RASTER_MAX_DECODE_BYTES,
       renderedTiles: this.renderedTiles,
       lastLevel: this.lastLevel,
       levelActivity: [...this.levelActivity.entries()]

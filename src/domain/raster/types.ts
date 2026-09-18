@@ -192,6 +192,16 @@ export interface RasterProcessingStats {
   readonly peakWorkers: number;
   readonly queuedTasks: number;
   readonly reservedBytes: number;
+  /** Cumulative source jobs accepted by the GeoTIFF queue. */
+  readonly acceptedTasks: number;
+  /** Cumulative jobs actually dispatched to a Worker. */
+  readonly dispatchedTasks: number;
+  /** Scheduler scans blocked because the decoded-output memory budget would be exceeded. */
+  readonly decodeBudgetBlocks: number;
+  /** Largest decoded-output reservation requested by any accepted job. */
+  readonly largestJobBytes: number;
+  /** Configured aggregate decoded-output reservation ceiling. */
+  readonly decodeBudgetBytes: number;
   readonly renderedTiles: number;
   readonly lastLevel: number | null;
   /** Cumulative render activity grouped by the actual pyramid level dispatched to workers. */
