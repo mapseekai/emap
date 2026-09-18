@@ -31,6 +31,22 @@ describe('bounded local range source', () => {
     await source.close();
     await expect(source.fetch([{ offset: 0, length: 1 }])).rejects.toThrow(/SOURCE_CLOSED/);
   });
+  it('allows a 128MiB cumulative strip budget without allowing a single range above 64MiB', async () => {
+    const blob = new Blob([new Uint8Array(1)]);
+    Object.defineProperty(blob, 'size', { value: 256 * 1024 ** 2 });
+    const source = new LocalRasterFileSource(blob);
+    source.beginRead(128 * 1024 ** 2);
+    for (let i = 0; i < 3; i++)
+      await source.fetch([{ offset: i * 40 * 1024 ** 2, length: 40 * 1024 ** 2 }]);
+    await expect(
+      source.fetch([{ offset: 3 * 40 * 1024 ** 2, length: 40 * 1024 ** 2 }]),
+    ).rejects.toThrow(/RASTER_IO_BUDGET/);
+    source.beginRead(128 * 1024 ** 2);
+    await expect(source.fetch([{ offset: 0, length: 65 * 1024 ** 2 }])).rejects.toThrow(
+      /RASTER_IO_BUDGET/,
+    );
+    await source.close();
+  });
   it('guards malicious directory entry counts before decoder allocations', async () => {
     const bytes = makeRasterFixture();
     new DataView(bytes.buffer).setUint16(8, 65535, true);

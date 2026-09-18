@@ -123,7 +123,7 @@ describe('raster display tiles', () => {
       distant.level.id,
     );
   });
-  it('allows modest overview oversampling only for tiled pyramids', () => {
+  it('allows modest overview oversampling for tiled overviews, including strip-backed bases', () => {
     const tiledBase = {
       ...metadata.levels[0],
       source: 'base' as const,
@@ -156,7 +156,15 @@ describe('raster display tiles', () => {
       identity,
       4,
     );
-    expect(striped.level.id).toBe(0);
+    expect(striped.level.id).toBe(1);
+
+    const stripedTooClose = selectRasterLevel(
+      { ...metadata, levels: [stripedBase, tiledOverview] },
+      [0, 0, 5.6, 5.6],
+      identity,
+      4,
+    );
+    expect(stripedTooClose.level.id).toBe(0);
 
     const tooClose = selectRasterLevel(
       { ...metadata, levels: [tiledBase, tiledOverview] },

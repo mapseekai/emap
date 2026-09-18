@@ -1,7 +1,7 @@
 import { colorizeRasterTile, planRasterTile } from '../../engine/rendering/raster/tile';
 import { describe, expect, it, vi } from 'vitest';
 import { GeoTIFFImage } from 'geotiff';
-import { GeoTIFFReader } from './reader';
+import { GeoTIFFReader, readBudgetForLevel } from './reader';
 import { RASTER_PYRAMID_THRESHOLD } from '../../domain/raster/policy';
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
 
@@ -48,6 +48,32 @@ describe('local GeoTIFF source', () => {
     expect(rgba[rgba.length - 4]).toBe(255);
     expect(result.data[0][0]).toBe(offset);
     expect(rgba[3]).toBe(255);
+    source.dispose();
+  });
+  it('uses the larger cumulative I/O budget only for bounded row-striped levels', async () => {
+    const source = await GeoTIFFReader.open(file({ bits: 16, bands: 3, compression: 'deflate' }));
+    const level = source.metadata.levels[0];
+    expect(readBudgetForLevel(level)).toBe(64 * 1024 ** 2);
+    expect(
+      readBudgetForLevel({
+        ...level,
+        width: 54798,
+        height: 56561,
+        tileWidth: 54798,
+        tileHeight: 1,
+        decodedBlockConcurrency: 4,
+      }),
+    ).toBe(128 * 1024 ** 2);
+    expect(
+      readBudgetForLevel({
+        ...level,
+        width: 54798,
+        height: 56561,
+        tileWidth: 54798,
+        tileHeight: 1,
+        decodedBlockConcurrency: undefined,
+      }),
+    ).toBe(64 * 1024 ** 2);
     source.dispose();
   });
   it('publishes bounded decode concurrency only for levels using the native block pipeline', async () => {

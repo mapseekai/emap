@@ -4,7 +4,8 @@ type Slice = { offset: number; length: number };
 /** A geotiff.js range source backed by the original Blob. No full-file arrayBuffer(). */
 export class LocalRasterFileSource {
   private bytes = 0;
-  private limit = 32 * 1024 ** 2;
+  private cumulativeLimit = 32 * 1024 ** 2;
+  private singleRangeLimit = 32 * 1024 ** 2;
   private closed = false;
   private cacheEnabled = false;
   private readonly pages = new Map<number, ArrayBuffer>();
@@ -43,9 +44,16 @@ export class LocalRasterFileSource {
       pageMisses: this.pageMisses,
     };
   }
-  beginRead(): void {
+  beginRead(cumulativeLimit = 64 * 1024 ** 2): void {
+    if (
+      !Number.isSafeInteger(cumulativeLimit) ||
+      cumulativeLimit < 64 * 1024 ** 2 ||
+      cumulativeLimit > 128 * 1024 ** 2
+    )
+      throw new RasterError('INVALID_RASTER_BUDGET', 'Read budget must be 64–128MiB.');
     this.bytes = 0;
-    this.limit = 64 * 1024 ** 2;
+    this.cumulativeLimit = cumulativeLimit;
+    this.singleRangeLimit = 64 * 1024 ** 2;
     this.cacheEnabled = true;
   }
   async fetch(slices: Slice[], signal?: AbortSignal): Promise<ArrayBuffer[]> {
@@ -70,7 +78,7 @@ export class LocalRasterFileSource {
     ) {
       throw new RasterError('INVALID_TIFF_OFFSET', 'Invalid or unsafe TIFF byte range.');
     }
-    if (length > this.limit)
+    if (length > this.singleRangeLimit)
       throw new RasterError(
         'RASTER_IO_BUDGET',
         'Requested TIFF byte range exceeds the read budget.',
@@ -110,7 +118,7 @@ export class LocalRasterFileSource {
     if (this.closed || !file)
       throw new RasterError('SOURCE_CLOSED', 'Raster source has been closed.');
     this.bytes += Math.min(length, this.fileSize - offset);
-    if (this.bytes > this.limit)
+    if (this.bytes > this.cumulativeLimit)
       throw new RasterError(
         'RASTER_IO_BUDGET',
         'TIFF physical range reads exceed the bounded I/O budget.',

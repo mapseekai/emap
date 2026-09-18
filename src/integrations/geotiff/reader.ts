@@ -37,6 +37,16 @@ export interface GeoTIFFOpenOptions {
   readonly signal?: AbortSignal;
 }
 
+const DEFAULT_READ_BUDGET_BYTES = 64 * 1024 ** 2;
+const ROW_STRIPED_READ_BUDGET_BYTES = 128 * 1024 ** 2;
+
+export function readBudgetForLevel(level: RasterLevel): number {
+  const rowStriped = level.tileWidth >= level.width && level.tileHeight < level.height;
+  return rowStriped && (level.decodedBlockConcurrency ?? 0) > 0
+    ? ROW_STRIPED_READ_BUDGET_BYTES
+    : DEFAULT_READ_BUDGET_BYTES;
+}
+
 export interface GeoTIFFReaderRuntime {
   readonly cacheBytes?: number;
   readonly pageLimit?: number;
@@ -490,7 +500,7 @@ export class GeoTIFFReader implements RasterSource {
   ): Promise<InterleavedRgb8Window> {
     signal?.throwIfAborted();
     this.lifetime.signal.throwIfAborted();
-    validateRasterRead(this.metadata.levels, request);
+    const level = validateRasterRead(this.metadata.levels, request);
     if (!this.supportsInterleavedRgb8(request.level))
       throw new RasterError('UNSUPPORTED_SAMPLES', 'Interleaved RGB8 fast path is unavailable.');
     if (this.pending >= 16)
@@ -504,7 +514,8 @@ export class GeoTIFFReader implements RasterSource {
       signal?.addEventListener('abort', abort, { once: true });
       this.lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
-        for (const source of this.sources) source.beginRead();
+        const readBudget = readBudgetForLevel(level);
+        for (const source of this.sources) source.beginRead(readBudget);
         const image = this.images.get(request.level)!;
         const result = await readInterleavedRgb8Window(image, request, controller.signal);
         controller.signal.throwIfAborted();
@@ -528,7 +539,7 @@ export class GeoTIFFReader implements RasterSource {
   async readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
     signal?.throwIfAborted();
     this.lifetime.signal.throwIfAborted();
-    validateRasterRead(this.metadata.levels, request);
+    const level = validateRasterRead(this.metadata.levels, request);
     if (this.pending >= 16)
       throw new RasterError('RASTER_QUEUE_BUDGET', 'Too many queued raster reads.');
     this.pending++;
@@ -540,7 +551,8 @@ export class GeoTIFFReader implements RasterSource {
       signal?.addEventListener('abort', abort, { once: true });
       this.lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
-        for (const source of this.sources) source.beginRead();
+        const readBudget = readBudgetForLevel(level);
+        for (const source of this.sources) source.beginRead(readBudget);
         const image = this.images.get(request.level)!;
         const result = await readNumericWindow(image, request, controller.signal);
         controller.signal.throwIfAborted();

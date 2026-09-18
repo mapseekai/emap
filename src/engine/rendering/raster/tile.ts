@@ -16,11 +16,14 @@ import type { RasterCoordinateTransform } from './projector';
 export const RASTER_TILE_SIZE = 256;
 // Near a pyramid boundary, decoding full-resolution tiled blocks can cost several times
 // more I/O/CPU than using the next tiled overview. Bound that quality tradeoff: an
-// overview pixel may cover at most 1.4 display pixels. Strip-backed bases stay strict.
+// overview pixel may cover at most 1.4 display pixels. Row-striped bases may also use a tiled overview.
 const TILED_OVERVIEW_MAX_UPSAMPLING = 1.4;
 
 function isSpatiallyTiled(level: RasterLevel): boolean {
   return level.tileWidth < level.width && level.tileHeight < level.height;
+}
+function isRowStriped(level: RasterLevel): boolean {
+  return level.tileWidth >= level.width && level.tileHeight < level.height;
 }
 export interface RasterLevelSelection {
   readonly level: RasterLevel;
@@ -69,7 +72,9 @@ function rasterLevelContext(
   for (const candidate of metadata.levels.slice(1)) {
     const reduction = Math.max(base.width / candidate.width, base.height / candidate.height);
     const oversampling =
-      isSpatiallyTiled(base) && isSpatiallyTiled(candidate) ? TILED_OVERVIEW_MAX_UPSAMPLING : 1;
+      isSpatiallyTiled(candidate) && (isSpatiallyTiled(base) || isRowStriped(base))
+        ? TILED_OVERVIEW_MAX_UPSAMPLING
+        : 1;
     if (reduction <= sourcePixelsPerDisplayPixel * oversampling && candidate.width < level.width)
       level = candidate;
   }
