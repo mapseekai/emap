@@ -5,7 +5,8 @@ import type { PointLodPick } from '../../map/feature-query';
 import { renderLayers } from '../../map/layer-renderer';
 import { type AffineDelta, type RenderAction, type RenderRequest } from '../../map/types';
 import { EditOverlayRenderer } from '../../rendering/edit-overlay-renderer';
-import { type EditPainter } from '../../rendering/painter';
+import { CooperativePainter } from '../../rendering/cooperative-painter';
+import { type CorePainter, type EditPainter } from '../../rendering/painter';
 import { pointLodForPainter } from '../../rendering/point-lod';
 import { RenderScheduler, type RenderSnapshot } from '../../rendering/render-scheduler';
 import { getLayerId } from '../../../domain/source/layer-utils';
@@ -56,7 +57,10 @@ export class CanvasRenderService {
     };
   }
 
-  private _renderPasses(stage: 'before-layers' | 'after-layers'): void {
+  private _renderPasses(
+    stage: 'before-layers' | 'after-layers',
+    painter: EditPainter = this._painter,
+  ): void {
     if (!this._passes.size) return;
     const viewport = this.deps.view._viewport;
     const frame: RenderFrame = {
@@ -64,7 +68,7 @@ export class CanvasRenderService {
       width: viewport.width,
       height: viewport.height,
       pixelRatio: window.devicePixelRatio || 1,
-      painter: this._painter,
+      painter,
     };
     for (const [pass, position] of this._passes) {
       if (position !== stage) continue;
@@ -77,6 +81,10 @@ export class CanvasRenderService {
   }
 
   beginNavigation(): void {
+    if (this._renderInFlight) {
+      this._scheduler.notifyFrameInterrupted();
+      this._renderEpoch++;
+    }
     this._ensureNavSnapshot();
   }
   updateNavigation(): void {
@@ -105,6 +113,16 @@ export class CanvasRenderService {
   _canvas!: HTMLCanvasElement;
 
   _painter!: EditPainter;
+
+  _renderCanvas!: HTMLCanvasElement;
+
+  _renderPainter!: EditPainter;
+
+  _cooperativePainter!: CooperativePainter;
+
+  _renderEpoch = 0;
+
+  _renderInFlight = false;
 
   _overlayPainter!: EditPainter;
 
@@ -169,6 +187,7 @@ export class CanvasRenderService {
     const height = this.deps.surface._container.clientHeight;
     this.deps.view._viewport.updateSize(width, height);
     this._painter.resize(width, height);
+    this._renderPainter?.resize(width, height);
     this._overlayPainter.resize(width, height);
   }
 
@@ -235,30 +254,103 @@ export class CanvasRenderService {
   }
 
   _renderFull(): void {
-    this._clearFastTransform();
+    const epoch = ++this._renderEpoch;
     const t0 = performance.now();
-    this._renderImpl();
-    // A full frame during a gesture replaces the bitmap that fast-nav transforms.
-    if (this._navSnapshotTransform) {
-      const { mx, my, bx, by } = this.deps.view._viewport.transform;
-      this._navSnapshotTransform = { mx, my, bx, by };
+    const isCurrent = () =>
+      !this.deps.document._removed && !this.deps.signal.aborted && epoch === this._renderEpoch;
+    this._renderInFlight = true;
+    const result = this._renderImpl(epoch, isCurrent);
+    if (!result || typeof (result as Promise<boolean>).then !== 'function') {
+      this._finishRender(epoch, t0, result !== false, isCurrent);
+      return;
     }
-    this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
+    void (result as Promise<boolean>).then((completed) =>
+      this._finishRender(epoch, t0, completed, isCurrent),
+    );
   }
 
-  _renderImpl(): void {
-    const transform = this.deps.view._viewport.transform;
-    this._painter.setTransform(transform);
+  private _finishRender(
+    epoch: number,
+    startedAt: number,
+    completed: boolean,
+    isCurrent: () => boolean,
+  ): void {
+    try {
+      if (!completed || !isCurrent()) return;
+      this._commitRenderCanvas();
+      // A committed full frame during a gesture becomes the new fast-nav snapshot origin.
+      if (this._navSnapshotTransform) {
+        const { mx, my, bx, by } = this.deps.view._viewport.transform;
+        this._navSnapshotTransform = { mx, my, bx, by };
+      }
+      this._scheduler.recordFrame(performance.now() - startedAt, this._captureRenderSnapshot());
+      this._renderEditOverlay();
+    } finally {
+      if (epoch === this._renderEpoch) this._renderInFlight = false;
+    }
+  }
 
-    this._painter.clear();
+  private _renderImpl(epoch: number, isCurrent: () => boolean): boolean | Promise<boolean> {
+    const current = this.deps.view._viewport.transform;
+    if (!this._renderPainter || !this._cooperativePainter) {
+      this._painter.setTransform(current);
+      this._painter.clear();
+      const lineScale = this.deps.view._viewport.getLineScale();
+      const pixelSize = 1 / Math.abs(current.mx);
+      this._renderPasses('before-layers');
+      this._renderLayers(pixelSize, lineScale);
+      this._renderPasses('after-layers');
+      this._renderHighlight(current, lineScale);
+      this._renderEditOverlay();
+      return true;
+    }
+    const transform = new AffineTransform(current.mx, current.my, current.bx, current.by);
+    this._renderPainter.setTransform(transform);
+    this._renderPainter.clear();
 
     const lineScale = this.deps.view._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
-    this._renderPasses('before-layers');
-    this._renderLayers(pixelSize, lineScale);
-    this._renderPasses('after-layers');
-    this._renderHighlight(transform, lineScale);
-    this._renderEditOverlay();
+    this._renderPasses('before-layers', this._renderPainter);
+    if (!isCurrent()) return false;
+
+    this._cooperativePainter.reset();
+    this._renderLayers(pixelSize, lineScale, this._cooperativePainter);
+    if (!isCurrent()) return false;
+    const replay = this._cooperativePainter.replay(isCurrent);
+    if (typeof replay === 'boolean')
+      return this._finishRenderImpl(epoch, transform, lineScale, replay, isCurrent);
+    return replay.then((completed) =>
+      this._finishRenderImpl(epoch, transform, lineScale, completed, isCurrent),
+    );
+  }
+
+  private _finishRenderImpl(
+    epoch: number,
+    transform: AffineTransform,
+    lineScale: number,
+    completed: boolean,
+    isCurrent: () => boolean,
+  ): boolean {
+    if (!completed || !isCurrent()) return false;
+    this._renderPasses('after-layers', this._renderPainter);
+    if (!isCurrent()) return false;
+    this._renderHighlight(transform, lineScale, this._renderPainter);
+    return epoch === this._renderEpoch;
+  }
+
+  private _commitRenderCanvas(): void {
+    this._clearFastTransform();
+    if (!this._renderCanvas || !this._canvas || typeof this._canvas.getContext !== 'function')
+      return;
+    const ctx = this._canvas.getContext('2d');
+    if (!ctx || typeof ctx.drawImage !== 'function') return;
+    ctx.save();
+    try {
+      ctx.globalCompositeOperation = 'copy';
+      ctx.drawImage(this._renderCanvas, 0, 0);
+    } finally {
+      ctx.restore();
+    }
   }
 
   _renderEditOverlay(): void {
@@ -307,13 +399,14 @@ export class CanvasRenderService {
     this._canvas.style.transformOrigin = '';
   }
 
-  _renderLayers(pixelSize: number, lineScale: number): void {
+  _renderLayers(pixelSize: number, lineScale: number, painter: CorePainter = this._painter): void {
     renderLayers(
       {
         layers: this.deps.layers._getEffectiveLayers(),
         sources: this.deps.document._sources,
         viewport: this.deps.view._viewport,
-        painter: this._painter,
+        painter,
+        lodPainter: this._painter,
         styleResolver: this.deps.layers._styleResolver,
         filterResolver: this.deps.layers._filterResolver,
         resolveSourceLayer: (sourceId, sourceLayerName) =>
@@ -327,10 +420,14 @@ export class CanvasRenderService {
     );
   }
 
-  _renderHighlight(transform: AffineTransform, lineScale: number): void {
+  _renderHighlight(
+    transform: AffineTransform,
+    lineScale: number,
+    painter: EditPainter = this._painter,
+  ): void {
     const visibleKeys = this.deps.layers._getVisibleLayerKeys();
     this.deps.document._highlightManager.renderHighlights(
-      this._painter,
+      painter,
       this.deps.document._sources,
       transform,
       lineScale,
@@ -364,6 +461,10 @@ export class CanvasRenderService {
     this._overlayPainter = this.deps.painterFactory.create(this._overlayCanvas);
     this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
+    this._renderCanvas = document.createElement('canvas');
+    this._renderPainter = this.deps.painterFactory.create(this._renderCanvas);
+    this._renderPainter.setPixelRatio(window.devicePixelRatio || 1);
+    this._cooperativePainter = new CooperativePainter(this._renderPainter);
     this._scheduler = new RenderScheduler({
       fullRedraw: () => this._renderFull(),
       requestRedraw: () => this._scheduleRender('redraw', undefined, true),
@@ -394,7 +495,9 @@ export class CanvasRenderService {
     this.clearLodCache();
     // Detaching a DOM node alone does not release backing pixels when a host
     // still retains a disposed map/provider handle for diagnostics.
-    for (const canvas of [this._canvas, this._overlayCanvas]) {
+    this._renderEpoch++;
+    this._renderInFlight = false;
+    for (const canvas of [this._canvas, this._renderCanvas, this._overlayCanvas]) {
       if (!canvas) continue;
       canvas.width = 0;
       canvas.height = 0;
