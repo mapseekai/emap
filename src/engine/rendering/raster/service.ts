@@ -131,6 +131,14 @@ export class RasterRenderService implements RasterContract {
   private loadTileFailed = 0;
   private pumpBlockedGestures = 0;
   private pumpBlockedSettleTimer = 0;
+  private readonly taskErrors: Array<{
+    stage: 'planRasterTile' | 'loadTile';
+    name: string;
+    code: string | null;
+    message: string;
+    selectedLevel: number;
+    blockSize: readonly [number, number] | null;
+  }> = [];
   private readonly plannedLevels = new Map<number, number>();
   private planningDiagnostics: RasterPlanningDiagnostics | null = null;
   private canvasUploadMs = 0;
@@ -509,7 +517,24 @@ export class RasterRenderService implements RasterContract {
     signal.throwIfAborted();
     this.loadTileStarted++;
     const { source, style } = task.layer;
-    const plan = planRasterTile(source.metadata, task.bounds, task.toSource, style);
+    let plan: ReturnType<typeof planRasterTile>;
+    try {
+      plan = planRasterTile(source.metadata, task.bounds, task.toSource, style);
+    } catch (error) {
+      if (this.taskErrors.length < 5) {
+        const value = error as { name?: unknown; code?: unknown; message?: unknown };
+        const level = source.metadata.levels.find((item) => item.id === task.selectedLevel);
+        this.taskErrors.push({
+          stage: 'planRasterTile',
+          name: typeof value?.name === 'string' ? value.name : 'Error',
+          code: typeof value?.code === 'string' ? value.code : null,
+          message: typeof value?.message === 'string' ? value.message : String(error),
+          selectedLevel: task.selectedLevel,
+          blockSize: level ? [level.tileWidth, level.tileHeight] : null,
+        });
+      }
+      throw error;
+    }
     let image: HTMLCanvasElement | null = null;
     if (plan) {
       this.planSucceeded++;
@@ -946,6 +971,7 @@ export class RasterRenderService implements RasterContract {
         loadTileFailed: this.loadTileFailed,
       },
       pumpBlocked: { gestures: this.pumpBlockedGestures, settleTimer: this.pumpBlockedSettleTimer },
+      taskErrors: this.taskErrors.map((item) => ({ ...item })),
       interacting: this.gestures.size > 0 || this.settleTimer !== null,
       planning: this.planningDiagnostics,
       plannedLevels: [...this.plannedLevels.entries()]

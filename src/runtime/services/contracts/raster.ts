@@ -106,6 +106,14 @@ export interface RasterCacheStats {
     readonly loadTileFailed: number;
   };
   readonly pumpBlocked: { readonly gestures: number; readonly settleTimer: number };
+  readonly taskErrors: readonly {
+    readonly stage: 'planRasterTile' | 'loadTile';
+    readonly name: string;
+    readonly code: string | null;
+    readonly message: string;
+    readonly selectedLevel: number;
+    readonly blockSize: readonly [number, number] | null;
+  }[];
   readonly interacting: boolean;
   /** Cumulative counters; snapshot twice to diagnose one navigation operation. */
   readonly performance: RasterPerformanceTotals;

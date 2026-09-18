@@ -205,6 +205,7 @@ function performanceSnapshot() {
       gestures:performanceDelta(stats.pumpBlocked,before.stats.pumpBlocked,'gestures'),
       settleTimer:performanceDelta(stats.pumpBlocked,before.stats.pumpBlocked,'settleTimer'),
     },
+    taskErrors: stats.taskErrors ?? [],
     sourceDispatch: {
       accepted:performanceDelta(processing,bproc,'acceptedTasks'),
       dispatched:performanceDelta(processing,bproc,'dispatchedTasks'),
