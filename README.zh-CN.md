@@ -229,10 +229,12 @@ import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 
 ```ts
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
-await map.ctx.plugin(geoPackagePlugin({
-  workerUrl: '/assets/emap-geopackage-worker.js',
-  wasmUrl: '/assets/sql-wasm.wasm',
-}));
+await map.ctx.plugin(
+  geoPackagePlugin({
+    workerUrl: '/assets/emap-geopackage-worker.js',
+    wasmUrl: '/assets/sql-wasm.wasm',
+  }),
+);
 const source = new TopologySource('gpkg', { formats: map.formats });
 await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
 await map.addSource('gpkg', source);
@@ -249,16 +251,17 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 ```
 
 ```ts
-import {
-  createDuckDbRuntimeFromJsDelivr,
-  attributeFilter,
-} from '@mapseekai/emap/duckdb';
+import { createDuckDbRuntimeFromJsDelivr, attributeFilter } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
 
-const result = await attributeFilter(source.getDataset()!, {
-  sql: 'SELECT geometry, name FROM input WHERE active = true',
-}, runtime);
+const result = await attributeFilter(
+  source.getDataset()!,
+  {
+    sql: 'SELECT geometry, name FROM input WHERE active = true',
+  },
+  runtime,
+);
 ```
 
 属性筛选接口只接受受限的单条 `SELECT`。DuckDB 处理工具箱提供 Overlay、Proximity、Aggregate、Join、Geometry、Transform、Selection 和 Data Management 八类操作。距离类操作默认拒绝地理坐标系，结果不会以角度为单位。

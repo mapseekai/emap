@@ -235,10 +235,12 @@ The optional `/geopackage` entry reads NGA SQLite WASM → GP Binary/WKB → Typ
 
 ```ts
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
-await map.ctx.plugin(geoPackagePlugin({
-  workerUrl: '/assets/emap-geopackage-worker.js',
-  wasmUrl: '/assets/sql-wasm.wasm',
-}));
+await map.ctx.plugin(
+  geoPackagePlugin({
+    workerUrl: '/assets/emap-geopackage-worker.js',
+    wasmUrl: '/assets/sql-wasm.wasm',
+  }),
+);
 const source = new TopologySource('gpkg', { formats: map.formats });
 await source.setData({ filename: file.name, content: new Uint8Array(await file.arrayBuffer()) });
 await map.addSource('gpkg', source);
@@ -255,16 +257,17 @@ pnpm add @duckdb/duckdb-wasm apache-arrow
 ```
 
 ```ts
-import {
-  createDuckDbRuntimeFromJsDelivr,
-  attributeFilter,
-} from '@mapseekai/emap/duckdb';
+import { createDuckDbRuntimeFromJsDelivr, attributeFilter } from '@mapseekai/emap/duckdb';
 
 const runtime = await createDuckDbRuntimeFromJsDelivr();
 
-const result = await attributeFilter(source.getDataset()!, {
-  sql: 'SELECT geometry, name FROM input WHERE active = true',
-}, runtime);
+const result = await attributeFilter(
+  source.getDataset()!,
+  {
+    sql: 'SELECT geometry, name FROM input WHERE active = true',
+  },
+  runtime,
+);
 ```
 
 The attribute-filter API accepts a restricted single-`SELECT` contract. The DuckDB processing toolbox exposes overlay, proximity, aggregate, join, geometry, transform, selection, and data-management operations. Distance-like operations reject geographic CRS by default so results are never measured in degrees.
