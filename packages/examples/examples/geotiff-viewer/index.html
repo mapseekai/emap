@@ -24,6 +24,7 @@
 <p class="emap-example-hint">普通文件选择器无法访问同目录其他文件，因此该兼容方式仍需手动选择 .ovr。</p>
 </details>
 <div class="emap-example-field"><label for="crs">源坐标系（留空自动识别）</label><input id="crs" type="text" placeholder="EPSG:4326" /></div>
+<div class="emap-example-field"><label for="nodata">NoData（留空使用文件值）</label><input id="nodata" type="text" inputmode="decimal" placeholder="例如 -9999；null 表示禁用" /></div>
 <div class="emap-example-field"><label for="sample-type">内置测试影像</label><select id="sample-type"><option value="example-geotiff.tif">8 位 RGB</option><option value="example-geotiff-uint16.tif">16 位无符号整数</option><option value="example-geotiff-int16.tif">16 位带符号整数</option><option value="example-geotiff-float32.tif">32 位浮点 DEM</option><option value="example-geotiff-float64.tif">64 位浮点</option></select></div>
 <div class="emap-example-row"><button id="load" class="emap-example-primary-button">加载选定文件</button><button id="sample">加载示例</button><button id="cancel" disabled>取消</button></div>
 <p id="status" class="emap-example-status" role="status">初始化地图…</p>
@@ -140,13 +141,21 @@ async function load(file, overviewFile) {
   document.getElementById('cancel').disabled = false;
   status.textContent = '检查金字塔与资源预算，抽样统计波段范围…';
   try {
-    const metadata = await map.ctx.geoTIFF.addFile(id, file, { overviewFile, signal, crs: document.getElementById('crs').value || undefined });
+    const noDataText = document.getElementById('nodata').value.trim();
+    const noData = noDataText === '' ? undefined : noDataText.toLowerCase() === 'null' ? null : Number(noDataText);
+    if (typeof noData === 'number' && !Number.isFinite(noData)) throw new Error('NoData 必须是有限数值、null 或留空');
+    const metadata = await map.ctx.geoTIFF.addFile(id, file, {
+      overviewFile,
+      signal,
+      crs: document.getElementById('crs').value || undefined,
+      noData,
+    });
     if (run !== generation) { map.ctx.raster.remove(id); return; }
     if (currentId) map.ctx.raster.remove(currentId);
     currentId = id; state.currentId = id; state.metadata = metadata; state.file = file;
     document.getElementById('size').textContent = `${(file.size / 1024 ** 2).toFixed(2)} MiB`;
     document.getElementById('levels').textContent = String(metadata.levels.length);
-    document.getElementById('metadata').textContent = JSON.stringify({ filename: metadata.filename, crs: metadata.crs, bounds: metadata.bounds, levels: metadata.levels.map(level => `${level.width} × ${level.height}`), bigTiff: metadata.bigTiff, externalOverview: metadata.overviewFile?.filename ?? null, bits: metadata.levels[0].bits, sampleFormats: metadata.levels[0].formats, statistics: metadata.statistics, storage: 'external-file' }, null, 2);
+    document.getElementById('metadata').textContent = JSON.stringify({ filename: metadata.filename, crs: metadata.crs, bounds: metadata.bounds, levels: metadata.levels.map(level => `${level.width} × ${level.height}`), bigTiff: metadata.bigTiff, externalOverview: metadata.overviewFile?.filename ?? null, noData: metadata.noData, bits: metadata.levels[0].bits, sampleFormats: metadata.levels[0].formats, statistics: metadata.statistics, storage: 'external-file' }, null, 2);
     document.getElementById('opacity').value = '1';
     document.getElementById('stretch').value = 'auto';
     document.getElementById('resampling').value = 'nearest';
