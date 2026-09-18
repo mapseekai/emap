@@ -18,8 +18,8 @@ export class RasterBlockCache {
   private peakEntries = 0;
   constructor(private limit = 8 * 1024 ** 2) {}
   setLimit(limit: number): void {
-    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 64 * 1024 ** 2)
-      throw new RangeError('Raster block cache limit must be 0–64MiB.');
+    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 128 * 1024 ** 2)
+      throw new RangeError('Raster block cache limit must be 0–128MiB.');
     this.limit = limit;
     while (this.retainedBytes > this.limit || this.entries.size > 4096) {
       const oldest = this.entries.keys().next().value;

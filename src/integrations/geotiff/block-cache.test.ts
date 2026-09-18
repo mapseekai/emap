@@ -59,6 +59,12 @@ describe('bounded decoded TIFF block cache', () => {
     expect(cache.get('b')).toBeUndefined();
     expect(cache.getDiagnostics()).toMatchObject({ limitBytes: 8, evictions: 2, evictedBytes: 8 });
   });
+  it('allows striped caches up to 128MiB but rejects larger limits', () => {
+    const cache = new RasterBlockCache(8);
+    expect(() => cache.setLimit(128 * 1024 ** 2)).not.toThrow();
+    expect(cache.getDiagnostics().limitBytes).toBe(128 * 1024 ** 2);
+    expect(() => cache.setLimit(128 * 1024 ** 2 + 1)).toThrow(/0–128MiB/);
+  });
   it('accounts replacements and prevents late completion from repopulating disposed caches', () => {
     const cache = new RasterBlockCache(16);
     cache.set('a', new ArrayBuffer(8));

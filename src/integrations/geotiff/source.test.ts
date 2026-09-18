@@ -494,7 +494,8 @@ describe('parallel raster pipeline pool', () => {
   });
   it.each([
     [20_000, 44],
-    [54_798, 64],
+    [54_798, 121],
+    [100_000, 128],
   ] as const)(
     'sizes a %i-pixel row-striped primary cache from its decoded working set',
     async (width, expectedMiB) => {
