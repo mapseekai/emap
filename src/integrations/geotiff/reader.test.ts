@@ -50,6 +50,19 @@ describe('local GeoTIFF source', () => {
     expect(rgba[3]).toBe(255);
     source.dispose();
   });
+  it('publishes bounded decode concurrency only for levels using the native block pipeline', async () => {
+    const bounded = await GeoTIFFReader.open(
+      file({ bits: 16, bands: 3, compression: 'deflate' }),
+    );
+    expect(bounded.metadata.levels[0].decodedBlockConcurrency).toBe(4);
+    bounded.dispose();
+
+    const fallback = await GeoTIFFReader.open(
+      file({ bits: 16, sampleFormat: 3, bands: 1, compression: 'deflate' }),
+    );
+    expect(fallback.metadata.levels[0].decodedBlockConcurrency).toBeUndefined();
+    fallback.dispose();
+  });
   it('allows NoData to inherit, override, or explicitly disable the TIFF value', async () => {
     const input = file({
       bits: 16,

@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fromArrayBuffer } from 'geotiff';
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
-import { readNumericWindow } from './read-window';
+import { readNumericWindow, supportsBoundedNumericWindow } from './read-window';
 
 async function image(options: Parameters<typeof makeRasterFixture>[0] = {}) {
   const bytes = makeRasterFixture(options);
   return (await fromArrayBuffer(bytes.buffer as ArrayBuffer)).getImage();
 }
 describe('native numeric window assembly', () => {
+  it('advertises bounded block concurrency only for the native numeric pipeline', async () => {
+    const bounded = await image({ bits: 16, bands: 3, compression: 'deflate' });
+    expect(supportsBoundedNumericWindow(bounded)).toBe(true);
+    const fallback = await image({ bits: 16, sampleFormat: 3, bands: 1, compression: 'deflate' });
+    expect(supportsBoundedNumericWindow(fallback)).toBe(false);
+  });
   it.each([
     [8, 1],
     [8, 2],

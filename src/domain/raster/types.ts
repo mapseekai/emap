@@ -17,6 +17,8 @@ export interface RasterLevel {
   readonly height: number;
   readonly tileWidth: number;
   readonly tileHeight: number;
+  /** Provider-guaranteed upper bound for simultaneously decoded physical blocks. Omit for conservative all-block budgeting. */
+  readonly decodedBlockConcurrency?: number;
   readonly samples: number;
   readonly bits: readonly number[];
   readonly formats: readonly number[];

@@ -10,6 +10,22 @@ export function getReadWindowDiagnostics() {
   return { deinterleaveMs };
 }
 
+/** True only when readNumericWindow uses the explicitly bounded four-block pipeline. */
+export function supportsBoundedNumericWindow(image: GeoTIFFImage): boolean {
+  const bits = image.getBitsPerSample(),
+    format = image.getSampleFormat(),
+    compression = image.getFileDirectory().getValue('Compression') ?? 1;
+  return (
+    [1, 5, 8, 32946, 32773].includes(compression) &&
+    !(bits > 8 && image.littleEndian !== NATIVE_LITTLE_ENDIAN) &&
+    !(format === 3 && bits === 16) &&
+    [8, 16, 32, 64].includes(bits) &&
+    !Array.from({ length: image.getSamplesPerPixel() }, (_, i) => i).some(
+      (i) => image.getBitsPerSample(i) !== bits || image.getSampleFormat(i) !== format,
+    )
+  );
+}
+
 async function windowDecoder(image: GeoTIFFImage) {
   const directory = image.getFileDirectory(),
     compression = directory.getValue('Compression') ?? 1,
@@ -45,21 +61,9 @@ export async function readNumericWindow(
 ): Promise<RasterReadResult> {
   signal?.throwIfAborted();
   const { window, samples } = request;
-  const bits = image.getBitsPerSample(),
-    format = image.getSampleFormat();
-  const directory = image.getFileDirectory(),
-    compression = directory.getValue('Compression') ?? 1;
   const w = window[2] - window[0],
     h = window[3] - window[1];
-  if (
-    ![1, 5, 8, 32946, 32773].includes(compression) ||
-    (bits > 8 && image.littleEndian !== NATIVE_LITTLE_ENDIAN) ||
-    (format === 3 && bits === 16) ||
-    ![8, 16, 32, 64].includes(bits) ||
-    Array.from({ length: image.getSamplesPerPixel() }, (_, i) => i).some(
-      (i) => image.getBitsPerSample(i) !== bits || image.getSampleFormat(i) !== format,
-    )
-  ) {
+  if (!supportsBoundedNumericWindow(image)) {
     const result = await image.readRasters({
       window: [...window],
       samples: [...samples],

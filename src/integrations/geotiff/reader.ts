@@ -2,6 +2,7 @@ import {
   getReadWindowDiagnostics,
   readInterleavedRgb8Window,
   readNumericWindow,
+  supportsBoundedNumericWindow,
   type InterleavedRgb8Window,
 } from './read-window';
 import { CachedGeoTIFFImage, RasterBlockCache } from './block-cache';
@@ -59,6 +60,7 @@ function descriptor(
     height: image.getHeight(),
     tileWidth: image.getTileWidth(),
     tileHeight: image.getTileHeight(),
+    ...(supportsBoundedNumericWindow(image) ? { decodedBlockConcurrency: 4 } : {}),
     samples,
     bits,
     formats,

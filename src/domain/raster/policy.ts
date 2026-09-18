@@ -98,10 +98,16 @@ export function validateRasterWindow(
   const bytesPerPixel = level.bits.reduce((sum, _bits, band) => sum + sampleBytes(band), 0);
   const blockColumns = Math.ceil(right / level.tileWidth) - Math.floor(left / level.tileWidth);
   const blockRows = Math.ceil(bottom / level.tileHeight) - Math.floor(top / level.tileHeight);
-  const decodedBlocks =
-    blockColumns * blockRows * level.tileWidth * level.tileHeight * bytesPerPixel;
-  // Account for all source bands in chunky compressed blocks, the assembled window,
-  // and a conservative temporary decode copy. A small output is not a small read.
+  const touchedBlocks = blockColumns * blockRows;
+  const concurrency = level.decodedBlockConcurrency;
+  const residentBlocks =
+    typeof concurrency === 'number' && Number.isSafeInteger(concurrency) && concurrency > 0
+      ? Math.min(touchedBlocks, concurrency)
+      : touchedBlocks;
+  const decodedBlocks = residentBlocks * level.tileWidth * level.tileHeight * bytesPerPixel;
+  // Account for the provider's peak decoded-block working set, the assembled window,
+  // and a conservative temporary decode copy. Providers that do not explicitly
+  // guarantee bounded block concurrency retain the conservative all-block policy.
   const budget =
     2 * decodedBlocks + pixels * samples.reduce((sum, band) => sum + sampleBytes(band), 0);
   if (

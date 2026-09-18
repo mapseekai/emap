@@ -54,6 +54,36 @@ describe('raster preflight policy', () => {
     };
     expect(() => validateRasterWindow(hugeStrip, [0, 0, 10, 10], [0])).toThrow();
   });
+  it('uses a provider-guaranteed decoded-block working set for bounded strip pipelines', () => {
+    const strip = {
+      ...base,
+      width: 54798,
+      height: 56561,
+      tileWidth: 54798,
+      tileHeight: 1,
+      bits: [16, 16, 16],
+      formats: [1, 1, 1],
+    };
+    const window = [1000, 1000, 1236, 1236] as const;
+    expect(() => validateRasterWindow(strip, window, [0, 1, 2])).toThrowError(/RASTER_READ_BUDGET/);
+    expect(() =>
+      validateRasterWindow({ ...strip, decodedBlockConcurrency: 4 }, window, [0, 1, 2]),
+    ).not.toThrow();
+    expect(() =>
+      validateRasterWindow(
+        {
+          ...strip,
+          width: 100000,
+          height: 100000,
+          tileWidth: 100000,
+          tileHeight: 100000,
+          decodedBlockConcurrency: 4,
+        },
+        [0, 0, 10, 10],
+        [0],
+      ),
+    ).toThrowError(/RASTER_READ_BUDGET/);
+  });
   it('rejects non-finite, fractional, inverted, outside or empty windows and invalid bands', () => {
     for (const window of [
       [NaN, 0, 1, 1],
