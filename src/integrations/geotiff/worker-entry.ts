@@ -46,7 +46,6 @@ scope.onmessage = ({ data }) => {
           directoryBytes: reader.directoryBytes,
           protocolVersion: GEOTIFF_WORKER_PROTOCOL_VERSION,
         });
-        reader.clearBlockAccessTrace();
       } finally {
         opening = false;
       }
@@ -56,44 +55,26 @@ scope.onmessage = ({ data }) => {
         reader.setBlockCacheLimit(data.cacheBytes);
         scope.postMessage({ id: data.id, type: 'configured' });
       } else if (data.type === 'render' || data.type === 'render-batch') {
-        const cursor = reader.getBlockAccessCursor();
-        try {
-          if (data.type === 'render') {
-            const result = await renderRasterWindow(reader, data.request, controller.signal);
-            const blockAccess = reader.takeBlockAccessesSince(cursor),
-              nativeDeflateStatus = reader.getNativeDeflateStatus();
-            scope.postMessage(
-              { id: data.id, type: 'rendered', result, blockAccess, nativeDeflateStatus },
-              [result.rgba.buffer],
-            );
-          } else {
-            const results = await renderRasterBatch(reader, data.requests, controller.signal);
-            const blockAccess = reader.takeBlockAccessesSince(cursor),
-              nativeDeflateStatus = reader.getNativeDeflateStatus();
-            scope.postMessage(
-              { id: data.id, type: 'rendered-batch', results, blockAccess, nativeDeflateStatus },
-              results.map((result) => result.rgba.buffer),
-            );
-          }
-        } catch (error) {
-          reader.takeBlockAccessesSince(cursor);
-          throw error;
+        if (data.type === 'render') {
+          const result = await renderRasterWindow(reader, data.request, controller.signal),
+            nativeDeflateStatus = reader.getNativeDeflateStatus();
+          scope.postMessage(
+            { id: data.id, type: 'rendered', result, nativeDeflateStatus },
+            [result.rgba.buffer],
+          );
+        } else {
+          const results = await renderRasterBatch(reader, data.requests, controller.signal),
+            nativeDeflateStatus = reader.getNativeDeflateStatus();
+          scope.postMessage(
+            { id: data.id, type: 'rendered-batch', results, nativeDeflateStatus },
+            results.map((result) => result.rgba.buffer),
+          );
         }
       } else {
-        const cursor = reader.getBlockAccessCursor();
-        try {
-          const result = await reader.readWindow(data.request, controller.signal);
-          const blockAccess = reader.takeBlockAccessesSince(cursor),
-            nativeDeflateStatus = reader.getNativeDeflateStatus();
-          const transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
-          scope.postMessage(
-            { id: data.id, type: 'result', result, blockAccess, nativeDeflateStatus },
-            transfer,
-          );
-        } catch (error) {
-          reader.takeBlockAccessesSince(cursor);
-          throw error;
-        }
+        const result = await reader.readWindow(data.request, controller.signal),
+          nativeDeflateStatus = reader.getNativeDeflateStatus(),
+          transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
+        scope.postMessage({ id: data.id, type: 'result', result, nativeDeflateStatus }, transfer);
       }
     }
   };

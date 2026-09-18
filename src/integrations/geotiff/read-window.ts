@@ -26,6 +26,57 @@ export function supportsBoundedNumericWindow(image: GeoTIFFImage): boolean {
   );
 }
 
+interface WindowBlockGrid {
+  readonly x0: number;
+  readonly y0: number;
+  readonly columns: number;
+  readonly count: number;
+}
+
+function windowBlockGrid(
+  image: GeoTIFFImage,
+  window: RasterReadRequest['window'],
+  perTile: number,
+): WindowBlockGrid {
+  const tw = image.getTileWidth(),
+    th = image.getTileHeight(),
+    x0 = Math.floor(window[0] / tw),
+    x1 = Math.ceil(window[2] / tw),
+    y0 = Math.floor(window[1] / th),
+    y1 = Math.ceil(window[3] / th),
+    columns = x1 - x0;
+  return { x0, y0, columns, count: columns * (y1 - y0) * perTile };
+}
+
+async function runBoundedBlocks(
+  count: number,
+  signal: AbortSignal | undefined,
+  task: (index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0,
+    failed = false;
+  const run = async () => {
+    while (next < count && !failed) {
+      signal?.throwIfAborted();
+      const index = next++;
+      await task(index);
+    }
+  };
+  const settled = await Promise.allSettled(
+    Array.from({ length: Math.min(4, count) }, async () => {
+      try {
+        await run();
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }),
+  );
+  const rejected = settled.find((result) => result.status === 'rejected');
+  if (rejected?.status === 'rejected') throw rejected.reason;
+  signal?.throwIfAborted();
+}
+
 async function windowDecoder(image: GeoTIFFImage) {
   const directory = image.getFileDirectory(),
     compression = directory.getValue('Compression') ?? 1,
@@ -78,78 +129,53 @@ export async function readNumericWindow(
   }
   const { decoder } = await windowDecoder(image);
   signal?.throwIfAborted();
-  const output = samples.map((sample) => image.getArrayForSample(sample, w * h));
-  const tw = image.getTileWidth(),
+  const output = samples.map((sample) => image.getArrayForSample(sample, w * h)),
+    tw = image.getTileWidth(),
     th = image.getTileHeight(),
-    bands = image.getSamplesPerPixel();
-  const x0 = Math.floor(window[0] / tw),
-    x1 = Math.ceil(window[2] / tw),
-    y0 = Math.floor(window[1] / th),
-    y1 = Math.ceil(window[3] / th);
-  const perTile = image.planarConfiguration === 2 ? samples.length : 1;
-  const columns = x1 - x0,
-    count = columns * (y1 - y0) * perTile;
-  let next = 0,
-    failed = false;
-  const run = async () => {
-    while (next < count && !failed) {
-      signal?.throwIfAborted();
-      const index = next++,
-        tileIndex = Math.floor(index / perTile),
-        bandIndex = index % perTile;
-      const x = x0 + (tileIndex % columns),
-        y = y0 + Math.floor(tileIndex / columns);
-      const tile = await image.getTileOrStrip(
+    bands = image.getSamplesPerPixel(),
+    perTile = image.planarConfiguration === 2 ? samples.length : 1,
+    grid = windowBlockGrid(image, window, perTile);
+  await runBoundedBlocks(grid.count, signal, async (index) => {
+    const tileIndex = Math.floor(index / perTile),
+      bandIndex = index % perTile,
+      x = grid.x0 + (tileIndex % grid.columns),
+      y = grid.y0 + Math.floor(tileIndex / grid.columns),
+      tile = await image.getTileOrStrip(
         x,
         y,
         image.planarConfiguration === 1 ? 0 : samples[bandIndex],
         decoder,
         signal,
       );
-      signal?.throwIfAborted();
-      const input = image.getArrayForSample(0, tile.data);
-      const left = Math.max(window[0], x * tw),
-        right = Math.min(window[2], (x + 1) * tw, image.getWidth());
-      const top = Math.max(window[1], y * th),
-        bottom = Math.min(window[3], y * th + image.getBlockHeight(y), image.getHeight());
-      const stride = image.planarConfiguration === 2 ? 1 : bands;
-      if (input.length < image.getBlockHeight(y) * tw * stride)
-        throw new Error('Truncated decoded TIFF block.');
-      for (let row = top; row < bottom; row++) {
-        const source = (row - y * th) * tw + left - x * tw,
-          target = (row - window[1]) * w + left - window[0],
-          length = right - left;
-        if (image.planarConfiguration === 2) {
-          output[bandIndex].set(input.subarray(source, source + length), target);
-        } else if (bands === 1) {
-          output[0].set(input.subarray(source, source + length), target);
-        } else {
-          const deinterleaveStarted = performance.now();
-          for (let si = 0; si < samples.length; si++) {
-            const destination = output[si],
-              sample = samples[si];
-            for (let col = 0; col < length; col++)
-              destination[target + col] = input[(source + col) * bands + sample];
-          }
-          deinterleaveMs += performance.now() - deinterleaveStarted;
+    signal?.throwIfAborted();
+    const input = image.getArrayForSample(0, tile.data),
+      left = Math.max(window[0], x * tw),
+      right = Math.min(window[2], (x + 1) * tw, image.getWidth()),
+      top = Math.max(window[1], y * th),
+      bottom = Math.min(window[3], y * th + image.getBlockHeight(y), image.getHeight()),
+      stride = image.planarConfiguration === 2 ? 1 : bands;
+    if (input.length < image.getBlockHeight(y) * tw * stride)
+      throw new Error('Truncated decoded TIFF block.');
+    for (let row = top; row < bottom; row++) {
+      const source = (row - y * th) * tw + left - x * tw,
+        target = (row - window[1]) * w + left - window[0],
+        length = right - left;
+      if (image.planarConfiguration === 2) {
+        output[bandIndex].set(input.subarray(source, source + length), target);
+      } else if (bands === 1) {
+        output[0].set(input.subarray(source, source + length), target);
+      } else {
+        const deinterleaveStarted = performance.now();
+        for (let si = 0; si < samples.length; si++) {
+          const destination = output[si],
+            sample = samples[si];
+          for (let col = 0; col < length; col++)
+            destination[target + col] = input[(source + col) * bands + sample];
         }
+        deinterleaveMs += performance.now() - deinterleaveStarted;
       }
     }
-  };
-  // A bounded block pipeline replaces per-pixel DataView.call and unbounded fanout.
-  const settled = await Promise.allSettled(
-    Array.from({ length: Math.min(4, count) }, async () => {
-      try {
-        await run();
-      } catch (error) {
-        failed = true;
-        throw error;
-      }
-    }),
-  );
-  const rejected = settled.find((result) => result.status === 'rejected');
-  if (rejected?.status === 'rejected') throw rejected.reason;
-  signal?.throwIfAborted();
+  });
   return { width: w, height: h, data: output };
 }
 
@@ -181,49 +207,25 @@ export async function readInterleavedRgb8Window(
     { decoder } = await windowDecoder(image),
     tw = image.getTileWidth(),
     th = image.getTileHeight(),
-    x0 = Math.floor(window[0] / tw),
-    x1 = Math.ceil(window[2] / tw),
-    y0 = Math.floor(window[1] / th),
-    y1 = Math.ceil(window[3] / th),
-    columns = x1 - x0,
-    count = columns * (y1 - y0);
-  let next = 0,
-    failed = false;
-  const run = async () => {
-    while (next < count && !failed) {
-      signal?.throwIfAborted();
-      const index = next++,
-        x = x0 + (index % columns),
-        y = y0 + Math.floor(index / columns),
-        tile = await image.getTileOrStrip(x, y, 0, decoder, signal);
-      signal?.throwIfAborted();
-      const input = new Uint8Array(tile.data),
-        left = Math.max(window[0], x * tw),
-        right = Math.min(window[2], (x + 1) * tw, image.getWidth()),
-        top = Math.max(window[1], y * th),
-        bottom = Math.min(window[3], y * th + image.getBlockHeight(y), image.getHeight());
-      if (input.length < image.getBlockHeight(y) * tw * 3)
-        throw new Error('Truncated decoded TIFF block.');
-      for (let row = top; row < bottom; row++) {
-        const sourcePixel = (row - y * th) * tw + left - x * tw,
-          targetPixel = (row - window[1]) * width + left - window[0],
-          pixels = right - left;
-        output.set(input.subarray(sourcePixel * 3, (sourcePixel + pixels) * 3), targetPixel * 3);
-      }
+    grid = windowBlockGrid(image, window, 1);
+  await runBoundedBlocks(grid.count, signal, async (index) => {
+    const x = grid.x0 + (index % grid.columns),
+      y = grid.y0 + Math.floor(index / grid.columns),
+      tile = await image.getTileOrStrip(x, y, 0, decoder, signal);
+    signal?.throwIfAborted();
+    const input = new Uint8Array(tile.data),
+      left = Math.max(window[0], x * tw),
+      right = Math.min(window[2], (x + 1) * tw, image.getWidth()),
+      top = Math.max(window[1], y * th),
+      bottom = Math.min(window[3], y * th + image.getBlockHeight(y), image.getHeight());
+    if (input.length < image.getBlockHeight(y) * tw * 3)
+      throw new Error('Truncated decoded TIFF block.');
+    for (let row = top; row < bottom; row++) {
+      const sourcePixel = (row - y * th) * tw + left - x * tw,
+        targetPixel = (row - window[1]) * width + left - window[0],
+        pixels = right - left;
+      output.set(input.subarray(sourcePixel * 3, (sourcePixel + pixels) * 3), targetPixel * 3);
     }
-  };
-  const settled = await Promise.allSettled(
-    Array.from({ length: Math.min(4, count) }, async () => {
-      try {
-        await run();
-      } catch (error) {
-        failed = true;
-        throw error;
-      }
-    }),
-  );
-  const rejected = settled.find((result) => result.status === 'rejected');
-  if (rejected?.status === 'rejected') throw rejected.reason;
-  signal?.throwIfAborted();
+  });
   return { width, height, data: output };
 }

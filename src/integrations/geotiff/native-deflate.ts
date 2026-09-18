@@ -36,27 +36,56 @@ export interface NativeDeflateParameters {
   readonly predictor: number;
 }
 
-async function nativeInflate(buffer: ArrayBufferLike): Promise<ArrayBuffer> {
-  const stream = new DecompressionStream('deflate');
-  const output = new Response(stream.readable).arrayBuffer();
-  const writer = stream.writable.getWriter();
-  const input = new Uint8Array(buffer.byteLength);
+function decodedBlockCapacity(parameters: NativeDeflateParameters): number {
+  const bytesPerSample = parameters.bitsPerSample[0] / 8,
+    samples = parameters.planarConfiguration === 2 ? 1 : parameters.bitsPerSample.length,
+    capacity = parameters.tileWidth * parameters.tileHeight * samples * bytesPerSample;
+  if (!Number.isSafeInteger(capacity) || capacity < 0)
+    throw new Error('Invalid TIFF decoded block size.');
+  return capacity;
+}
+
+async function nativeInflate(buffer: ArrayBufferLike, capacity: number): Promise<ArrayBuffer> {
+  const stream = new DecompressionStream('deflate'),
+    writer = stream.writable.getWriter(),
+    reader = stream.readable.getReader(),
+    input = new Uint8Array(buffer.byteLength),
+    output = new Uint8Array(capacity);
   input.set(new Uint8Array(buffer));
-  await writer.write(input);
-  await writer.close();
-  return output;
+  const write = writer.write(input).then(() => writer.close());
+  // The readable side can cancel first on an output-budget violation. Attach a
+  // rejection handler immediately so the corresponding writer failure is never unhandled.
+  void write.catch(() => undefined);
+  let total = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > capacity) {
+        await reader.cancel('TIFF DEFLATE block exceeds decoded size.');
+        throw new Error('TIFF DEFLATE block exceeds decoded size.');
+      }
+      output.set(value, total);
+      total += value.byteLength;
+    }
+    await write;
+  } catch (error) {
+    try {
+      await writer.abort(error);
+    } catch {}
+    throw error;
+  }
+  return total === output.length ? output.buffer : output.slice(0, total).buffer;
 }
 
 export function getNativeDeflateCapability(
   compression: number,
   parameters: NativeDeflateParameters,
 ): RasterNativeDeflateStatus {
-  const available = typeof DecompressionStream === 'function' && typeof Response === 'function';
+  const available = typeof DecompressionStream === 'function';
   let disabledReason: RasterNativeDeflateDisabledReason | null = null;
   if (!TIFF_DEFLATE_CODES.has(compression)) disabledReason = 'unsupported-compression';
-  else if (typeof DecompressionStream !== 'function')
-    disabledReason = 'decompression-stream-unavailable';
-  else if (typeof Response !== 'function') disabledReason = 'response-unavailable';
+  else if (!available) disabledReason = 'decompression-stream-unavailable';
   else if (parameters.predictor !== 1 && parameters.predictor !== 2)
     disabledReason = 'unsupported-predictor';
   else if (
@@ -96,6 +125,7 @@ export function createNativeDeflateDecoder(
   const capability = getNativeDeflateCapability(compression, parameters);
   recordCapability(capability);
   if (!capability.eligible) return fallback;
+  const capacity = decodedBlockCapacity(parameters);
   return {
     parameters: {
       tileWidth: parameters.tileWidth,
@@ -105,20 +135,15 @@ export function createNativeDeflateDecoder(
       predictor: parameters.predictor,
     },
     async decodeBlock(buffer: ArrayBufferLike): Promise<ArrayBufferLike> {
-      return nativeInflate(buffer);
+      return nativeInflate(buffer, capacity);
     },
     async decode(buffer: ArrayBufferLike): Promise<ArrayBufferLike> {
-      const started = performance.now();
-      try {
-        const decoded = await nativeInflate(buffer),
-          result = applyHorizontalPredictor(decoded, parameters);
-        nativeBlocks++;
-        nativeMs += performance.now() - started;
-        return result;
-      } catch {
-        nativeFallbacks++;
-        return fallback.decode(buffer);
-      }
+      const started = performance.now(),
+        decoded = await nativeInflate(buffer, capacity),
+        result = applyHorizontalPredictor(decoded, parameters);
+      nativeBlocks++;
+      nativeMs += performance.now() - started;
+      return result;
     },
   } as GeoTIFFDecoder;
 }

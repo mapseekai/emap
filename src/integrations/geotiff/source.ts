@@ -23,10 +23,14 @@ import type {
   GeoTIFFWorkerCommand,
   GeoTIFFWorkerResponse,
   GeoTIFFWorkerOpen,
-  GeoTIFFWorkerBlockAccess,
 } from './worker-protocol';
 import { RasterWorkerClient } from './worker-client';
-import { acquireParallelWorker, rasterWorkerCount } from './worker-capacity';
+import {
+  acquireParallelWorker,
+  acquireRasterBlockCache,
+  rasterWorkerCount,
+  type RasterBlockCacheLease,
+} from './worker-capacity';
 
 const MIB = 1024 ** 2;
 const SOURCE_BLOCK_CACHE_BYTES = 8 * MIB;
@@ -35,7 +39,6 @@ const TILED_WORKER_CACHE_MAX_BYTES = 16 * MIB;
 const STRIPED_WORKING_SET_BLOCKS = 384;
 const STRIPED_PRIMARY_CACHE_MIN_BYTES = 32 * MIB;
 const STRIPED_PRIMARY_CACHE_MAX_BYTES = 128 * MIB;
-const MAX_BLOCK_DIAGNOSTIC_KEYS = 65_536;
 
 function isRowStripedLevel(level: RasterMetadata['levels'][number]): boolean {
   return level.tileWidth >= level.width && level.tileHeight < level.height;
@@ -197,11 +200,6 @@ interface Slot {
   cachePeakBytes: number;
   cachePeakEntries: number;
   cacheLimitBytes: number;
-  blockRequests: number;
-  blockLoads: number;
-  duplicateBlockLoads: number;
-  requestedBlocks: Set<string>;
-  loadedBlocks: Set<string>;
 }
 type MutableLevelStats = {
   -readonly [K in keyof Omit<RasterLevelProcessingStats, 'level'>]: Omit<
@@ -266,27 +264,22 @@ class WorkerRasterSource implements RasterSource {
   private nativeDeflateEligible = false;
   private nativeDeflateDisabledReason: RasterNativeDeflateStatus['disabledReason'] = null;
   private readonly nativeDeflateCompressionCodes = new Set<number>();
-  private physicalBlockRequests = 0;
-  private blockLoads = 0;
-  private duplicateBlockLoads = 0;
-  private crossWorkerDuplicateLoads = 0;
-  private blockDiagnosticsTruncated = false;
-  private readonly requestedPhysicalBlocks = new Set<string>();
-  private readonly loadedPhysicalBlocks = new Set<string>();
-  private readonly blockWorkers = new Map<string, Set<number>>();
   private blockLoadMs = 0;
   private assembleMs = 0;
   private colorizeMs = 0;
   private transferMs = 0;
   private queuedMeshBytes = 0;
   private target = 1;
+  private cacheLease?: RasterBlockCacheLease;
   private openCommand?: GeoTIFFWorkerOpen;
   constructor(
     private readonly url: string | URL,
     private readonly requested: number,
   ) {}
   async open(file: File, options: OpenGeoTIFFOptions): Promise<void> {
-    const initialCacheBytes = Math.floor(SOURCE_BLOCK_CACHE_BYTES / this.requested);
+    const initialCacheBytes = Math.floor(SOURCE_BLOCK_CACHE_BYTES / this.requested),
+      cacheLease = acquireRasterBlockCache(initialCacheBytes);
+    this.cacheLease = cacheLease;
     this.openCommand = {
       type: 'open',
       file,
@@ -296,7 +289,7 @@ class WorkerRasterSource implements RasterSource {
       cacheBytes: initialCacheBytes,
       pageLimit: Math.floor(16 / this.requested),
     };
-    const primary = this.createSlot();
+    const primary = this.createSlot(undefined, initialCacheBytes);
     const result = await primary.client.call(this.openCommand, options.signal);
     if (result.type === 'metadata' && result.protocolVersion !== GEOTIFF_WORKER_PROTOCOL_VERSION)
       throw new RasterError(
@@ -313,9 +306,20 @@ class WorkerRasterSource implements RasterSource {
       this.requested,
       Math.max(1, Math.floor((32 * 1024 ** 2) / Math.max(1, cost))),
     );
-    const workerCacheBytes = workerBlockCacheBytes(this.metadata, this.target);
-    this.openCommand = { ...this.openCommand, cacheBytes: workerCacheBytes };
-    const primaryCacheBytes = stripedPrimaryCacheBytes(this.metadata, workerCacheBytes);
+    const desiredWorkerCacheBytes = workerBlockCacheBytes(this.metadata, this.target),
+      desiredPrimaryCacheBytes = stripedPrimaryCacheBytes(this.metadata, desiredWorkerCacheBytes),
+      desiredTotalCacheBytes =
+        desiredPrimaryCacheBytes + desiredWorkerCacheBytes * Math.max(0, this.target - 1),
+      grantedCacheBytes = cacheLease.resize(desiredTotalCacheBytes),
+      replicaCacheBytes =
+        this.target > 1
+          ? Math.min(desiredWorkerCacheBytes, Math.floor(grantedCacheBytes / this.target))
+          : 0,
+      primaryCacheBytes = Math.min(
+        desiredPrimaryCacheBytes,
+        grantedCacheBytes - replicaCacheBytes * Math.max(0, this.target - 1),
+      );
+    this.openCommand = { ...this.openCommand, cacheBytes: replicaCacheBytes };
     if (primaryCacheBytes !== initialCacheBytes) {
       const configured = await primary.client.call(
         { type: 'configure', cacheBytes: primaryCacheBytes },
@@ -327,13 +331,14 @@ class WorkerRasterSource implements RasterSource {
           'Expected raster cache configuration acknowledgement.',
         );
     }
+    primary.cacheLimitBytes = primaryCacheBytes;
     primary.ready = true;
     // Warm the second metadata-only replica during the host's initial view settle.
     // This starts no pixel reads and never runs before mandatory pyramid validation.
     if (this.target > 1) this.startReplica();
     this.lifetime.signal.throwIfAborted();
   }
-  private createSlot(release?: () => void): Slot {
+  private createSlot(release?: () => void, cacheLimitBytes = 0): Slot {
     let worker: Worker;
     try {
       worker = new Worker(this.url, { type: 'classic', name: `emap-geotiff-${this.slots.length}` });
@@ -350,12 +355,7 @@ class WorkerRasterSource implements RasterSource {
       cacheEntries: 0,
       cachePeakBytes: 0,
       cachePeakEntries: 0,
-      cacheLimitBytes: 0,
-      blockRequests: 0,
-      blockLoads: 0,
-      duplicateBlockLoads: 0,
-      requestedBlocks: new Set(),
-      loadedBlocks: new Set(),
+      cacheLimitBytes,
     };
     slot.client = new RasterWorkerClient(
       worker,
@@ -369,15 +369,6 @@ class WorkerRasterSource implements RasterSource {
     this.slots.push(slot);
     return slot;
   }
-  private addDiagnosticKey(target: Set<string>, key: string): boolean {
-    if (target.has(key)) return true;
-    if (target.size >= MAX_BLOCK_DIAGNOSTIC_KEYS) {
-      this.blockDiagnosticsTruncated = true;
-      return false;
-    }
-    target.add(key);
-    return true;
-  }
   private recordNativeDeflateStatus(status?: RasterNativeDeflateStatus): void {
     if (!status) return;
     for (const compression of status.compressionCodes)
@@ -387,42 +378,13 @@ class WorkerRasterSource implements RasterSource {
     if (this.nativeDeflateEligible) this.nativeDeflateDisabledReason = null;
     else if (status.disabledReason) this.nativeDeflateDisabledReason = status.disabledReason;
   }
-  private recordBlockAccess(slot: Slot, access?: GeoTIFFWorkerBlockAccess): void {
-    if (!access) return;
-    const worker = this.slots.indexOf(slot);
-    slot.blockRequests += access.requested.length;
-    this.physicalBlockRequests += access.requested.length;
-    for (const key of access.requested) {
-      this.addDiagnosticKey(slot.requestedBlocks, key);
-      this.addDiagnosticKey(this.requestedPhysicalBlocks, key);
-    }
-    for (const key of access.loaded) {
-      slot.blockLoads++;
-      this.blockLoads++;
-      if (slot.loadedBlocks.has(key)) slot.duplicateBlockLoads++;
-      else this.addDiagnosticKey(slot.loadedBlocks, key);
-      if (this.loadedPhysicalBlocks.has(key)) this.duplicateBlockLoads++;
-      else this.addDiagnosticKey(this.loadedPhysicalBlocks, key);
-      let workers = this.blockWorkers.get(key);
-      if (!workers) {
-        if (this.blockWorkers.size >= MAX_BLOCK_DIAGNOSTIC_KEYS) {
-          this.blockDiagnosticsTruncated = true;
-          continue;
-        }
-        workers = new Set();
-        this.blockWorkers.set(key, workers);
-      }
-      if (workers.size && !workers.has(worker)) this.crossWorkerDuplicateLoads++;
-      workers.add(worker);
-    }
-  }
   private startReplica(): boolean {
     if (this.slots.length >= this.target || !this.openCommand) return false;
     const release = acquireParallelWorker();
     if (!release) return false;
     let slot: Slot;
     try {
-      slot = this.createSlot(release);
+      slot = this.createSlot(release, this.openCommand.cacheBytes ?? 0);
     } catch (error) {
       this.fail(error);
       return false;
@@ -588,10 +550,8 @@ class WorkerRasterSource implements RasterSource {
             response.type === 'rendered' ||
             response.type === 'rendered-batch' ||
             response.type === 'result'
-          ) {
-            this.recordBlockAccess(slot, response.blockAccess);
+          )
             this.recordNativeDeflateStatus(response.nativeDeflateStatus);
-          }
           if (response.type === 'rendered' || response.type === 'rendered-batch') {
             const rendered = response.type === 'rendered' ? [response.result] : response.results;
             this.renderedTiles += rendered.length;
@@ -814,21 +774,16 @@ class WorkerRasterSource implements RasterSource {
       blockCachePeakEntries: this.slots.reduce((sum, slot) => sum + slot.cachePeakEntries, 0),
       blockCacheLimitBytes: this.slots.reduce((sum, slot) => sum + slot.cacheLimitBytes, 0),
       blockCacheOversizeSkips: this.blockCacheOversizeSkips,
-      physicalBlockRequests: this.physicalBlockRequests,
-      uniquePhysicalBlocks: this.requestedPhysicalBlocks.size,
-      blockLoads: this.blockLoads,
-      uniqueLoadedBlocks: this.loadedPhysicalBlocks.size,
-      duplicateBlockLoads: this.duplicateBlockLoads,
-      crossWorkerDuplicateLoads: this.crossWorkerDuplicateLoads,
-      blockDiagnosticsTruncated: this.blockDiagnosticsTruncated,
-      workerBlockStats: this.slots.map((slot, worker) => ({
-        worker,
-        requests: slot.blockRequests,
-        uniqueBlocks: slot.requestedBlocks.size,
-        loads: slot.blockLoads,
-        uniqueLoadedBlocks: slot.loadedBlocks.size,
-        duplicateLoads: slot.duplicateBlockLoads,
-      })),
+      // Block identity diagnostics are temporarily disabled to avoid retaining
+      // per-block keys and cloning them across Worker boundaries.
+      physicalBlockRequests: 0,
+      uniquePhysicalBlocks: 0,
+      blockLoads: 0,
+      uniqueLoadedBlocks: 0,
+      duplicateBlockLoads: 0,
+      crossWorkerDuplicateLoads: 0,
+      blockDiagnosticsTruncated: false,
+      workerBlockStats: [],
       nativeDeflateBlocks: this.nativeDeflateBlocks,
       nativeDeflateFallbacks: this.nativeDeflateFallbacks,
       nativeDeflateMs: this.nativeDeflateMs,
@@ -877,11 +832,10 @@ class WorkerRasterSource implements RasterSource {
     }
     this.queue = [];
     this.pending.clear();
-    this.requestedPhysicalBlocks.clear();
-    this.loadedPhysicalBlocks.clear();
-    this.blockWorkers.clear();
     this.reservedBytes = 0;
     this.queuedMeshBytes = 0;
+    this.cacheLease?.release();
+    this.cacheLease = undefined;
     this.openCommand = undefined;
   }
   dispose(): void {

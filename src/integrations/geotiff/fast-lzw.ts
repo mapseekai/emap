@@ -147,17 +147,12 @@ export function createFastLzwDecoder(
       return decodeLzwBlock(buffer, capacity, scratch);
     },
     async decode(buffer: ArrayBufferLike): Promise<ArrayBufferLike> {
-      const started = performance.now();
-      try {
-        const decoded = decodeLzwBlock(buffer, capacity, scratch),
-          result = applyHorizontalPredictor(decoded, parameters);
-        fastLzwBlocks++;
-        fastLzwMs += performance.now() - started;
-        return result;
-      } catch {
-        fastLzwFallbacks++;
-        return fallback.decode(buffer);
-      }
+      const started = performance.now(),
+        decoded = decodeLzwBlock(buffer, capacity, scratch),
+        result = applyHorizontalPredictor(decoded, parameters);
+      fastLzwBlocks++;
+      fastLzwMs += performance.now() - started;
+      return result;
     },
   } as GeoTIFFDecoder;
 }

@@ -31,18 +31,6 @@ describe('bounded decoded TIFF block cache', () => {
       oversizeSkips: 1,
     });
   });
-  it('traces physical requests and successful decoded loads separately', () => {
-    const cache = new RasterBlockCache(16),
-      cursor = cache.getAccessCursor();
-    expect(cache.get('a')).toBeUndefined();
-    cache.set('a', new ArrayBuffer(4));
-    expect(cache.get('a')).toBeDefined();
-    expect(cache.takeAccessesSince(cursor)).toEqual({
-      requested: ['a', 'a'],
-      loaded: ['a'],
-    });
-    expect(cache.takeAccessesSince(cache.getAccessCursor())).toEqual({ requested: [], loaded: [] });
-  });
   it('resizes a striped working set while preserving byte-bounded LRU eviction', () => {
     const cache = new RasterBlockCache(8);
     cache.set('a', new ArrayBuffer(4));

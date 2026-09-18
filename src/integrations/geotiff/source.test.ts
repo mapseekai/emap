@@ -354,7 +354,7 @@ describe('parallel raster pipeline pool', () => {
       source.dispose();
     }
   });
-  it('reports exact duplicate and cross-Worker physical block loads', async () => {
+  it('keeps block identity diagnostics disabled without affecting parallel reads', async () => {
     const tiledMetadata: RasterMetadata = {
       ...metadata,
       levels: [
@@ -375,46 +375,26 @@ describe('parallel raster pipeline pool', () => {
       const left = source.readWindow({ level: 0, window: [400, 0, 600, 1], samples: [0] }),
         right = source.readWindow({ level: 0, window: [500, 0, 700, 1], samples: [0] });
       expect(source.getProcessingStats?.().busyWorkers).toBe(2);
-      const keys = ['0:0:0:0', '0:1:0:0'];
       worker.reply({
         id: worker.messages.at(-1)!.id,
         type: 'result',
         result: { width: 200, height: 1, data: [new Uint8Array(200)] },
-        blockAccess: { requested: keys, loaded: keys },
       });
       replica.reply({
         id: replica.messages.at(-1)!.id,
         type: 'result',
         result: { width: 200, height: 1, data: [new Uint8Array(200)] },
-        blockAccess: { requested: keys, loaded: keys },
       });
       await Promise.all([left, right]);
       expect(source.getProcessingStats?.()).toMatchObject({
-        physicalBlockRequests: 4,
-        uniquePhysicalBlocks: 2,
-        blockLoads: 4,
-        uniqueLoadedBlocks: 2,
-        duplicateBlockLoads: 2,
-        crossWorkerDuplicateLoads: 2,
+        physicalBlockRequests: 0,
+        uniquePhysicalBlocks: 0,
+        blockLoads: 0,
+        uniqueLoadedBlocks: 0,
+        duplicateBlockLoads: 0,
+        crossWorkerDuplicateLoads: 0,
         blockDiagnosticsTruncated: false,
-        workerBlockStats: [
-          {
-            worker: 0,
-            requests: 2,
-            uniqueBlocks: 2,
-            loads: 2,
-            uniqueLoadedBlocks: 2,
-            duplicateLoads: 0,
-          },
-          {
-            worker: 1,
-            requests: 2,
-            uniqueBlocks: 2,
-            loads: 2,
-            uniqueLoadedBlocks: 2,
-            duplicateLoads: 0,
-          },
-        ],
+        workerBlockStats: [],
       });
     } finally {
       source.dispose();

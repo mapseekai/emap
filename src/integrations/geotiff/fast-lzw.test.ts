@@ -82,6 +82,15 @@ describe('allocation-light TIFF LZW decoder', () => {
     expect(actual).toEqual(original);
   });
 
+  it('rejects decoded output larger than the declared TIFF block without unsafe fallback', async () => {
+    const upstream = await getDecoder(5, parameters),
+      decode = vi.spyOn(upstream, 'decode'),
+      decoder = createFastLzwDecoder(5, parameters, upstream),
+      compressed = encodeTiffLzw(new Uint8Array(parameters.tileWidth * parameters.tileHeight * 3 + 1));
+    await expect(decoder.decode(compressed.buffer)).rejects.toThrow(/exceeds decoded size/);
+    expect(decode).not.toHaveBeenCalled();
+  });
+
   it('keeps unsupported layouts on the upstream decoder', async () => {
     const fallback = await getDecoder(5, parameters);
     expect(canUseFastLzw(8, parameters)).toBe(false);

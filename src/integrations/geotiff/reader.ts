@@ -183,7 +183,7 @@ export class GeoTIFFReader implements RasterSource {
     private readonly images: Map<number, GeoTIFFImage>,
     private readonly sources: LocalRasterFileSource[],
     private readonly blockCache: RasterBlockCache,
-    private readonly physicalBlockBytes: ReadonlyMap<number, readonly number[]>,
+    private readonly physicalBlockBytes: ReadonlyMap<number, Float64Array>,
     readonly directoryBytes: number,
   ) {}
 
@@ -306,7 +306,7 @@ export class GeoTIFFReader implements RasterSource {
       );
     const sources: LocalRasterFileSource[] = [],
       images = new Map<number, GeoTIFFImage>(),
-      physicalBlockBytes = new Map<number, readonly number[]>(),
+      physicalBlockBytes = new Map<number, Float64Array>(),
       levels: RasterLevel[] = [];
     let base: GeoTIFFImage | undefined, baseTiff: GeoTIFF | undefined;
     let hasValidityMask = false;
@@ -415,14 +415,20 @@ export class GeoTIFFReader implements RasterSource {
               image.planarConfiguration === 1 &&
               fd.hasTag('StripByteCounts')
             ) {
-              const rawCounts = Array.from((await fd.loadValue('StripByteCounts')) ?? [], Number);
-              const expected = Math.ceil(level.height / level.tileHeight);
-              if (
-                rawCounts.length < expected ||
-                rawCounts.slice(0, expected).some((value) => !Number.isSafeInteger(value) || value < 0)
-              )
+              const rawCounts = (await fd.loadValue('StripByteCounts')) as
+                  | ArrayLike<number | bigint>
+                  | undefined,
+                expected = Math.ceil(level.height / level.tileHeight);
+              if (!rawCounts || rawCounts.length < expected)
                 throw new RasterError('INVALID_TIFF_DIRECTORY', 'Invalid TIFF strip byte counts.');
-              physicalBlockBytes.set(level.id, rawCounts.slice(0, expected));
+              const counts = new Float64Array(expected);
+              for (let index = 0; index < expected; index++) {
+                const value = Number(rawCounts[index]);
+                if (!Number.isSafeInteger(value) || value < 0)
+                  throw new RasterError('INVALID_TIFF_DIRECTORY', 'Invalid TIFF strip byte counts.');
+                counts[index] = value;
+              }
+              physicalBlockBytes.set(level.id, counts);
             }
             levels.push(level);
           }
@@ -551,18 +557,6 @@ export class GeoTIFFReader implements RasterSource {
     }
   }
 
-  getBlockAccessCursor(): number {
-    return this.blockCache.getAccessCursor();
-  }
-
-  takeBlockAccessesSince(cursor: number): { requested: string[]; loaded: string[] } {
-    return this.blockCache.takeAccessesSince(cursor);
-  }
-
-  clearBlockAccessTrace(): void {
-    this.blockCache.clearAccessTrace();
-  }
-
   getNativeDeflateStatus() {
     const diagnostics = getNativeDeflateDiagnostics();
     return {
@@ -627,49 +621,11 @@ export class GeoTIFFReader implements RasterSource {
     );
   }
 
-  async readInterleavedRgb8Window(
+  private async runRead<T>(
     request: RasterReadRequest,
-    signal?: AbortSignal,
-  ): Promise<InterleavedRgb8Window> {
-    signal?.throwIfAborted();
-    this.lifetime.signal.throwIfAborted();
-    const level = validateRasterRead(this.metadata.levels, request);
-    if (!this.supportsInterleavedRgb8(request.level))
-      throw new RasterError('UNSUPPORTED_SAMPLES', 'Interleaved RGB8 fast path is unavailable.');
-    if (this.pending >= 16)
-      throw new RasterError('RASTER_QUEUE_BUDGET', 'Too many queued raster reads.');
-    this.pending++;
-    const run = this.tail.then(async () => {
-      signal?.throwIfAborted();
-      this.lifetime.signal.throwIfAborted();
-      const controller = new AbortController();
-      const abort = () => controller.abort(signal?.reason ?? this.lifetime.signal.reason);
-      signal?.addEventListener('abort', abort, { once: true });
-      this.lifetime.signal.addEventListener('abort', abort, { once: true });
-      try {
-        const readBudget = this.requestReadBudget(level, request);
-        for (const source of this.sources) source.beginRead(readBudget);
-        const image = this.images.get(request.level)!;
-        const result = await readInterleavedRgb8Window(image, request, controller.signal);
-        controller.signal.throwIfAborted();
-        return result;
-      } finally {
-        signal?.removeEventListener('abort', abort);
-        this.lifetime.signal.removeEventListener('abort', abort);
-      }
-    });
-    this.tail = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    try {
-      return await run;
-    } finally {
-      this.pending--;
-    }
-  }
-
-  async readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
+    signal: AbortSignal | undefined,
+    execute: (image: GeoTIFFImage, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     signal?.throwIfAborted();
     this.lifetime.signal.throwIfAborted();
     const level = validateRasterRead(this.metadata.levels, request);
@@ -679,15 +635,14 @@ export class GeoTIFFReader implements RasterSource {
     const run = this.tail.then(async () => {
       signal?.throwIfAborted();
       this.lifetime.signal.throwIfAborted();
-      const controller = new AbortController();
-      const abort = () => controller.abort(signal?.reason ?? this.lifetime.signal.reason);
+      const controller = new AbortController(),
+        abort = () => controller.abort(signal?.reason ?? this.lifetime.signal.reason);
       signal?.addEventListener('abort', abort, { once: true });
       this.lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
         const readBudget = this.requestReadBudget(level, request);
         for (const source of this.sources) source.beginRead(readBudget);
-        const image = this.images.get(request.level)!;
-        const result = await readNumericWindow(image, request, controller.signal);
+        const result = await execute(this.images.get(request.level)!, controller.signal);
         controller.signal.throwIfAborted();
         return result;
       } finally {
@@ -705,6 +660,23 @@ export class GeoTIFFReader implements RasterSource {
     } finally {
       this.pending--;
     }
+  }
+
+  readInterleavedRgb8Window(
+    request: RasterReadRequest,
+    signal?: AbortSignal,
+  ): Promise<InterleavedRgb8Window> {
+    return this.runRead(request, signal, (image, readSignal) => {
+      if (!this.supportsInterleavedRgb8(request.level))
+        throw new RasterError('UNSUPPORTED_SAMPLES', 'Interleaved RGB8 fast path is unavailable.');
+      return readInterleavedRgb8Window(image, request, readSignal);
+    });
+  }
+
+  readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
+    return this.runRead(request, signal, (image, readSignal) =>
+      readNumericWindow(image, request, readSignal),
+    );
   }
 
   toReference(): RasterReference {

@@ -159,13 +159,13 @@ console.log(map.ctx.raster.getProcessingStats('imagery'));
 
 首个 Worker 完成必需的 TIFF/OVR 验证与抽样统计；第二个 Worker 可在初始视口等待期间预热元数据，其余按需建立。副本复用相同统计范围，不重复抽样扫描，不因不同线程产生颜色接缝。超过 2GiB 无有效金字塔的输入仍在首次像素读取之前被拒绝；副本不会绕过该规则。
 
-分块（tiled）层级的请求按块足迹路由：相邻块列成对固定在同一个 Worker 上，跨列边界的请求按像素重叠量选择缓存命中最多的 Worker，减少同一压缩块在多个 Worker 中的重复解码；条带层级不做亲和路由，使用第一个空闲 Worker。块级诊断中的 `crossWorkerDuplicateLoads` 可用来核对亲和效果。
+分块（tiled）层级的请求按块足迹路由：相邻块列成对固定在同一个 Worker 上，跨列边界的请求按像素重叠量选择缓存命中最多的 Worker，减少同一压缩块在多个 Worker 中的重复解码；条带层级不做亲和路由，使用第一个空闲 Worker。块身份级诊断目前暂停，以避免为极小 tile/strip 长期保留大量键值并增加 Worker IPC 内存。
 
 主线程只做视口调度、LOD 选择、投影网格构建和 Canvas 合成。`RasterWarpMesh` 使用 Float64 可序列化网格；投影有效性边界保留精确像素中心回退，不降低投影精度。Worker 返回 `RasterRenderResult.rgba`，通过可转移 ArrayBuffer 回传；显示路径不再把 UInt16/Float32 全部波段发送到主线程后着色。`queryPixel()`/`readWindow()` 仍返回原始数值。
 
 `RasterSource.renderTile(RasterRenderRequest, signal)` 是可选能力：GeoTIFF 默认实现并走后台路径；只有 `readWindow()` 的第三方数据源继续兼容原来的主线程着色路径。`getProcessingStats()` 返回实际 Worker 数、忙碌数、历史峰值、等待任务、预约字节数和已后台着色瓦片数。示例显示“后台 Workers / 已着色块”，用来核对实际生效的管线。
 
-资源保护也按池汇总：同一源并行任务的**估算解码＋投影网格＋RGBA 在途预约合计不超过 64MiB**，超出并行余额的任务排队而非同时分配；待发送网格最多保留 32MiB。解码块缓存基准（8MiB）与每文件 1MiB 已保留压缩页按配置 Worker 数均分后，再按工作集规则放大（见上文）。TIFF 目录数组在副本间合计控制在 32MiB，必要时自动减少副本数。这些仍不是浏览器整个进程的硬内存上限，独立 Worker 的运行时开销也需计入实际观测。
+资源保护也按池汇总：同一源并行任务的**估算解码＋投影网格＋RGBA 在途预约合计不超过 64MiB**，超出并行余额的任务排队而非同时分配；待发送网格最多保留 32MiB。所有已打开 GeoTIFF 源的 decoded block cache 共享 **256MiB 总预算**；单个源仍会按 tiled/striped 工作集申请缓存，但可用额度不足时会自动缩小，不再按图层线性叠加到数 GiB。每文件压缩页仍保持小型有界缓存。TIFF 目录数组在副本间合计控制在 32MiB，必要时自动减少副本数。这些仍不是浏览器整个进程的硬内存上限，独立 Worker 的运行时开销也需计入实际观测。
 
 取消任务时调用方立即结束等待，物理 Worker 槽在任务实际响应后才可重用，避免快速缩放把旧 CPU 工作无限排队；保留 60 秒超时保护。移除图层或卸载插件会终止所有源属 Worker，释放队列、计时器、监听器和全局附加线程名额。一个 Worker 崩溃会关闭同源池并显式报错，不留半损坏管线。
 

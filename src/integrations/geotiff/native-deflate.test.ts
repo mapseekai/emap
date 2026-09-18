@@ -61,6 +61,18 @@ describe('native DEFLATE decoder', () => {
     expect(result).toEqual(original);
   });
 
+  it('rejects decoded output larger than the declared TIFF block without unsafe fallback', async () => {
+    const upstream = fallback(),
+      decoder = createNativeDeflateDecoder(8, parameters, upstream),
+      compressed = deflateSync(new Uint8Array(25));
+    await expect(
+      decoder.decode(
+        compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength),
+      ),
+    ).rejects.toThrow(/exceeds decoded size/);
+    expect(upstream.decode).not.toHaveBeenCalled();
+  });
+
   it('falls back to the upstream decoder when native streams are unavailable', async () => {
     const upstream = fallback();
     vi.stubGlobal('DecompressionStream', undefined);

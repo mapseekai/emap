@@ -260,22 +260,9 @@ function performanceSnapshot() {
         evictedMiB:performanceDelta(perf,bp,'blockCacheEvictedBytes')/1024**2,
         admittedMiB:performanceDelta(perf,bp,'blockCacheAdmittedBytes')/1024**2,
         oversizeSkips:performanceDelta(perf,bp,'blockCacheOversizeSkips'),
-        physicalRequests:performanceDelta(processing,bproc,'physicalBlockRequests'),
-        newUniquePhysicalBlocks:performanceDelta(processing,bproc,'uniquePhysicalBlocks'),
-        sourceUniquePhysicalBlocks:processing?.uniquePhysicalBlocks ?? 0,
-        loads:performanceDelta(processing,bproc,'blockLoads'),
-        newUniqueLoadedBlocks:performanceDelta(processing,bproc,'uniqueLoadedBlocks'),
-        duplicateLoads:performanceDelta(processing,bproc,'duplicateBlockLoads'),
-        crossWorkerDuplicateLoads:performanceDelta(processing,bproc,'crossWorkerDuplicateLoads'),
         nativeDeflateBlocks:performanceDelta(processing,bproc,'nativeDeflateBlocks'),
         nativeDeflateFallbacks:performanceDelta(processing,bproc,'nativeDeflateFallbacks'),
         fastLzwBlocks:performanceDelta(processing,bproc,'fastLzwBlocks'), fastLzwFallbacks:performanceDelta(processing,bproc,'fastLzwFallbacks'),
-        diagnosticsTruncated:Boolean(processing?.blockDiagnosticsTruncated),
-        workers:(processing?.workerBlockStats ?? []).map(item => {
-          const previous=bproc?.workerBlockStats?.find(value => value.worker === item.worker);
-          const delta=key => Math.max(0,Number(item[key] ?? 0)-Number(previous?.[key] ?? 0));
-          return {worker:item.worker,requests:delta('requests'),newUniqueBlocks:delta('uniqueBlocks'),loads:delta('loads'),newUniqueLoadedBlocks:delta('uniqueLoadedBlocks'),duplicateLoads:delta('duplicateLoads')};
-        }),
         currentMiB:(processing?.blockCacheBytes ?? 0)/1024**2,
         peakMiB:(processing?.blockCachePeakBytes ?? 0)/1024**2,
         capacityMiB:(processing?.blockCacheLimitBytes ?? 0)/1024**2,
