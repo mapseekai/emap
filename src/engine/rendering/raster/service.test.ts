@@ -513,12 +513,19 @@ describe('settled, progressive raster frames', () => {
       tileHeight: 1,
       decodedBlockConcurrency: 4,
     });
-    const renderTiles = vi.fn(async (requests: readonly { width: number; height: number }[]) =>
-      requests.map((request) => ({
-        width: request.width,
-        height: request.height,
-        rgba: new Uint8ClampedArray(request.width * request.height * 4),
-      })),
+    const renderTiles = vi.fn(
+      async (
+        requests: readonly {
+          width: number;
+          height: number;
+          read: { window: readonly [number, number, number, number] };
+        }[],
+      ) =>
+        requests.map((request) => ({
+          width: request.width,
+          height: request.height,
+          rgba: new Uint8ClampedArray(request.width * request.height * 4),
+        })),
     );
     Object.assign(original, { renderTiles });
     read.mockRejectedValue(new Error('row-striped batch should not use the main-thread read path'));
@@ -527,6 +534,11 @@ describe('settled, progressive raster frames', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(renderTiles).toHaveBeenCalled();
     expect(renderTiles.mock.calls.some(([requests]) => requests.length > 1)).toBe(true);
+    const sourceRows = renderTiles.mock.calls.map(([requests]) =>
+      Math.min(...requests.map((request) => request.read.window[1])),
+    );
+    expect(new Set(sourceRows).size).toBeGreaterThan(1);
+    expect(sourceRows).toEqual([...sourceRows].sort((a, b) => a - b));
     expect(read).not.toHaveBeenCalled();
     expect(service.getStats().taskLifecycle.loadTileFailed).toBe(0);
     service.dispose();

@@ -76,6 +76,7 @@ interface Task {
   selectedLevel: number;
   rowStriped: boolean;
   gridRow: number;
+  sourceRow: number;
 }
 interface TileBatch {
   readonly keys: ReadonlySet<string>;
@@ -316,6 +317,16 @@ export class RasterRenderService implements RasterContract {
               extent[1] + (y + 1) * span,
             ];
             const selection = selectRasterLevel(layer.source.metadata, bounds, toSource);
+            const worldCenter: [number, number] = [
+              (bounds[0] + bounds[2]) / 2,
+              (bounds[1] + bounds[3]) / 2,
+            ];
+            const sourceCenter = toSource(worldCenter[0], worldCenter[1]);
+            const sourceRow =
+              sourceCenter && Number.isFinite(sourceCenter[1]) && layer.source.metadata.resolution[1]
+                ? (sourceCenter[1] - layer.source.metadata.origin[1]) /
+                  layer.source.metadata.resolution[1]
+                : Number.POSITIVE_INFINITY;
             const task: Task = {
               key,
               layer,
@@ -329,6 +340,7 @@ export class RasterRenderService implements RasterContract {
                 selection.level.tileWidth >= selection.level.width &&
                 selection.level.tileHeight < selection.level.height,
               gridRow: y,
+              sourceRow,
             };
             tasks.push(task);
             layerTasks.push(task);
@@ -438,16 +450,18 @@ export class RasterRenderService implements RasterContract {
     this.queue = tasks
       .filter((task) => !this.cache.has(task.key) && !this.failures.has(task.key))
       .sort((a, b) => {
-        const ordered = priority(a) - priority(b);
-        if (ordered) return ordered;
         if (
           a.rowStriped &&
           b.rowStriped &&
           a.layer === b.layer &&
-          a.selectedLevel === b.selectedLevel &&
-          a.gridRow !== b.gridRow
-        )
-          return a.gridRow - b.gridRow;
+          a.selectedLevel === b.selectedLevel
+        ) {
+          const sourceOrdered = a.sourceRow - b.sourceRow;
+          if (Number.isFinite(sourceOrdered) && sourceOrdered) return sourceOrdered;
+          if (a.gridRow !== b.gridRow) return a.gridRow - b.gridRow;
+        }
+        const ordered = priority(a) - priority(b);
+        if (ordered) return ordered;
         return distance(a) - distance(b);
       });
     this.taskQueued += this.queue.length;
