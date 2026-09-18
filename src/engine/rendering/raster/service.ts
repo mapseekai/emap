@@ -491,6 +491,20 @@ export class RasterRenderService implements RasterContract {
         .catch((error) => {
           if (this.disposed || controller.signal.aborted || !this.wanted.has(task.key)) return;
           this.loadTileFailed++;
+          if (this.taskErrors.length < 5) {
+            const value = error as { name?: unknown; code?: unknown; message?: unknown };
+            const level = task.layer.source.metadata.levels.find(
+              (item) => item.id === task.selectedLevel,
+            );
+            this.taskErrors.push({
+              stage: 'loadTile',
+              name: typeof value?.name === 'string' ? value.name : 'Error',
+              code: typeof value?.code === 'string' ? value.code : null,
+              message: typeof value?.message === 'string' ? value.message : String(error),
+              selectedLevel: task.selectedLevel,
+              blockSize: level ? [level.tileWidth, level.tileHeight] : null,
+            });
+          }
           this.failures.add(task.key);
           this.presentation.flush();
           // A slow or failed tile must not cancel ready/queued siblings.
