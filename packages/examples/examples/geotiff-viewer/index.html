@@ -6,6 +6,9 @@
 <style>
 #metadata, #references, #performance-output { white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.5;max-height:240px;overflow:auto; }
 .metric { display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--emap-example-border); }
+#directory-raster-list { display:grid;gap:6px;max-height:180px;overflow:auto;padding:4px 0; }
+.directory-raster-option { display:flex;align-items:center;gap:8px;font-size:12px; }
+.directory-raster-option input { margin:0; }
 </style>
 </head>
 <body class="emap-example-with-floating-header">
@@ -16,8 +19,8 @@
 <div class="emap-example-workbench-body">
 <section class="emap-example-section">
 <div class="emap-example-field"><label>影像目录（推荐，自动关联 .ovr）</label><button id="directory-picker" type="button">选择影像目录</button></div>
-<div id="directory-raster-row" class="emap-example-field" hidden><label for="directory-raster">目录中的 TIFF / BigTIFF</label><select id="directory-raster"><option value="">请选择影像…</option></select></div>
-<p id="directory-status" class="emap-example-hint">授权目录后，选择 a.tif 会自动查找同目录 a.tif.ovr，无需再次选择金字塔。</p>
+<div id="directory-raster-row" class="emap-example-field" hidden><label>目录中的 TIFF / BigTIFF（可多选）</label><div id="directory-raster-list" role="group" aria-label="目录中的 TIFF / BigTIFF"></div></div>
+<p id="directory-status" class="emap-example-hint">授权目录后，可勾选多个 TIFF；每个 a.tif 都会自动查找同目录 a.tif.ovr，无需再次选择金字塔。</p>
 <details><summary>兼容方式：手动选择原图与 .ovr</summary>
 <div class="emap-example-field"><label for="file-input">原始 TIFF / BigTIFF</label><input id="file-input" type="file" accept=".tif,.tiff" /></div>
 <div class="emap-example-field"><label for="overview-input">外部金字塔（可选）</label><input id="overview-input" type="file" accept=".ovr" /></div>
@@ -72,7 +75,9 @@ const map = await emap.Emap.create({ container: 'map', preset: 'viewer' });
 const rasterFiber = map.ctx.plugin(rasterFeature); await rasterFiber.await();
 const loaderFiber = map.ctx.plugin(loader); await loaderFiber.await();
 const status = document.getElementById('status');
-let generation = 0, controller, currentId = null, directoryHandle = null, directoryPair = null;
+let generation = 0, controller, currentId = null, directoryHandle = null;
+const directoryLayers = new Map();
+let directoryLoadQueue = Promise.resolve();
 const state = { map, rasterFiber, loaderFiber, loading: false, metadata: null, error: null, errorCode: null, currentId: null, file: null };
 window.geotiffDemo = state;
 const bandControls = attachRasterBandControls(style => {
@@ -87,22 +92,44 @@ const fit = async () => {
   const bounds = await map.ctx.raster.getBounds(currentId);
   map.fitBounds(new emap.Bounds(...bounds), { padding: 40, duration: 0 });
 };
-async function selectDirectoryRaster(filename, loadNow = false) {
-  if (!directoryHandle || !filename) { directoryPair = null; return; }
-  const run = ++generation;
+async function setDirectoryRaster(filename, checked) {
+  if (!directoryHandle || !filename) return;
   const directoryStatus = document.getElementById('directory-status');
+  if (!checked) {
+    const loaded = directoryLayers.get(filename);
+    if (loaded) {
+      map.ctx.raster.remove(loaded.id);
+      directoryLayers.delete(filename);
+      if (currentId === loaded.id) {
+        const next = Array.from(directoryLayers.values()).at(-1) ?? null;
+        currentId = state.currentId = next?.id ?? null;
+        state.metadata = next?.metadata ?? null;
+        state.file = next?.file ?? null;
+        bandControls.setSource(next?.metadata ?? null);
+      }
+    }
+    directoryStatus.textContent = `已移除 ${filename}；当前已加载 ${directoryLayers.size} 个目录栅格。`;
+    return;
+  }
+  if (directoryLayers.has(filename)) return;
   directoryStatus.textContent = `正在读取 ${filename} 并查找 ${filename}.ovr…`;
   try {
     const pair = await openRasterPair(directoryHandle, filename);
-    if (run !== generation) return;
-    directoryPair = pair;
+    const result = await load(pair.file, pair.overviewFile, { replaceCurrent: false });
+    if (!result) {
+      const input = Array.from(document.querySelectorAll('#directory-raster-list input[type="checkbox"]'))
+        .find(candidate => candidate.value === filename);
+      if (input) input.checked = false;
+      return;
+    }
+    directoryLayers.set(filename, { ...pair, ...result });
     directoryStatus.textContent = pair.overviewFile
-      ? `已自动关联：${pair.file.name} + ${pair.overviewFile.name}`
-      : `未找到 ${pair.file.name}.ovr；将使用原图/内部金字塔。`;
-    if (loadNow) await load(pair.file, pair.overviewFile);
+      ? `已加载 ${filename}（已关联 ${pair.overviewFile.name}）；当前共 ${directoryLayers.size} 个目录栅格。`
+      : `已加载 ${filename}（原图/内部金字塔）；当前共 ${directoryLayers.size} 个目录栅格。`;
   } catch (error) {
-    if (run !== generation) return;
-    directoryPair = null;
+    const input = Array.from(document.querySelectorAll('#directory-raster-list input[type="checkbox"]'))
+      .find(candidate => candidate.value === filename);
+    if (input) input.checked = false;
     directoryStatus.textContent = `目录读取失败：${error.message}`;
   }
 }
@@ -114,10 +141,26 @@ async function chooseRasterDirectory() {
     const handle = await picker({ mode: 'read' });
     const names = await listGeoTIFFs(handle);
     directoryHandle = handle;
-    directoryPair = null;
-    const select = document.getElementById('directory-raster');
-    select.replaceChildren(new Option('请选择影像…', ''));
-    for (const name of names) select.append(new Option(name, name));
+    const removedIds = new Set(Array.from(directoryLayers.values(), layer => layer.id));
+    for (const id of removedIds) map.ctx.raster.remove(id);
+    directoryLayers.clear();
+    if (currentId && removedIds.has(currentId)) {
+      currentId = state.currentId = null;
+      state.metadata = null;
+      state.file = null;
+      bandControls.setSource(null);
+    }
+    const list = document.getElementById('directory-raster-list');
+    list.replaceChildren();
+    for (const name of names) {
+      const label = document.createElement('label');
+      label.className = 'directory-raster-option';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = name;
+      label.append(input, document.createTextNode(name));
+      list.append(label);
+    }
     document.getElementById('directory-raster-row').hidden = false;
     if (!names.length) {
       document.getElementById('directory-status').textContent = '该目录没有 .tif / .tiff 文件。';
@@ -125,8 +168,9 @@ async function chooseRasterDirectory() {
     }
     document.getElementById('directory-status').textContent = `已授权 ${handle.name}，找到 ${names.length} 个 TIFF。`;
     if (names.length === 1) {
-      select.value = names[0];
-      await selectDirectoryRaster(names[0], true);
+      const input = list.querySelector('input[type="checkbox"]');
+      input.checked = true;
+      await setDirectoryRaster(names[0], true);
     }
   } catch (error) {
     if (error?.name === 'AbortError') return;
@@ -134,7 +178,7 @@ async function chooseRasterDirectory() {
   }
 }
 
-async function load(file, overviewFile) {
+async function load(file, overviewFile, { replaceCurrent = true } = {}) {
   controller?.abort(); const signal = (controller = new AbortController()).signal;
   const run = ++generation, id = `raster-${run}`;
   state.loading = true; state.error = null; state.errorCode = null;
@@ -151,7 +195,7 @@ async function load(file, overviewFile) {
       noData,
     });
     if (run !== generation) { map.ctx.raster.remove(id); return; }
-    if (currentId) map.ctx.raster.remove(currentId);
+    if (replaceCurrent && currentId) map.ctx.raster.remove(currentId);
     currentId = id; state.currentId = id; state.metadata = metadata; state.file = file;
     document.getElementById('size').textContent = `${(file.size / 1024 ** 2).toFixed(2)} MiB`;
     document.getElementById('levels').textContent = String(metadata.levels.length);
@@ -162,6 +206,7 @@ async function load(file, overviewFile) {
     bandControls.setSource(metadata);
     await fit();
     status.textContent = `${file.name} · Web Worker · 已加载，像素按视口读取`;
+    return { id, metadata, file };
   } catch (error) {
     if (run !== generation) return;
     state.error = error.message; state.errorCode = error.code ?? error.name;
@@ -303,15 +348,14 @@ if (typeof window.showDirectoryPicker !== 'function') {
   directoryPicker.textContent = '当前浏览器不支持目录授权';
 }
 directoryPicker.onclick = () => void chooseRasterDirectory();
-document.getElementById('directory-raster').onchange = event => {
-  const filename = event.target.value;
-  void selectDirectoryRaster(filename, Boolean(filename));
+document.getElementById('directory-raster-list').onchange = event => {
+  const input = event.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const filename = input.value, checked = input.checked;
+  directoryLoadQueue = directoryLoadQueue.then(() => setDirectoryRaster(filename, checked));
 };
-document.getElementById('file-input').onchange = () => { directoryPair = null; };
-document.getElementById('overview-input').onchange = () => { directoryPair = null; };
 document.getElementById('sample').onclick = () => void sample().catch(error => { status.textContent = error.message; });
 document.getElementById('load').onclick = () => {
-  if (directoryPair) { void load(directoryPair.file, directoryPair.overviewFile); return; }
   const file = document.getElementById('file-input').files?.[0];
   if (file) void load(file, document.getElementById('overview-input').files?.[0]);
 };
@@ -344,13 +388,14 @@ map.ctx.effect(() => () => {
   controller?.abort();
   controller = undefined;
   currentId = state.currentId = null;
-  directoryHandle = directoryPair = null;
+  directoryHandle = null;
+  directoryLayers.clear();
   state.file = state.metadata = null;
   // Debugging handles are host-owned references. Drop them when the map ends.
   state.rasterFiber = state.loaderFiber = null;
   document.getElementById('file-input').value = '';
   document.getElementById('overview-input').value = '';
-  for (const id of ['directory-picker','directory-raster','sample','load','cancel','fit','remove','save-reference','performance-reset','performance-copy','opacity','stretch','resampling','file-input','overview-input']) {
+  for (const id of ['directory-picker','directory-raster-list','sample','load','cancel','fit','remove','save-reference','performance-reset','performance-copy','opacity','stretch','resampling','file-input','overview-input']) {
     const control = document.getElementById(id);
     control.onclick = control.oninput = control.onchange = null;
   }
