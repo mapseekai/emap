@@ -5,7 +5,13 @@ import type { MapshaperLayer } from '../../../shared/types/mapshaper-types';
 
 /** Renderer boundary: consumers never obtain Canvas, painter or scheduler state. */
 export interface RenderContract {
-  registerPass(pass: RenderPass, stage?: 'before-layers' | 'after-layers'): () => void;
+  /** Top-first order shared by vector sources and source-scoped render passes. */
+  setSourceOrder(order: readonly string[]): void;
+  getSourceOrder(): readonly string[];
+  registerPass(
+    pass: RenderPass,
+    stage?: 'before-layers' | 'after-layers' | { readonly sourceId: string },
+  ): () => void;
   render(request?: RenderRequest): void;
   resize(): void;
   beginNavigation(): void;

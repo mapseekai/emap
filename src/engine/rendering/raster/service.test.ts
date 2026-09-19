@@ -38,6 +38,28 @@ describe('raster service contracts', () => {
     expect(service.getLayers()).toEqual([]);
     expect(service.getStats().cachedBytes).toBe(0);
   });
+  it('registers and releases one source-scoped render pass per raster layer', async () => {
+    const releases: ReturnType<typeof vi.fn>[] = [];
+    const registerLayerPass = vi.fn((_id: string, _pass: RenderPass) => {
+      const release = vi.fn();
+      releases.push(release);
+      return release;
+    });
+    const service = new RasterRenderService({ ...deps(), registerLayerPass });
+    service.addSource('a', await source());
+    service.addSource('b', await source());
+    expect(registerLayerPass.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
+
+    service.moveLayer('a');
+    expect(releases.slice(0, 2).every((release) => release.mock.calls.length === 1)).toBe(true);
+    expect(registerLayerPass.mock.calls.slice(2).map(([id]) => id)).toEqual(['b', 'a']);
+
+    service.remove('b');
+    expect(releases[2]).toHaveBeenCalledTimes(1);
+    service.dispose();
+    expect(releases[3]).toHaveBeenCalledTimes(1);
+  });
+
   it('validates ids, budgets and style before acquiring source ownership', async () => {
     for (const options of [
       { cacheBytes: 0 },

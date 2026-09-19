@@ -8,6 +8,11 @@ import { EditOverlayRenderer } from '../../rendering/edit-overlay-renderer';
 import { type EditPainter } from '../../rendering/painter';
 import { pointLodForPainter } from '../../rendering/point-lod';
 import { RenderScheduler, type RenderSnapshot } from '../../rendering/render-scheduler';
+import {
+  checkedSourceOrder,
+  sourceRenderBlocks,
+  type RenderPassStage,
+} from '../../rendering/source-order';
 import { getLayerId } from '../../../domain/source/layer-utils';
 import type { ArcCollection, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import type { CacheContract as WorkspaceCache } from '../../../runtime/services/contracts/cache';
@@ -42,14 +47,29 @@ interface Dependencies {
 
 /** render implementation, wired through explicit service dependencies. */
 export class CanvasRenderService {
-  private readonly _passes = new Map<RenderPass, 'before-layers' | 'after-layers'>();
+  private readonly _passes = new Map<RenderPass, RenderPassStage>();
+  private _sourceOrder: string[] = [];
 
-  registerPass(
-    pass: RenderPass,
-    stage: 'before-layers' | 'after-layers' = 'before-layers',
-  ): () => void {
+  setSourceOrder(order: readonly string[]): void {
+    const next = checkedSourceOrder(order);
+    if (
+      next.length === this._sourceOrder.length &&
+      next.every((id, i) => id === this._sourceOrder[i])
+    )
+      return;
+    this._sourceOrder = next;
+    this._scheduleRender();
+  }
+
+  getSourceOrder(): readonly string[] {
+    return [...this._sourceOrder];
+  }
+
+  registerPass(pass: RenderPass, stage: RenderPassStage = 'before-layers'): () => void {
+    const checkedStage =
+      typeof stage === 'object' ? { sourceId: checkedSourceOrder([stage.sourceId])[0] } : stage;
     if (this._passes.has(pass)) throw new Error('Render pass is already registered');
-    this._passes.set(pass, stage);
+    this._passes.set(pass, checkedStage);
     this._scheduleRender();
     return () => {
       if (this._passes.delete(pass)) this._scheduleRender();
@@ -307,10 +327,42 @@ export class CanvasRenderService {
     this._canvas.style.transformOrigin = '';
   }
 
-  _renderLayers(pixelSize: number, lineScale: number): void {
+  _renderLayers(
+    pixelSize: number,
+    lineScale: number,
+    selectedLayers?: readonly ReturnType<LayerServiceImpl['_getEffectiveLayers']>[number][],
+    retainLayerIds?: ReadonlySet<string>,
+  ): void {
+    if (
+      selectedLayers === undefined &&
+      [...this._passes.values()].some((stage) => typeof stage === 'object')
+    ) {
+      const all = this.deps.layers._getEffectiveLayers();
+      const retain = new Set(all.map((layer) => layer.id));
+      const viewport = this.deps.view._viewport;
+      const frame: RenderFrame = {
+        transform: viewport.transform.clone(),
+        width: viewport.width,
+        height: viewport.height,
+        pixelRatio: window.devicePixelRatio || 1,
+        painter: this._painter,
+      };
+      for (const block of sourceRenderBlocks(all, this._passes, this._sourceOrder)) {
+        if ('layers' in block) this._renderLayers(pixelSize, lineScale, block.layers, retain);
+        else {
+          try {
+            block.pass(frame);
+          } catch (error) {
+            this.deps.events.fire('error', { error });
+          }
+        }
+      }
+      return;
+    }
     renderLayers(
       {
-        layers: this.deps.layers._getEffectiveLayers(),
+        layers: selectedLayers ?? this.deps.layers._getEffectiveLayers(),
+        retainLayerIds,
         sources: this.deps.document._sources,
         viewport: this.deps.view._viewport,
         painter: this._painter,

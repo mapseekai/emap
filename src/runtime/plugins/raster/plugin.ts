@@ -20,6 +20,7 @@ export function rasterPlugin(options: RasterRenderOptions = {}): Plugin.Object {
       ctx.effect(function* () {
         const raster = new RasterRenderService(
           {
+            registerLayerPass: (id, pass) => ctx.render.registerPass(pass, { sourceId: id }),
             getCRS: () => ctx.view.getCRS(),
             requestRender: () => ctx.signals.requestRender(),
             reportError: (id, error) => ctx.mapEvents.fire('rastererror', { sourceId: id, error }),

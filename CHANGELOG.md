@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-09-19
+
+Changes since [v0.13.0](https://github.com/mapseekai/emap/compare/v0.13.0...v0.13.1).
+
 ### Changed
 
 - Write GeoTIFF row chunks directly into each display tile's final RGBA buffer,
@@ -16,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Initialize its embedded WASM lazily inside the existing classic Worker; keep
   the bounded JavaScript decoder when WASM is unavailable or blocks exceed the
   small-block envelope. Validate LZW codes and decoded size before WASM calls.
+- Add a top-first source render order shared by vector sources and source-scoped
+  render passes. Raster layers now register individual source passes so raster
+  and vector sources can be interleaved on the same map canvas without changing
+  edit/highlight overlay behavior.
+
+### Fixed
+
+- Respect mixed raster/vector Z-order instead of forcing every raster below every
+  vector. Preserve NoData transparency, alpha compositing and point-LOD cache
+  retention when a frame is rendered in source blocks.
 
 ## [0.13.0] - 2026-09-18
 

@@ -1,12 +1,15 @@
 import { test, expect } from '@playwright/test';
 const route='/mapseekai/emap/examples/geotiff-viewer/';
 async function idle(page){
-  await expect.poll(()=>page.evaluate(()=>{
+  const pending=()=>page.evaluate(()=>{
     const s=window.geotiffDemo,v=s.stats(),p=s.processing();
     return Number(s.loading)+v.activeReads+v.queuedReads+v.pendingFrames+Number(v.interacting)
       +(p?.busyWorkers ?? 0)+(p?.queuedTasks ?? 0)+Number((p?.reservedBytes ?? 0)>0);
-  })).toBe(0);
+  });
+  await expect.poll(pending).toBe(0);
+  // A completed presentation requests another frame; require quiescence after it.
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await expect.poll(pending).toBe(0);
 }
 async function installProbe(page){
   await page.addInitScript(()=>{

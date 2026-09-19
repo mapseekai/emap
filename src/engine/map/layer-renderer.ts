@@ -17,6 +17,8 @@ import { applyMaskToCandidates, type FilterResolver } from './filter-resolver';
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
+  /** Full-frame layer IDs retained when rendering one source block at a time. */
+  retainLayerIds?: ReadonlySet<string>;
   sources: ReadonlyMap<string, MutableTopologySource>;
   viewport: Viewport;
   painter: CorePainter;
@@ -101,7 +103,7 @@ export function renderLayers(
   lineScale: number,
 ): void {
   const pointLod = pointLodForPainter(ctx.painter);
-  pointLod.retainLayers(new Set(ctx.layers.map((layer) => layer.id)));
+  pointLod.retainLayers(ctx.retainLayerIds ?? new Set(ctx.layers.map((layer) => layer.id)));
   for (const layer of ctx.layers) {
     if (layer.layout?.visibility === 'none') continue;
 

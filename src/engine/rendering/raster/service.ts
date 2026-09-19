@@ -90,6 +90,7 @@ interface Presentation {
   patches: RasterPatch[];
 }
 interface Dependencies {
+  registerLayerPass?(id: string, pass: RenderPass): () => void;
   getCRS(): string;
   requestRender(): void;
   reportError(id: string, error: unknown): void;
@@ -154,6 +155,7 @@ export class RasterRenderService implements RasterContract {
   private readonly cacheLimit: number;
   private readonly concurrency: number;
   private readonly presentation: RasterPresentationQueue;
+  private readonly layerPasses = new Map<string, () => void>();
   constructor(
     private readonly deps: Dependencies,
     options: RasterRenderOptions = {},
@@ -181,7 +183,7 @@ export class RasterRenderService implements RasterContract {
       this.deps.requestRender();
     });
   }
-  readonly render: RenderPass = (frame: RenderFrame) => {
+  readonly render = (frame: RenderFrame, layerId?: string): void => {
     if (this.disposed || !this.layers.size || frame.width <= 0 || frame.height <= 0) return;
     const crs = this.deps.getCRS(),
       t = frame.transform;
@@ -194,7 +196,13 @@ export class RasterRenderService implements RasterContract {
       Math.max(a[0], b[0]),
       Math.max(a[1], b[1]),
     ];
-    for (const layer of this.layers.values()) {
+    const paintLayers =
+      layerId === undefined
+        ? this.deps.registerLayerPass
+          ? []
+          : this.layers.values()
+        : [this.layers.get(layerId)].filter((layer): layer is Layer => Boolean(layer));
+    for (const layer of paintLayers) {
       if (!layer.visible) continue;
       const displayed = this.displayed.get(layer.id);
       if (!displayed || displayed.crs !== crs) continue;
@@ -210,6 +218,7 @@ export class RasterRenderService implements RasterContract {
         );
       }
     }
+    if (layerId !== undefined) return;
     if (this.gestures.size || this.settleTimer !== null) return;
     const signature = [
       t.mx,
@@ -1015,9 +1024,25 @@ export class RasterRenderService implements RasterContract {
       visible: true,
       revision: ++this.version,
     });
+    try {
+      if (this.deps.registerLayerPass) {
+        this.layerPasses.set(
+          id,
+          this.deps.registerLayerPass(id, (frame) => this.render(frame, id)),
+        );
+      }
+    } catch (error) {
+      this.layers.delete(id);
+      throw error;
+    }
     this.invalidate();
   }
   remove(id: string): void {
+    const release = this.layerPasses.get(id);
+    if (release) {
+      this.layerPasses.delete(id);
+      release();
+    }
     const layer = this.layers.get(id);
     if (!layer) return;
     this.layers.delete(id);
@@ -1079,6 +1104,16 @@ export class RasterRenderService implements RasterContract {
     );
     this.layers.clear();
     for (const entry of entries) this.layers.set(entry.id, entry);
+    if (this.deps.registerLayerPass) {
+      for (const release of this.layerPasses.values()) release();
+      this.layerPasses.clear();
+      for (const entry of entries) {
+        this.layerPasses.set(
+          entry.id,
+          this.deps.registerLayerPass(entry.id, (frame) => this.render(frame, entry.id)),
+        );
+      }
+    }
     this.invalidate();
   }
   async getBounds(id: string): Promise<RasterWindow> {
@@ -1195,6 +1230,8 @@ export class RasterRenderService implements RasterContract {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    for (const release of this.layerPasses.values()) release();
+    this.layerPasses.clear();
     this.presentation.dispose();
     this.epoch++;
     if (this.scheduled) cancelAnimationFrame(this.scheduled);
