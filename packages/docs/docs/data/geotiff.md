@@ -10,7 +10,11 @@ verifiedVersion: 0.13.0
 
 # 本地 GeoTIFF 栅格
 
-`@mapseekai/emap/geotiff` 使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片绘制到现有地图 Canvas，不创建额外地图覆盖层。对常见的 chunky UInt8 RGB + nearest 显示路径，Worker 会直接从 interleaved 解码窗口生成 RGBA，避免先拆成三个平面数组；不满足条件时自动回退通用数值路径。对标准 TIFF LZW（Compression=5）的字节对齐整数块使用预分配 typed-array 快速解码器，并保留 geotiff.js 解码器作为兼容回退；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
+`@mapseekai/emap/geotiff` 使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片绘制到现有地图 Canvas，不创建额外地图覆盖层。对常见的 chunky UInt8 RGB + nearest 显示路径，Worker 会直接从 interleaved 解码窗口生成 RGBA，避免先拆成三个平面数组；不满足条件时自动回退通用数值路径。对标准 TIFF LZW（Compression=5）的字节对齐整数块优先使用固定的 `@developmentseed/lzw-tiff-decoder@0.2.2` Wasm 解码器；Wasm 不可用时保留有界 typed-array JavaScript 回退，不支持的布局仍交给 geotiff.js；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
+
+每张显示瓦片只分配一份最终 RGBA，条带读取分段直接写入该缓冲区，不再为每段生成完整临时 RGBA 或全量扫描合并。未覆盖、NoData 和最终 Alpha 为零的像素不会覆盖同批次前面已写入的有效像素；这不是跨视口旧影像合成，也不是 Alpha 叠加。原来的独立着色调用仍返回新缓冲区。
+
+LZW Wasm 内嵌于同一 `emap-geotiff-worker.js`，首次需要时初始化，每个 Worker 复用实例，不增加 Worker、网络请求或部署资产。初始化失败（包括 CSP 禁用 Wasm）时自动使用有界 JS 解码器。为控制 Wasm 堆增长，仅对压缩输入和实际解码输出各不超过 4MiB 的块启用 Wasm，较大块继续走有界 JS 路径。进入 Wasm 前检查初始 CLEAR、码宽／字典进度、结束标记和输出长度，损坏／超出声明尺寸的码流直接报错，不回退到无界解码。`fastLzwBlocks` 统计快速路径完成块数（含 JS 回退），`fastLzwFallbacks` 统计其中因 Wasm 不可用或块过大而使用 JS 的块数。
 
 性能诊断会报告 DEFLATE 原生解码的 compression code、运行时可用性、是否符合 fast path 条件和禁用原因；TIFF Compression `8` 与 `32946` 都按 Deflate 处理。逐块身份追踪（物理块请求/重复加载）目前暂停，以避免为极小 tile/strip 长期保留大量键值。
 
@@ -132,7 +136,7 @@ emap 使用更短的有界更新窗口，并保留块级进度：优先减少读
 
 每个打开的数据源增加解码块 LRU 缓存：基准为**每源 8MiB**，由并行 Worker 分摊，每个 Worker 同时受 4096 个条目约束。含分块（tiled）层级时按工作集放大——每个 Worker 至少容纳约 10 个最大解码块（按 MiB 向上取整），上限 16MiB/Worker；含条带（striped）层级时主 Worker 按约 384 个最大条带的工作集定容，范围 32–128MiB。原图、概览共享同一缓存；相邻显示瓦片、重访和样式变化可复用原始数据块。缓存只保存已完成的解码缓冲，关闭源文件时清空，不保存长期 Promise 或输出像素数组。
 
-数值窗口针对原生端序、均一位深的常见编码使用 TypedArray 行复制／解交错，并将块读取管线限制为最多 4 个；编码解压与 Predictor 处理仍由 geotiff.js 执行。Float16、不同端序、混合样本与特殊编码继续使用上游读取路径。最近邻和双线性显示均复用坐标、通道与插值状态，减少逐像素临时数组。没有修改源文件数值、金字塔选择或拉伸范围。
+数值窗口针对原生端序、均一位深的常见编码使用 TypedArray 行复制／解交错，并将块读取管线限制为最多 4 个；适用的 LZW/DEFLATE 块走快速解码器和对应 Predictor 处理，其余编码交给 geotiff.js。Float16、不同端序、混合样本与特殊编码继续使用上游读取路径。最近邻和双线性显示均复用坐标、通道与插值状态，减少逐像素临时数组。没有修改源文件数值、金字塔选择或拉伸范围。
 
 条带（striped）TIFF 的读取围绕主 Worker 的条带缓存组织：所有条带层级的任务固定在主 Worker 串行执行，并按源行号升序调度，让连续读取沿条带单调前进、最大化缓存复用。同一图层、同一金字塔层级、同一显示行的最多 16 个显示瓦片合并为一次读取：合并窗口按行块切分（解码后不超过 64MiB、物理字节不超过 96MiB，双线性重采样保留 1 像素重叠），每个行块只读取解码一次。单个压缩条带超过 64MiB 直接报 `RASTER_IO_BUDGET`，需要更完整的金字塔。金字塔层级选择靠近边界时，若下一级为分块概览且放大倍数不超过 1.4×，直接选用概览以避免整分辨率分块的 I/O 与解码尖峰；以条带存储的原始层级保持严格选择，不因边界放宽。
 

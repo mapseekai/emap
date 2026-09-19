@@ -21,6 +21,9 @@ importers:
 
   .:
     dependencies:
+      '@developmentseed/lzw-tiff-decoder':
+        specifier: 0.2.2
+        version: 0.2.2
       '@ngageoint/geopackage':
         specifier: 4.2.9
         version: 4.2.9(@types/node@24.13.1)(geotiff@3.0.5)(supports-color@8.1.1)
@@ -1233,6 +1236,9 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       postcss: ^8.4
+
+  '@developmentseed/lzw-tiff-decoder@0.2.2':
+    resolution: {integrity: sha512-bsBIdV1LyqcrtnYtIYu3C/297X2wxeYkmmhHzR02OOX823sGxT8GLGdenTmwoXvNWkozk3b+ptXtJeSUmNPaTA==}
 
   '@discoveryjs/json-ext@0.5.7':
     resolution: {integrity: sha512-dBVuXR082gk3jsFp7Rd/JI4kytwGHecnCoTtXFb7DB6CNHp4rg5k1bhg0nWdLGLnOV71lmDzGQaLMy8iPLY0pw==}
@@ -8762,6 +8768,8 @@ snapshots:
   '@csstools/utilities@2.0.0(postcss@8.5.6)':
     dependencies:
       postcss: 8.5.6
+
+  '@developmentseed/lzw-tiff-decoder@0.2.2': {}
 
   '@discoveryjs/json-ext@0.5.7': {}
 

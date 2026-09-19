@@ -1,3 +1,4 @@
+import { lazyLzwDecoder } from './scripts/lazy-lzw-decoder.mjs';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
@@ -188,6 +189,7 @@ function esbuildTypeScript() {
 
 function commonPlugins() {
   return [
+    lazyLzwDecoder(),
     alias({
       entries: [{ find: 'iconv-lite', replacement: 'src/shared/types/iconv-shim.ts' }],
     }),

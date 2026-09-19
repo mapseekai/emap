@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Write GeoTIFF row chunks directly into each display tile's final RGBA buffer,
+  removing temporary full-tile arrays and full-buffer merge scans while preserving
+  nearest/bilinear, NoData, palette and alpha behavior.
+- Use pinned `@developmentseed/lzw-tiff-decoder@0.2.2` for bounded LZW blocks.
+  Initialize its embedded WASM lazily inside the existing classic Worker; keep
+  the bounded JavaScript decoder when WASM is unavailable or blocks exceed the
+  small-block envelope. Validate LZW codes and decoded size before WASM calls.
+
 ## [0.13.0] - 2026-09-18
 
 Changes since [v0.12.0](https://github.com/mapseekai/emap/compare/v0.12.0...v0.13.0).

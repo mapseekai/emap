@@ -1,3 +1,4 @@
+import { rasterWarpLocator } from '../../engine/rendering/raster/warp';
 import { describe, expect, it, vi } from 'vitest';
 import { GeoTIFFReader } from './reader';
 import { renderRasterBatch, renderRasterWindow } from './render-window';
@@ -5,6 +6,86 @@ import { planRasterTile, colorizeRasterTile } from '../../engine/rendering/raste
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
 
 describe('off-thread raster pipeline', () => {
+  it.each([
+    [8, 3, 'nearest'],
+    [16, 3, 'nearest'],
+    [16, 3, 'bilinear'],
+    [8, 4, 'nearest'],
+    [8, 4, 'bilinear'],
+  ] as const)('reuses only final RGBA across chunks (%i-bit, %i bands, %s)', async (bits, bands, resampling) => {
+    const reader = await GeoTIFFReader.open(
+      new File(
+        [
+          makeRasterFixture({
+            width: 32,
+            height: 16,
+            bits,
+            bands,
+            noData: 0,
+            compression: 'lzw',
+            pixelValue: (x, y, band) =>
+              band === 3
+                ? x % 3 === 0
+                  ? 0
+                  : x % 3 === 1
+                    ? 128
+                    : 255
+                : (x * 7 + y * 13 + band * 17) % 255,
+          }),
+        ],
+        'chunked-lzw.tif',
+      ),
+    );
+    try {
+      const style = { resampling };
+      const plan = planRasterTile(
+        reader.metadata,
+        reader.metadata.bounds,
+        (x, y) => [x, y],
+        style,
+        64,
+      )!;
+      const request = { read: plan.request, warp: plan.warp, width: 64, height: 64, style };
+      const overlap = resampling === 'bilinear' ? 1 : 0;
+      const chunks = [
+        { ...plan.request, window: [0, 0, 32, 6 + overlap] as const },
+        { ...plan.request, window: [0, 6 - overlap, 32, 11 + overlap] as const },
+        { ...plan.request, window: [0, 11 - overlap, 32, 16] as const },
+      ];
+      const expected = new Uint8ClampedArray(64 * 64 * 4);
+      for (const chunk of chunks) {
+        const data = await reader.readWindow(chunk);
+        const partial = colorizeRasterTile(
+          reader.metadata,
+          { ...plan, request: chunk, locate: rasterWarpLocator(plan.warp, 64) },
+          data,
+          style,
+        );
+        for (let i = 0; i < partial.length; i += 4)
+          if (partial[i + 3]) expected.set(partial.subarray(i, i + 4), i);
+      }
+      vi.spyOn(reader, 'splitRowStripedReadRequests').mockReturnValue(chunks);
+      let rgbaAllocations = 0;
+      vi.stubGlobal(
+        'Uint8ClampedArray',
+        new Proxy(Uint8ClampedArray, {
+          construct(target, args) {
+            if (args[0] === 64 * 64 * 4) rgbaAllocations++;
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      const actual = await renderRasterBatch(reader, [request, structuredClone(request)]);
+      expect(actual[0].rgba).toEqual(expected);
+      expect(actual[1].rgba).toEqual(expected);
+      expect(actual[0].rgba.buffer).not.toBe(actual[1].rgba.buffer);
+      expect(rgbaAllocations).toBe(2);
+    } finally {
+      vi.unstubAllGlobals();
+      reader.dispose();
+    }
+  });
+
   it.each([
     [8, 1],
     [16, 1],

@@ -1,7 +1,8 @@
+import { encodeTiffLzw } from './tiff-lzw';
 import { deflateSync } from 'node:zlib';
 /** Small, deterministic TIFF fixtures; no network or GDAL dependency. */
 export interface RasterFixtureOptions {
-  compression?: 'deflate' | 'deflate-old';
+  compression?: 'deflate' | 'deflate-old' | 'lzw';
   width?: number;
   height?: number;
   overviews?: number[];
@@ -84,7 +85,12 @@ export function makeRasterFixture(options: RasterFixtureOptions = {}): Uint8Arra
           }
         }
     const deflate = options.compression === 'deflate' || options.compression === 'deflate-old';
-    const payload = deflate ? new Uint8Array(deflateSync(values)) : values;
+    const payload =
+      options.compression === 'lzw'
+        ? encodeTiffLzw(values)
+        : deflate
+          ? new Uint8Array(deflateSync(values))
+          : values;
     const tags: Tag[] = [
       { id: 254, type: 4, values: [mask ? 5 : index > 0 ? 1 : (options.subfileType ?? 0)] },
       { id: 256, type: 4, values: [w] },
@@ -93,7 +99,15 @@ export function makeRasterFixture(options: RasterFixtureOptions = {}): Uint8Arra
       {
         id: 259,
         type: 3,
-        values: [options.compression === 'deflate-old' ? 32946 : deflate ? 8 : 1],
+        values: [
+          options.compression === 'lzw'
+            ? 5
+            : options.compression === 'deflate-old'
+              ? 32946
+              : deflate
+                ? 8
+                : 1,
+        ],
       },
       { id: 262, type: 3, values: [options.photometric ?? (samples >= 3 ? 2 : 1)] },
       { id: 273, type: big ? 16 : 4, values: [0] },

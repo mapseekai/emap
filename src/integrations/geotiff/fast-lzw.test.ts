@@ -1,46 +1,7 @@
+import { encodeTiffLzw } from '../../../test/utils/tiff-lzw';
 import { describe, expect, it, vi } from 'vitest';
 import { getDecoder, type BaseDecoder } from 'geotiff';
 import { canUseFastLzw, createFastLzwDecoder, decodeLzwBlock } from './fast-lzw';
-
-function encodeTiffLzw(input: Uint8Array): Uint8Array {
-  const dictionary = new Map<string, number>();
-  for (let i = 0; i < 256; i++) dictionary.set(String(i), i);
-  let nextCode = 258,
-    bits = 9,
-    currentByte = 0,
-    bitCount = 0;
-  const output: number[] = [];
-  const write = (code: number) => {
-    for (let shift = bits - 1; shift >= 0; shift--) {
-      currentByte = (currentByte << 1) | ((code >> shift) & 1);
-      if (++bitCount === 8) {
-        output.push(currentByte);
-        currentByte = 0;
-        bitCount = 0;
-      }
-    }
-  };
-  write(256);
-  if (input.length) {
-    let sequence = String(input[0]);
-    for (let i = 1; i < input.length; i++) {
-      const next = `${sequence},${input[i]}`;
-      if (dictionary.has(next)) sequence = next;
-      else {
-        write(dictionary.get(sequence)!);
-        if (nextCode <= 4095) {
-          dictionary.set(next, nextCode++);
-          if (bits < 12 && nextCode >= 1 << bits) bits++;
-        }
-        sequence = String(input[i]);
-      }
-    }
-    write(dictionary.get(sequence)!);
-  }
-  write(257);
-  if (bitCount) output.push(currentByte << (8 - bitCount));
-  return Uint8Array.from(output);
-}
 
 function predictor2Encode(input: Uint8Array, width: number, height: number, stride: number) {
   const encoded = input.slice(),
@@ -62,6 +23,40 @@ const parameters = {
 } as const;
 
 describe('allocation-light TIFF LZW decoder', () => {
+  it('keeps the bounded JS fallback correct after filling the 12-bit dictionary', () => {
+    let seed = 19;
+    const raw = Uint8Array.from({ length: 16384 }, () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed >>> 24;
+    });
+    const compressed = encodeTiffLzw(raw);
+    expect(new Uint8Array(decodeLzwBlock(compressed.buffer, raw.length))).toEqual(raw);
+  });
+
+  it.each([16, 32] as const)('preserves %i-bit samples and planar Predictor 2', async (bits) => {
+    for (const planarConfiguration of [1, 2]) {
+      const ArrayType = bits === 16 ? Uint16Array : Uint32Array;
+      const stride = planarConfiguration === 2 ? 1 : 3;
+      const original = ArrayType.from({ length: 64 * 16 * stride }, (_, i) => i * 173 + 7);
+      const predicted = original.slice();
+      for (let row = 0; row < 16; row++)
+        for (let index = 64 * stride - 1; index >= stride; index--)
+          predicted[row * 64 * stride + index] -= predicted[row * 64 * stride + index - stride];
+      const params = {
+        ...parameters,
+        bitsPerSample: [bits, bits, bits],
+        predictor: 2,
+        planarConfiguration,
+      };
+      const upstream = await getDecoder(5, params);
+      const decoder = createFastLzwDecoder(5, params, upstream);
+      const compressed = encodeTiffLzw(new Uint8Array(predicted.buffer));
+      expect(new Uint8Array(await decoder.decode(compressed.buffer))).toEqual(
+        new Uint8Array(original.buffer),
+      );
+    }
+  });
+
   it('matches upstream through dictionary code-width transitions', async () => {
     const original = Uint8Array.from({ length: 64 * 16 * 3 }, (_, i) => (i * 73 + (i >> 3)) & 255),
       compressed = encodeTiffLzw(original),

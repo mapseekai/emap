@@ -35,6 +35,59 @@ const metadata: RasterMetadata = {
 };
 const identity = (x: number, y: number): [number, number] => [x, y];
 describe('raster display tiles', () => {
+  it.each([
+    'nearest',
+    'bilinear',
+  ] as const)('writes %s into the supplied RGBA without clearing transparent pixels', (resampling) => {
+    const rgbaMetadata = {
+      ...metadata,
+      noData: 0,
+      alphaBand: 3,
+      levels: [
+        {
+          ...metadata.levels[0],
+          samples: 4,
+          bits: [32, 32, 32, 32],
+          formats: [3, 3, 3, 3],
+          photometric: 2,
+        },
+      ],
+    };
+    const style = { resampling };
+    const plan = planRasterTile(rgbaMetadata, [0, 0, 8, 8], identity, style, 8)!;
+    const red = new Float32Array(64).fill(0.5);
+    red[0] = 0;
+    const alpha = new Float32Array(64).fill(0.5);
+    alpha[1] = 0;
+    alpha[2] = NaN;
+    alpha[3] = -1;
+    alpha[4] = 0.001;
+    const samples = { width: 8, height: 8, data: [red, red.slice(), red.slice(), alpha] };
+    const expected = new Uint8ClampedArray(256).fill(73);
+    const partial = colorizeRasterTile(rgbaMetadata, plan, samples, style);
+    for (let i = 0; i < partial.length; i += 4)
+      if (partial[i + 3]) expected.set(partial.subarray(i, i + 4), i);
+    const target = new Uint8ClampedArray(256).fill(73);
+    expect(colorizeRasterTile(rgbaMetadata, plan, samples, style, target)).toBe(target);
+    expect(target).toEqual(expected);
+    expect(Array.from(target.subarray(0, 20))).toEqual(Array(20).fill(73));
+  });
+
+  it('validates a caller-owned target before writing', () => {
+    const plan = planRasterTile(metadata, [0, 0, 8, 8], identity, {}, 8)!;
+    const target = new Uint8ClampedArray(4).fill(73);
+    expect(() =>
+      colorizeRasterTile(
+        metadata,
+        plan,
+        { width: 8, height: 8, data: [new Uint8Array(64)] },
+        {},
+        target,
+      ),
+    ).toThrow(/RGBA/);
+    expect(Array.from(target)).toEqual([73, 73, 73, 73]);
+  });
+
   it('normalizes floating-point unassociated alpha using the 0–1 range', () => {
     const rgbaMetadata = {
       ...metadata,

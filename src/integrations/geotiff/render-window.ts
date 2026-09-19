@@ -38,12 +38,13 @@ function canRenderDirectRgb8(
   );
 }
 
-function colorizeInterleavedRgb8(
+function colorizeInterleavedRgb8Into(
   source: GeoTIFFReader,
   request: RasterRenderRequest,
   bands: readonly number[],
   data: InterleavedRgb8Window,
-): Uint8ClampedArray<ArrayBuffer> {
+  out: Uint8ClampedArray<ArrayBuffer>,
+): void {
   const metadata = source.metadata,
     level = metadata.levels.find((value) => value.id === request.read.level)!,
     ranges = resolveRasterRanges(metadata, request.style, bands),
@@ -52,7 +53,6 @@ function colorizeInterleavedRgb8(
     position: [number, number] = [0, 0],
     window = request.read.window,
     noData = metadata.noData,
-    out = new Uint8ClampedArray(request.width * request.height * 4),
     redBand = bands[0],
     greenBand = bands[1],
     blueBand = bands[2],
@@ -83,7 +83,6 @@ function colorizeInterleavedRgb8(
       }
       out[target + 3] = 255;
     }
-  return out;
 }
 
 function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadRequest {
@@ -110,19 +109,6 @@ function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadR
       Math.max(...requests.map((request) => request.read.window[3])),
     ],
   };
-}
-
-function mergeOpaque(
-  target: Uint8ClampedArray<ArrayBuffer>,
-  source: Uint8ClampedArray<ArrayBuffer>,
-) {
-  for (let offset = 0; offset < source.length; offset += 4)
-    if (source[offset + 3]) {
-      target[offset] = source[offset];
-      target[offset + 1] = source[offset + 1];
-      target[offset + 2] = source[offset + 2];
-      target[offset + 3] = source[offset + 3];
-    }
 }
 
 function diagnostics(
@@ -220,28 +206,30 @@ export async function renderRasterBatch(
     const colorStarted = performance.now();
     for (let index = 0; index < requests.length; index++) {
       const request = { ...requests[index], read: chunk };
-      const partial = directRgb8
-        ? colorizeInterleavedRgb8(
-            source,
-            request,
-            bandsByRequest[index],
-            data as InterleavedRgb8Window,
-          )
-        : colorizeRasterTile(
-            source.metadata,
-            {
-              request: chunk,
-              warp: request.warp,
-              level,
-              bands: bandsByRequest[index],
-              width: request.width,
-              height: request.height,
-              locate: rasterWarpLocator(request.warp, request.width),
-            },
-            data as RasterReadResult,
-            request.style,
-          );
-      mergeOpaque(outputs[index], partial);
+      if (directRgb8)
+        colorizeInterleavedRgb8Into(
+          source,
+          request,
+          bandsByRequest[index],
+          data as InterleavedRgb8Window,
+          outputs[index],
+        );
+      else
+        colorizeRasterTile(
+          source.metadata,
+          {
+            request: chunk,
+            warp: request.warp,
+            level,
+            bands: bandsByRequest[index],
+            width: request.width,
+            height: request.height,
+            locate: rasterWarpLocator(request.warp, request.width),
+          },
+          data as RasterReadResult,
+          request.style,
+          outputs[index],
+        );
     }
     colorizeMs += performance.now() - colorStarted;
   }

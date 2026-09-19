@@ -252,14 +252,21 @@ export function planRasterTile(
   };
 }
 
-/** Numerical data stays untouched; RGBA is a disposable display derivation. */
+/** Numerical data stays untouched; RGBA is a disposable display derivation.
+ * With a caller-owned target, only nontransparent pixels are written, preserving
+ * previous row chunks exactly as an opaque-pixel merge would (not alpha blending).
+ */
 export function colorizeRasterTile(
   metadata: RasterMetadata,
   plan: RasterTilePlan,
   result: RasterReadResult,
   style: RasterStyle = {},
+  target?: Uint8ClampedArray<ArrayBuffer>,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const out = new Uint8ClampedArray(plan.width * plan.height * 4);
+  const length = plan.width * plan.height * 4;
+  if (target && target.length !== length)
+    throw new RasterError('INVALID_RASTER_RENDER', 'RGBA target size does not match the tile.');
+  const out = target ?? new Uint8ClampedArray(length);
   const window = plan.request.window,
     sourceIndices = plan.bands.map((band) => plan.request.samples.indexOf(band));
   const alphaIndex =
@@ -299,6 +306,10 @@ export function colorizeRasterTile(
           gv = green[index],
           bv = blue[index];
         if (!valid(rv) || (!gray && (!valid(gv) || !valid(bv)))) continue;
+        const opacity = alpha ? (alpha[index] / alphaMax) * 255 : 255;
+        // Uint8ClampedArray rounds 0.5 to zero. Do not overwrite RGB either
+        // when this chunk would have produced a transparent partial pixel.
+        if (target && (!Number.isFinite(opacity) || opacity <= 0.5)) continue;
         const offset = (y * plan.width + x) * 4;
         if (palette) {
           const entry = Math.floor(rv),
@@ -319,7 +330,6 @@ export function colorizeRasterTile(
           out[offset + 1] = g;
           out[offset + 2] = b;
         }
-        const opacity = alpha ? (alpha[index] / alphaMax) * 255 : 255;
         out[offset + 3] = Number.isFinite(opacity) ? opacity : 0;
       }
     return out;
@@ -376,10 +386,6 @@ export function colorizeRasterTile(
         g = 255 - g;
         b = 255 - b;
       }
-      const offset = (y * plan.width + x) * 4;
-      out[offset] = r;
-      out[offset + 1] = g;
-      out[offset + 2] = b;
       const nx = Math.floor(p[0]),
         ny = Math.floor(p[1]);
       const opacity = alpha
@@ -387,6 +393,11 @@ export function colorizeRasterTile(
           ? NaN
           : (alpha[(ny - window[1]) * result.width + nx - window[0]] / alphaMax) * 255
         : 255;
+      if (target && (!Number.isFinite(opacity) || opacity <= 0.5)) continue;
+      const offset = (y * plan.width + x) * 4;
+      out[offset] = r;
+      out[offset + 1] = g;
+      out[offset + 2] = b;
       out[offset + 3] = Number.isFinite(opacity) ? opacity : 0;
     }
   return out;

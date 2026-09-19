@@ -1,3 +1,4 @@
+import { decodeWasmLzw } from './wasm-lzw';
 import type { getDecoder } from 'geotiff';
 import {
   applyHorizontalPredictor,
@@ -130,11 +131,18 @@ export function createFastLzwDecoder(
 ): GeoTIFFDecoder {
   if (!canUseFastLzw(compression, parameters)) return fallback;
   const capacity = decodedBlockCapacity(parameters),
+    lengths = new Uint16Array(4096).fill(1, 0, 256),
     scratch: LzwScratch = {
       prefix: new Uint16Array(4096),
       suffix: new Uint8Array(4096),
       stack: new Uint8Array(4096),
     };
+  const decode = async (buffer: ArrayBufferLike): Promise<ArrayBuffer> => {
+    const wasm = await decodeWasmLzw(buffer, capacity, lengths);
+    if (wasm) return wasm;
+    fastLzwFallbacks++;
+    return decodeLzwBlock(buffer, capacity, scratch);
+  };
   return {
     parameters: {
       tileWidth: parameters.tileWidth,
@@ -143,12 +151,10 @@ export function createFastLzwDecoder(
       bitsPerSample: [...parameters.bitsPerSample],
       predictor: parameters.predictor,
     },
-    decodeBlock(buffer: ArrayBufferLike): ArrayBufferLike {
-      return decodeLzwBlock(buffer, capacity, scratch);
-    },
+    decodeBlock: decode,
     async decode(buffer: ArrayBufferLike): Promise<ArrayBufferLike> {
       const started = performance.now(),
-        decoded = decodeLzwBlock(buffer, capacity, scratch),
+        decoded = await decode(buffer),
         result = applyHorizontalPredictor(decoded, parameters);
       fastLzwBlocks++;
       fastLzwMs += performance.now() - started;
