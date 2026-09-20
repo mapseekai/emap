@@ -1,3 +1,4 @@
+import { pathMsaaVS, pathMsaaFS, pathMsaaWGSL } from './path-shaders';
 import type { BufferLayout, ShaderLayout } from '@luma.gl/core';
 import {
   emapModule,
@@ -28,7 +29,8 @@ export type PipelineKind =
   | 'circle'
   | 'circle-core'
   | 'circle-edge'
-  | 'point-depth-reset';
+  | 'point-depth-reset'
+  | 'path-msaa';
 
 // Continuous path joins: do not enlarge every internal subpixel segment into a round capsule.
 const pathVS = `#version 300 es
@@ -222,6 +224,7 @@ struct ImageOut{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>}
 @fragment fn fragmentMain(p:ImageOut)->@location(0) vec4<f32>{let c=textureSample(imageTexture,imageSampler,p.uv);let a=c.a*emap.parameters.x;return vec4<f32>(c.rgb*a,a);}
 `;
 const glsl = {
+  'path-msaa': [pathMsaaVS, pathMsaaFS],
   'circle-core': [circleCoreVS, circleCoreFS],
   'circle-edge': [circleVS, circleFS],
   'point-depth-reset': [pointDepthResetVS, pointDepthResetFS],
@@ -233,6 +236,7 @@ const glsl = {
   image: [imageVS, imageFS],
 };
 const wgsl = {
+  'path-msaa': pathMsaaWGSL,
   'circle-core': circleCoreWGSL,
   'circle-edge': circleWGSL,
   'point-depth-reset': pointDepthResetWGSL,
@@ -292,7 +296,7 @@ export function shaderLayouts(
           { attribute: 'instanceDistance', format: 'float32x2', byteOffset: 32 },
         ],
       });
-    } else if (kind === 'path') {
+    } else if (kind === 'path' || kind === 'path-msaa') {
       ['previousPosition', 'startPosition', 'endPosition', 'nextPosition'].forEach((name, i) =>
         attribute(name, i + 1, 'vec4<f32>', 'instance'),
       );

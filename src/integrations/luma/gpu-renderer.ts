@@ -1,3 +1,4 @@
+import { PATH_CORNERS, PATH_INDICES } from './path-shaders';
 import {
   Buffer,
   Texture,
@@ -26,6 +27,7 @@ export interface GpuMesh {
   bytes: number;
   vertexArray?: VertexArray;
   circleVertexArray?: VertexArray;
+  pathMsaaVertexArray?: VertexArray;
 }
 const IMMUTABLE_IMAGE_CACHE_BYTES = 32 * 1024 ** 2;
 interface ImageEntry {
@@ -153,6 +155,9 @@ export class GpuRenderer {
     }
   }
   private quad!: Buffer;
+  private pathCorners!: Buffer;
+  private pathIndices!: Buffer;
+  pathOptimizationEnabled = true;
   private circleQuad!: Buffer;
   private nearest!: Sampler;
   private linear!: Sampler;
@@ -180,6 +185,7 @@ export class GpuRenderer {
     liveTextures: 0,
     uniformWrites: 0,
     frames: 0,
+    pathMsaaDraws: 0,
     circleCoreDraws: 0,
     circleEdgeDraws: 0,
     pointDepthResets: 0,
@@ -257,6 +263,8 @@ export class GpuRenderer {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     });
+    this.pathCorners = this.device.createBuffer({data: new Float32Array(PATH_CORNERS),usage: Buffer.VERTEX});
+    this.pathIndices = this.device.createBuffer({data: new Uint16Array(PATH_INDICES),usage: Buffer.INDEX,indexType: 'uint16'});
     for (const kind of [
       'fill',
       'point',
@@ -266,6 +274,7 @@ export class GpuRenderer {
       'point-depth-reset',
       'line',
       'path',
+      'path-msaa',
       'image',
     ] as const) {
       const layout = shaderLayouts(kind, this.backend === 'webgpu');
@@ -303,6 +312,7 @@ export class GpuRenderer {
             ...parameters,
             depthCompare: 'always',
             depthWriteEnabled: false,
+            ...(kind === 'path-msaa' ? {blend:false} : {}),
             ...(kind === 'circle-core'
               ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
               : {}),
@@ -350,7 +360,7 @@ export class GpuRenderer {
           binding.name === 'corners'
             ? kind.startsWith('circle')
               ? this.circleQuad
-              : this.quad
+              : kind === 'path-msaa' ? this.pathCorners : this.quad
             : buffer;
         if (this.backend === 'webgpu') {
           const slot = vao.getBufferSlot(binding.name);
@@ -409,6 +419,7 @@ export class GpuRenderer {
     if (!this.meshes.delete(mesh)) return;
     mesh.vertexArray?.destroy();
     mesh.circleVertexArray?.destroy();
+    mesh.pathMsaaVertexArray?.destroy();
     mesh.buffer.destroy();
     mesh.indices?.destroy();
     this.stats.liveBufferBytes -= mesh.bytes;
@@ -530,6 +541,8 @@ export class GpuRenderer {
           12,
         );
         if (paint.marker) v.set(paint.marker.slice(0, 24), 20);
+      } else if (kind === 'path-msaa') {
+        v[12] = paint.width ?? 1;
       } else if (kind === 'line' || kind === 'path') {
         if (kind === 'path' && paint.arrow)
           throw new Error('Arrow paint requires the segment pipeline.');
@@ -554,13 +567,15 @@ export class GpuRenderer {
       this.pass.setParameters({ scissorRect: [0, 0, this.canvas.width, this.canvas.height] });
       this.fullScissor = true;
     }
-    const kind: PipelineKind = circle ? 'circle' : mesh.kind;
-    const vao = circle
+    if ((mesh.kind === 'path' || mesh.kind === 'line') && (paint.width ?? 1) <= 0) return;
+    const fastPath = mesh.kind === 'path' && this.pathOptimizationEnabled && paint.color[3] === 1 && !paint.dash?.length && !paint.arrow;
+    const kind: PipelineKind = fastPath ? 'path-msaa' : circle ? 'circle' : mesh.kind;
+    const vao = fastPath ? (mesh.pathMsaaVertexArray ??= this.vertexArray('path-msaa', mesh.buffer, this.pathIndices)) : circle
       ? (mesh.circleVertexArray ??= this.vertexArray('circle', mesh.buffer))
       : (mesh.vertexArray ??= this.vertexArray(kind, mesh.buffer, mesh.indices));
     const style = this.style(kind, paint);
     const options =
-      mesh.kind === 'fill'
+      fastPath ? {indexCount:12,vertexCount:6,instanceCount:mesh.count,isInstanced:true} : mesh.kind === 'fill'
         ? { indexCount: mesh.count, vertexCount: mesh.count }
         : { vertexCount: circle ? 4 : 6, instanceCount: mesh.count, isInstanced: true };
     // A whole consecutive color run is classified before drawing its fringes,
@@ -579,13 +594,15 @@ export class GpuRenderer {
       this.pass.setPipeline(this.pipelines.get(kind)!.pipeline);
       this.pass.setBindings(style.bindings, { _bindGroupCacheKeys: { 0: style.bindings } });
       this.pass.setVertexArray(vao);
-      if (this.pass.draw(options)) this.stats.drawCalls++;
+      if (this.pass.draw(options)) { this.stats.drawCalls++; if(fastPath)this.stats.pathMsaaDraws++; }
     }
   }
   private flushCircles(): void {
     const pass = this.pass;
     if (!pass || !this.circleQueue.length) return;
     if (this.pointGroup !== this.queuedCircleGroup && this.pointDepthDirty) this.resetPointDepth();
+    this.pathCorners = this.device.createBuffer({data: new Float32Array(PATH_CORNERS),usage: Buffer.VERTEX});
+    this.pathIndices = this.device.createBuffer({data: new Uint16Array(PATH_INDICES),usage: Buffer.INDEX,indexType: 'uint16'});
     for (const kind of ['circle-core', 'circle-edge'] as const) {
       // Each circle instance is retained in BOTH passes, not deduplicated.
       for (const { mesh, vao, bindings } of this.circleQueue) {
@@ -861,6 +878,8 @@ export class GpuRenderer {
     this.pointDepthDirty = false;
     this.query?.destroy();
     this.query = null;
+    this.pathCorners?.destroy();
+    this.pathIndices?.destroy();
     this.quad?.destroy();
     this.circleQuad?.destroy();
     this.nearest?.destroy();
