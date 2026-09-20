@@ -162,7 +162,10 @@
     "typecheck:examples": "tsc -p packages/examples/tsconfig.json --noEmit",
     "test:geopackage": "vitest run src/integrations/geopackage test/integration/geopackage",
     "runtime:check": "node scripts/check-node-version.mjs",
-    "test:geotiff": "vitest run src/domain/raster src/integrations/geotiff src/engine/rendering/raster test/integration/raster"
+    "test:geotiff": "vitest run src/domain/raster src/integrations/geotiff src/engine/rendering/raster test/integration/raster",
+    "examples:luma": "pnpm run build && pnpm run examples:build && pnpm --filter @mapseekai/emap-examples exec vite preview --host 127.0.0.1 --port 4187 --strictPort",
+    "test:luma": "pnpm run build && pnpm run examples:build && playwright test --config playwright.luma.config.mjs",
+    "benchmark:luma:real": "node scripts/benchmark-luma-real.mjs"
   },
   "keywords": [
     "mapshaper",
@@ -193,6 +196,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-terser": "^1.0.0",
+    "@types/earcut": "3.0.0",
     "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^17.0.0",
     "esbuild": "^0.25.12",
@@ -209,9 +213,14 @@
   },
   "dependencies": {
     "@developmentseed/lzw-tiff-decoder": "0.2.2",
+    "@luma.gl/core": "10.0.0-alpha.1",
+    "@luma.gl/engine": "10.0.0-alpha.1",
+    "@luma.gl/webgl": "10.0.0-alpha.1",
+    "@luma.gl/webgpu": "10.0.0-alpha.1",
     "@ngageoint/geopackage": "4.2.9",
     "@tmcw/togeojson": "^5.8.1",
     "cordis": "4.0.0-rc.10",
+    "earcut": "3.0.2",
     "fflate": "^0.8.3",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",

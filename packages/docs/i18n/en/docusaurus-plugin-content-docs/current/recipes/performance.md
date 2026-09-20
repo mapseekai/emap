@@ -3,7 +3,7 @@ id: performance
 slug: /recipes/performance
 title: Performance
 api: ["Emap", "MapOptions", "SimplifyOptions"]
-examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
+examples: ["simplify", "simplify-control", "web-worker", "point-lod", "luma-benchmark"]
 stability: stable
 verifiedVersion: 0.13.0
 ---
@@ -129,6 +129,42 @@ node --expose-gc --max-old-space-size=8192 scripts/benchmark-point-lod.mjs
 
 A fixed seed covers 100k, 1M, and 5M uniform and clustered points, reporting median of three cold builds (including first query), median/P95 of 50 warm pans, and input/output counts. Generation is excluded; Node measures LOD only, while browser frames also include Canvas drawing, import, style resolution, and the original spatial index.
 
+## luma GPU real-data benchmark and optional point aggregation
+
+The independent `luma-benchmark` waits for selected local files; it does not generate performance
+inputs. Canvas, WebGL2 and WebGPU share a native mapshaper dataset and conservative spatial culling.
+The existing PointLod is enabled for point backgrounds with a 3 CSS-pixel cell target. Lines and polygons remain full detail. GeoJSON streams through a Worker;
+full geometry is cached by revision. Default viewer/editor presets still use Canvas.
+
+Open `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl` or `?gpu=webgpu`.
+Point aggregation has its own off switch and grid-size control, independent of symbol radius. Cells retain original representatives, not centroids or count bubbles.
+Point shader controls select automatic optimization or the same-precision standard path, a CSS radius
+(default 3), and opacity (default 1). Filled circles use four-vertex instancing and an analytic
+antialiased edge inspired by GeoArrow/deck.gl. Automatic coverage optimization applies only to
+consecutive same-color opaque circles. It changes neither coordinates, counts, radii nor sample
+resolution. Transparent points and other symbols retain the standard compositing path.
+
+The page runs Canvas → GPU → GPU → Canvas. CPU submission time is not GPU execution time.
+The point-specific runner measures fixed full/far/near views; do not mix those FPS values with
+animated-navigation results. Full-precision runners explicitly disable PointLod. The separate
+`benchmark-luma-point-lod.mjs` runner measures default 3 CSS-pixel aggregation with ABBA navigation.
+
+```bash
+pnpm examples:luma
+node scripts/benchmark-luma-points.mjs --data-dir /path/to/authorized/files --gpu webgl --frames 30
+node scripts/benchmark-luma-points.mjs --data-dir /path/to/authorized/files --gpu webgpu --frames 30
+node scripts/benchmark-luma-point-lod.mjs --data-dir /path/to/authorized/files --gpu webgl --frames 30
+```
+
+The point runner loads complete `points.geojson` and `pppp.geojson` files. Other real inputs use
+`benchmark:luma:real`. Optional `--reference-dir` points to a local deck.gl-geoarrow checkout to run
+actual GeoArrow layers with the same coordinates. Reference dependencies are test-only, not emap
+production dependencies. Input hashes, pixels, raw frame intervals and resource release are recorded.
+
+The soft cache budget only evicts inactive chunks; it never reduces visible geometry precision.
+Actual browser memory and emap import limits still apply. Fixed decoded raster tiles do not measure
+end-to-end GeoTIFF I/O, decoding or overview selection.
+
 ## API
 
 - `Emap`
@@ -141,3 +177,5 @@ A fixed seed covers 100k, 1M, and 5M uniform and clustered points, reporting med
 - [Simplify control](/mapseekai/emap/examples/simplify-control/)
 - [Geometry simplification](/mapseekai/emap/examples/simplify/)
 - [密集点 LOD / Dense point LOD](/mapseekai/emap/examples/point-lod/)
+
+- [luma WebGL2 Benchmark](/mapseekai/emap/examples/luma-benchmark/)

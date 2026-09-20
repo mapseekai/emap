@@ -75,6 +75,14 @@ const route = (id: string) => `/examples/${id}/`;
 const sourceHtml = (id: string) => `packages/examples/examples/${id}/index.html`;
 
 const exampleDescriptions = {
+  'luma-vertex-editing': {
+    zh: '以真实文件验证 luma 选择、原始顶点拖动及撤销重做；背景显示 LOD，编辑保留原始拓扑精度。',
+    en: 'Selects real features, drags original vertices and undoes edits with luma while background LOD preserves native topology for editing.',
+  },
+  'luma-benchmark': {
+    zh: '加载真实本地大数据，对照共享空间裁剪和显示 LOD 下的 Canvas2D 与 luma WebGL2；保留原生 mapshaper dataset。',
+    en: 'Loads real local datasets to compare Canvas2D and luma WebGL2 with shared spatial culling and display LOD while preserving the native mapshaper dataset.',
+  },
   'create-layer': {
     zh: '设置名称、几何类型、坐标系和字段，从空图层开始绘制并查看默认属性。',
     en: 'Create an empty layer with a name, geometry type, CRS and fields, then draw features with default attributes.',
@@ -803,6 +811,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('explode', 'data-analysis', '拆分多部件', 'Explode multipart features', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('buffer', 'data-analysis', '缓冲区', 'Buffer', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('simplify', 'data-analysis', '几何简化', 'Simplify geometry', [docsOperations, docsPerformance], 'Emap', ['spatial', 'history'], [task7Fixture]),
+  recipe('luma-vertex-editing', 'data-editing', 'luma 选择与顶点编辑', 'luma selection and vertex editing', [docsEditing, docsSelection, docsPerformance], 'TopologySource', ['luma-editor', 'history'], []),
+  recipe('luma-benchmark', 'style-interaction', 'luma WebGL2 性能对照', 'luma WebGL2 benchmark', [docsPerformance], 'TopologySource', ['luma-benchmark'], ['inline:local-file-selection']),
   recipe('point-lod', 'style-interaction', '密集点 LOD', 'Dense point LOD', [docsPerformance, docsStyling, docsSelection], 'Emap', ['point-lod'], ['inline:seeded-points']),
   recipe('simplify-control', 'data-analysis', '简化控件', 'Simplify control', [docsOperations, docsControls, docsPerformance], 'Emap', ['spatial', 'controls', 'history'], [task7Fixture]),
   recipe('dissolve', 'data-analysis', '融合', 'Dissolve', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),

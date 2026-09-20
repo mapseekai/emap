@@ -3,7 +3,7 @@ id: editing
 slug: /guides/editing
 title: Editing
 api: ["AffineMatrix", "AppendedArc", "AutoCompletePolygonHandler", "AutoCompletePolygonOptions", "AutoCompletePolygonResult", "BulkFeatureDeleteCommand", "BulkFeatureDeleteCommandOptions", "composeMatrix", "CompositeCommand", "DatasetReplaceCommand", "DatasetReplaceCommandOptions", "EditCommand", "EditHistory", "EditHistoryOptions", "Emap", "FeatureAffineCommand", "FeatureAffineCommandOptions", "FeatureAppendCommand", "FeatureAppendCommandOptions", "FeatureCreateCommand", "FeatureDeleteCommand", "FeatureDeleteCommandOptions", "FeaturePropertyChangeCommand", "FeaturePropertyChangeCommandOptions", "FeatureTranslateCommand", "FeatureTranslateCommandOptions", "FieldAddCommand", "FieldAddCommandOptions", "FieldRemoveCommand", "FieldRemoveCommandOptions", "FieldRenameCommand", "FieldRenameCommandOptions", "HistoryStateSnapshot", "IDENTITY_MATRIX", "invertMatrix", "planSharedArcSplit", "planSharedNodeSplit", "rotateMatrix", "scaleMatrix", "SplitSharedArcsCommand", "SplitSharedArcsCommandOptions", "SplitSharedArcsRemap", "SplitSharedNodeCommand", "SplitSharedNodePlan", "TopologySource.fromBytes", "Transaction", "TranslatedPointFeature", "VertexDeleteCommand", "VertexInsertCommand", "VertexMoveCommand", "AddPartOptions", "AddRingOptions", "DeletePartOptions", "DeleteRingOptions", "FillRingOptions", "PartEditHandler", "PartEditOptions", "ReshapeFeatureHandler", "ReshapeFeatureOptions", "ReshapeSelectedOptions", "ReshapeSelectedResult", "RingEditHandler", "RingEditOptions", "DrawFeatureHandler", "VertexEditHandler", "SplitFeatureHandler", "TransformFeatureHandler"]
-examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
+examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing", "luma-vertex-editing"]
 stability: stable
 verifiedVersion: 0.13.0
 ---
@@ -231,3 +231,18 @@ These constructors serve advanced integrations; ordinary edits use handlers, `ma
 - [Vertex editing](/mapseekai/emap/examples/vertex-editing/)
 - [Undo and redo](/mapseekai/emap/examples/undo-redo/)
 - [Transactions](/mapseekai/emap/examples/transaction/)
+
+## Experimental luma vertex editor
+
+The [luma selection and vertex editing example](/mapseekai/emap/examples/luma-vertex-editing/)
+loads explicitly selected local GeoJSON files. Click a feature, use **Fit selected**
+for small features, then switch to vertex editing and drag an original vertex.
+Escape cancels the preview; Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z redoes.
+Shared topology nodes and closed-ring endpoints move together.
+
+Only point backgrounds use the existing PointLod by default (3 CSS-pixel cell target, switchable); lines and polygons stay full detail. Selection, vertex handles, edit commands and exports
+use the authoritative mapshaper dataset; affected Worker/GPU chunks are refreshed
+after commit, undo and redo. Export downloads the selected feature in source CRS
+using GeoJSON 2008, without overwriting the original file. This single-feature
+example does not implement insert/delete, node splitting or automatic geometry
+repair, and does not change the default emap rendering backend.

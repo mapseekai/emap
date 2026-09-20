@@ -1301,3 +1301,33 @@ export function getDefaultMapshaperAdapter(): MapshaperAdapter {
 export function setDefaultMapshaperAdapter(adapter: MapshaperAdapter | null): void {
   _default = adapter;
 }
+
+/** Incremental upstream parser; the resulting data remains a native mapshaper dataset. */
+export function createStreamingGeoJSONParser(): {
+  parseObject(value: unknown): void;
+  done(): MapshaperDataset;
+} {
+  const internal = mapshaper.internal as unknown as {
+    GeoJSONParser: new (
+      options: Record<string, unknown>,
+    ) => {
+      parseObject(value: unknown): void;
+      done(): MapshaperDataset;
+    };
+  };
+  return new internal.GeoJSONParser({});
+}
+
+/** Restore transferred raw arc storage without a GeoJSON round trip. */
+export function restoreTransferredArcs(
+  data: Pick<ArcVertexData, 'nn' | 'xx' | 'yy'>,
+): ArcCollection {
+  const internals = mapshaper.internal as unknown as {
+    ArcCollection: new (
+      nn: Int32Array | Uint32Array,
+      xx: Float64Array,
+      yy: Float64Array,
+    ) => ArcCollection;
+  };
+  return new internals.ArcCollection(data.nn, data.xx, data.yy);
+}

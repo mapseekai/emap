@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Emap - luma WebGL2 A/B Benchmark</title></head>
+<body>
+<div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a><strong>luma WebGL2 / Canvas2D 性能对照</strong></div>
+<main id="benchmark">
+  <section class="bench-toolbar"><label>GPU API（切换后重新选文件） <select id="gpu-backend"><option value="webgl">WebGL2</option><option value="webgpu">WebGPU</option></select></label><strong id="geometry-mode">点 LOD · 3 CSS px / 线面全精度</strong></section>
+  <section class="bench-toolbar" aria-label="数据与渲染器">
+    <label>当前后端 <select id="backend" data-lock><option value="luma">luma / WebGL2</option><option value="canvas">Canvas2D</option></select></label>
+    <button id="fit" data-lock>完整范围</button>
+    <label><input id="point-lod-enabled" type="checkbox" checked data-lock>点网格聚合</label>
+    <label>聚合网格(CSS px) <input id="point-lod-cell" type="number" value="3" min="1" max="64" step="1" style="width:58px" data-lock></label>
+    <label>圆点策略 <select id="point-strategy" data-lock><option value="auto">自动优化</option><option value="standard">标准圆点（同精度对照）</option></select></label>
+    <label>半径(px) <input id="point-radius" type="number" value="3" min="0.1" max="64" step="0.1" style="width:62px" data-lock></label>
+    <label>透明度 <input id="point-opacity" type="number" value="1" min="0" max="1" step="0.1" style="width:62px" data-lock></label>
+    <label>诊断绘制 <select id="pass-mode" data-lock><option value="all">全部</option><option value="fill">仅面填充</option><option value="stroke">仅描边</option><option value="points">仅点</option></select></label><button id="compare" data-lock>开始 A/B 压测</button><button id="cancel" disabled>取消</button><button id="export" data-lock>导出 JSON</button>
+  </section>
+  <section class="bench-files"><label for="file-input">本地矢量 / TIFF（可同时选择同名 .ovr）</label><input id="file-input" data-lock type="file" multiple accept=".geojson,.json,.topojson,.zip,.kml,.csv,.tsv,.tif,.tiff,.ovr" /><select id="selected-file" data-lock aria-label="选择待加载文件"></select><button id="load-file" data-lock>加载文件</button></section>
+  <p id="status" role="status" data-state="loading">初始化基准测试…</p><p id="gpu-warning" role="alert"></p>
+  <section class="bench-viewport">
+    <div class="bench-badge"><strong id="active-renderer">初始化…</strong><span id="last-frame">—</span></div>
+    <div id="stage" tabindex="0" aria-label="拖动平移，滚轮缩放"><canvas id="canvas2d" hidden></canvas><canvas id="webgl"></canvas></div>
+  </section>
+  <p id="scene-info"></p><p id="lod-info"></p><p id="resources"></p><p id="preparation"></p>
+  <div class="bench-table"><table><thead><tr><th>后端</th><th>采样帧</th><th>rAF FPS</th><th>帧间隔均值 ms</th><th>帧间隔 P95 ms</th><th>CPU 绘制均值 ms</th><th>CPU 绘制 P95 ms</th><th>&gt;33.3 ms 帧</th></tr></thead><tbody id="results"></tbody></table></div>
+  <p>圆点采用四顶点实例化和解析抗锯齿；自动优化只对连续同色、不透明的实心圆点分离不透明覆盖与边缘合成。半透明／其他符号使用标准路径。点网格聚合默认启用，目标单元为 3 CSS 像素；与圆点半径是两个独立参数。复用已有 PointLod，每格保留一个原始代表点，不新增中心点或计数气泡；小数据/稀疏视图按已有策略恢复全量。</p><details open><summary>测试口径与限制</summary><p>这是独立 Painter 对照，不是默认地图引擎迁移。两种后端使用同一个 mapshaper dataset、相同视口/DPR、样式和轨迹；启用相同的保守空间裁剪，线面始终全精度；点在开启聚合时使用同一组原始代表点，关闭后绘制全量点，不使用 CSS 快照导航。A/B 按 Canvas → luma → luma → Canvas 顺序单独运行，每轮预热 12 帧、采样 60 帧。拖动/滚轮可手动比较。</p><p>CPU 指标测量 JS 绘制/提交，不代表 GPU 执行完成；rAF FPS 受刷新率、后台标签页和机器负载限制。显存数字仅为已跟踪几何及图像的估算，不含驱动、帧缓冲、着色器等。栅格最多 64 个已解码 256×256 瓦片，导航不再读文件或切换 overview，因此不是 GeoTIFF 全流程测速。不再限制原始要素／顶点数量；本地矢量文件沿用 emap 的 2 GiB 导入上限。GeoJSON 在 Worker 中流式解析为原生 mapshaper dataset。点聚合只影响显示缓存，不修改原始坐标、属性、要素数量；线面不因缩放跳过短边或改写边界。仅剔除完整位于屏幕外（含符号扩张范围）的分块。缓存预算只淘汰屏幕外资源，可见工作集超预算时保留完整精度并显示占用，不回退为粗级几何。原始坐标、属性和 CRS 不修改。诊断绘制开关仅用于定位瓶颈，正式性能应使用“全部”。面三角化仅覆盖有效简单环，复杂自交面仍需后续兼容验证。</p><p>本页只加载用户选择的真实数据，不生成规则数据。原有 examples 仍使用 Canvas2D。默认测试页不会加载底图，避免把 MapLibre 的 WebGL 误认为本次渲染后端。</p><code id="device"></code></details>
+</main>
+<script type="module" src="/src/luma-benchmark/main.ts"></script>
+</body></html>

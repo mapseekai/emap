@@ -613,6 +613,7 @@ function examplesRouteRewritePlugin(): Plugin {
 }
 
 export default defineConfig({
+  worker: { format: 'es' },
   base: '/mapseekai/emap/examples/',
   resolve: {
     alias: [

@@ -3,7 +3,7 @@ id: performance
 slug: /recipes/performance
 title: 性能
 api: ["Emap", "MapOptions", "SimplifyOptions"]
-examples: ["simplify", "simplify-control", "web-worker", "point-lod"]
+examples: ["simplify", "simplify-control", "web-worker", "point-lod", "luma-benchmark"]
 stability: stable
 verifiedVersion: 0.13.0
 ---
@@ -129,6 +129,36 @@ node --expose-gc --max-old-space-size=8192 scripts/benchmark-point-lod.mjs
 
 固定种子覆盖 10 万、100 万、500 万点的均匀和聚集分布，报告三次冷构建中位数（含首次查询）、50 次暖平移中位数/P95 及输入输出点数。生成不计时；Node 仅测 LOD，浏览器帧还包括 Canvas 绘制、导入、样式解析和原始空间索引。
 
+## luma GPU 真实数据基准与可选点聚合
+
+独立 `luma-benchmark` 等待用户选择本地文件，不生成性能数据。Canvas、WebGL2 和 WebGPU
+共用原生 mapshaper dataset 与保守空间裁剪。点默认复用已有 PointLod，目标网格为 3 CSS 像素；线面不化简。
+GeoJSON 在 Worker 中流式导入，完整几何按版本缓存；默认 viewer/editor 仍使用 Canvas。
+
+入口 `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl`，或 `?gpu=webgpu`。
+点聚合可关闭，网格大小与圆点半径独立。每格保留原始代表点，不生成中心点或数量气泡。
+圆点策略另提供覆盖优化与标准对照，默认半径 3 CSS px、透明度 1。
+普通实心圆借鉴 GeoArrow/deck.gl 的四顶点实例化与解析抗锯齿；自动模式仅对连续同色不透明
+圆点分离完全覆盖和边缘合成，不修改坐标、点数、半径或采样分辨率。半透明与其他符号使用标准路径。
+
+页面 A/B 按 Canvas → GPU → GPU → Canvas 运行；CPU ms 是 JS 绘制/提交，rAF FPS 不是 GPU 执行时间。
+点专项全精度脚本显式关闭 PointLod；不能把聚合帧率当作全量绘制帧率。
+`benchmark-luma-point-lod.mjs` 测试默认 3 CSS px 聚合的 ABBA 导航；所有性能测试使用真实文件。
+
+```bash
+pnpm examples:luma
+node scripts/benchmark-luma-points.mjs --data-dir /Users/zhang/Desktop/测试数据 --gpu webgl --frames 30
+node scripts/benchmark-luma-points.mjs --data-dir /Users/zhang/Desktop/测试数据 --gpu webgpu --frames 30
+node scripts/benchmark-luma-point-lod.mjs --data-dir /Users/zhang/Desktop/测试数据 --gpu webgl --frames 30
+```
+
+点专项仅完整加载 `points.geojson`、`pppp.geojson`；其他真实文件使用 `benchmark:luma:real`。
+可通过 `--reference-dir` 提供本地 deck.gl-geoarrow 仓库，测试同一批原始点的真正 GeoArrow 图层。
+参考依赖仅用于测试打包，不加入 emap 生产依赖。原文件哈希、像素、逐帧数据和资源释放均记录。
+
+缓存软预算只用于淘汰非活跃分块，不会因为预算不足而自动化简可见数据。大文件仍受 emap
+导入限制和实际浏览器内存约束。固定已解码栅格对照不表示 GeoTIFF I/O、解码或 overview 加速。
+
 ## API
 
 - `Emap`
@@ -141,3 +171,5 @@ node --expose-gc --max-old-space-size=8192 scripts/benchmark-point-lod.mjs
 - [简化控件](/mapseekai/emap/examples/simplify-control/)
 - [几何简化](/mapseekai/emap/examples/simplify/)
 - [密集点 LOD / Dense point LOD](/mapseekai/emap/examples/point-lod/)
+
+- [luma WebGL2 Benchmark](/mapseekai/emap/examples/luma-benchmark/)

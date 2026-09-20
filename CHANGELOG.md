@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reuse the existing world-anchored `PointLod` in both luma examples, enabled by
+  default with a 3 CSS-pixel cell target. Build original representative IDs in
+  the data Worker and cache their GPU buffers across pan/DPR changes. Add an
+  off switch and a separate grid-size control; preserve full lines/polygons and
+  authoritative selection/edit/export coordinates. Superseded grid requests
+  are coalesced and stale edit/configuration results cannot repopulate caches.
+- Record point-aggregation state in benchmark schema v4. Full-precision runners
+  explicitly disable aggregation; add a separate real-file point-LOD runner.
+
+- Add a four-vertex, analytic-antialiasing circle specialization based on
+  GeoArrow/deck.gl ScatterplotLayer. Keep native mapshaper coordinates and every
+  point instance. Add an optional read-only local GeoArrow comparison runner.
+- Optimize consecutive same-color opaque circle runs with separate core and
+  fringe passes across spatial chunks. Preserve exact fractional coverage,
+  color/layer ordering, and the standard path for transparency and other symbols.
+  Both WebGL2 and WebGPU support an explicit same-shader reference switch.
+- Add point strategy, CSS radius and opacity controls, original-coordinate pixel
+  comparisons across DPRs, and complete real-point benchmark reports.
+
+- Add `luma-vertex-editing`, an independent real-file example for original-geometry
+  selection, native vertex/point dragging, cancellable previews, undo/redo and
+  selected-feature export. Full-detail backgrounds, original selection outlines and edit
+  handles all draw through luma WebGL2. Use existing feature-query, selection,
+  history and topology-aware vertex commands; preserve shared nodes and rings.
+- Synchronize coordinate edits into the render Worker in revision order and
+  regenerate only affected spatial chunks. Unchanged full-detail buffers stay resident.
+  Selected-feature GeoJSON exports retain source coordinates and CRS (GeoJSON 2008).
+
+- Start the experimental `luma集成` branch with pinned luma.gl v10 alpha
+  dependencies, direct mapshaper-to-GPU geometry packing, and an isolated GPU
+  renderer prototype. This is not a completed renderer migration: the default
+  Canvas backend remains unchanged.
+
+- Add an independent `luma-benchmark` example with actual Canvas2D/WebGL2 output,
+  local mapshaper point/line/holed-polygon datasets, streamed vector imports and
+  fixed decoded GeoTIFF tiles. Sequential ABBA navigation reports real rAF cadence,
+  CPU draw/submit timing, preparation costs, tracked resources and JSON results.
+- Add `examples:luma` and `test:luma` commands. Preserve the default Canvas presets.
+
+### Fixed
+
+- Align render-Worker coordinate patch results with the full-geometry source
+  contract. Vertex edit/undo/redo cache invalidation now consumes updated chunk
+  objects instead of accidentally treating numeric chunk IDs as objects.
+
+- Resolve luma v10's deferred drawing-buffer resize before setting the viewport;
+  align fractional-DPR backing dimensions in the A/B harness and pass complete
+  external-image upload dimensions. Retain immutable offscreen textures within a
+  bounded cache, skip redundant sampler state changes, and explicitly release
+  them when benchmark data changes. Release vertex buffers if index allocation fails.
+
+### Changed
+
+- Make the standalone luma benchmark start empty and use explicitly selected real
+  files, not generated performance scenes. Add a repeatable five-file local runner
+  that records full-extent, far, close-up, actual dragging, raw frame samples,
+  input SHA-256 identities, pixels, memory observations and disposal results.
+- Stream large GeoJSON FeatureCollections in a dedicated Worker through mapshaper's
+  native parser and topology builder. Keep attributes/CRS and transfer raw arc
+  buffers instead of allocating one giant decoded GeoJSON string. The normal
+  import byte limit still applies; benchmark-only feature/vertex caps are removed.
+- Replace the experimental display LOD with a single full-detail geometry cache:
+  no point sampling, boundary simplification, size-based omission or coarse fallback.
+  Keep conservative spatial culling, source revisions, Worker preparation and
+  local edit invalidation. Add native WebGPU/WGSL alongside WebGL2 using pinned
+  luma v10. The authoritative dataset and default Canvas presets are unchanged.
+
 ## [0.13.1] - 2026-09-19
 
 Changes since [v0.13.0](https://github.com/mapseekai/emap/compare/v0.13.0...v0.13.1).

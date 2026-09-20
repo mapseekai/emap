@@ -1,0 +1,42 @@
+import { test, expect } from '@playwright/test';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { join, resolve } from 'node:path';
+import { mkdir } from 'node:fs/promises';
+const directory=process.env.EMAP_BENCHMARK_DATA_DIR;
+const bundle=resolve('test-results/.point-fixtures/visual.js');
+test.beforeAll(async()=>{
+  const require=createRequire(import.meta.url);
+  const esbuild=await import(pathToFileURL(createRequire(require.resolve('vite')).resolve('esbuild')).href);
+  await mkdir(resolve('test-results/.point-fixtures'),{recursive:true});
+  await esbuild.build({entryPoints:[resolve('test/browser/fixtures/luma-points.ts')],bundle:true,format:'iife',platform:'browser',target:'es2022',outfile:bundle,define:{'process.env.NODE_ENV':'"production"'}});
+});
+for(const backend of ['webgl','webgpu'])test(`${backend}: original real points preserve compositing across colors, symbols, opacity and DPR`,async({page},info)=>{
+  test.skip(!directory,'Supply the authorized real-data directory; no generated replacement.');
+  test.setTimeout(180000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend+'&pointLod=off');
+  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
+  expect(await page.evaluate(()=>!!window.lumaBenchmark.gpuStats)).toBe(true);
+  await page.locator('#file-input').setInputFiles(join(directory,'points.geojson'));
+  await page.locator('#load-file').click();
+  await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state));
+  expect(await page.evaluate(()=>window.lumaBenchmark.state),await page.locator('#status').textContent()).toBe('ready');
+  await page.evaluate(()=>window.lumaBenchmark.setPointLod(false,3));
+  await page.evaluate(()=>window.lumaBenchmark.setView(Math.exp(-3.2)));
+  const stats=await page.evaluate(()=>window.lumaBenchmark.lodStats);
+  expect(stats.displayVertices).toBe(250988);expect(stats.omitted).toBe(0);expect(stats.missingChunks).toBe(0);
+  await page.addScriptTag({path:bundle});
+  const result=await page.evaluate(b=>window.verifyCirclePixels(b),backend);
+  await info.attach('real-point-pixel-equivalence',{body:JSON.stringify(result,null,2),contentType:'application/json'});
+  expect(result.errors).toEqual([]);expect(result.results).toHaveLength(36);
+  for(const item of result.results){expect(item.painted).toBeGreaterThan(0);expect(item.maxChannelDifference,JSON.stringify(item)).toBe(0);}
+  expect(result.resources.liveBufferBytes).toBe(0);
+  await page.locator('#point-opacity').fill('0.4');await page.locator('#point-opacity').dispatchEvent('change');
+  await page.waitForTimeout(50);
+  const before=await page.evaluate(()=>({...window.lumaBenchmark.gpuStats}));
+  await page.evaluate(()=>window.lumaBenchmark.draw('luma'));
+  const after=await page.evaluate(()=>window.lumaBenchmark.gpuStats);
+  expect(after.circleCoreDraws).toBe(before.circleCoreDraws);
+  await page.evaluate(()=>window.lumaBenchmark.dispose());
+  await expect.poll(()=>page.workers().length).toBe(0);expect(errors).toEqual([]);
+});

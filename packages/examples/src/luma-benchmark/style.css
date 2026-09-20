@@ -1,0 +1,21 @@
+body { margin: 0; background: #f7f8fa; color: #17202c; font: 13px/1.5 system-ui, sans-serif; }
+#header { padding: 12px 20px !important; display: flex; align-items: center; gap: 20px; background: white; border-bottom: 1px solid #dce2e8; }
+#benchmark { max-width: 1680px; margin: auto; padding: 14px 20px 32px; }
+.bench-toolbar, .bench-files { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bench-toolbar label { display: flex; align-items: center; gap: 6px; }
+#benchmark button, #benchmark select, #benchmark input { font: inherit; }
+#benchmark button, #benchmark select { padding: 6px 10px; border: 1px solid #c4cdd7; border-radius: 4px; background: white; color: inherit; }
+#benchmark button { cursor: pointer; } #benchmark button:disabled { opacity: .45; cursor: default; }
+#compare { background: #175cd3 !important; color: white !important; }
+#status { min-height: 20px; margin: 10px 0; } #status[data-state="error"], #gpu-warning { color: #b42318; }
+#gpu-warning:empty { display: none; }
+.bench-viewport { position: relative; border: 1px solid #ccd5df; }
+#stage { position: relative; height: clamp(280px, 50vh, 760px); overflow: hidden; touch-action: none; cursor: grab; background: #fff; }
+#stage:active { cursor: grabbing; } #stage canvas { position: absolute; inset: 0; } #stage canvas[hidden] { display: none; }
+.bench-badge { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #edf3fc; padding: 8px 12px; border-bottom: 1px solid #ccd5df; }
+#scene-info, #resources, #preparation { margin: 8px 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.bench-table { overflow-x: auto; margin: 14px 0; } #benchmark table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+#benchmark th, #benchmark td { text-align: right; padding: 9px 12px; border-bottom: 1px solid #dce2e8; white-space: nowrap; }
+#benchmark th:first-child, #benchmark td:first-child { text-align: left; } #benchmark th { background: #edf0f4; }
+#benchmark details { padding: 12px; border: 1px solid #dce2e8; color: #4c5968; background: white; }
+#benchmark summary { font-weight: 600; cursor: pointer; } #benchmark code { overflow-wrap: anywhere; }

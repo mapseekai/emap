@@ -688,7 +688,11 @@ describe('example catalog metadata', () => {
       await expect(access(htmlPath), `${example.id} HTML exists`).resolves.toBeUndefined();
       const html = await readFile(htmlPath, 'utf8');
       const parsed = new DOMParser().parseFromString(html, 'text/html');
-      expect(html, `${example.id} has a map surface`).toContain('id="map"');
+      expect(html, `${example.id} has a map surface`).toContain(
+        example.id === 'luma-benchmark' || example.id === 'luma-vertex-editing'
+          ? 'id="stage"'
+          : 'id="map"',
+      );
       expect(parsed.querySelector('#header'), `${example.id} has a top banner`).not.toBeNull();
       expect(
         parsed.querySelector('#header > .emap-example-banner-brand'),
@@ -710,6 +714,16 @@ describe('example catalog metadata', () => {
         expect(inspector).toContain('Context.is(map.ctx)');
         expect(inspector).toContain('fiber.dispose()');
         expect(inspector).not.toContain('installExampleMapUi(map');
+      } else if (example.id === 'luma-vertex-editing') {
+        expect(parsed.querySelector('#stage #webgl')).not.toBeNull();
+        expect(parsed.querySelector('#mode')).not.toBeNull();
+        expect(html).toContain('/src/luma-editor/main.ts');
+      } else if (example.id === 'luma-benchmark') {
+        // The isolated benchmark must not mount a basemap or the default Emap painter.
+        expect(parsed.querySelector('#stage #canvas2d')).not.toBeNull();
+        expect(parsed.querySelector('#stage #webgl')).not.toBeNull();
+        expect(parsed.querySelector('#backend')).not.toBeNull();
+        expect(html).toContain('/src/luma-benchmark/main.ts');
       } else {
         expect(
           html.includes('installExampleMapUi(map') || html.includes('mountDuckDbSpatialExample'),
