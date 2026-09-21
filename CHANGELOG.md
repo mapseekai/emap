@@ -77,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix the experimental WebGPU raster scissor origin so TIFF tiles are not clipped
+  against vertically mirrored rectangles. Preserve WebGL behavior; add DPR unit
+  regressions, real-TIFF Canvas/GPU coverage checks and a source-cold/fixed-texture
+  raster baseline runner. Keep the default Canvas raster runtime unchanged.
+
 - Fix deep-zoom GPU/editor coordinate drift with independently scaled high/low
   position differences in GLSL and WGSL. Keep uniform layouts aligned and anchor
   each stroked endpoint directly. Add real-LUCC pixel projection, cached/uncached

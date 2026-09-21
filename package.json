@@ -167,7 +167,8 @@
     "test:luma": "pnpm run build && pnpm run examples:build && playwright test --config playwright.luma.config.mjs",
     "benchmark:luma:real": "node scripts/benchmark-luma-real.mjs",
     "benchmark:luma:lines": "node scripts/benchmark-luma-lines.mjs",
-    "benchmark:luma:zoom-out": "node scripts/benchmark-luma-zoom-out.mjs"
+    "benchmark:luma:zoom-out": "node scripts/benchmark-luma-zoom-out.mjs",
+    "benchmark:luma:raster": "node scripts/benchmark-luma-raster.mjs"
   },
   "keywords": [
     "mapshaper",

@@ -6,6 +6,7 @@ export default defineConfig({
   ...base,
   testMatch: [
     'luma-benchmark.spec.mjs',
+    'luma-raster.spec.mjs',
     'luma-editor.spec.mjs',
     'luma-editor-refresh.spec.mjs',
     'luma-zoom-precision.spec.mjs',

@@ -840,7 +840,8 @@ export class GpuRenderer {
     this.pass.setParameters({
       scissorRect: [
         scissor[0],
-        this.canvas.height - scissor[3],
+        // WebGPU uses a top-left origin; WebGL scissor coordinates are bottom-left.
+        this.backend === 'webgpu' ? scissor[1] : this.canvas.height - scissor[3],
         scissor[2] - scissor[0],
         scissor[3] - scissor[1],
       ],
