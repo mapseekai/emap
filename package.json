@@ -165,7 +165,9 @@
     "test:geotiff": "vitest run src/domain/raster src/integrations/geotiff src/engine/rendering/raster test/integration/raster",
     "examples:luma": "pnpm run build && pnpm run examples:build && pnpm --filter @mapseekai/emap-examples exec vite preview --host 127.0.0.1 --port 4187 --strictPort",
     "test:luma": "pnpm run build && pnpm run examples:build && playwright test --config playwright.luma.config.mjs",
-    "benchmark:luma:real": "node scripts/benchmark-luma-real.mjs"
+    "benchmark:luma:real": "node scripts/benchmark-luma-real.mjs",
+    "benchmark:luma:lines": "node scripts/benchmark-luma-lines.mjs",
+    "benchmark:luma:zoom-out": "node scripts/benchmark-luma-zoom-out.mjs"
   },
   "keywords": [
     "mapshaper",

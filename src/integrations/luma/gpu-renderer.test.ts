@@ -197,3 +197,204 @@ describe('opaque point run scheduling', () => {
     });
   });
 });
+
+describe('full precision solid path scheduling', () => {
+  function fixture() {
+    const pass = {
+      setPipeline: vi.fn(),
+      setBindings: vi.fn(),
+      setVertexArray: vi.fn(),
+      setParameters: vi.fn(),
+      draw: vi.fn(() => true),
+    };
+    const a = {
+      kind: 'path',
+      count: 12,
+      bytes: 400,
+      buffer: { destroy: vi.fn() },
+      pathMsaaVertexArray: { destroy: vi.fn() },
+    };
+    const b = {
+      ...a,
+      count: 40,
+      buffer: { destroy: vi.fn() },
+      pathMsaaVertexArray: { destroy: vi.fn() },
+    };
+    const renderer = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: { type: 'webgl' },
+      pass,
+      meshes: new Set([a, b]),
+      fullScissor: true,
+      circleQueue: [],
+      pathMode: 'auto',
+      pathSamples: 4,
+      pointGroup: null,
+      pointDepthDirty: false,
+      pipelines: new Map(
+        ['path', 'path-msaa', 'path-msaa-reference'].map((k) => [k, { pipeline: k }]),
+      ),
+      vertexArray: vi.fn(() => ({ destroy: vi.fn() })),
+      style: vi.fn(() => ({ bindings: {} })),
+      resetPointDepth: vi.fn(),
+      stats: { drawCalls: 0, pathMsaaDraws: 0, liveBufferBytes: 800 },
+    }) as GpuRenderer;
+    return { renderer, pass, a: a as any, b: b as any };
+  }
+  const paint = { color: [0, 0.5, 0.4, 1] as [number, number, number, number], width: 1.2 };
+  it('uses the six-vertex indexed envelope for every original instance and reuses its vertex array', () => {
+    const { renderer, pass, a } = fixture();
+    renderer.drawMesh(a, paint);
+    renderer.drawMesh(a, paint);
+    expect(pass.draw).toHaveBeenCalledTimes(2);
+    expect(pass.draw).toHaveBeenLastCalledWith({
+      indexCount: 12,
+      vertexCount: 6,
+      instanceCount: 12,
+      isInstanced: true,
+    });
+    expect(Reflect.get(renderer, 'vertexArray')).not.toHaveBeenCalled();
+    expect(Reflect.get(renderer, 'resetPointDepth')).not.toHaveBeenCalled();
+  });
+  it('resets coverage across different colors without merging or reordering them', () => {
+    const { renderer, pass, a, b } = fixture();
+    renderer.drawMesh(a, paint);
+    renderer.drawMesh(b, paint);
+    expect(Reflect.get(renderer, 'resetPointDepth')).not.toHaveBeenCalled();
+    renderer.drawMesh(a, { ...paint, color: [1, 0, 0, 1] });
+    expect(Reflect.get(renderer, 'resetPointDepth')).toHaveBeenCalledOnce();
+    expect(pass.draw.mock.calls.map((c) => c[0].instanceCount)).toEqual([12, 40, 12]);
+  });
+  it('restores the standard route for dashes, translucent strokes and missing MSAA', () => {
+    const { renderer, pass, a } = fixture();
+    renderer.drawMesh(a, paint);
+    renderer.drawMesh(a, { ...paint, dash: [4, 3] });
+    renderer.drawMesh(a, { ...paint, color: [0, 0.5, 1, 0.4] });
+    Reflect.set(renderer, 'pathSamples', 0);
+    renderer.drawMesh(a, paint);
+    expect(pass.setPipeline.mock.calls.map((c) => c[0])).toEqual([
+      'path-msaa',
+      'path',
+      'path',
+      'path',
+    ]);
+  });
+  it('uses identical geometry in reference mode without writing private coverage depth', () => {
+    const { renderer, pass, a } = fixture();
+    renderer.pathMode = 'reference';
+    renderer.drawMesh(a, paint);
+    expect(pass.setPipeline).toHaveBeenCalledExactlyOnceWith('path-msaa-reference');
+    expect(Reflect.get(renderer, 'pointDepthDirty')).toBe(false);
+  });
+  it('filters immutable path ranges with cached offset bindings on WebGL', () => {
+    const { renderer, pass, a } = fixture();
+    renderer.drawMesh(a, paint, [{ firstInstance: 4, count: 3 }]);
+    renderer.drawMesh(a, paint, [{ firstInstance: 4, count: 2 }]);
+    expect(Reflect.get(renderer, 'vertexArray')).toHaveBeenCalledTimes(1);
+    expect(pass.draw).toHaveBeenLastCalledWith({
+      indexCount: 12,
+      vertexCount: 6,
+      instanceCount: 2,
+      isInstanced: true,
+      firstInstance: 0,
+    });
+    const vao = a.rangeVertexArrays.values().next().value;
+    renderer.destroyMesh(a);
+    expect(vao.destroy).toHaveBeenCalledOnce();
+  });
+  it('uses firstInstance on WebGPU without a new buffer/VAO or changing path order', () => {
+    const { renderer, pass, a } = fixture();
+    Reflect.set(renderer, 'device', { type: 'webgpu' });
+    renderer.drawMesh(a, paint, [
+      { firstInstance: 2, count: 3 },
+      { firstInstance: 9, count: 2 },
+    ]);
+    expect(pass.draw.mock.calls.map((c) => [c[0].firstInstance, c[0].instanceCount])).toEqual([
+      [2, 3],
+      [9, 2],
+    ]);
+    expect(Reflect.get(renderer, 'vertexArray')).not.toHaveBeenCalled();
+  });
+  it('releases the cached indexed path vertex array once', () => {
+    const { renderer, a } = fixture();
+    renderer.destroyMesh(a);
+    renderer.destroyMesh(a);
+    expect(a.pathMsaaVertexArray.destroy).toHaveBeenCalledOnce();
+    expect(a.buffer.destroy).toHaveBeenCalledOnce();
+  });
+});
+
+it('isolates screen-space path uniforms from source-coordinate edit uniforms', () => {
+  const writes: Float32Array[] = [];
+  const renderer = Object.assign(Object.create(GpuRenderer.prototype), {
+    frame: 1,
+    width: 200,
+    height: 100,
+    frameData: Float32Array.from({ length: 52 }, (_, i) => i + 10),
+    styles: new Map(),
+    device: { createBuffer: () => ({ write: (v: Float32Array) => writes.push(v.slice()) }) },
+    stats: { uniformWrites: 0 },
+  });
+  const style = Reflect.get(renderer, 'style');
+  style.call(renderer, 'path-msaa', { color: [0, 1, 0, 1], width: 1, screenSpace: true });
+  style.call(renderer, 'path-msaa', { color: [0, 1, 0, 1], width: 1 });
+  expect([...writes[0].slice(0, 6)]).toEqual([100, 50, 0, 0, 1, 1]);
+  expect([...writes[1].slice(0, 6)]).toEqual([10, 11, 12, 13, 14, 15]);
+  expect([...writes[0].slice(48, 50)]).toEqual([1, 1]);
+  expect([...writes[1].slice(48, 50)]).toEqual([58, 59]);
+  expect(writes.every((v) => v.byteLength === 208)).toBe(true);
+});
+
+it('forgets the editor bitmap texture and its obsolete bindings without double release', () => {
+  const texture = { width: 40, height: 20, destroy: vi.fn() },
+    image = {} as ImageBitmap,
+    uniform = { destroy: vi.fn() };
+  const renderer: any = Object.assign(Object.create(GpuRenderer.prototype), {
+    images: new Map([[image, { texture }]]),
+    styles: new Map([['image:editor', { buffer: uniform, images: new Map([[texture, {}]]) }]]),
+    stats: { liveTextureBytes: 3200, liveTextures: 1 },
+  });
+  renderer.forgetImage(image);
+  renderer.forgetImage(image);
+  expect(texture.destroy).toHaveBeenCalledOnce();
+  expect(uniform.destroy).toHaveBeenCalledOnce();
+  expect(renderer.stats.liveTextures).toBe(0);
+  expect(renderer.stats.liveTextureBytes).toBe(0);
+  expect(renderer.styles.size).toBe(0);
+});
+
+it('writes both independent projection scales on every frame, including mirrored/nonuniform views', () => {
+  const data = new Float32Array(52);
+  const renderer = Object.assign(Object.create(GpuRenderer.prototype), {
+    end: vi.fn(),
+    frame: 0,
+    width: 641,
+    height: 479,
+    pixelRatio: 1.25,
+    frameData: data,
+    stats: { frames: 0 },
+    device: {
+      type: 'webgl',
+      isLost: false,
+      canvasContext: { getCurrentFramebuffer: () => ({ colorAttachments: [] }) },
+      beginRenderPass: vi.fn(() => ({})),
+    },
+    canvas: { width: 801, height: 599 },
+  }) as GpuRenderer;
+  const view = {
+    mx: 1e7 + 0.375,
+    my: -9e6 - 0.25,
+    bx: 0,
+    by: 0,
+    unproject: (x: number, y: number) => [110.123456789 + x / 1e7, 30.987654321 + y / 9e6],
+    clone() {
+      return this;
+    },
+  };
+  expect(renderer.begin(view as any)).toBe(true);
+  expect([...data.slice(48, 50)]).toEqual([...data.slice(4, 6)]);
+  expect(data[46]).toBe(1.25);
+  view.mx = -32768.25;
+  view.my = 16384.5;
+  renderer.begin(view as any);
+  expect([...data.slice(48, 50)]).toEqual([-32768.25, 16384.5]);
+});

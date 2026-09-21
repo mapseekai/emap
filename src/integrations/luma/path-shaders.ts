@@ -20,10 +20,13 @@ void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
  float width = max(emap.parameters.x * 0.5, 1e-12);
- vec2 a = projectPosition(previousPosition), b = projectPosition(startPosition);
- vec2 c = projectPosition(endPosition), d = projectPosition(nextPosition);
- vec2 da = (end ? c - b : b - a) / width;
- vec2 db = (end ? d - c : c - b) / width;
+ if (pathFlags >= 4.0) { gl_Position=vec4(2.0,2.0,0.0,1.0); cornerOffset=vec2(0.0); pathPosition=vec2(0.0); pathLength=0.0; return; }
+ vec4 prev = end ? startPosition : previousPosition;
+ vec4 curr = end ? endPosition : startPosition;
+ vec4 next = end ? nextPosition : endPosition;
+ // Subtract hi/lo coordinates before projection; translation cancels exactly.
+ vec2 da = projectDifference(curr, prev)/width;
+ vec2 db = projectDifference(next, curr)/width;
  float la = length(da), lb = length(db);
  vec2 ua = la > 0.0 ? da / la : vec2(0.0);
  vec2 ub = lb > 0.0 ? db / lb : vec2(0.0);
@@ -46,8 +49,7 @@ void main() {
  vec2 fromStart = offset + (end ? da : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = end ? la : lb;
- gl_Position = clipPosition((end ? c : b) + offset * width);
- if (flags >= 4 || all(equal(b, c))) gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+ gl_Position = clipPosition(projectPosition(curr) + offset * width);
 }`;
 export const pathMsaaFS = `#version 300 es
 precision highp float;
@@ -71,9 +73,12 @@ struct PathOut {
  @location(5) pathDistance:vec2<f32>, @location(6) pathFlags:f32)->PathOut {
  let end = corners.x > 0.0; let side = corners.y; let joint = select(0.0,1.0,side==0.0);
  let width = max(emap.parameters.x * 0.5, 1e-12);
- let a = projectPosition(previousPosition); let b = projectPosition(startPosition);
- let c = projectPosition(endPosition); let d = projectPosition(nextPosition);
- let da = select(b-a,c-b,end)/width; let db = select(c-b,d-c,end)/width;
+ if(pathFlags>=4.0){return PathOut(vec4<f32>(2.0,2.0,0.0,1.0),vec2<f32>(0.0),vec2<f32>(0.0),0.0);}
+ let prev=select(previousPosition,startPosition,end);
+ let curr=select(startPosition,endPosition,end);
+ let next=select(endPosition,nextPosition,end);
+ let da=projectDifference(curr, prev)/width;
+ let db=projectDifference(next, curr)/width;
  let la = length(da); let lb = length(db);
  var ua = vec2<f32>(0.0); var ub = vec2<f32>(0.0);
  if (la>0.0) { ua=da/la; } if (lb>0.0) { ub=db/lb; }
@@ -92,8 +97,7 @@ struct PathOut {
  if(startCap||endCap){offset=select(normal*side,dir*4.0*select(1.0,-1.0,startCap),joint>0.5);}
  let fromStart=offset+select(vec2<f32>(0.0),da,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- var position=clipPosition(select(b,c,end)+offset*width);
- if(flags>=4u || all(b==c)){position=vec4<f32>(2.0,2.0,0.0,1.0);}
+ let position=clipPosition(projectPosition(curr)+offset*width);
  return PathOut(position,offset,local,select(lb,la,end));
 }
 @fragment fn fragmentMain(p:PathOut)->@location(0) vec4<f32> {

@@ -34,7 +34,7 @@ try {
       page.on('pageerror', error => record.errors.push(error.message));
       page.on('crash', () => record.errors.push('Browser page crashed'));
       page.on('console', m => {if(m.type()==='error') record.errors.push(m.text());});
-      await page.goto(base+'luma-benchmark/?gpu='+gpu+'&pointLod=off');
+      await page.goto(base+'luma-benchmark/?gpu='+gpu+'&pointLod=off&screenFilter=off');
       await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
       if(!await page.evaluate(()=>window.lumaBenchmark?.gpuStats))throw new Error(await page.locator('#gpu-warning').textContent());
       await page.locator('#file-input').setInputFiles(path);

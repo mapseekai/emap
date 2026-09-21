@@ -35,14 +35,18 @@ function lock(busy: boolean) {
   for (const input of document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('[data-lock]')) input.disabled = busy;
   if (!renderers.gpu) {
     el<HTMLButtonElement>('compare').disabled = true;
+    el<HTMLButtonElement>('compare-screen').disabled = true;
     selector.querySelector<HTMLOptionElement>('option[value="luma"]')!.disabled = true;
   }
   cancel.disabled = !busy;
 }
+let invalidatePreviewOnError: () => void = () => {};
 function fail(error: unknown) {
+  invalidatePreviewOnError();
   running?.abort();
   setStatus(error instanceof Error ? error.message : String(error), 'error');
 }
+let screenFilterUpdating=false;
 const requestedGpu = new URLSearchParams(location.search).get('gpu') === 'webgpu' ? 'webgpu' : 'webgl';
 const renderers = await BenchmarkRenderers.create(el<HTMLCanvasElement>('canvas2d'), el<HTMLCanvasElement>('webgl'),
   () => {
@@ -61,6 +65,37 @@ if (!renderers.gpu) {
   backend = 'canvas';
   el('gpu-warning').textContent = `所选 GPU 后端不可用：${renderers.unavailableReason}。未伪装回退为 luma。`;
 }
+
+invalidatePreviewOnError=()=>{renderers.navigation.reset();renderers.setInteracting(false);};
+const fastNavToggle=el<HTMLInputElement>('fast-nav'), pathCullingToggle=el<HTMLInputElement>('path-culling');
+renderers.navigation.setEnabled(new URLSearchParams(location.search).get('nav') !== 'off');
+renderers.pathCullingEnabled=new URLSearchParams(location.search).get('cull') !== 'off';
+fastNavToggle.checked=renderers.navigation.enabled;pathCullingToggle.checked=renderers.pathCullingEnabled;
+function refreshNavigation():void {
+  const n=renderers.navigation.stats,g=renderers.lodStats;
+  el('navigation-info').textContent=`${n.active?'快照导航 / 等待新画面':n.pending?'等待几何重绘画面':renderers.screenFilterApplied?'几何重绘 / Canvas 描边过滤':'原始几何画面'} · 快照帧 ${n.previewFrames} · 完整更新 ${n.fullRedraws} · 最近提交 ${n.lastSubmitMs.toFixed(1)} ms / 更新就绪 ${n.lastRefreshMs.toFixed(1)} ms · 路径候选 ${g.candidateSegments.toLocaleString()} / 提交 ${g.submittedSegments.toLocaleString()} / 屏幕外过滤 ${g.culledSegments.toLocaleString()} 条线段${n.captureErrors?' · 快照不可用，已停止快照复用':''}`;
+}
+renderers.navigation.onChange=refreshNavigation;
+fastNavToggle.addEventListener('change',()=>{renderers.navigation.setEnabled(fastNavToggle.checked);requestDraw();});
+pathCullingToggle.addEventListener('change',()=>{renderers.pathCullingEnabled=pathCullingToggle.checked;renderers.navigation.reset();requestDraw();});
+
+const smallArcToggle=el<HTMLInputElement>('small-arc-filter'),halfPixelToggle=el<HTMLInputElement>('half-pixel-filter');
+const filterParams=new URLSearchParams(location.search);
+renderers.setScreenFilters(filterParams.get('screenFilter')!=='off'&&filterParams.get('smallArcs')!=='off',
+  filterParams.get('screenFilter')!=='off'&&filterParams.get('halfPixel')!=='off');
+smallArcToggle.checked=renderers.smallArcFilterEnabled;halfPixelToggle.checked=renderers.halfPixelFilterEnabled;
+async function setScreenFilters(smallArcs:boolean,halfPixel:boolean):Promise<void>{
+  if(loading||running||screenFilterUpdating||pointLodUpdating)throw new Error('请等待当前任务结束。');
+  renderers.setScreenFilters(smallArcs,halfPixel);smallArcToggle.checked=smallArcs;halfPixelToggle.checked=halfPixel;
+  report=null;el('results').replaceChildren();
+  if(!scene){refreshCounters();return;}
+  screenFilterUpdating=true;lock(true);const current=scene;
+  try{await renderers.warmScreenPaths(transform,new AbortController().signal);if(!disposed&&scene===current)draw();}
+  finally{screenFilterUpdating=false;if(!disposed&&!loading)lock(false);}
+}
+for(const control of [smallArcToggle,halfPixelToggle])control.addEventListener('change',()=>{
+ void setScreenFilters(smallArcToggle.checked,halfPixelToggle.checked).catch(fail);
+});
 const gpuSelector=el<HTMLSelectElement>('gpu-backend');gpuSelector.value=requestedGpu;
 gpuSelector.addEventListener('change',()=>{const url=new URL(location.href);url.searchParams.set('gpu',gpuSelector.value);location.assign(url.href);});
 const passSelector=el<HTMLSelectElement>('pass-mode');
@@ -81,20 +116,21 @@ function refreshCounters() {
   el('resources').textContent = stats
     ? `几何 Buffer ${(stats.liveBufferBytes / 1024**2).toFixed(2)} MiB · 图像 Texture ${(stats.liveTextureBytes / 1024**2).toFixed(2)} MiB / ${stats.liveTextures} 张 · 累计几何上传 ${stats.uploads} 次 · 纹理上传 ${stats.textureUploads} 次 · Draw calls ${stats.drawCalls}`
     : 'GPU 不可用';
+  const screen=renderers.screenFilterStats;
+  el('screen-filter-info').textContent=`描边屏幕过滤 ${screen.smallArcs||screen.halfPixel ? '开启' : '关闭'} / 当前帧 ${screen.applied?'已应用':'原始 GPU 几何'} · 微小 arc ${screen.tinyArcs.toLocaleString()} · 连续重复顶点 ${screen.duplicateVertices.toLocaleString()} · 塌缩短线 ${screen.collapsedArcs.toLocaleString()} · 过滤后线段 ${screen.outputSegments.toLocaleString()} · 待准备 ${screen.pending} · 准备 ${screen.buildWallMs.toFixed(1)} ms · 缓存 ${(screen.cacheBytes/1024**2).toFixed(1)} MiB · 原始回退块 ${screen.rawFallbackChunks}`;
   const lod = renderers.lodStats;
   const pointLod = renderers.pointLodStats;
-  el('geometry-mode').textContent = pointLod.enabled ? `点 LOD · ${pointLod.cellSize} CSS px / 线面全精度` : 'FULL · 点线面均为原始几何';
-  el('lod-info').textContent = `${lod.geometryMode === 'point-lod' ? '点网格代表 / 线面全精度' : '当前全精度'} · 点聚合 ${pointLod.enabled ? pointLod.cellSize + ' CSS px' : '关闭'} · 聚合待更新 ${pointLod.pending} · 聚合缓存 ${(pointLod.cacheBytes/1024**2).toFixed(2)} MiB · 可见分块 ${lod.visibleChunks}/${lod.totalChunks} · 显示顶点 ${lod.displayVertices.toLocaleString()} · 原始顶点 ${lod.sourceVertices.toLocaleString()} · 缺失块 ${lod.missingChunks} · 待加载 ${lod.pending} · CPU+GPU 几何估算 ${(lod.cacheBytes/1024**2).toFixed(1)} MiB · 当前帧 draw calls ${lod.frameDrawCalls}`;
+  el('geometry-mode').textContent = (screen.smallArcs||screen.halfPixel) ? '原始数据 / 描边 Canvas 屏幕过滤' : pointLod.enabled ? `点 LOD · ${pointLod.cellSize} CSS px / 线面全精度` : 'FULL · 点线面均为原始几何';
+  el('lod-info').textContent = `${screen.applied ? '描边已做 Canvas 屏幕过滤 / 填充保持原始' : lod.geometryMode === 'point-lod' ? '点网格代表 / 线面原始' : '当前原始几何'} · 点聚合 ${pointLod.enabled ? pointLod.cellSize + ' CSS px' : '关闭'} · 聚合待更新 ${pointLod.pending} · 聚合缓存 ${(pointLod.cacheBytes/1024**2).toFixed(2)} MiB · 可见分块 ${lod.visibleChunks}/${lod.totalChunks} · 可见块顶点 ${lod.displayVertices.toLocaleString()} · 原始顶点 ${lod.sourceVertices.toLocaleString()} · 缺失块 ${lod.missingChunks} · 待加载 ${lod.pending} · CPU+GPU 几何估算 ${(lod.cacheBytes/1024**2).toFixed(1)} MiB · 线模式 ${renderers.gpu?.pathMode ?? 'canvas'}（MSAA ${renderers.gpu?.pathRendering.samples ?? 0}） · 当前帧 draw calls ${lod.frameDrawCalls}`;
 }
 
 function draw() {
   if (!scene || disposed) return;
   try {
-    renderers.requestView(transform);
-    const ms = renderers.draw(backend, transform);
+    const ms = renderers.drawInteractive(backend, transform);
     el('active-renderer').textContent = backend === 'luma' ? (renderers.gpu?.label ?? 'GPU 不可用') : 'Canvas2D / 原始 CanvasPainter';
-    el('last-frame').textContent = `${ms.toFixed(2)} ms · 主线程绘制/提交（非 GPU 执行时间）`;
-    refreshCounters();
+    el('last-frame').textContent = renderers.navigation.stats.active ? '快照变换 · 本帧未提交原始几何' : `${ms.toFixed(2)} ms · 主线程绘制/提交（非 GPU 执行时间）`;
+    refreshCounters(); refreshNavigation();
   } catch (error) { fail(error); }
 }
 function requestDraw() {
@@ -161,6 +197,15 @@ async function load(create: (signal: AbortSignal) => Promise<Scene>) {
     release();
   }
 }
+const pathStrategy=el<HTMLSelectElement>('path-strategy');
+function setPathMode(value:'auto'|'reference'|'legacy'):void {
+  if(!['auto','reference','legacy'].includes(value))throw new Error('Invalid path strategy');
+  if(renderers.gpu)renderers.gpu.pathMode=value;
+  pathStrategy.value=value;report=null;el('results').replaceChildren();requestDraw();
+}
+pathStrategy.addEventListener('change',()=>setPathMode(pathStrategy.value as 'auto'|'reference'|'legacy'));
+const requestedPath=new URLSearchParams(location.search).get('path');
+if(requestedPath==='legacy'||requestedPath==='reference')setPathMode(requestedPath);
 const pointStrategy=el<HTMLSelectElement>('point-strategy');
 const pointRadius=el<HTMLInputElement>('point-radius');
 const pointOpacity=el<HTMLInputElement>('point-opacity');
@@ -168,7 +213,7 @@ const pointLodToggle=el<HTMLInputElement>('point-lod-enabled');
 const pointLodCell=el<HTMLInputElement>('point-lod-cell');
 let pointLodUpdating=false;
 async function setPointLod(enabled:boolean,cellSize=3):Promise<void>{
-  if(loading||running||pointLodUpdating)throw new Error('请等待当前任务结束再调整点 LOD。');
+  if(loading||running||screenFilterUpdating||pointLodUpdating)throw new Error('请等待当前任务结束再调整点 LOD。');
   renderers.setPointLod(enabled,cellSize);
   pointLodToggle.checked=enabled;pointLodCell.value=String(cellSize);
   report=null;el('results').replaceChildren();
@@ -202,7 +247,8 @@ el('fit').addEventListener('click', () => { fit(); requestDraw(); });
 cancel.addEventListener('click', () => { loading?.abort(); running?.abort(); setStatus('已取消。', scene ? 'ready' : 'idle'); });
 let drag: { id: number; x: number; y: number } | null = null;
 stage.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || running || loading) return;
+  if (e.button !== 0 || running || loading || drag) return;
+  clearTimeout(wheelSettle);wheelSettle=undefined;
   renderers.setInteracting(true);
   stage.setPointerCapture(e.pointerId); drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });
@@ -210,15 +256,18 @@ stage.addEventListener('pointermove', (e) => {
   if (!drag || drag.id !== e.pointerId) return;
   transform.translate(e.clientX-drag.x, e.clientY-drag.y); drag.x=e.clientX; drag.y=e.clientY; requestDraw();
 });
-function endDrag() { drag = null; renderers.setInteracting(false); requestDraw(); }
+function endDrag(e?:PointerEvent) { if(!drag||(e&&e.pointerId!==drag.id))return; drag = null; renderers.setInteracting(false); requestDraw(); }
 stage.addEventListener('lostpointercapture', endDrag);
 stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
+function blurNavigation(){clearTimeout(wheelSettle);wheelSettle=undefined;endDrag();renderers.setInteracting(false);requestDraw();}
+window.addEventListener('blur',blurNavigation);
 let wheelSettle: ReturnType<typeof setTimeout> | undefined;
 stage.addEventListener('wheel', (e) => {
   e.preventDefault(); if (running || loading) return;
   renderers.setInteracting(true);
   clearTimeout(wheelSettle);
-  wheelSettle = setTimeout(() => { renderers.setInteracting(false); requestDraw(); }, 120);
+  wheelSettle = setTimeout(() => { wheelSettle=undefined; if(!drag){renderers.setInteracting(false);requestDraw();} }, 120);
   const rect = stage.getBoundingClientRect();
   const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? height : 1);
   transform.scale(Math.exp(Math.max(-0.4, Math.min(0.4, -delta*0.002))), e.clientX-rect.left, e.clientY-rect.top);
@@ -236,22 +285,28 @@ function showResults(results: Record<Backend, ReturnType<typeof summarize>>) {
     return row;
   }));
 }
-async function compare(framesPerTrial = 60) {
-  if (!scene || !renderers.gpu || loading || running || pointLodUpdating || disposed) return null;
+async function compare(framesPerTrial = 60, screenMode = false) {
+  if (!scene || !renderers.gpu || loading || running || pointLodUpdating || screenFilterUpdating || disposed) return null;
   if (!Number.isInteger(framesPerTrial) || framesPerTrial < 1 || framesPerTrial > 600) throw new Error('Invalid sample count.');
   const controller = new AbortController(); running = controller; lock(true); drag = null;
   if (scheduled) { cancelAnimationFrame(scheduled); scheduled = 0; }
+  renderers.navigation.reset(); renderers.setInteracting(false);
   const startView = transform.clone();
+  const trialDraw=(name:Backend,i:number,n:number)=>screenMode
+    ? renderers.drawScreenFrame(name,startView)
+    : renderers.draw(name,navigationFrame(startView,i,n,width,height));
   const samples: Record<Backend, Samples> = { canvas: { cpuMs: [], frameMs: [] }, luma: { cpuMs: [], frameMs: [] } };
   let before = { ...renderers.gpu.stats };
   const order: Backend[] = ['canvas', 'luma', 'luma', 'canvas'];
   const trialResults: unknown[] = [];
+  const geometryByBackend: Partial<Record<Backend,typeof renderers.lodStats>> = {};
   report = null;
   try {
-    setStatus('预热同一组可见分块与点显示缓存，预热不计入帧率…', 'running');
+    setStatus(screenMode?'准备当前固定视图的屏幕过滤缓存（不计入暖帧率）…':'预热同一组可见分块与点显示缓存…', 'running');
     const views = [startView, ...Array.from({length: framesPerTrial}, (_, i) => navigationFrame(startView, i, framesPerTrial, width, height)),
       ...Array.from({length: 12}, (_, i) => navigationFrame(startView, i, 12, width, height))];
-    await renderers.warmViews(views, controller.signal);
+    await renderers.warmViews(screenMode?[startView]:views, controller.signal);
+    if(screenMode)await renderers.warmScreenPaths(startView,controller.signal);
     before = { ...renderers.gpu.stats };
     for (let trial = 0; trial < order.length; trial++) {
       const name = order[trial]; renderers.show(name);
@@ -259,34 +314,38 @@ async function compare(framesPerTrial = 60) {
       setStatus(`A/B ${trial+1}/4 · ${name} · 每轮 ${framesPerTrial} 帧（先预热 12 帧）`, 'running');
       for (let i = 0; i < 12; i++) {
         await animationTick(controller.signal);
-        renderers.draw(name, navigationFrame(startView, i, 12, width, height));
+        trialDraw(name,i,12);
       }
       const measurements: Samples = { cpuMs: [], frameMs: [] };
       let previous = await animationTick(controller.signal);
       for (let i = 0; i < framesPerTrial; i++) {
         controller.signal.throwIfAborted();
-        measurements.cpuMs.push(renderers.draw(name, navigationFrame(startView, i, framesPerTrial, width, height)));
+        measurements.cpuMs.push(trialDraw(name,i,framesPerTrial));
         const end = await animationTick(controller.signal);
         measurements.frameMs.push(end-previous); previous=end;
       }
       samples[name].cpuMs.push(...measurements.cpuMs); samples[name].frameMs.push(...measurements.frameMs);
-      trialResults.push({ backend: name, ...summarize(measurements) });
+      geometryByBackend[name]={...renderers.lodStats};
+      trialResults.push({ backend: name, ...summarize(measurements), geometry: geometryByBackend[name] });
     }
     const results = { canvas: summarize(samples.canvas), luma: summarize(samples.luma) };
     const after = { ...renderers.gpu.stats };
-    report = { schemaVersion: 4, pointLod: renderers.pointLodStats, pointRendering:{strategy:pointStrategy.value,radiusCssPx:renderers.pointPaint.radius,opacity:renderers.pointPaint.color[3]}, measuredAt: new Date().toISOString(), scope: 'standalone painter; native dataset retained; shared optional PointLod representatives; full lines/polygons; no CSS snapshot navigation',
-      method: 'ABBA sequential; identical frame-indexed pan/zoom; 12 warmup frames per trial; CPU draw/submit is not GPU time',
-      gpuExecutionMs: null, geometryMode: renderers.lodStats.geometryMode, passMode: renderers.passMode, backend: requestedGpu, environment: { userAgent: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
+    report = { schemaVersion: 5, benchmarkMode:screenMode?'screen-filtered-fixed-view':'original-geometry-navigation', pointLod: renderers.pointLodStats, pointRendering:{strategy:pointStrategy.value,radiusCssPx:renderers.pointPaint.radius,opacity:renderers.pointPaint.color[3]}, pathRendering:renderers.gpu.pathRendering, measuredAt: new Date().toISOString(), scope: screenMode?'Fixed-view Canvas-filtered background strokes; original fills and data; no snapshots':'Original GPU geometry navigation; Canvas retains its intrinsic snapping; no screen cache or snapshots',
+      method: screenMode?'ABBA same fixed view; 12 warmup frames; screen preparation separate; no snapshots':'ABBA frame-indexed pan/zoom; 12 warmup frames; no snapshots',
+      gpuExecutionMs: null, navigationMode: 'full-redraw', screenFiltering: screenMode?{...renderers.screenFilterStats}:{applied:false,reason:'original GPU Buffer navigation; screen preparation excluded'}, pathCulling: renderers.pathCullingEnabled, geometryMode: renderers.lodStats.geometryMode, passMode: renderers.passMode, backend: requestedGpu, environment: { userAgent: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
         cssViewport: [width, height], dpr, deviceViewport: [renderers.glCanvas.width, renderers.glCanvas.height],
         lumaVersion: '10.0.0-alpha.1', gpu: renderers.gpu.deviceInfo },
       scene: { name: scene.name, features: scene.featureCount, vertices: scene.vertexCount, tiles: scene.tiles.length,
         rasterMode: scene.tiles.length ? 'fixed decoded working set; no navigation I/O or new overviews' : null },
-      geometry: { ...renderers.lodStats }, preparation, rasterProcessing: scene.rasterStats, results, trialResults, rawFrames: samples, gpuResources: after, lod: { ...renderers.lodStats },
+      geometry: geometryByBackend.luma, geometryByBackend, preparation, rasterProcessing: scene.rasterStats, results, trialResults, rawFrames: samples, gpuResources: after, lod: { ...renderers.lodStats },
       view: { mx: startView.mx, my: startView.my, bx: startView.bx, by: startView.by },
       warmNavigation: { geometryUploads: after.uploads-before.uploads, textureUploads: after.textureUploads-before.textureUploads,
         drawCalls: after.drawCalls-before.drawCalls },
     };
     showResults(results);
+    el('results-caption').textContent=screenMode
+      ? `当前结果：过滤后固定视图暖重绘，不使用快照；屏幕准备 ${renderers.screenFilterStats.buildWallMs.toFixed(1)} ms 另计。`
+      : '当前结果：原始 GPU 几何平移缩放 A/B；不使用屏幕过滤缓存和快照。Canvas 保留自身的绘制吸附。';
     setStatus('A/B 完成。FPS 看显示节奏，CPU ms 看主线程开销；切勿把两者混为 GPU 执行时间。', 'ready');
     return report;
   } catch (error) {
@@ -300,13 +359,14 @@ async function compare(framesPerTrial = 60) {
   }
 }
 el('compare').addEventListener('click', () => { void compare(); });
+el('compare-screen').addEventListener('click',()=>{void compare(60,true);});
 el('export').addEventListener('click', () => {
   if (!report) { setStatus('请先完成一次 A/B 压测。', 'ready'); return; }
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
   a.href = url; a.download = 'emap-luma-benchmark.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
-function hidden() { if (document.hidden) running?.abort(new Error('Tab hidden')); }
+function hidden() { if (document.hidden) { running?.abort(new Error('Tab hidden')); blurNavigation(); } }
 document.addEventListener('visibilitychange', hidden);
 function dispose() {
   if (disposed) return; disposed = true;
@@ -314,6 +374,7 @@ function dispose() {
   clearTimeout(wheelSettle);
   observer.disconnect(); window.removeEventListener('resize', resize);
   document.removeEventListener('visibilitychange', hidden);
+  window.removeEventListener('blur',blurNavigation);
   renderers.dispose(); scene?.dispose(); scene = null;
 }
 window.addEventListener('pagehide', dispose, { once: true });
@@ -358,7 +419,15 @@ async function start() {
     const overview = files.find((f) => f.name.toLowerCase() === `${file.name}.ovr`.toLowerCase());
     void loadFile(file, overview);
   });
-  Object.assign(window, { lumaBenchmark: { run: compare, loadFile, dispose, setPointLod,
+  Object.assign(window, { lumaBenchmark: { run: compare, runScreen:(frames=60)=>compare(frames,true), loadFile, dispose, setPointLod,
+    get screenFilterStats(){return renderers.screenFilterStats;},
+    get cacheDiagnostics(){return renderers.cacheDiagnostics;},
+    setScreenFilters,
+    get navigationStats(){return renderers.navigation.stats;},
+    setFastNav(enabled:boolean){renderers.navigation.setEnabled(enabled);fastNavToggle.checked=enabled;requestDraw();},
+    setPathCulling(enabled:boolean){renderers.pathCullingEnabled=enabled;pathCullingToggle.checked=enabled;renderers.navigation.reset();},
+    setPathMode,
+    get pathRendering() { return renderers.gpu?.pathRendering ?? null; },
     get pointLodStats() {return renderers.pointLodStats;},
     get report() { return report; }, get preparation() { return preparation; },
     setPointOptimization(enabled: boolean) { pointStrategy.value=enabled?'auto':'standard';if(renderers.gpu)renderers.gpu.circleOptimizationEnabled=enabled;draw(); },
@@ -368,14 +437,28 @@ async function start() {
     get view() { return { mx: transform.mx, my: transform.my, bx: transform.bx, by: transform.by }; },
     async setView(scaleFromFit: number, pan: [number, number] = [0, 0]) {
       if (!Number.isFinite(scaleFromFit) || scaleFromFit <= 0) throw new Error('Invalid view scale');
+      // Explicit harness view changes complete a real frame; interactive gestures use previews.
+      renderers.navigation.reset();
       fit(); transform.scale(scaleFromFit, width/2, height/2); transform.translate(...pan);
       const signal = new AbortController().signal;
-      await renderers.warmViews([transform], signal); renderers.requestView(transform); draw();
+      await renderers.warmViews([transform], signal); await renderers.warmScreenPaths(transform,signal); renderers.requestView(transform); draw();
     },
-    async settle() { await renderers.warmViews([transform], new AbortController().signal); draw(); },
+    async settle() { clearTimeout(wheelSettle);wheelSettle=undefined;drag=null;renderers.setInteracting(false);renderers.navigation.reset();await renderers.warmViews([transform], new AbortController().signal);await renderers.warmScreenPaths(transform,new AbortController().signal);draw(); },
     setPass(mode: import('./renderers').PassMode) {renderers.passMode=mode;passSelector.value=mode;draw();},
+    async warmScreen(){await renderers.warmScreenPaths(transform,new AbortController().signal);},
+    drawScreen(name:Backend='luma'){renderers.show(name);return renderers.drawScreenFrame(name,transform);},
+    async captureScreenPixels(name:Backend='luma'){
+      renderers.navigation.reset();renderers.show(name);renderers.drawScreenFrame(name,transform);
+      const source=name==='luma'?renderers.glCanvas:renderers.canvas;
+      const snapshot=createImageBitmap(source);await renderers.gpu?.waitForIdle();const bitmap=await snapshot;
+      const copy=document.createElement('canvas');copy.width=bitmap.width;copy.height=bitmap.height;
+      const ctx=copy.getContext('2d')!;ctx.drawImage(bitmap,0,0);bitmap.close();
+      const pixels=ctx.getImageData(0,0,copy.width,copy.height).data;let painted=0,hash=2166136261;
+      for(let i=0;i<pixels.length;i++){hash=Math.imul(hash^pixels[i],16777619);if(i%4===3&&pixels[i])painted++;}
+      return {painted,hash:hash>>>0,width:copy.width,height:copy.height,filters:renderers.screenFilterStats};
+    },
     async capturePixels() {
-      renderers.show('luma');renderers.draw('luma',transform);
+      renderers.navigation.reset();renderers.show('luma');renderers.draw('luma',transform);
       const snapshot=createImageBitmap(renderers.glCanvas);
       await renderers.gpu?.waitForIdle();
       const bitmap=await snapshot;
@@ -383,7 +466,8 @@ async function start() {
       const ctx=copy.getContext('2d')!;ctx.drawImage(bitmap,0,0);bitmap.close();
       const pixels=ctx.getImageData(0,0,copy.width,copy.height).data;
       let paintedPixels=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i])paintedPixels++;
-      return {paintedPixels,size:[copy.width,copy.height],backend:requestedGpu};
+      let hash=2166136261;for(const byte of pixels)hash=Math.imul(hash^byte,16777619);
+      return {paintedPixels,pixelHash:hash>>>0,size:[copy.width,copy.height],backend:requestedGpu};
     },
     async profileGpu(frames=8) {
       const gpu=renderers.gpu;if(!gpu)return null;
@@ -393,7 +477,7 @@ async function start() {
       const result={supported:gpu.timestampSupported,samplesMs:[...gpu.gpuTimings],pass:renderers.passMode};
       gpu.enableTiming(false);return result;
     },
-    draw(name: Backend) { renderers.show(name); return renderers.draw(name, transform); },
+    draw(name: Backend) { if(renderers.navigation.stats.ready||renderers.navigation.stats.pending)renderers.navigation.reset(); renderers.show(name); return renderers.draw(name, transform); },
   } });
   refreshCounters();
   setStatus('请选择真实本地数据：big、building、lucc、points 或 pppp。不会自动生成测试数据。', 'idle');

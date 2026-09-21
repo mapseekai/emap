@@ -1,3 +1,4 @@
+import { useMsaaPath, opaquePathGroup, type PathRenderMode } from './path-pipeline';
 import { PATH_CORNERS, PATH_INDICES } from './path-shaders';
 import {
   Buffer,
@@ -17,7 +18,7 @@ import { WebGLDevice } from '@luma.gl/webgl';
 import { AffineTransform } from '../../domain/geo/transform';
 import { isFilledCircle, opaqueCircleGroup } from './point-pipeline';
 import { shaderSource, shaderLayouts, type PipelineKind } from './portable-shaders';
-import type { GeometryBuffer, MeshPaint, Rect } from './types';
+import type { GeometryBuffer, MeshPaint, Rect, PathDrawRange } from './types';
 
 export interface GpuMesh {
   kind: GeometryBuffer['kind'];
@@ -28,6 +29,7 @@ export interface GpuMesh {
   vertexArray?: VertexArray;
   circleVertexArray?: VertexArray;
   pathMsaaVertexArray?: VertexArray;
+  rangeVertexArrays?: Map<string, VertexArray>;
 }
 const IMMUTABLE_IMAGE_CACHE_BYTES = 32 * 1024 ** 2;
 interface ImageEntry {
@@ -64,7 +66,7 @@ export class GpuRenderer {
       images: Map<Texture, Bindings>;
     }
   >();
-  private frameData = new Float32Array(48);
+  private frameData = new Float32Array(52);
   private imageVertexArray: VertexArray | null = null;
   private msaaTexture: Texture | null = null;
   private msaaFramebuffer: Framebuffer | null = null;
@@ -157,7 +159,11 @@ export class GpuRenderer {
   private quad!: Buffer;
   private pathCorners!: Buffer;
   private pathIndices!: Buffer;
-  pathOptimizationEnabled = true;
+  pathMode: PathRenderMode = 'auto';
+  private pathSamples = 1;
+  get pathRendering() {
+    return { mode: this.pathMode, samples: this.pathSamples };
+  }
   private circleQuad!: Buffer;
   private nearest!: Sampler;
   private linear!: Sampler;
@@ -243,6 +249,10 @@ export class GpuRenderer {
         },
         onError: (error) => this.report(error),
       });
+    this.pathSamples =
+      this.backend === 'webgpu'
+        ? 4
+        : (this.device as WebGLDevice).gl.getParameter((this.device as WebGLDevice).gl.SAMPLES);
     this.nearest = this.device.createSampler({
       minFilter: 'nearest',
       magFilter: 'nearest',
@@ -263,8 +273,15 @@ export class GpuRenderer {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     });
-    this.pathCorners = this.device.createBuffer({data: new Float32Array(PATH_CORNERS),usage: Buffer.VERTEX});
-    this.pathIndices = this.device.createBuffer({data: new Uint16Array(PATH_INDICES),usage: Buffer.INDEX,indexType: 'uint16'});
+    this.pathCorners = this.device.createBuffer({
+      data: new Float32Array(PATH_CORNERS),
+      usage: Buffer.VERTEX,
+    });
+    this.pathIndices = this.device.createBuffer({
+      data: new Uint16Array(PATH_INDICES),
+      usage: Buffer.INDEX,
+      indexType: 'uint16',
+    });
     for (const kind of [
       'fill',
       'point',
@@ -275,6 +292,7 @@ export class GpuRenderer {
       'line',
       'path',
       'path-msaa',
+      'path-msaa-reference',
       'image',
     ] as const) {
       const layout = shaderLayouts(kind, this.backend === 'webgpu');
@@ -312,7 +330,9 @@ export class GpuRenderer {
             ...parameters,
             depthCompare: 'always',
             depthWriteEnabled: false,
-            ...(kind === 'path-msaa' ? {blend:false} : {}),
+            ...(kind === 'path-msaa'
+              ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
+              : {}),
             ...(kind === 'circle-core'
               ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
               : {}),
@@ -349,9 +369,20 @@ export class GpuRenderer {
       });
     }
   }
-  private vertexArray(kind: PipelineKind, buffer: Buffer, indices?: Buffer): VertexArray {
+  private vertexArray(
+    kind: PipelineKind,
+    buffer: Buffer,
+    indices?: Buffer,
+    firstInstance = 0,
+  ): VertexArray {
     const entry = this.pipelines.get(kind)!;
     const { bufferLayout } = shaderLayouts(kind, this.backend === 'webgpu');
+    if (firstInstance)
+      for (const binding of bufferLayout) {
+        if (binding.stepMode !== 'instance') continue;
+        for (const attr of binding.attributes ?? [])
+          attr.byteOffset += firstInstance * (binding.byteStride ?? 0);
+      }
     const layout = entry.pipeline.shaderLayout;
     const vao = this.device.createVertexArray({ shaderLayout: layout, bufferLayout });
     try {
@@ -360,7 +391,9 @@ export class GpuRenderer {
           binding.name === 'corners'
             ? kind.startsWith('circle')
               ? this.circleQuad
-              : kind === 'path-msaa' ? this.pathCorners : this.quad
+              : kind.startsWith('path-msaa')
+                ? this.pathCorners
+                : this.quad
             : buffer;
         if (this.backend === 'webgpu') {
           const slot = vao.getBufferSlot(binding.name);
@@ -420,6 +453,8 @@ export class GpuRenderer {
     mesh.vertexArray?.destroy();
     mesh.circleVertexArray?.destroy();
     mesh.pathMsaaVertexArray?.destroy();
+    for (const vao of mesh.rangeVertexArrays?.values() ?? []) vao.destroy();
+    mesh.rangeVertexArrays?.clear();
     mesh.buffer.destroy();
     mesh.indices?.destroy();
     this.stats.liveBufferBytes -= mesh.bytes;
@@ -485,6 +520,7 @@ export class GpuRenderer {
       this.height,
     ]);
     this.frameData[46] = this.pixelRatio;
+    this.frameData.set([transform.mx, transform.my], 48);
     const canvasFramebuffer = this.device.canvasContext!.getCurrentFramebuffer();
     if (this.backend === 'webgpu' && !this.msaaFramebuffer)
       this.resize(this.width, this.height, this.pixelRatio);
@@ -512,12 +548,12 @@ export class GpuRenderer {
     let entry = this.styles.get(key);
     if (!entry) {
       const buffer = this.device.createBuffer({
-        byteLength: 192,
+        byteLength: 208,
         usage: Buffer.UNIFORM | Buffer.COPY_DST,
       });
       entry = {
         buffer,
-        values: new Float32Array(48),
+        values: new Float32Array(52),
         frame: -1,
         bindings: { emapUniforms: buffer },
         images: new Map(),
@@ -527,6 +563,10 @@ export class GpuRenderer {
     if (entry.frame !== this.frame) {
       const v = entry.values;
       v.set(this.frameData);
+      if (paint.screenSpace) {
+        v.set([this.width / 2, this.height / 2, 0, 0, 1, 1], 0);
+        v.set([1, 1], 48);
+      }
       v.set(paint.color, 8);
       v.set([1, 0, 0, 1], 12);
       v.fill(0, 20, 44);
@@ -541,7 +581,7 @@ export class GpuRenderer {
           12,
         );
         if (paint.marker) v.set(paint.marker.slice(0, 24), 20);
-      } else if (kind === 'path-msaa') {
+      } else if (kind.startsWith('path-msaa')) {
         v[12] = paint.width ?? 1;
       } else if (kind === 'line' || kind === 'path') {
         if (kind === 'path' && paint.arrow)
@@ -560,7 +600,9 @@ export class GpuRenderer {
     }
     return entry;
   }
-  drawMesh(mesh: GpuMesh, paint: MeshPaint): void {
+  drawMesh(mesh: GpuMesh, paint: MeshPaint, ranges?: readonly PathDrawRange[] | null): void {
+    if (ranges && mesh.kind !== 'path') throw new Error('Instance ranges require a path mesh.');
+    if (ranges?.length === 0) return;
     if (!this.pass || !this.meshes.has(mesh) || paint.color[3] <= 0) return;
     const circle = mesh.kind === 'point' && isFilledCircle(paint);
     if (!this.fullScissor) {
@@ -568,14 +610,23 @@ export class GpuRenderer {
       this.fullScissor = true;
     }
     if ((mesh.kind === 'path' || mesh.kind === 'line') && (paint.width ?? 1) <= 0) return;
-    const fastPath = mesh.kind === 'path' && this.pathOptimizationEnabled && paint.color[3] === 1 && !paint.dash?.length && !paint.arrow;
-    const kind: PipelineKind = fastPath ? 'path-msaa' : circle ? 'circle' : mesh.kind;
-    const vao = fastPath ? (mesh.pathMsaaVertexArray ??= this.vertexArray('path-msaa', mesh.buffer, this.pathIndices)) : circle
-      ? (mesh.circleVertexArray ??= this.vertexArray('circle', mesh.buffer))
-      : (mesh.vertexArray ??= this.vertexArray(kind, mesh.buffer, mesh.indices));
+    const fastPath = mesh.kind === 'path' && useMsaaPath(paint, this.pathMode, this.pathSamples);
+    const kind: PipelineKind = fastPath
+      ? this.pathMode === 'reference'
+        ? 'path-msaa-reference'
+        : 'path-msaa'
+      : circle
+        ? 'circle'
+        : mesh.kind;
+    const vao = fastPath
+      ? (mesh.pathMsaaVertexArray ??= this.vertexArray('path-msaa', mesh.buffer, this.pathIndices))
+      : circle
+        ? (mesh.circleVertexArray ??= this.vertexArray('circle', mesh.buffer))
+        : (mesh.vertexArray ??= this.vertexArray(kind, mesh.buffer, mesh.indices));
     const style = this.style(kind, paint);
-    const options =
-      fastPath ? {indexCount:12,vertexCount:6,instanceCount:mesh.count,isInstanced:true} : mesh.kind === 'fill'
+    const options = fastPath
+      ? { indexCount: 12, vertexCount: 6, instanceCount: mesh.count, isInstanced: true }
+      : mesh.kind === 'fill'
         ? { indexCount: mesh.count, vertexCount: mesh.count }
         : { vertexCount: circle ? 4 : 6, instanceCount: mesh.count, isInstanced: true };
     // A whole consecutive color run is classified before drawing its fringes,
@@ -590,19 +641,65 @@ export class GpuRenderer {
       this.circleQueue.push({ mesh, vao, bindings: style.bindings });
     } else {
       this.flushCircles();
-      this.pointGroup = null;
+      if (kind === 'path-msaa') {
+        const group = opaquePathGroup(paint);
+        if (this.pointDepthDirty && this.pointGroup !== group) this.resetPointDepth();
+        this.pointGroup = group;
+        this.pointDepthDirty = true;
+      } else this.pointGroup = null;
       this.pass.setPipeline(this.pipelines.get(kind)!.pipeline);
       this.pass.setBindings(style.bindings, { _bindGroupCacheKeys: { 0: style.bindings } });
-      this.pass.setVertexArray(vao);
-      if (this.pass.draw(options)) { this.stats.drawCalls++; if(fastPath)this.stats.pathMsaaDraws++; }
+      const draws = ranges ?? [{ firstInstance: 0, count: mesh.count }];
+      for (const range of draws) {
+        if (
+          !Number.isSafeInteger(range.firstInstance) ||
+          !Number.isSafeInteger(range.count) ||
+          range.firstInstance < 0 ||
+          range.count < 0 ||
+          range.firstInstance + range.count > mesh.count
+        )
+          throw new Error('Invalid path instance range');
+        let rangeVao = vao;
+        if (this.backend === 'webgl' && range.firstInstance) {
+          const key = `${fastPath ? 'path-msaa' : kind}:${range.firstInstance}`;
+          mesh.rangeVertexArrays ??= new Map();
+          const previous = mesh.rangeVertexArrays.get(key);
+          if (previous) {
+            mesh.rangeVertexArrays.delete(key);
+            rangeVao = previous;
+          } else
+            rangeVao = this.vertexArray(
+              fastPath ? 'path-msaa' : kind,
+              mesh.buffer,
+              fastPath ? this.pathIndices : mesh.indices,
+              range.firstInstance,
+            );
+          mesh.rangeVertexArrays.set(key, rangeVao);
+          if (mesh.rangeVertexArrays.size > 32) {
+            const oldest = mesh.rangeVertexArrays.keys().next().value!;
+            mesh.rangeVertexArrays.get(oldest)!.destroy();
+            mesh.rangeVertexArrays.delete(oldest);
+          }
+        }
+        this.pass.setVertexArray(rangeVao);
+        const rangeOptions = ranges
+          ? {
+              ...options,
+              instanceCount: range.count,
+              firstInstance: this.backend === 'webgpu' ? range.firstInstance : 0,
+            }
+          : options;
+        if (this.pass.draw(rangeOptions)) {
+          this.stats.drawCalls++;
+          if (fastPath) this.stats.pathMsaaDraws++;
+        }
+      }
     }
   }
   private flushCircles(): void {
     const pass = this.pass;
     if (!pass || !this.circleQueue.length) return;
     if (this.pointGroup !== this.queuedCircleGroup && this.pointDepthDirty) this.resetPointDepth();
-    this.pathCorners = this.device.createBuffer({data: new Float32Array(PATH_CORNERS),usage: Buffer.VERTEX});
-    this.pathIndices = this.device.createBuffer({data: new Uint16Array(PATH_INDICES),usage: Buffer.INDEX,indexType: 'uint16'});
     for (const kind of ['circle-core', 'circle-edge'] as const) {
       // Each circle instance is retained in BOTH passes, not deduplicated.
       for (const { mesh, vao, bindings } of this.circleQueue) {
@@ -654,11 +751,32 @@ export class GpuRenderer {
     if (enabled && this.timestampSupported && !this.query)
       this.query = this.device.createQuerySet({ type: 'timestamp', count: 2 });
   }
+  /** Completion barrier for snapshot publication/diagnostics, never called per pointermove.
+   * WebGL polls a fence asynchronously; gl.finish/readPixels must not stall input handling.
+   */
   async waitForIdle(): Promise<void> {
-    if (this.backend === 'webgpu')
-      await (
-        this.device as import('@luma.gl/webgpu').WebGPUDevice
-      ).handle.queue.onSubmittedWorkDone();
+    if (this.disposed || this.lost) return;
+    const device = this.device;
+    if (this.backend === 'webgpu') {
+      await (device as import('@luma.gl/webgpu').WebGPUDevice).handle.queue.onSubmittedWorkDone();
+      return;
+    }
+    const gl = (device as WebGLDevice).gl;
+    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!fence) throw new Error('Unable to create GPU completion fence.');
+    const deadline = performance.now() + 30000;
+    gl.flush();
+    try {
+      while (!this.disposed && !this.lost && device === this.device) {
+        const status = gl.clientWaitSync(fence, 0, 0);
+        if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) return;
+        if (status === gl.WAIT_FAILED || performance.now() > deadline)
+          throw new Error('GPU completion fence failed or timed out.');
+        await new Promise<void>((resolve) => setTimeout(resolve, 4));
+      }
+    } finally {
+      gl.deleteSync(fence);
+    }
   }
   private dashTexture(input: readonly number[]) {
     const values = input.filter((v) => Number.isFinite(v) && v >= 0);
@@ -834,6 +952,20 @@ export class GpuRenderer {
         this.destroyImage(entry);
         this.images.delete(image);
       }
+  }
+
+  /** Release a completed editor backdrop without retaining its bitmap or texture. */
+  forgetImage(image: CanvasImageSource): void {
+    const entry = this.images.get(image);
+    if (!entry) return;
+    this.images.delete(image);
+    this.destroyImage(entry);
+    for (const [key, style] of this.styles) {
+      if (style.images.delete(entry.texture) && key.startsWith('image:') && !style.images.size) {
+        style.buffer.destroy();
+        this.styles.delete(key);
+      }
+    }
   }
 
   /** Drop source-owned images when the dataset changes, not on every pan. */

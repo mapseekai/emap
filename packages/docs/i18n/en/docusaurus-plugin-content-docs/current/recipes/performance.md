@@ -165,6 +165,75 @@ The soft cache budget only evicts inactive chunks; it never reduces visible geom
 Actual browser memory and emap import limits still apply. Fixed decoded raster tiles do not measure
 end-to-end GeoTIFF I/O, decoding or overview selection.
 
+### Full-detail line rendering
+
+The two luma examples offer `MSAA path optimization`, `same-geometry MSAA reference`,
+and `legacy analytic stroke` modes. Original mapshaper paths and segments are unchanged;
+point LOD remains independent. Opaque solid strokes use a six-vertex indexed path envelope,
+round joins/caps and actual render-target multisampling. A private depth mask only rejects
+already covered same-color samples. Color changes and intervening primitives reset coverage;
+translucency, dashes and devices without multisampling retain the analytic path.
+The MSAA result is not pixel-identical to the old analytic antialiasing; do not describe
+that visual change as an equal-output speed comparison.
+
+```bash
+pnpm benchmark:luma:lines --data-dir /path/to/authorized/files --gpu webgl --frames 20
+pnpm benchmark:luma:lines --data-dir /path/to/authorized/files --gpu webgpu --frames 20
+```
+
+This runner loads complete `big.geojson`, `lucc.geojson` and `building.geojson` and measures
+stroke-only fixed views. The UI A/B still supports full-scene animated navigation; the two
+methods must not be mixed. `--reference-dir` optionally uses a local deck.gl-geoarrow checkout
+for a real GeoArrowPathLayer comparison, without adding its dependencies to emap production.
+
+### Snapshot navigation and conservative path culling
+
+Both luma examples enable snapshot navigation and viewport path-range filtering by default.
+Gestures reuse a completed image; settling redraws current full-detail geometry. Newly exposed
+areas may temporarily be blank, and zooming temporarily scales image sharpness and stroke width.
+The editor bypasses snapshot navigation while a feature is selected to keep original handles exact.
+Native mapshaper geometry, topology and history remain unchanged; PointLod is an independent option.
+
+Range culling rejects only bounds outside the expanded viewport, including neighbor and stroke
+padding. It does not omit visible short paths or simplify vertices. Original GPU buffers are reused
+with offset VAOs on WebGL and firstInstance on WebGPU. A full-extent view still submits all paths.
+Use `?nav=off` or `?cull=off` to disable each mechanism, and `&pointLod=off` for original point counts.
+
+Raw A/B trials always bypass snapshots. Snapshot rAF cadence is not full-geometry GPU throughput.
+The UI separates navigation state, CPU submission, replacement readiness, candidate segments and
+submitted segments.
+
+### Canvas screen filtering in the luma examples
+
+The independent examples enable separate micro-arc and half-device-pixel consecutive-command
+filters for background lines and polygon strokes. They mirror Canvas's 0.35 CSS-pixel threshold
+with initial-view scaling, DPR-aware truncation, consecutive-only deduplication and the
+0.1-device-pixel stroke for a collapsed path. Native datasets, polygon fills/holes and original
+selection/editing geometry remain unchanged. This is a display approximation, not full-detail
+pixel equivalence. `screenFilter=off` disables both switches.
+The data Worker caches exact view/DPR/revision results with stale-result protection. Navigation
+snapshots avoid rebuilding during gestures. The two benchmark buttons separate original-geometry navigation from filtered fixed-view warm
+drawing. Neither uses snapshots. Screen preparation is reported separately; the two FPS methods
+are not interchangeable.
+
+
+### Near-to-far cache recovery
+
+Screen-filtered strokes no longer depend on resident raw path GPU buffers. Zoom-out prepares the latest
+screen commands without rebuilding evicted raw paths first. Full polygon triangulations take eviction
+priority over inactive raw paths within the unchanged 256 MiB raw-cache budget. Oversized fill working
+sets may still need rebuilding; this is not a guarantee that every dataset stays resident. Selection,
+editing precision and screen-filter rules are unchanged.
+
+```bash
+pnpm benchmark:luma:zoom-out --data-dir /path/to/authorized/files --assert-refill
+```
+
+This runner uses complete real files and wheel input from a 16× near view, recording release-to-complete-
+frame latency separately from warm FPS. Its isolated loopback server uses port 4195 and closes afterwards,
+without modifying a user-owned 4187 server. `--assert-refill` checks the known preloaded real-file route,
+not a universal no-rebuild guarantee for arbitrary data.
+
 ## API
 
 - `Emap`

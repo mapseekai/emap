@@ -16,11 +16,17 @@ layout(std140) uniform emapUniforms {
   vec4 vertices5;
   vec2 arrow;
   float pixelRatio;
+  vec2 lowScale;
 } emap;
 `;
 const projection = `
+// Keep independent uniform scale operands for the high and low differences.
+// A compiler must not collapse hi+lo back to world-space f32 before subtracting.
+vec2 projectDifference(vec4 a, vec4 b) {
+  return (a.xy - b.xy) * emap.scale + (a.zw - b.zw) * emap.lowScale;
+}
 vec2 projectPosition(vec4 position) {
-  return ((position.xy - emap.origin.xy) + (position.zw - emap.origin.zw)) * emap.scale;
+  return projectDifference(position, emap.origin);
 }
 vec4 clipPosition(vec2 pixels) {
   return vec4(pixels * vec2(2.0, -2.0) / emap.viewport, 0.0, 1.0);
@@ -45,6 +51,7 @@ export const emapModule = {
     vertices5: 'vec4<f32>',
     arrow: 'vec2<f32>',
     pixelRatio: 'f32',
+    lowScale: 'vec2<f32>',
   },
 } satisfies NonNullable<ModelProps['modules']>[number];
 const fragment = `#version 300 es
@@ -120,7 +127,7 @@ flat out float startDistance;
 void main() {
   vec2 start = projectPosition(instanceStart);
   vec2 end = projectPosition(instanceEnd);
-  vec2 delta = end - start;
+  vec2 delta = projectDifference(instanceEnd, instanceStart);
   segmentLength = length(delta);
   vec2 direction = segmentLength > 1e-8 ? delta / segmentLength : vec2(1.0, 0.0);
   vec2 normal = vec2(-direction.y, direction.x);
@@ -128,7 +135,12 @@ void main() {
   if (emap.parameters.w > 0.5) extent += emap.arrow.y * 0.45;
   localPosition = vec2(mix(-extent, segmentLength + extent, (corners.x + 1.0) * 0.5), corners.y * extent);
   startDistance = (instanceDistance.x + instanceDistance.y) * abs(emap.scale.x);
-  gl_Position = clipPosition(start + direction * localPosition.x + normal * localPosition.y);
+  // Do not reconstruct the end as start + direction * length: start may be
+  // millions of pixels off screen at deep zoom, destroying the endpoint residual.
+  bool atEnd = corners.x > 0.0;
+  vec2 anchor = atEnd ? end : start;
+  vec2 offset = direction * (atEnd ? extent : -extent) + normal * localPosition.y;
+  gl_Position = clipPosition(anchor + offset);
 }
 `;
 export const lineFS = `${fragment}

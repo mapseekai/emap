@@ -30,7 +30,8 @@ export type PipelineKind =
   | 'circle-core'
   | 'circle-edge'
   | 'point-depth-reset'
-  | 'path-msaa';
+  | 'path-msaa'
+  | 'path-msaa-reference';
 
 // Continuous path joins: do not enlarge every internal subpixel segment into a round capsule.
 const pathVS = `#version 300 es
@@ -57,12 +58,12 @@ vec2 joinOffset(vec2 a, vec2 b, float side, float width) {
 void main(){
  vec2 a=projectPosition(previousPosition), b=projectPosition(startPosition);
  vec2 c=projectPosition(endPosition), d=projectPosition(nextPosition);
- vec2 delta=c-b;float len=length(delta);segmentLength=len;
+ vec2 delta=projectDifference(endPosition,startPosition);float len=length(delta);segmentLength=len;
  vec2 dir=len>0.0?delta/len:vec2(1.0,0.0);
  float w=emap.parameters.x*0.5+0.5/emap.pixelRatio;
  bool end=corners.x>0.0;int flags=int(pathFlags);
  bool cap=end?((flags&2)!=0):((flags&1)!=0);
- vec2 offset=joinOffset(end?c-b:b-a,end?d-c:c-b,corners.y,w);
+ vec2 offset=joinOffset(end?delta:projectDifference(startPosition,previousPosition),end?projectDifference(nextPosition,endPosition):delta,corners.y,w);
  float extra=cap?w:0.0;
  if(cap) offset=vec2(-dir.y,dir.x)*corners.y*w+dir*extra*(end?1.0:-1.0);
  localPosition=vec2(corners.y*w,end?len+extra:-extra);
@@ -97,10 +98,11 @@ const uniformWGSL = `
 struct EmapUniforms {
  origin:vec4<f32>,scale:vec2<f32>,viewport:vec2<f32>,color:vec4<f32>,parameters:vec4<f32>,rect:vec4<f32>,
  vertices0:vec4<f32>,vertices1:vec4<f32>,vertices2:vec4<f32>,vertices3:vec4<f32>,vertices4:vec4<f32>,vertices5:vec4<f32>,
- arrow:vec2<f32>,pixelRatio:f32,
+ arrow:vec2<f32>,pixelRatio:f32,lowScale:vec2<f32>,
 };
 @group(0) @binding(0) var<uniform> emap:EmapUniforms;
-fn projectPosition(p:vec4<f32>)->vec2<f32>{return ((p.xy-emap.origin.xy)+(p.zw-emap.origin.zw))*emap.scale;}
+fn projectDifference(a:vec4<f32>,b:vec4<f32>)->vec2<f32>{return (a.xy-b.xy)*emap.scale+(a.zw-b.zw)*emap.lowScale;}
+fn projectPosition(p:vec4<f32>)->vec2<f32>{return projectDifference(p,emap.origin);}
 fn clipPosition(p:vec2<f32>)->vec4<f32>{return vec4<f32>(p*vec2<f32>(2.0,-2.0)/emap.viewport,0.0,1.0);}
 fn premultiply(coverage:f32)->vec4<f32>{let a=emap.color.a*coverage;return vec4<f32>(emap.color.rgb*a,a);}
 `;
@@ -152,11 +154,12 @@ const lineWGSL =
   lineCommonWGSL +
   `
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) instanceStart:vec4<f32>,@location(2) instanceEnd:vec4<f32>,@location(3) instanceDistance:vec2<f32>)->LineOut{
- let a=projectPosition(instanceStart);let b=projectPosition(instanceEnd);let delta=b-a;let len=length(delta);
+ let a=projectPosition(instanceStart);let b=projectPosition(instanceEnd);let delta=projectDifference(instanceEnd,instanceStart);let len=length(delta);
  var dir=vec2<f32>(1.0,0.0);if(len>1e-8){dir=delta/len;}
  var extent=emap.parameters.x*0.5+1.0/emap.pixelRatio;if(emap.parameters.w>0.5){extent+=emap.arrow.y*0.45;}
  let local=vec2<f32>(mix(-extent,len+extent,(corners.x+1.0)*0.5),corners.y*extent);
- return LineOut(clipPosition(a+dir*local.x+vec2<f32>(-dir.y,dir.x)*local.y),local,len,(instanceDistance.x+instanceDistance.y)*abs(emap.scale.x));
+ let anchor=select(a,b,corners.x>0.0);let cap=select(-extent,extent,corners.x>0.0);
+ return LineOut(clipPosition(anchor+dir*cap+vec2<f32>(-dir.y,dir.x)*local.y),local,len,(instanceDistance.x+instanceDistance.y)*abs(emap.scale.x));
 }
 @fragment fn fragmentMain(p:LineOut)->@location(0) vec4<f32>{
  let halfWidth=emap.parameters.x*0.5;let longitudinal=max(max(-p.local.x,p.local.x-p.len),0.0);
@@ -194,10 +197,10 @@ fn joinOffset(a:vec2<f32>,b:vec2<f32>,side:f32,width:f32)->vec2<f32>{
 }
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) previousPosition:vec4<f32>,@location(2) startPosition:vec4<f32>,@location(3) endPosition:vec4<f32>,@location(4) nextPosition:vec4<f32>,@location(5) pathDistance:vec2<f32>,@location(6) pathFlags:f32)->LineOut{
  let a=projectPosition(previousPosition);let b=projectPosition(startPosition);let c=projectPosition(endPosition);let d=projectPosition(nextPosition);
- let delta=c-b;let len=length(delta);var dir=vec2<f32>(1.0,0.0);if(len>0.0){dir=delta/len;}
+ let delta=projectDifference(endPosition,startPosition);let len=length(delta);var dir=vec2<f32>(1.0,0.0);if(len>0.0){dir=delta/len;}
  let w=emap.parameters.x*0.5+0.5/emap.pixelRatio;let end=corners.x>0.0;let flags=u32(pathFlags);
  let cap=select((flags&1u)!=0u,(flags&2u)!=0u,end);
- var offset=joinOffset(select(b-a,c-b,end),select(c-b,d-c,end),corners.y,w);let extra=select(0.0,w,cap);
+ var offset=joinOffset(select(projectDifference(startPosition,previousPosition),delta,end),select(delta,projectDifference(nextPosition,endPosition),end),corners.y,w);let extra=select(0.0,w,cap);
  if(cap){offset=vec2<f32>(-dir.y,dir.x)*corners.y*w+dir*extra*select(-1.0,1.0,end);}
  var pos=clipPosition(select(b,c,end)+offset);if(flags>=4u || len==0.0){pos=vec4<f32>(2.0,2.0,0.0,1.0);}
  return LineOut(pos,vec2<f32>(corners.y*w,select(-extra,len+extra,end)),len,(pathDistance.x+pathDistance.y)*abs(emap.scale.x));
@@ -225,6 +228,7 @@ struct ImageOut{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>}
 `;
 const glsl = {
   'path-msaa': [pathMsaaVS, pathMsaaFS],
+  'path-msaa-reference': [pathMsaaVS, pathMsaaFS],
   'circle-core': [circleCoreVS, circleCoreFS],
   'circle-edge': [circleVS, circleFS],
   'point-depth-reset': [pointDepthResetVS, pointDepthResetFS],
@@ -237,6 +241,7 @@ const glsl = {
 };
 const wgsl = {
   'path-msaa': pathMsaaWGSL,
+  'path-msaa-reference': pathMsaaWGSL,
   'circle-core': circleCoreWGSL,
   'circle-edge': circleWGSL,
   'point-depth-reset': pointDepthResetWGSL,
@@ -263,7 +268,7 @@ export function shaderLayouts(
   const shaderLayout: ShaderLayout = {
     attributes: [],
     bindings: [
-      { name: 'emapUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 192 },
+      { name: 'emapUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 208 },
     ],
   };
   const bufferLayout: BufferLayout[] = [];
@@ -296,7 +301,7 @@ export function shaderLayouts(
           { attribute: 'instanceDistance', format: 'float32x2', byteOffset: 32 },
         ],
       });
-    } else if (kind === 'path' || kind === 'path-msaa') {
+    } else if (kind === 'path' || kind === 'path-msaa' || kind === 'path-msaa-reference') {
       ['previousPosition', 'startPosition', 'endPosition', 'nextPosition'].forEach((name, i) =>
         attribute(name, i + 1, 'vec4<f32>', 'instance'),
       );

@@ -1,3 +1,5 @@
+import { TriangulationCache } from './triangulation-cache';
+import { buildScreenPaths, type ScreenPathRequest, type ScreenPathPacket } from './screen-paths';
 import { LumaPointLodSource, type PointLodRequest, type PointLodPacket } from './point-lod-source';
 import { applyCoordinatePatch, type CoordinatePatch } from './edit-patch';
 import Flatbush from 'flatbush';
@@ -90,10 +92,17 @@ function displayArcs(paths: readonly (readonly Point[])[]): ArcCollection {
  * subpixel culling. Source coordinates, rings and attributes are never modified by rendering.
  */
 export class FullGeometrySource {
+  private readonly triangulationCache = new TriangulationCache();
+  get triangulationStats() { return { ...this.triangulationCache.stats }; }
   private pointLod: LumaPointLodSource | null = null;
   queryPointLod(request: PointLodRequest): PointLodPacket[] {
     this.pointLod ??= new LumaPointLodSource(this.dataset);
     return this.pointLod.query(request, this.chunks);
+  }
+  buildScreenPaths(chunk: SpatialChunk, request: ScreenPathRequest): ScreenPathPacket {
+    if(chunk.kind!=='line'||!this.vertices)throw new Error('Screen path filter requires raw arcs');
+    if(request.revision!==(this.dataset.editVersion??0))throw new Error('Stale screen path revision');
+    return buildScreenPaths(this.vertices,chunk.ids,request);
   }
   readonly chunks: SpatialChunk[] = [];
   private spatial: InstanceType<typeof Flatbush> | null = null;
@@ -362,7 +371,7 @@ export class FullGeometrySource {
       }
       geometry = pathGeometry(paths);
     } else {
-      const features: Point[][][] = [];
+      const features: Point[][][] = [], featureIds: number[] = [];
       for (const id of chunk.ids) {
         const shape = chunk.shapes![id] as PathShape | null;
         if (!shape) continue;
@@ -384,10 +393,11 @@ export class FullGeometrySource {
           } else if (ring.length)
             throw new Error('Cannot triangulate a ring with fewer than three distinct positions.');
         }
-        features.push(rings);
+        features.push(rings);featureIds.push(id);
         shapes.push(parts);
       }
-      geometry = polygonGeometry(features);
+      geometry = polygonGeometry(features, (i) => (coordinates, holes, group) =>
+        this.triangulationCache.triangulate(`${chunk.layer}:${featureIds[i]}:${group}`, coordinates, holes));
     }
     const retained =
       chunk.kind === 'point' ? geometry.count : paths.reduce((n, p) => n + p.length, 0);
@@ -404,6 +414,7 @@ export class FullGeometrySource {
     };
   }
   dispose(): void {
+    this.triangulationCache.clear();
     this.pointLod?.clear();
     this.pointLod = null;
     this.chunks.length = 0;
@@ -516,5 +527,6 @@ export interface ChunkGeometryAccess {
   build(chunk: SpatialChunk, level: number): DisplayChunk | Promise<DisplayChunk>;
   patch?(patch: CoordinatePatch, signal: AbortSignal): Promise<SpatialChunk[]>;
   queryPointLod?(request: PointLodRequest): PointLodPacket[] | Promise<PointLodPacket[]>;
+  buildScreenPaths?(chunk: SpatialChunk, request: ScreenPathRequest): ScreenPathPacket | Promise<ScreenPathPacket>;
   dispose(): void;
 }

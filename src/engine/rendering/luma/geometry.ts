@@ -100,22 +100,37 @@ interface Ring {
   bounds: [number, number, number, number];
   parent: number;
   depth: number;
+  edgeIndex?: InstanceType<typeof Flatbush>;
 }
-function containsPoint(ring: readonly Point[], p: Point): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i],
-      b = ring[j];
-    if (
-      a[1] > p[1] !== b[1] > p[1] &&
-      p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
-    )
-      inside = !inside;
+function containsPoint(ring: Ring, p: Point): boolean {
+  const points=ring.points;
+  const crosses=(i:number):boolean=>{
+    const a=points[i],b=points[(i+points.length-1)%points.length];
+    return (a[1]>p[1])!==(b[1]>p[1]) && p[0]<((b[0]-a[0])*(p[1]-a[1]))/(b[1]-a[1])+a[0];
+  };
+  let inside=false;
+  if(points.length<128){
+    for(let i=0;i<points.length;i++)if(crosses(i))inside=!inside;
+  }else{
+    // The same even-odd ray predicate, but query only edges intersecting the ray.
+    // A LUCC shell can contain thousands of holes: rescanning every shell vertex
+    // for every candidate hole was the dominant load/edit cost, not GPU upload.
+    let spatial=ring.edgeIndex;
+    if(!spatial){
+      spatial=new Flatbush(points.length);
+      for(let i=0;i<points.length;i++){
+        const a=points[i],b=points[(i+points.length-1)%points.length];
+        spatial.add(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]));
+      }
+      spatial.finish();ring.edgeIndex=spatial;
+    }
+    for(const i of spatial.search(p[0],p[1],ring.bounds[2],p[1]))if(crosses(i))inside=!inside;
   }
   return inside;
 }
 /** Even-odd nesting is independent of winding and preserves nested islands. */
-export function triangulateRings(paths: readonly (readonly Point[])[]): {
+export type PolygonTessellator = (coordinates: number[], holes: number[], group: number) => Iterable<number>;
+export function triangulateRings(paths: readonly (readonly Point[])[], tessellate?: PolygonTessellator): {
   positions: Point[];
   indices: number[];
 } {
@@ -157,7 +172,7 @@ export function triangulateRings(paths: readonly (readonly Point[])[]): {
         other.bounds[3] < ring.bounds[3]
       )
         continue;
-      if (containsPoint(other.points, p)) {
+      if (containsPoint(other, p)) {
         ring.parent = j;
         parentArea = other.area;
       }
@@ -182,15 +197,16 @@ export function triangulateRings(paths: readonly (readonly Point[])[]): {
         positions.push(p);
       }
     }
-    for (const index of earcut(coordinates, holes)) indices.push(offset + index);
+    for (const index of tessellate ? tessellate(coordinates, holes, i) : earcut(coordinates, holes)) indices.push(offset + index);
   }
   return { positions, indices };
 }
-export function polygonGeometry(features: Iterable<readonly (readonly Point[])[]>): GeometryBuffer {
+export function polygonGeometry(features: Iterable<readonly (readonly Point[])[]>, tessellate?: (feature: number) => PolygonTessellator): GeometryBuffer {
   const vertices: number[] = [],
     indices: number[] = [];
+  let featureId = 0;
   for (const feature of features) {
-    const triangles = triangulateRings(feature),
+    const triangles = triangulateRings(feature, tessellate?.(featureId++)),
       offset = vertices.length / 4;
     for (const p of triangles.positions) packPosition(vertices, p[0], p[1]);
     for (const index of triangles.indices) indices.push(offset + index);

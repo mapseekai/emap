@@ -35,7 +35,7 @@ test.describe('original coordinates from the five authorized real files',()=>{
     });
     const box=await page.locator('#stage').boundingBox();const x=box.x+before.pixel[0],y=box.y+before.pixel[1];
     // A real cancelled pointer drag never writes the source dataset or history.
-    await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+14,y+8,{steps:4});await page.keyboard.press('Escape');await page.mouse.up();
+    await page.mouse.move(x,y);await page.mouse.down();expect((await page.locator('#stage').boundingBox()).y).toBe(box.y);await page.mouse.move(x+14,y+8,{steps:4});await page.keyboard.press('Escape');await page.mouse.up();
     expect(await page.evaluate(()=>window.lumaEditor.session.exportSelected())).toBe(before.export);
     expect(await page.evaluate(()=>window.lumaEditor.session.history.size())).toBe(0);
     await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+18,y+12,{steps:6});

@@ -246,3 +246,19 @@ after commit, undo and redo. Export downloads the selected feature in source CRS
 using GeoJSON 2008, without overwriting the original file. This single-feature
 example does not implement insert/delete, node splitting or automatic geometry
 repair, and does not change the default emap rendering backend.
+
+### Editing refresh in the luma example
+
+The independent `luma-vertex-editing` example keeps selection outlines and handles at original precision;
+background strokes can use Canvas screen filtering. The cached background excludes handles, which are
+redrawn immediately during dragging and after commit. Changed fill/stroke resources are prepared in the
+Worker and published together by revision; partial initial frames are not presented. Edits that change
+many hole relationships may still require background retriangulation. Original vertices are already updated,
+and the UI reports synchronization rather than displaying missing chunks or mixed geometry versions.
+
+### Deep zoom in the experimental luma editor
+
+The luma vertex editor uses corrected high/low projection and direct endpoint anchoring
+to keep handles aligned with the background at deep zoom. Disabling screen filtering
+is not required for the fix. Native mapshaper coordinates, picking, undo/redo, and the
+default Canvas editor are unchanged.

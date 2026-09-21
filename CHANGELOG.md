@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reuse Canvas micro-arc and half-device-pixel consecutive-command filtering in the
+  independent luma backgrounds, with separate switches and explicit display-approximation
+  metrics. Keep polygon fills/holes and original editing geometry unchanged. Build in the
+  data Worker with exact view/DPR/revision keys, atomic replacement and stale-result guards.
+  Preserve collapsed Canvas strokes and fall back to original chunks on coordinate overflow
+  or screen-cache budget pressure. Separate filtered warm draws from raw ABBA and fast-nav.
+
+- Add Canvas-style snapshot navigation to both experimental luma examples. Reuse a
+  completed frame during gestures and defer full-detail redraw until settling;
+  keep raw A/B measurements snapshot-free. Publish snapshots after asynchronous GPU
+  completion, rebase interrupted gestures, and invalidate stale captures on changes.
+- Conservatively cull immutable path instance ranges outside the expanded viewport.
+  WebGL reuses bounded offset-VAO caches; WebGPU uses firstInstance. Preserve original
+  vertices, short paths, joins, dash distances and compositing order. Add separate
+  preview/full-redraw and candidate/submitted-segment counters plus real-file tests.
+
+- Add full-precision MSAA path rendering in the independent luma examples,
+  adapting GeoArrow/deck.gl PathLayer's six-vertex indexed segment/join envelope.
+  Keep all original path coordinates and segments, round joins/caps and pixel widths;
+  do not add line/polygon LOD. Same-color opaque strokes reuse private coverage depth
+  without blending; color changes and intervening layers preserve drawing order.
+- Expose optimized, same-MSAA reference and legacy analytic path modes. Retain the
+  existing analytic path for translucent/dashed strokes and missing multisampling.
+  Add a real-file line runner and optional local GeoArrowPathLayer comparison.
+  Antialiasing differs from the old analytic shader; only the same-MSAA reference
+  is used for exact coverage-equivalence assertions.
+
 - Reuse the existing world-anchored `PointLod` in both luma examples, enabled by
   default with a 3 CSS-pixel cell target. Build original representative IDs in
   the data Worker and cache their GPU buffers across pan/DPR changes. Add an
@@ -49,6 +76,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `examples:luma` and `test:luma` commands. Preserve the default Canvas presets.
 
 ### Fixed
+
+- Fix deep-zoom GPU/editor coordinate drift with independently scaled high/low
+  position differences in GLSL and WGSL. Keep uniform layouts aligned and anchor
+  each stroked endpoint directly. Add real-LUCC pixel projection, cached/uncached
+  editing, screen-filter, DPR and original-coordinate pointer-hit regressions.
+
+- Keep luma editor vertex handles live while complex polygon fills synchronize in
+  the Worker. Cache only the completed background, never the selection overlay;
+  use explicit unpremultiplied bitmap capture to avoid darkening translucent fills.
+- Publish edited fill/stroke caches atomically and refresh only affected same-view
+  screen-path chunks. Reuse validated original triangulations with a bounded Worker
+  cache; retriangulate when local validity or ring membership changes.
+- Suppress partial luma editor frames during loading and context restoration,
+  including resize-triggered redraws. Preserve the prior complete scene until
+  edited replacement buffers are ready instead of clearing live chunks early.
+
+- Fix near-to-far stalls in the luma examples: render screen-filtered strokes
+  independently of evicted raw path buffers, prioritize current-view screen work,
+  and retain full polygon triangulations before unused raw lines within the same
+  256 MiB cache budget. Preserve source geometry, filtering rules and drawing order.
+  Track the latest snapshot view so gesture end cannot enqueue a previous near view.
+  Add real-wheel zoom-out regression and a separate transition-latency runner.
+
+- Compute path directions from high/low source-coordinate differences before
+  applying the viewport transform. Avoid repeated absolute-position projection
+  and skip padding instances before join work, without dropping short segments.
+
+- Allocate path template buffers only during GPU initialization, never while flushing
+  point batches; release cached path vertex arrays with their owning meshes.
 
 - Align render-Worker coordinate patch results with the full-geometry source
   contract. Vertex edit/undo/redo cache invalidation now consumes updated chunk

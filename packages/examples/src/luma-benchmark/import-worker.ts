@@ -1,3 +1,4 @@
+import type { ScreenPathRequest } from '../../../../src/engine/rendering/luma/screen-paths';
 import type { PointLodRequest } from '../../../../src/engine/rendering/luma/point-lod-source';
 import type { CoordinatePatch } from '../../../../src/engine/rendering/luma/edit-patch';
 import type { MapshaperDataset } from '../../../../src/shared/types/mapshaper-types';
@@ -12,6 +13,7 @@ type Message = {
   level: number;
   patch: CoordinatePatch;
   pointView: PointLodRequest;
+  screenView: ScreenPathRequest;
 };
 const scope = globalThis as unknown as {
   onmessage: ((event: MessageEvent<Message>) => void) | null;
@@ -61,6 +63,13 @@ async function processMessage(event: MessageEvent<Message>): Promise<void> {
       const transfer = result.flatMap(p => p.geometry ? [p.geometry.vertices.buffer,
         p.featureIds!.buffer, p.componentIds!.buffer] : []) as ArrayBuffer[];
       scope.postMessage({ type: 'response', id: data.id, result, buildMs: performance.now() - started }, transfer);
+    } else if (data.type === 'screen-paths') {
+      if (!lod) throw new Error('Screen path source is not initialized');
+      const started=performance.now();
+      const result=lod.buildScreenPaths(lod.chunks[data.chunk],data.screenView);
+      const transfer=[result.geometry.vertices.buffer,result.coordinates.buffer,result.offsets.buffer,result.arcIds.buffer,
+        ...(result.geometry.pathRanges?[result.geometry.pathRanges.bounds.buffer,result.geometry.pathRanges.segments.buffer]:[])];
+      scope.postMessage({type:'response',id:data.id,result,buildMs:performance.now()-started},transfer as ArrayBuffer[]);
     } else if (data.type === 'build') {
       if (!lod) throw new Error('LOD source is not initialized');
       const { packDisplayChunk } = await import(
@@ -69,11 +78,12 @@ async function processMessage(event: MessageEvent<Message>): Promise<void> {
       const started = performance.now();
       const packet = packDisplayChunk(lod.build(lod.chunks[data.chunk], data.level));
       scope.postMessage(
-        { type: 'response', id: data.id, result: packet, buildMs: performance.now() - started },
+        { type: 'response', id: data.id, result: packet, buildMs: performance.now() - started, triangulationStats: lod.triangulationStats },
         [
           packet.coordinates.buffer,
           packet.offsets.buffer,
           packet.geometry.vertices.buffer,
+          ...(packet.geometry.pathRanges ? [packet.geometry.pathRanges.bounds.buffer, packet.geometry.pathRanges.segments.buffer] : []),
           ...(packet.geometry.indices ? [packet.geometry.indices.buffer] : []),
         ] as ArrayBuffer[],
       );

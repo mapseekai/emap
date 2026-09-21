@@ -159,6 +159,60 @@ node scripts/benchmark-luma-point-lod.mjs --data-dir /Users/zhang/Desktop/测试
 缓存软预算只用于淘汰非活跃分块，不会因为预算不足而自动化简可见数据。大文件仍受 emap
 导入限制和实际浏览器内存约束。固定已解码栅格对照不表示 GeoTIFF I/O、解码或 overview 加速。
 
+### 线数据全精度渲染
+
+两个 luma 示例提供“MSAA 路径优化”“MSAA 同几何对照”“旧版解析描边”三种模式。
+原始 mapshaper 路径和非零线段完整保留，点 LOD 独立工作。默认对不透明实线使用六顶点
+索引模板、圆角连接、圆头与真实多重采样；仅剔除同色重复覆盖的采样位置。颜色变化和中间
+图元会重置覆盖，不改变图层顺序。半透明、虚线或不支持 MSAA 的设备保留解析路径。
+MSAA 和旧版解析抗锯齿并非逐像素等价；精确像素对照应使用同一 MSAA 几何模式。
+
+```bash
+pnpm benchmark:luma:lines --data-dir /Users/zhang/Desktop/测试数据 --gpu webgl --frames 20
+pnpm benchmark:luma:lines --data-dir /Users/zhang/Desktop/测试数据 --gpu webgpu --frames 20
+```
+
+线专项完整加载 `big.geojson`、`lucc.geojson`、`building.geojson`，测固定视图的描边，
+不要与页面完整场景的平移缩放 A/B 混算。可用 `--reference-dir` 指向本地 deck.gl-geoarrow
+仓库进行真正的 GeoArrowPathLayer 对照；参考依赖不进入 emap 的生产依赖。
+
+### 快照导航与保守路径过滤
+
+两个 luma 示例默认打开“快照导航”与“视口路径过滤”。导航复用已完成画面，停止后等待原始几何新画面；
+平移时新进入区域可能暂空白，缩放时清晰度和线宽暂随位图变化。选中要素或编辑顶点时暂停快照路径。
+原始 mapshaper 坐标、共享拓扑和编辑历史不变；现有 PointLod 开关独立。
+
+路径区间只做扩张视口包围盒剔除，包含邻接与描边余量，不过滤屏幕内短线或化简顶点。
+GPU Buffer 不变，复用 WebGL 偏移 VAO 或 WebGPU firstInstance；全范围可见时不减少原始工作量。
+`?nav=off`、`?cull=off` 可分别关闭；`&pointLod=off` 用于全量原始点。
+
+页面 A/B 仍强制原始绘制，不使用快照；快照 rAF FPS 不能当作全量 GPU 重绘 FPS。
+界面分别显示导航状态、提交时间、完整画面就绪时间、候选和实际提交的线段数。
+
+### Canvas 屏幕过滤（luma 实验页）
+
+默认开启的“Canvas 微小 arc 过滤”和“半设备像素重复点过滤”只作用于背景线/面描边。
+它们复用 Canvas 的 0.35 CSS px 阈值及初始视图修正、DPR 后半像素截断、连续重复命令跳过和
+塌缩路径 0.1 设备像素短线。原始 dataset、面填充/洞、选中轮廓和编辑顶点不受影响。
+这是显示近似，不是严格全精度显示。两项可独立关闭；`screenFilter=off` 同时关闭。
+屏幕几何由 Worker 按精确视图/DPR/版本生成，快照导航期间不重建；旧结果不会覆盖新视图。
+页面提供“原始几何导航”和“过滤后暖重绘压测”两个按钮。后者测固定当前视图、同一过滤命令集，筛选准备耗时另列，不使用快照。两种帧率不可直接混算。
+
+
+### 近景退远的缓存恢复
+
+屏幕过滤描边不依赖原始 GPU 路径 Buffer 的驻留。退远时先准备最新视图的屏幕路径，
+不再为了显示这些命令重建已淘汰的原始线。完整面三角网在同一 256 MiB 原始缓存预算内
+优先于非活跃原始线保留；超过预算的面仍可能重建，不承诺所有数据常驻。选择/编辑与过滤规则不变。
+
+```bash
+pnpm benchmark:luma:zoom-out --data-dir /Users/zhang/Desktop/测试数据 --assert-refill
+```
+
+该命令以完整真实文件从 16× 近景执行滚轮退远，统计停止操作到完整当前画面替换快照的延迟，
+不是固定视图暖 FPS。使用独立 4195 loopback 服务，结束后关闭；不操作已有 4187 服务。
+`--assert-refill` 校验指定真实文件在这条已预载路线中未重复构建原始线/面，并非所有数据的通用承诺。
+
 ## API
 
 - `Emap`

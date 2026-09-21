@@ -1,3 +1,4 @@
+import type { ScreenPathRequest, ScreenPathPacket } from '../../../../src/engine/rendering/luma/screen-paths';
 import type { PointLodRequest, PointLodPacket } from '../../../../src/engine/rendering/luma/point-lod-source';
 import type { CoordinatePatch } from '../../../../src/engine/rendering/luma/edit-patch';
 import Flatbush from 'flatbush';
@@ -29,11 +30,13 @@ type Response = {
   info?: MapshaperDataset['info'];
   arcs?: Pick<ArcVertexData, 'nn' | 'xx' | 'yy'>;
   buildMs?: number;
+  triangulationStats?: Record<string, number>;
 };
 
 export class BenchmarkFileWorker implements ChunkGeometryAccess {
   readonly chunks: SpatialChunk[] = [];
   workerBuildMs = 0;
+  triangulationStats: Record<string, number> = {};
   private index: InstanceType<typeof Flatbush> | null = null;
   private bounds: Rect = [0, 0, 1, 1];
   private serial = 0;
@@ -63,6 +66,7 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
         const request = this.pending.get(data.id);
         this.pending.delete(data.id);
         this.workerBuildMs += data.buildMs ?? 0;
+        if(data.triangulationStats)this.triangulationStats=data.triangulationStats;
         if (data.type === 'error') request?.reject(new Error(data.message));
         else request?.resolve(data.result);
       } else if (data.type === 'error') this.imported.reject(new Error(data.message));
@@ -135,6 +139,9 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
   level(_transform: AffineTransform): number { return 0; }
   async queryPointLod(pointView: PointLodRequest): Promise<PointLodPacket[]> {
     return await this.request('point-lod', { pointView }) as PointLodPacket[];
+  }
+  async buildScreenPaths(chunk: SpatialChunk, screenView: ScreenPathRequest): Promise<ScreenPathPacket> {
+    return await this.request('screen-paths',{chunk:chunk.id,screenView}) as ScreenPathPacket;
   }
   async build(chunk: SpatialChunk, level: number) {
     const packet = (await this.request('build', { chunk: chunk.id, level })) as DisplayPacket;

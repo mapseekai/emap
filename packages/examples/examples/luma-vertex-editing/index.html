@@ -12,13 +12,15 @@
 <label><input id="point-lod-enabled" type="checkbox" checked data-ready>点网格聚合</label>
 <label>聚合网格(CSS px) <input id="point-lod-cell" type="number" value="3" min="1" max="64" step="1" style="width:58px" data-ready></label>
 <label>模式 <select id="mode" data-ready><option value="select">选择要素</option><option value="vertex">顶点编辑</option><option value="pan">仅平移</option></select></label>
+<label>线绘制 <select id="path-strategy" data-ready><option value="auto">MSAA 路径优化</option><option value="reference">MSAA 同几何对照</option><option value="legacy">旧版解析描边</option></select></label>
 <button id="fit" data-ready>完整范围</button><button id="fit-selected" data-selected>定位选中</button><button id="clear" data-selected>清除选择</button>
 <button id="undo" disabled>撤销</button><button id="redo" disabled>重做</button><button id="export" data-selected>导出选中 GeoJSON</button>
 </section>
-<p id="status" role="status" data-state="idle">选择本地文件开始；不会自动生成测试数据。</p>
+<section class="bench-toolbar"><label><input id="fast-nav" type="checkbox" checked data-ready>快照导航（停止后按当前过滤设置重绘）</label><label><input id="path-culling" type="checkbox" checked data-ready>视口路径过滤（不化简）</label><label><input id="small-arc-filter" type="checkbox" checked data-lock>Canvas 微小 arc 过滤</label><label><input id="half-pixel-filter" type="checkbox" checked data-lock>半设备像素重复点过滤</label></section><p id="navigation-info" role="status"></p>
+  <p id="status" role="status" data-state="idle">选择本地文件开始；不会自动生成测试数据。</p>
 <div class="workspace">
 <section id="map" class="map-panel"><div class="badge"><strong id="renderer">luma.gl 10.0.0-alpha.1 / WebGL2</strong><span id="render-time"></span></div>
-<div id="stage" tabindex="0" aria-label="选择要素或拖动原始顶点"><canvas id="canvas2d" hidden></canvas><canvas id="webgl"></canvas></div><p id="lod-info"></p></section>
+<div id="stage" tabindex="0" aria-label="选择要素或拖动原始顶点"><canvas id="canvas2d" hidden></canvas><canvas id="webgl"></canvas></div><p id="lod-info"></p><p id="screen-filter-info" role="status"></p></section>
 <aside><h2>当前选择</h2>
 <div class="lookup"><label>数据图层 <select id="layer" data-ready></select></label><label>要素行号（0 起） <input id="feature-id" type="number" min="0" value="0" data-ready /></label><button id="select-id" data-ready>按行号选择</button></div>
 <p id="selection-info">未选择要素</p><pre id="attributes">{}</pre>
@@ -27,6 +29,6 @@
 <details open><summary>操作与精度</summary>
 <p>单击选择要素，橙色边界来自原始几何；空白处拖动平移、滚轮缩放。“定位选中”便于查看小图斑。切换到“顶点编辑”后拖动白色顶点；点图层可直接拖动被选中的原始点。</p>
 <p>拖动时红色线段是预览，松开才提交一次可撤销的编辑。Esc 取消拖动，Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 或 Ctrl+Y 重做。闭合环和共享拓扑节点一起移动，共享边的相邻要素也会改变；本示例不拆分共享节点、不插入或删除顶点，也不自动修复自交。</p>
-<p>点背景复用已有 PointLod，默认 3 CSS 像素网格保留原始代表点（可关闭），线面背景始终保持全精度；选择查询、橙色边界、白色顶点、编辑命令和选中导出使用原始坐标，不使用化简顶点。编辑后仅重新生成受影响的 全精度分块。首次导入和 几何准备仍可能需要等待。选中导出使用保留源坐标系的 GeoJSON 2008（含 CRS），不会暗中转换到 WGS84。本页是独立 luma 编辑验证，默认 emap 编辑器没有切换。</p>
+<p>点背景复用已有 PointLod，默认 3 CSS 像素网格保留原始代表点（可关闭），面填充保持原始，背景描边可按 Canvas 屏幕规则过滤；选择查询、橙色边界、白色顶点、编辑命令和选中导出使用原始坐标，不使用化简顶点。编辑后仅重新生成受影响的 全精度分块。首次导入和 几何准备仍可能需要等待。选中导出使用保留源坐标系的 GeoJSON 2008（含 CRS），不会暗中转换到 WGS84。本页是独立 luma 编辑验证，默认 emap 编辑器没有切换。</p>
 </details>
-</main><script type="module" src="/src/luma-editor/main.ts"></script></body></html>
+<p>快照导航复用上一帧，平移可能暂时露出未绘区域，缩放时线宽也暂随快照缩放；停止后按当前屏幕过滤设置重新绘制并恢复样式。这不是几何 LOD，也不是每帧完整重绘。编辑时只缓存已完成的背景，原始选中边界和顶点标记每帧通过 luma 实时绘制，不随背景快照缩放。提交后只刷新受影响缓存；复杂面的重新三角化在 Worker 中完成，期间保留完整旧背景，新缓存就绪后一次替换。</p></main><p>Canvas 屏幕过滤仅用于线与面描边：0.35 CSS px 的 arc 包围盒阈值按初始视图调整，顶点先投影到设备像素再截断至半像素；仅删除连续重复命令，全塌缩路径保留 0.1 设备像素短线。会改变小细节的显示，不是严格全精度显示；原生 dataset、面填充/洞、选择与编辑坐标不变。关闭两项可对照原始 GPU 路径。A/B 原始几何压测不含屏幕过滤和快照；过滤后的暖重绘、准备耗时与快照导航应分别测量。</p><script type="module" src="/src/luma-editor/main.ts"></script></body></html>

@@ -4,7 +4,18 @@ import base from './playwright.config.mjs';
 // Isolate benchmark runs from any user-owned example preview server.
 export default defineConfig({
   ...base,
-  testMatch: ['luma-benchmark.spec.mjs', 'luma-editor.spec.mjs', 'luma-points.spec.mjs', 'luma-point-lod.spec.mjs'],
+  testMatch: [
+    'luma-benchmark.spec.mjs',
+    'luma-editor.spec.mjs',
+    'luma-editor-refresh.spec.mjs',
+    'luma-zoom-precision.spec.mjs',
+    'luma-points.spec.mjs',
+    'luma-lines.spec.mjs',
+    'luma-point-lod.spec.mjs',
+    'luma-navigation.spec.mjs',
+    'luma-screen-filters.spec.mjs',
+    'luma-zoom-out.spec.mjs',
+  ],
   workers: 1,
   // Keep browser cleanup isolated from persisted performance reports.
   outputDir: 'test-results/luma-browser',
