@@ -16,6 +16,12 @@ export class RasterError extends Error {
 }
 
 export function isRasterOverview(base: RasterLevel, candidate: RasterLevel): boolean {
+  if (
+    ![base.width, base.height, candidate.width, candidate.height].every(
+      (n) => Number.isSafeInteger(n) && n > 0,
+    )
+  )
+    return false;
   // TIFF NewSubfileType: bit 0 = reduced resolution, bit 1 = page, bit 2 = mask.
   if (!(candidate.subfileType & 1) || candidate.subfileType & 6) return false;
   if (
@@ -25,10 +31,21 @@ export function isRasterOverview(base: RasterLevel, candidate: RasterLevel): boo
   )
     return false;
   if (candidate.width < 1 || candidate.height < 1) return false;
+  // Independent ceiling at a common integer reduction can shift the apparent
+  // aspect ratio by more than one pixel along the long dimension. Recognize
+  // that exact construction before applying the existing general-ratio check.
+  const integerReduction = Math.round(
+    Math.max(base.width / candidate.width, base.height / candidate.height),
+  );
+  const integerRounded =
+    integerReduction >= 2 &&
+    candidate.width === Math.ceil(base.width / integerReduction) &&
+    candidate.height === Math.ceil(base.height / integerReduction);
   const ratio = Math.min(base.width / candidate.width, base.height / candidate.height);
   if (
-    Math.abs(base.width / ratio - candidate.width) > 1 ||
-    Math.abs(base.height / ratio - candidate.height) > 1
+    !integerRounded &&
+    (Math.abs(base.width / ratio - candidate.width) > 1 ||
+      Math.abs(base.height / ratio - candidate.height) > 1)
   )
     return false;
   return (

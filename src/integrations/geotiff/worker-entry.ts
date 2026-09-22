@@ -1,4 +1,4 @@
-import { renderRasterBatch, renderRasterWindow } from './render-window';
+import { diagnostics, renderRasterBatch, renderRasterWindow } from './render-window';
 import { RasterError } from '../../domain/raster/policy';
 import { GeoTIFFReader } from './reader';
 import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
@@ -69,8 +69,31 @@ scope.onmessage = ({ data }) => {
             results.map((result) => result.rgba.buffer),
           );
         }
+      } else if (data.type === 'texture') {
+        const before = reader.getTaskDiagnosticsSnapshot(),
+          started = performance.now();
+        const packed = await reader.readTexture(data.request, controller.signal);
+        const result = {
+          ...packed,
+          diagnostics: diagnostics(reader, before, started, performance.now() - started, 0, 0),
+        };
+        scope.postMessage(
+          {
+            id: data.id,
+            type: 'texture',
+            result,
+            nativeDeflateStatus: reader.getNativeDeflateStatus(),
+          },
+          [result.data.buffer],
+        );
       } else {
-        const result = await reader.readWindow(data.request, controller.signal),
+        const before = reader.getTaskDiagnosticsSnapshot(),
+          started = performance.now();
+        const samples = await reader.readWindow(data.request, controller.signal);
+        const result = {
+            ...samples,
+            diagnostics: diagnostics(reader, before, started, performance.now() - started, 0, 0),
+          },
           nativeDeflateStatus = reader.getNativeDeflateStatus(),
           transfer = [...new Set(result.data.map((array) => array.buffer))] as ArrayBuffer[];
         scope.postMessage({ id: data.id, type: 'result', result, nativeDeflateStatus }, transfer);

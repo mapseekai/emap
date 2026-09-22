@@ -49,9 +49,12 @@ async function nativeInflate(buffer: ArrayBufferLike, capacity: number): Promise
   const stream = new DecompressionStream('deflate'),
     writer = stream.writable.getWriter(),
     reader = stream.readable.getReader(),
-    input = new Uint8Array(buffer.byteLength),
+    input =
+      buffer instanceof ArrayBuffer
+        ? new Uint8Array(buffer)
+        : new Uint8Array(new Uint8Array(buffer)),
     output = new Uint8Array(capacity);
-  input.set(new Uint8Array(buffer));
+  // The decoder borrows immutable compressed input until the awaited stream completes.
   const write = writer.write(input).then(() => writer.close());
   // The readable side can cancel first on an output-budget violation. Attach a
   // rejection handler immediately so the corresponding writer failure is never unhandled.

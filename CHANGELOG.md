@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read nonoverlapping original raster cores and reuse resident integer GPU textures
+  for exact halo edge/corner copies. Add a bounded Worker upload layout for UInt8/
+  UInt16 data, reducing duplicate decode, planar intermediates and main-thread packing;
+  retain original samples, NoData, sampling resolution, cancellation and coverage ownership.
+- Support UInt8 RGB GeoTIFFs in the experimental luma raster page, including planar
+  external overviews. Retain legitimate independently rounded integer-reduction
+  overview dimensions, including the J50D001006 1/8 level. Add folder selection with relative-path TIFF/OVR pairing and
+  real-file regressions for all five cdf20250916042716 images. Default runtimes remain unchanged.
+
+- Add an isolated real-TIFF memory profiler covering main/Worker V8 heaps, ArrayBuffer
+  backing storage, macOS process footprint, natural GC traces, navigation frame gaps,
+  repeated loads and disposal. Add an optional aggregate GeoTIFF block-cache ceiling;
+  the dynamic raster example uses 32 MiB without changing other callers' adaptive defaults.
+  Report raw-read Worker cache gauges, reuse bounded UInt16 upload packing storage,
+  and throttle example diagnostics independently of rendering. Memory budgets do not
+  represent total browser/driver memory; do not force GC in production.
+
+- Batch adjacent original raster windows with bounded 2D/strip-aware reads in the
+  dynamic luma example. Reuse shared planes for UInt16 texture packing and publish
+  disjoint progressive coverage without double alpha or old NoData bleed-through.
+  Keep pointer/camera upload pauses independent; add real-TIFF progress regressions
+  and same-resolution before/after measurements. Default runtimes remain unchanged.
+
+- Add a live `luma-raster` example with a source-CRS Canvas comparator and
+  WebGL2/WebGPU UInt16 data textures. Keep TIFF sources open, fetch native-window
+  overviews on navigation, reuse numerical textures on style changes, and perform
+  NoData-aware nearest/bilinear sampling, stretching and band mapping in shaders.
+  Bound requests/uploads and cache memory; retain complete previous views during
+  source-level transitions. Keep cross-CRS reprojection in the formal Canvas path.
+- Add exact, bounded column-window reads for eligible uncompressed pixel-interleaved
+  integer strips. Bypass metadata-page read-ahead only for validated pixel ranges;
+  preserve compressed, predicted, planar, non-native-endian and tiled read paths.
+  Include raw-read diagnostics, original-file pixel checks and dynamic raster benchmarks.
+
 - Reuse Canvas micro-arc and half-device-pixel consecutive-command filtering in the
   independent luma backgrounds, with separate switches and explicit display-approximation
   metrics. Keep polygon fills/holes and original editing geometry unchanged. Build in the

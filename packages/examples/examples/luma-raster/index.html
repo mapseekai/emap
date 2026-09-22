@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Emap · 动态 UInt8/UInt16 栅格</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:13px system-ui;color:#172b3a}#header{display:flex;gap:16px;align-items:center;height:48px;padding:12px}
+.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #dde4e8}button,select,input{font:inherit}button,select{padding:5px 9px}#status{margin:0;padding:8px 16px;min-height:36px;background:#eef5fb}#status[data-state=error]{color:#ab1525}
+#map{position:relative;width:100%;height:calc(100vh - 222px);min-height:300px;background:#f3f3f3}.numeric-raster{position:absolute;inset:0;pointer-events:none;z-index:2}
+.details{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:16px}pre{white-space:pre-wrap;overflow:auto;max-height:400px;font-size:12px}.hint{padding:8px 16px;margin:0;background:#fafafa;line-height:1.5}
+</style></head><body>
+<header id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/">Emap / Examples</a><strong>动态栅格 · UInt8/UInt16 原始数值纹理</strong></header>
+<section class="toolbar"><label>后端 <select id="backend"><option value="webgl">luma WebGL2 / UInt8/UInt16</option><option value="webgpu">luma WebGPU / UInt8/UInt16</option><option value="canvas">Canvas / 正式动态流程</option></select></label>
+<input id="file-input" type="file" multiple accept=".tif,.tiff,.ovr"><button id="choose-folder">选择文件夹</button><input id="folder-input" type="file" multiple webkitdirectory hidden><select id="file-select" aria-label="文件"></select><button id="load">加载文件</button><button id="cancel">取消加载</button><button id="fit">完整范围</button><button id="native">原始像元 1:1</button></section>
+<section class="toolbar"><label>拉伸 <select id="stretch"><option value="auto">自动 2–98%</option><option value="minmax">min / max</option><option value="percentile">2–98%</option><option value="none">类型范围</option></select></label>
+<label>重采样 <select id="resampling"><option value="nearest">最近邻</option><option value="bilinear">双线性（排除 NoData）</option></select></label>
+<label>透明度 <input id="opacity" type="range" min="0" max="1" step=".05" value="1"></label>
+<label>R <select id="red"></select></label><label>G <select id="green"></select></label><label>B <select id="blue"></select></label></section>
+<p id="status" role="status" data-state="loading">初始化…</p><div id="map"></div>
+<p class="hint">文件夹可列出多份 TIFF，并按同目录相对路径自动关联 .tif.ovr；一次加载选中的影像。本页会保持 TIFF 数据源打开，放大后选择 overview 或原图补充细节，不是固定图片 benchmark。三种后端均使用文件源 CRS；GPU 当前支持 UInt8/UInt16、1–4 波段、非调色板、正北向影像。其他类型可选 Canvas；跨 CRS 重投影暂不在此 GPU 示例范围内。样式变化复用 GPU 数据纹理，原文件不会被写入。</p>
+<p id="memory-summary" class="hint">内存指标将在加载后显示；缓存预算不等于浏览器总内存。</p>
+<div class="details"><details open><summary>运行指标（CPU 提交不等于 GPU 耗时）</summary><pre id="stats"></pre></details><details><summary>原始 TIFF 元数据</summary><pre id="metadata"></pre></details></div>
+<script type="module" src="/src/luma-raster/main.ts"></script></body></html>

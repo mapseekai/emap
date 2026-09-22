@@ -7,6 +7,9 @@ export default defineConfig({
   testMatch: [
     'luma-benchmark.spec.mjs',
     'luma-raster.spec.mjs',
+    'luma-raster-dynamic.spec.mjs',
+    'luma-raster-folder.spec.mjs',
+    'luma-raster-progress.spec.mjs',
     'luma-editor.spec.mjs',
     'luma-editor-refresh.spec.mjs',
     'luma-zoom-precision.spec.mjs',

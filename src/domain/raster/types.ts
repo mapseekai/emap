@@ -61,9 +61,20 @@ export interface RasterReadRequest {
   readonly samples: readonly number[];
 }
 export interface RasterReadResult {
+  /** Optional per-read Worker diagnostics; original samples are unchanged. */
+  readonly diagnostics?: RasterTaskDiagnostics;
   readonly width: number;
   readonly height: number;
   readonly data: readonly RasterSamples[];
+}
+/** Upload-ready, interleaved original integer samples. Unused channels are zero;
+ * RGBA describes storage only, not colorization or alpha interpretation. */
+export interface RasterTextureResult {
+  readonly width: number;
+  readonly height: number;
+  readonly bits: 8 | 16;
+  readonly data: Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer>;
+  readonly diagnostics?: RasterTaskDiagnostics;
 }
 export interface RasterStyle {
   /** auto preserves UInt8 colors and applies 2–98% stretch to other numeric types. */
@@ -251,6 +262,8 @@ export interface RasterProcessingStats {
 export interface RasterSource {
   readonly metadata: RasterMetadata;
   readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult>;
+  /** Optional lossless upload layout. Requests select all original bands in order. */
+  readTexture?(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterTextureResult>;
   /** Optional provider capability: render off-thread instead of returning raw windows. */
   renderTile?(request: RasterRenderRequest, signal?: AbortSignal): Promise<RasterRenderResult>;
   /** Optional storage-aware batch path. Providers may share one physical source read across tiles. */

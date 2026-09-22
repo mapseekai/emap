@@ -1,5 +1,11 @@
+import { getUncompressedWindowTimings, readUncompressedStripWindow } from './uncompressed-window';
 import { getDecoder, type GeoTIFFImage } from 'geotiff';
-import type { RasterReadRequest, RasterReadResult, RasterSamples } from '../../domain/raster/types';
+import type {
+  RasterReadRequest,
+  RasterReadResult,
+  RasterSamples,
+  RasterTextureResult,
+} from '../../domain/raster/types';
 import { createFastLzwDecoder } from './fast-lzw';
 import { createNativeDeflateDecoder } from './native-deflate';
 
@@ -7,7 +13,8 @@ const NATIVE_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 
 let deinterleaveMs = 0;
 
 export function getReadWindowDiagnostics() {
-  return { deinterleaveMs };
+  const direct = getUncompressedWindowTimings();
+  return { deinterleaveMs: deinterleaveMs + direct.assemblyMs, directReadMs: direct.directReadMs };
 }
 
 /** True only when readNumericWindow uses the explicitly bounded four-block pipeline. */
@@ -52,6 +59,7 @@ async function runBoundedBlocks(
   count: number,
   signal: AbortSignal | undefined,
   task: (index: number) => Promise<void>,
+  concurrency = 4,
 ): Promise<void> {
   let next = 0,
     failed = false;
@@ -63,7 +71,7 @@ async function runBoundedBlocks(
     }
   };
   const settled = await Promise.allSettled(
-    Array.from({ length: Math.min(4, count) }, async () => {
+    Array.from({ length: Math.min(concurrency, count) }, async () => {
       try {
         await run();
       } catch (error) {
@@ -111,6 +119,8 @@ export async function readNumericWindow(
   signal?: AbortSignal,
 ): Promise<RasterReadResult> {
   signal?.throwIfAborted();
+  const direct = await readUncompressedStripWindow(image, request, signal);
+  if (direct) return direct;
   const { window, samples } = request;
   const w = window[2] - window[0],
     h = window[3] - window[1];
@@ -228,4 +238,85 @@ export async function readInterleavedRgb8Window(
     }
   });
   return { width, height, data: output };
+}
+
+/** Assemble directly into a single transferable upload buffer, without full
+ * deinterleaved planes and a second main-thread packing pass. Core-aligned tiled
+ * requests do not overlap; neighbor halo reuse is performed on the GPU. */
+export async function readTextureWindow(
+  image: GeoTIFFImage,
+  request: RasterReadRequest,
+  signal?: AbortSignal,
+): Promise<RasterTextureResult> {
+  const { window } = request;
+  const width = window[2] - window[0],
+    height = window[3] - window[1];
+  const bits = image.getBitsPerSample() as 8 | 16,
+    bands = image.getSamplesPerPixel();
+  if (
+    ![8, 16].includes(bits) ||
+    bands < 1 ||
+    bands > 4 ||
+    (width * height * 4 * bits) / 8 > 8 * 1024 ** 2 ||
+    request.samples.length !== bands ||
+    request.samples.some((b, i) => b !== i) ||
+    request.samples.some(
+      (b) => image.getBitsPerSample(b) !== bits || image.getSampleFormat(b) !== 1,
+    )
+  )
+    throw new Error('Invalid packed integer texture read.');
+  signal?.throwIfAborted();
+  const output =
+    bits === 8 ? new Uint8Array(width * height * 4) : new Uint16Array(width * height * 4);
+  if (!image.isTiled || !supportsBoundedNumericWindow(image)) {
+    // Keep exact narrow-column strip and endian fallbacks. They never become
+    // full-file reads simply because the caller requests an upload layout.
+    const result = await readNumericWindow(image, request, signal);
+    for (let i = 0; i < width * height; i++)
+      for (let b = 0; b < bands; b++) output[i * 4 + b] = result.data[b][i];
+    return { width, height, bits, data: output };
+  }
+  const { decoder } = await windowDecoder(image),
+    tw = image.getTileWidth(),
+    th = image.getTileHeight();
+  const planar = image.planarConfiguration === 2,
+    perTile = planar ? bands : 1;
+  const grid = windowBlockGrid(image, window, perTile);
+  // Two physical decodes per worker bound stream chunks and decoded temporaries;
+  // source-level worker parallelism is retained.
+  await runBoundedBlocks(
+    grid.count,
+    signal,
+    async (index) => {
+      const ti = Math.floor(index / perTile),
+        sample = planar ? index % bands : 0;
+      const x = grid.x0 + (ti % grid.columns),
+        y = grid.y0 + Math.floor(ti / grid.columns);
+      const tile = await image.getTileOrStrip(x, y, sample, decoder, signal);
+      signal?.throwIfAborted();
+      const input = image.getArrayForSample(sample, tile.data),
+        stride = planar ? 1 : bands;
+      if (input.length < image.getBlockHeight(y) * tw * stride)
+        throw new Error('Truncated decoded texture block.');
+      const left = Math.max(window[0], x * tw),
+        right = Math.min(window[2], (x + 1) * tw, image.getWidth());
+      const top = Math.max(window[1], y * th),
+        bottom = Math.min(window[3], y * th + image.getBlockHeight(y), image.getHeight());
+      for (let row = top; row < bottom; row++) {
+        let src = ((row - y * th) * tw + left - x * tw) * stride;
+        let dst = ((row - window[1]) * width + left - window[0]) * 4;
+        for (let col = left; col < right; col++, src += stride, dst += 4) {
+          if (planar) output[dst + sample] = input[src];
+          else {
+            output[dst] = input[src];
+            if (bands > 1) output[dst + 1] = input[src + 1];
+            if (bands > 2) output[dst + 2] = input[src + 2];
+            if (bands > 3) output[dst + 3] = input[src + 3];
+          }
+        }
+      }
+    },
+    2,
+  );
+  return { width, height, bits, data: output };
 }

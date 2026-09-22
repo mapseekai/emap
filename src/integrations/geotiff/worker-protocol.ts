@@ -1,9 +1,10 @@
-export const GEOTIFF_WORKER_PROTOCOL_VERSION = 10;
+export const GEOTIFF_WORKER_PROTOCOL_VERSION = 12;
 
 import type {
   RasterMetadata,
   RasterReadRequest,
   RasterReadResult,
+  RasterTextureResult,
   RasterRenderRequest,
   RasterRenderResult,
   RasterBandStatistics,
@@ -25,6 +26,7 @@ export type GeoTIFFWorkerCommand =
   | GeoTIFFWorkerOpen
   | { type: 'configure'; cacheBytes: number }
   | { type: 'read'; request: RasterReadRequest }
+  | { type: 'texture'; request: RasterReadRequest }
   | { type: 'render'; request: RasterRenderRequest }
   | { type: 'render-batch'; requests: readonly RasterRenderRequest[] };
 export type GeoTIFFWorkerRequest =
@@ -54,6 +56,12 @@ export type GeoTIFFWorkerResponse =
       id: number;
       type: 'rendered-batch';
       results: readonly RasterRenderResult[];
+      nativeDeflateStatus?: RasterNativeDeflateStatus;
+    }
+  | {
+      id: number;
+      type: 'texture';
+      result: RasterTextureResult;
       nativeDeflateStatus?: RasterNativeDeflateStatus;
     }
   | { id: number; type: 'configured' }

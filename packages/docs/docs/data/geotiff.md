@@ -2,8 +2,8 @@
 id: geotiff
 slug: /data/geotiff
 title: 本地 GeoTIFF 栅格
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
-examples: ["geotiff-viewer", "mixed-data-viewer"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterTextureResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+examples: ["geotiff-viewer", "mixed-data-viewer", "luma-raster"]
 stability: experimental
 verifiedVersion: 0.13.0
 ---
@@ -265,3 +265,12 @@ console.log(after.performance.colorizeMs - before.performance.colorizeMs);
 ```
 
 `RasterCacheStats.performance` 是累计计数，宿主应取两次快照做差。Worker 可并行执行，因此 `workerMs`、`fileReadMs`、`blockLoadMs` 等是各任务累计时间，**不能相加当作墙钟总耗时**。示例中的 `decodeApprox` 以 `blockLoadMs - fileReadMs` 估算，适合定位方向，不是 profiler 的 CPU 精确采样；`transferMs` 也包含 Worker 消息调度开销，是近似值。
+
+
+### 可选的原始数值纹理布局
+
+`RasterSource.readTexture(request, signal)` 是[luma 栅格实验页](/mapseekai/emap/examples/luma-raster/)
+使用的可选能力，返回 `RasterTextureResult`：交错 RGBA8/16 TypedArray 保存原始无符号整数，
+未使用的通道为0。这只是存储布局，不是着色、alpha 推断或 UInt16 降位深；请求必须按源顺序选择
+全部波段。GeoTIFF 实现将单次 packed 输出限制在8 MiB内，并额外计入解码内存预留。
+没有实现此方法的外部数据源仍走 `readWindow` 兼容路径，正式 Canvas 流程保持原状。

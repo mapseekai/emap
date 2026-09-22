@@ -111,7 +111,7 @@ function unionReadRequest(requests: readonly RasterRenderRequest[]): RasterReadR
   };
 }
 
-function diagnostics(
+export function diagnostics(
   source: GeoTIFFReader,
   before: ReturnType<GeoTIFFReader['getTaskDiagnosticsSnapshot']>,
   workerStarted: number,
@@ -149,7 +149,7 @@ function diagnostics(
     deinterleaveMs: delta('deinterleaveMs'),
     directRgb8Tiles,
     blockLoadMs,
-    assembleMs: Math.max(0, readMs - blockLoadMs),
+    assembleMs: Math.max(0, readMs - blockLoadMs - delta('directReadMs')),
     colorizeMs,
   };
 }

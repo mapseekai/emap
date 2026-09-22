@@ -113,6 +113,49 @@ export class LocalRasterFileSource {
     if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster file source has been closed.');
     return { ...slice, data };
   }
+  /** Gather only explicitly requested pixel ranges, bypassing metadata-page read-ahead.
+   * Blob slices remain file-backed until the bounded combined read. This is not
+   * a full-file read and does not mutate the original file. */
+  async fetchPackedRanges(slices: readonly Slice[], signal?: AbortSignal): Promise<ArrayBuffer> {
+    signal?.throwIfAborted();
+    const file = this.file;
+    if (this.closed || !file)
+      throw new RasterError('SOURCE_CLOSED', 'Raster source has been closed.');
+    if (!slices.length || slices.length > 256)
+      throw new RasterError('RASTER_IO_BUDGET', 'A gathered read requires 1–256 ranges.');
+    let length = 0;
+    for (const range of slices) {
+      if (
+        !Number.isSafeInteger(range.offset) ||
+        !Number.isSafeInteger(range.length) ||
+        range.offset < 0 ||
+        range.length <= 0 ||
+        !Number.isSafeInteger(range.offset + range.length) ||
+        range.offset + range.length > this.fileSize
+      )
+        throw new RasterError('INVALID_TIFF_OFFSET', 'Invalid or truncated TIFF pixel range.');
+      length += range.length;
+    }
+    if (
+      !Number.isSafeInteger(length) ||
+      length > this.singleRangeLimit ||
+      this.bytes + length > this.cumulativeLimit
+    )
+      throw new RasterError('RASTER_IO_BUDGET', 'Gathered TIFF read exceeds the I/O budget.');
+    this.bytes += length;
+    const started = performance.now();
+    const data = await new Blob(
+      slices.map((r) => file.slice(r.offset, r.offset + r.length)),
+    ).arrayBuffer();
+    this.readOps++;
+    this.readBytesTotal += data.byteLength;
+    this.readMs += performance.now() - started;
+    signal?.throwIfAborted();
+    if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster source has been closed.');
+    if (data.byteLength !== length)
+      throw new RasterError('TRUNCATED_TIFF_RANGE', 'Incomplete gathered pixel read.');
+    return data;
+  }
   private async readBytes(offset: number, length: number): Promise<ArrayBuffer> {
     const file = this.file;
     if (this.closed || !file)

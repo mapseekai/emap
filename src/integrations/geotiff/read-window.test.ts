@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fromArrayBuffer } from 'geotiff';
 import { makeRasterFixture } from '../../../test/utils/raster-fixture';
-import { readNumericWindow, supportsBoundedNumericWindow } from './read-window';
+import { readNumericWindow, readTextureWindow, supportsBoundedNumericWindow } from './read-window';
 
 async function image(options: Parameters<typeof makeRasterFixture>[0] = {}) {
   const bytes = makeRasterFixture(options);
@@ -142,5 +142,73 @@ describe('native numeric window assembly', () => {
     await expect(
       readNumericWindow(input, { level: 0, window: [0, 0, 1, 1], samples: [0] }, abort.signal),
     ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('upload-ready original texture samples', () => {
+  it.each([
+    8, 16,
+  ] as const)('preserves all %i-bit integer samples without creating main-thread planes', async (bits) => {
+    const input = await image({
+      bits,
+      bands: 3,
+      width: 9,
+      height: 7,
+      compression: 'deflate',
+      pixelValue: (x, y, b) => b * 40 + x + y,
+    });
+    const request = { level: 0, window: [1, 1, 8, 6] as const, samples: [0, 1, 2] };
+    const original = await readNumericWindow(input, request),
+      packed = await readTextureWindow(input, request);
+    expect(packed.bits).toBe(bits);
+    for (let i = 0; i < packed.width * packed.height; i++) {
+      for (let b = 0; b < 3; b++) expect(packed.data[i * 4 + b]).toBe(original.data[b][i]);
+      expect(packed.data[i * 4 + 3]).toBe(0);
+    }
+  });
+  it.each([
+    1, 2,
+  ])('assembles physical blocks directly with planar configuration %i and at most two decodes', async (planar) => {
+    const input = await image({ bits: 16, bands: 3, width: 8, height: 8 });
+    input.isTiled = true;
+    input.planarConfiguration = planar;
+    vi.spyOn(input, 'getTileWidth').mockReturnValue(4);
+    vi.spyOn(input, 'getTileHeight').mockReturnValue(4);
+    vi.spyOn(input, 'getBlockHeight').mockReturnValue(4);
+    let active = 0,
+      peak = 0;
+    vi.spyOn(input, 'getTileOrStrip').mockImplementation(async (x, y, sample) => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 1));
+      active--;
+      const channels = planar === 1 ? 3 : 1,
+        data = new Uint16Array(16 * channels);
+      for (let j = 0; j < 4; j++)
+        for (let i = 0; i < 4; i++)
+          for (let b = 0; b < channels; b++)
+            data[(j * 4 + i) * channels + b] =
+              100 * (planar === 1 ? b : sample) + (x * 4 + i) * 10 + y * 4 + j;
+      return { x, y, sample, data: data.buffer };
+    });
+    const result = await readTextureWindow(input, {
+      level: 0,
+      window: [1, 2, 7, 8],
+      samples: [0, 1, 2],
+    });
+    for (let y = 0; y < 6; y++)
+      for (let x = 0; x < 6; x++)
+        for (let b = 0; b < 3; b++)
+          expect(result.data[(y * 6 + x) * 4 + b]).toBe(b * 100 + (x + 1) * 10 + y + 2);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+  it('rejects reordered channels and a packed-output overrun', async () => {
+    const input = await image({ bits: 16, bands: 3 });
+    await expect(
+      readTextureWindow(input, { level: 0, window: [0, 0, 1, 1], samples: [2, 1, 0] }),
+    ).rejects.toThrow();
+    await expect(
+      readTextureWindow(input, { level: 0, window: [0, 0, 4096, 4096], samples: [0, 1, 2] }),
+    ).rejects.toThrow();
   });
 });

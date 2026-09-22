@@ -248,3 +248,74 @@ not a universal no-rebuild guarantee for arbitrary data.
 - [密集点 LOD / Dense point LOD](/mapseekai/emap/examples/point-lod/)
 
 - [luma WebGL2 Benchmark](/mapseekai/emap/examples/luma-benchmark/)
+
+
+## Dynamic UInt16 raster comparison
+
+The [luma dynamic raster example](/mapseekai/emap/examples/luma-raster/) keeps the TIFF source open
+and fetches finer overviews/full-resolution pixels as the camera zooms. It compares the formal Canvas
+pipeline with WebGL2 and WebGPU using the same source CRS and overview policy. The GPU experiment
+currently supports north-up UInt16 images with 1–4 bands and no palette; cross-CRS reprojection remains
+in the formal Canvas path, without a silent bounding-box approximation.
+
+GPU numerical textures support NoData-aware nearest/bilinear sampling, source-wide stretches,
+band mapping and opacity in shaders. Style-only changes reuse loaded data without CPU RGBA rebuilds.
+Both display caches have a 32 MiB soft budget, but retain different representations. Include cold-view
+halo reads and CPU interleaving costs rather than reporting only warm rendering speed. The shared reader
+also supports exact column-window reads for eligible uncompressed strips, benefiting Canvas as well.
+
+`pnpm benchmark:luma:raster:dynamic --data-dir <local-test-directory>` runs the two authorized TIFFs.
+Stable-view timings include an eight-frame confirmation window: approximately 133–150 ms for a warm view
+is not GPU execution time. The original luma-benchmark raster path remains a separate fixed-texture
+compositing benchmark.
+
+
+### Dynamic raster zoom refinement
+
+The `luma-raster` example batches adjacent complete source windows, shares halo reads,
+and publishes ready textures through disjoint progressive coverage. Pointer and camera
+pauses prevent pending packing/uploads from competing with active gestures. Original values,
+source CRS, overview policy and soft cache budgets remain unchanged. Separate main-thread
+packing/submission, cumulative Worker decoding and settled wall time; the latter includes
+eight quiet-frame confirmations. Not every view is faster, and block-edge duplication
+and small striped reads still have costs.
+
+
+## Dynamic raster memory diagnostics
+
+The `luma-raster` example reports decoded-block cache, GPU texture payloads, queued
+samples and reusable packing storage below the map. These tracked resources exclude
+V8/Worker temporaries, Canvas/swapchain surfaces and driver overhead; a 32 MiB cache
+budget is not total browser memory. Source values and overview selection stay unchanged.
+
+`openGeoTIFF(file, { blockCacheBytes: 32 * 1024 ** 2 })` caps the aggregate decoded-block
+cache across the source's Workers (8–256 MiB). Omitting the option retains storage-aware
+defaults. This is separate from decode reservations; smaller caches may require rereads.
+
+On macOS run `pnpm profile:luma:raster:memory --data-dir "/authorized/test-data"` with
+the original FUS/GJ files. Optional flags include `--backends webgl,webgpu --dprs 1,2
+--cycles 4 --trace`. Only the profiler's own browser and preview process are cleaned up.
+Forced GC is restricted to untimed checkpoints; the production renderer never forces GC.
+
+
+### Source cores, GPU halo reuse, and local folders
+
+The dynamic raster example can prepare an original UInt8/UInt16 upload layout in the
+Worker, avoiding planar intermediate outputs and main-thread channel packing. Eligible
+TIFF tiles are read as disjoint cores; resident integer textures supply exact one-pixel
+halo edges/corners with GPU copies. Only neighbors needed by visible sample footprints
+are requested, without recursive halo expansion. Incomplete coverage retains the previous
+image; completed regions still replace it without double alpha or stale NoData bleed.
+Strips and incompatible layouts retain bounded window fallback, at the same overview policy.
+
+The folder selector lists TIFFs and pairs `.tif.ovr` by the full relative path. One selected
+image is loaded at a time; this is not automatic mosaicking. The verified folder contains
+four UInt8 RGB originals with planar external OVRs and one internally overviewed COG.
+Embedded GeoTIFF georeferencing is used; this feature does not promise arbitrary TFW/XML
+fallback. Other sample types, palettes and cross-CRS display remain in the formal Canvas path.
+
+`haloCopies`, `haloCopyBytes` and `preparedUploads` separate GPU edge reuse from CPU uploads.
+`packMs=0` means no main-thread packing, not an entirely copy-free Worker/browser pipeline.
+`?pipeline=legacy` keeps the planar reader as a diagnostic comparison, not an exact old-build
+reproduction. Add `--include-cdf` to `benchmark:luma:raster:dynamic` to include all five
+original TIFFs in the authorized `cdf20250916042716` folder.

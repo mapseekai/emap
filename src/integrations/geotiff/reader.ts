@@ -1,7 +1,9 @@
+import { validateRasterTextureRead } from '../../domain/raster/texture';
 import {
   getReadWindowDiagnostics,
   readInterleavedRgb8Window,
   readNumericWindow,
+  readTextureWindow,
   supportsBoundedNumericWindow,
   type InterleavedRgb8Window,
 } from './read-window';
@@ -24,6 +26,7 @@ import type {
   RasterMetadata,
   RasterReadRequest,
   RasterReadResult,
+  RasterTextureResult,
   RasterReference,
   RasterSource,
 } from '../../domain/raster/types';
@@ -610,6 +613,7 @@ export class GeoTIFFReader implements RasterSource {
       fastLzwFallbacks: fastLzw.fallbacks,
       fastLzwMs: fastLzw.ms,
       deinterleaveMs: readWindow.deinterleaveMs,
+      directReadMs: readWindow.directReadMs,
       blockLoadMs: blocks.loadMs,
       transferMs: 0,
     };
@@ -682,6 +686,15 @@ export class GeoTIFFReader implements RasterSource {
   readWindow(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterReadResult> {
     return this.runRead(request, signal, (image, readSignal) =>
       readNumericWindow(image, request, readSignal),
+    );
+  }
+
+  readTexture(request: RasterReadRequest, signal?: AbortSignal): Promise<RasterTextureResult> {
+    const level = this.metadata.levels.find((l) => l.id === request.level);
+    if (!level) throw new RasterError('INVALID_LEVEL', 'Unknown texture level.');
+    validateRasterTextureRead(level, request);
+    return this.runRead(request, signal, (image, readSignal) =>
+      readTextureWindow(image, request, readSignal),
     );
   }
 

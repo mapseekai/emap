@@ -1,3 +1,4 @@
+import { validateRasterTextureRead } from '../../domain/raster/texture';
 import {
   RasterError,
   validateRasterWindow,
@@ -7,6 +8,7 @@ import type {
   RasterMetadata,
   RasterReadRequest,
   RasterReadResult,
+  RasterTextureResult,
   RasterReference,
   RasterSource,
   RasterRenderRequest,
@@ -14,6 +16,7 @@ import type {
   RasterProcessingStats,
   RasterLevelProcessingStats,
   RasterNativeDeflateStatus,
+  RasterTaskDiagnostics,
 } from '../../domain/raster/types';
 import { validateRasterRender } from '../../engine/rendering/raster/warp';
 import { validateRasterStyle } from '../../engine/rendering/raster/tile';
@@ -83,14 +86,14 @@ function stripedPrimaryCacheBytes(metadata: RasterMetadata, baseline: number): n
 }
 
 function commandLevel(command: GeoTIFFWorkerCommand): number | null {
-  if (command.type === 'read') return command.request.level;
+  if (command.type === 'read' || command.type === 'texture') return command.request.level;
   if (command.type === 'render') return command.request.read.level;
   if (command.type === 'render-batch') return command.requests[0]?.read.level ?? null;
   return null;
 }
 
 function commandWindow(command: GeoTIFFWorkerCommand): RasterReadRequest['window'] | null {
-  if (command.type === 'read') return command.request.window;
+  if (command.type === 'read' || command.type === 'texture') return command.request.window;
   if (command.type === 'render') return command.request.read.window;
   if (command.type === 'render-batch' && command.requests.length)
     return [
@@ -189,6 +192,9 @@ export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
   readonly workerUrl?: string | URL;
   /** 1–4 independent decoding/rendering workers; default 2 (1 on <=2 logical cores). */
   readonly workerCount?: number;
+  /** Optional aggregate decoded-block cache ceiling across this source's Workers (8–256 MiB).
+   * Omit to preserve storage-aware sizing. Not a total browser-memory limit. */
+  readonly blockCacheBytes?: number;
 }
 interface Slot {
   client: RasterWorkerClient;
@@ -200,6 +206,15 @@ interface Slot {
   cachePeakBytes: number;
   cachePeakEntries: number;
   cacheLimitBytes: number;
+}
+/** Gauges apply to raw numeric reads too; a source read is not a rendered display tile. */
+function recordSlotCacheMemory(slot: Slot, d?: RasterTaskDiagnostics): void {
+  if (!d) return;
+  slot.cacheBytes = d.blockCacheBytes;
+  slot.cacheEntries = d.blockCacheEntries;
+  slot.cachePeakBytes = Math.max(slot.cachePeakBytes, d.blockCachePeakBytes);
+  slot.cachePeakEntries = Math.max(slot.cachePeakEntries, d.blockCachePeakEntries);
+  slot.cacheLimitBytes = d.blockCacheLimitBytes;
 }
 type MutableLevelStats = {
   -readonly [K in keyof Omit<RasterLevelProcessingStats, 'level'>]: Omit<
@@ -310,7 +325,9 @@ class WorkerRasterSource implements RasterSource {
       desiredPrimaryCacheBytes = stripedPrimaryCacheBytes(this.metadata, desiredWorkerCacheBytes),
       desiredTotalCacheBytes =
         desiredPrimaryCacheBytes + desiredWorkerCacheBytes * Math.max(0, this.target - 1),
-      grantedCacheBytes = cacheLease.resize(desiredTotalCacheBytes),
+      grantedCacheBytes = cacheLease.resize(
+        Math.min(desiredTotalCacheBytes, options.blockCacheBytes ?? desiredTotalCacheBytes),
+      ),
       replicaCacheBytes =
         this.target > 1
           ? Math.min(desiredWorkerCacheBytes, Math.floor(grantedCacheBytes / this.target))
@@ -552,9 +569,12 @@ class WorkerRasterSource implements RasterSource {
           if (
             response.type === 'rendered' ||
             response.type === 'rendered-batch' ||
-            response.type === 'result'
+            response.type === 'result' ||
+            response.type === 'texture'
           )
             this.recordNativeDeflateStatus(response.nativeDeflateStatus);
+          if (response.type === 'result' || response.type === 'texture')
+            recordSlotCacheMemory(slot, response.result.diagnostics);
           if (response.type === 'rendered' || response.type === 'rendered-batch') {
             const rendered = response.type === 'rendered' ? [response.result] : response.results;
             this.renderedTiles += rendered.length;
@@ -598,11 +618,7 @@ class WorkerRasterSource implements RasterSource {
               this.pageCacheMisses += d.pageCacheMisses;
               this.blockCacheHits += d.blockCacheHits;
               this.blockCacheMisses += d.blockCacheMisses;
-              slot.cacheBytes = d.blockCacheBytes;
-              slot.cacheEntries = d.blockCacheEntries;
-              slot.cachePeakBytes = Math.max(slot.cachePeakBytes, d.blockCachePeakBytes);
-              slot.cachePeakEntries = Math.max(slot.cachePeakEntries, d.blockCachePeakEntries);
-              slot.cacheLimitBytes = d.blockCacheLimitBytes;
+              recordSlotCacheMemory(slot, d);
               this.blockCacheEvictions += d.blockCacheEvictions;
               this.blockCacheEvictedBytes += d.blockCacheEvictedBytes;
               this.blockCacheAdmittedBytes += d.blockCacheAdmittedBytes;
@@ -665,6 +681,29 @@ class WorkerRasterSource implements RasterSource {
       throw new RasterError('RASTER_WORKER_PROTOCOL', 'Expected original raster samples.');
     return response.result;
   }
+  async readTexture(
+    request: RasterReadRequest,
+    signal?: AbortSignal,
+  ): Promise<RasterTextureResult> {
+    const level = this.metadata.levels.find((l) => l.id === request.level);
+    if (!level) throw new RasterError('INVALID_LEVEL', 'Unknown texture level.');
+    const bytes = validateRasterTextureRead(level, request);
+    if (bytes > RASTER_MAX_DECODE_BYTES)
+      throw new RasterError(
+        'RASTER_READ_BUDGET',
+        'Packed texture decode reservation exceeds budget.',
+      );
+    const snapshot = {
+      ...request,
+      window: [...request.window] as [number, number, number, number],
+      samples: [...request.samples],
+    };
+    const response = await this.submit({ type: 'texture', request: snapshot }, bytes, signal);
+    if (response.type !== 'texture')
+      throw new RasterError('RASTER_WORKER_PROTOCOL', 'Expected packed original raster samples.');
+    return response.result;
+  }
+
   async renderTile(
     request: RasterRenderRequest,
     signal?: AbortSignal,
@@ -858,6 +897,13 @@ export async function openGeoTIFF(
   options: OpenGeoTIFFOptions = {},
 ): Promise<RasterSource> {
   options.signal?.throwIfAborted();
+  if (
+    options.blockCacheBytes !== undefined &&
+    (!Number.isSafeInteger(options.blockCacheBytes) ||
+      options.blockCacheBytes < 8 * MIB ||
+      options.blockCacheBytes > 256 * MIB)
+  )
+    throw new RasterError('INVALID_RASTER_BUDGET', 'Source block-cache budget must be 8–256 MiB.');
   const count = rasterWorkerCount(options.workerCount);
   const url =
     options.workerUrl ?? new URL(/* @vite-ignore */ './emap-geotiff-worker.js', import.meta.url);

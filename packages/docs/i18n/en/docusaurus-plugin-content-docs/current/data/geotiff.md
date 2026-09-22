@@ -2,8 +2,8 @@
 id: geotiff
 slug: /data/geotiff
 title: Local GeoTIFF rasters
-api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
-examples: ["geotiff-viewer", "mixed-data-viewer"]
+api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterTextureResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
+examples: ["geotiff-viewer", "mixed-data-viewer", "luma-raster"]
 stability: experimental
 verifiedVersion: 0.13.0
 ---
@@ -251,3 +251,14 @@ console.log(after.performance.colorizeMs - before.performance.colorizeMs);
 ```
 
 `RasterCacheStats.performance` contains cumulative counters; hosts should diff two snapshots. Worker tasks run in parallel, so `workerMs`, `fileReadMs`, and `blockLoadMs` are accumulated task durations and **must not be summed as wall-clock time**. The example's `decodeApprox` is `blockLoadMs - fileReadMs`, useful for bottleneck triage rather than exact CPU profiling. `transferMs` also includes Worker message scheduling and is approximate.
+
+
+### Optional original texture layout
+
+`RasterSource.readTexture(request, signal)` is an optional capability used by the experimental
+[luma raster example](/mapseekai/emap/examples/luma-raster/). It returns `RasterTextureResult`: one
+interleaved RGBA8/16 typed array containing original unsigned samples, with unused channels set
+to zero. This is a storage layout, not colorization, alpha inference or UInt16 quantization.
+Select every source band in original order. The GeoTIFF implementation bounds each packed
+output to 8 MiB and includes it in the decoded-output reservation. Providers without this
+method retain the existing `readWindow` compatibility path; the formal Canvas pipeline is unchanged.

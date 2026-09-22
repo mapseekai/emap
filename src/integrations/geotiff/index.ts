@@ -23,6 +23,7 @@ export type {
   RasterLevelProcessingStats,
   RasterReadRequest,
   RasterReadResult,
+  RasterTextureResult,
   RasterSamples,
   RasterReference,
   RasterStyle,

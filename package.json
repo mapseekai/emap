@@ -168,7 +168,9 @@
     "benchmark:luma:real": "node scripts/benchmark-luma-real.mjs",
     "benchmark:luma:lines": "node scripts/benchmark-luma-lines.mjs",
     "benchmark:luma:zoom-out": "node scripts/benchmark-luma-zoom-out.mjs",
-    "benchmark:luma:raster": "node scripts/benchmark-luma-raster.mjs"
+    "benchmark:luma:raster": "node scripts/benchmark-luma-raster.mjs",
+    "benchmark:luma:raster:dynamic": "node scripts/benchmark-luma-raster-dynamic.mjs",
+    "profile:luma:raster:memory": "node scripts/profile-luma-raster-memory.mjs"
   },
   "keywords": [
     "mapshaper",

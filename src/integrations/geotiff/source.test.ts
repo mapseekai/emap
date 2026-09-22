@@ -1,9 +1,9 @@
 import { planRasterTile } from '../../engine/rendering/raster/tile';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openGeoTIFF, openGeoTIFFHandle } from './source';
+import { openGeoTIFF, openGeoTIFFHandle, type OpenGeoTIFFOptions } from './source';
 import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
 import type { GeoTIFFWorkerRequest, GeoTIFFWorkerResponse } from './worker-protocol';
-import type { RasterMetadata } from '../../domain/raster/types';
+import type { RasterTaskDiagnostics, RasterMetadata } from '../../domain/raster/types';
 const metadata: RasterMetadata = {
   filename: 'image.tif',
   fileSize: 8,
@@ -60,8 +60,9 @@ async function opened(
   workerCount = 1,
   directoryBytes?: number,
   rasterMetadata: RasterMetadata = metadata,
+  options: OpenGeoTIFFOptions = {},
 ) {
-  const pending = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount }),
+  const pending = openGeoTIFF(file(), { workerUrl: '/worker.js', workerCount, ...options }),
     worker = FakeWorker.instances.at(-1)!;
   worker.reply({ id: 1, type: 'metadata', metadata: rasterMetadata, directoryBytes });
   for (let i = 0; i < 4; i++) await Promise.resolve();
@@ -78,6 +79,116 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('Worker-backed external raster sources', () => {
+  it('caps aggregate source cache across primary and replica without changing default policy', async () => {
+    const level = {
+      ...metadata.levels[0],
+      width: 54798,
+      height: 56561,
+      tileWidth: 54798,
+      tileHeight: 1,
+      samples: 3,
+      bits: [16, 16, 16],
+      formats: [1, 1, 1],
+    };
+    const striped = {
+      ...metadata,
+      levels: [
+        level,
+        { ...level, id: 1, width: 1000, height: 1000, tileWidth: 128, tileHeight: 128 },
+      ],
+    };
+    const { source, worker } = await opened(2, 1000, striped, { blockCacheBytes: 32 * 1024 ** 2 });
+    try {
+      const configure = worker.messages.find((m) => m.type === 'configure');
+      expect(configure).toMatchObject({ cacheBytes: 28 * 1024 ** 2 });
+      const replica = FakeWorker.instances.at(-1)!;
+      expect(replica.messages[0]).toMatchObject({ cacheBytes: 4 * 1024 ** 2 });
+      expect(source.getProcessingStats!().blockCacheLimitBytes).toBe(32 * 1024 ** 2);
+    } finally {
+      source.dispose();
+    }
+  });
+  it.each([
+    0,
+    -1,
+    7 * 1024 ** 2,
+    257 * 1024 ** 2,
+    NaN,
+    Infinity,
+    8 * 1024 ** 2 + 0.5,
+  ])('rejects invalid explicit cache budget %s before creating a Worker', async (blockCacheBytes) => {
+    await expect(openGeoTIFF(file(), { workerUrl: '/worker.js', blockCacheBytes })).rejects.toThrow(
+      /cache|budget/i,
+    );
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+  it('reports raw numeric read cache memory without counting the read as a rendered tile', async () => {
+    const { source, worker } = await opened();
+    try {
+      const pending = source.readWindow({ level: 0, window: [0, 0, 1, 1], samples: [0] });
+      const request = worker.messages.at(-1)!;
+      const diagnostics = {
+        blockCacheBytes: 1024,
+        blockCacheEntries: 2,
+        blockCachePeakBytes: 2048,
+        blockCachePeakEntries: 3,
+        blockCacheLimitBytes: 8 * 1024 ** 2,
+      } as RasterTaskDiagnostics;
+      worker.reply({
+        id: request.id,
+        type: 'result',
+        result: { width: 1, height: 1, data: [new Uint8Array(1)], diagnostics },
+      });
+      await pending;
+      expect(source.getProcessingStats!()).toMatchObject({
+        blockCacheBytes: 1024,
+        blockCacheEntries: 2,
+        blockCachePeakBytes: 2048,
+        blockCachePeakEntries: 3,
+        renderedTiles: 0,
+      });
+    } finally {
+      source.dispose();
+    }
+  });
+  it('transfers packed integer results and reports their cache gauges without pretending to render', async () => {
+    const { source, worker } = await opened(1, 1000, {
+      ...metadata,
+      levels: [
+        { ...metadata.levels[0], samples: 3, bits: [8, 8, 8], formats: [1, 1, 1], photometric: 2 },
+      ],
+    });
+    try {
+      const pending = source.readTexture!({ level: 0, window: [0, 0, 1, 1], samples: [0, 1, 2] });
+      const request = worker.messages.at(-1)!;
+      expect(request.type).toBe('texture');
+      worker.reply({
+        id: request.id,
+        type: 'texture',
+        result: {
+          width: 1,
+          height: 1,
+          bits: 8,
+          data: new Uint8Array([3, 7, 19, 0]),
+          diagnostics: {
+            blockCacheBytes: 2048,
+            blockCacheEntries: 1,
+            blockCachePeakBytes: 2048,
+            blockCachePeakEntries: 1,
+            blockCacheLimitBytes: 8 * 1024 ** 2,
+          } as RasterTaskDiagnostics,
+        },
+      });
+      const result = await pending;
+      expect(Array.from(result.data)).toEqual([3, 7, 19, 0]);
+      expect(source.getProcessingStats!()).toMatchObject({
+        blockCacheBytes: 2048,
+        renderedTiles: 0,
+      });
+    } finally {
+      source.dispose();
+    }
+  });
   it('passes a File reference into a classic Worker and returns only external references', async () => {
     const { worker, source } = await opened();
     expect(worker.options.type).toBe('classic');

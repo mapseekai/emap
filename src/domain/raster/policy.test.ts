@@ -139,3 +139,19 @@ describe('numerical overview compatibility', () => {
     ).toBe(false);
   });
 });
+
+describe('integer-reduction overview dimensions', () => {
+  const original = { ...base, width: 27119, height: 18617 };
+  it('accepts the real J50D001006 1/8 overview with independent ceiling of each dimension', () => {
+    expect(isRasterOverview(original, { ...overview, width: 3390, height: 2328 })).toBe(true);
+  });
+  it('still rejects anisotropic, invalid and incompatible candidate dimensions', () => {
+    for (const candidate of [
+      { ...overview, width: 3390, height: 2340 },
+      { ...overview, width: 3390, height: 2328, subfileType: 5 },
+      { ...overview, width: NaN, height: 2328 },
+      { ...overview, width: 3390.5, height: 2328 },
+    ])
+      expect(isRasterOverview(original, candidate)).toBe(false);
+  });
+});

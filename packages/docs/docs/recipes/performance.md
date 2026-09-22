@@ -227,3 +227,62 @@ pnpm benchmark:luma:zoom-out --data-dir /Users/zhang/Desktop/测试数据 --asse
 - [密集点 LOD / Dense point LOD](/mapseekai/emap/examples/point-lod/)
 
 - [luma WebGL2 Benchmark](/mapseekai/emap/examples/luma-benchmark/)
+
+
+## 动态 UInt16 栅格对照
+
+[luma 动态栅格示例](/mapseekai/emap/examples/luma-raster/) 保持 TIFF 源打开，放大后读取更精细
+的 overview/原图，不再仅放大固定图片。可切换正式 Canvas、WebGL2、WebGPU；同一文件均采用
+源 CRS 和同一层级选择策略。GPU 当前支持 UInt8/UInt16、1–4 波段、非调色板、正北向影像，跨 CRS
+仍使用正式 Canvas 流程，不会静默用矩形包围盒代替重投影。
+
+GPU 缓存数值纹理，shader 负责 NoData-aware 最近邻/双线性、源统计拉伸、波段和透明度。
+样式变化复用已加载的数据，不重新生成 CPU RGBA。相同软缓存预算为 32 MiB，但 GPU/Canvas
+存储形式不同；冷视图的 halo 读放大和 CPU 交错打包仍需计入，不能只报告暖缓存帧率。
+共享 Reader 同时增加了合格未压缩 strip 的精确列窗口读取，正式 Canvas 也自动受益。
+
+`pnpm benchmark:luma:raster:dynamic --data-dir <本地测试目录>` 运行两份授权 TIFF 的动态基准，
+每个动作的稳定时间包含 8 帧确认；约 133–150 ms 的暖缓存结果不能解读为 GPU 执行时间。
+旧 luma-benchmark 的栅格仍是固定纹理纯合成基准，两者应分别测量。
+
+
+### 动态栅格放大补图
+
+`luma-raster` 会合并相邻完整源窗口，复用 halo 读块，并在纹理就绪后按不重叠覆盖渐进补图。
+交互中暂停新读和待上传打包；原始数值、源坐标系、overview 策略和软缓存预算保持不变。
+主线程打包与 GPU 提交、Worker 累计解码、画面稳定时间分别观察；稳定压测含八帧确认窗口。
+此优化不代表所有视图更快，压缩块边缘重复和条带小范围读取仍有开销。
+
+
+## 动态栅格内存诊断
+
+`luma-raster` 的地图下方显示解码缓存、GPU 数据纹理、待上传样本和打包暂存。
+这些是已跟踪的资源字节，不包含完整 JS/Worker 临时内存、Canvas/交换缓冲和图形驱动；
+不要将 32 MiB 缓存预算误读为浏览器总占用。原始数据读取继续使用完整数值和相同 overview 策略。
+
+`openGeoTIFF(file, { blockCacheBytes: 32 * 1024 ** 2 })` 可以限制该数据源全部 Worker
+的解码块缓存预算（允许 8–256 MiB）。省略该选项仍使用原来的存储布局自适应策略。
+它不改变并发解码预算，缓存缩小时重复访问旧视图可能需要重新读块。
+
+在 macOS 上可用 `pnpm profile:luma:raster:memory --data-dir "/你的测试数据目录"`
+对授权的 FUS/GJ 文件复测；可用 `--backends webgl,webgpu --dprs 1,2 --cycles 4 --trace`
+选择后端、DPR、次数及额外 GC 跟踪。该命令只清理自己创建的测试浏览器和预览服务。
+强制 GC 仅用于非计时检查点核对存活对象，生产渲染路径不调用 GC。
+
+
+### 原始源块、GPU halo 与文件夹读取
+
+动态栅格页现在直接在 Worker 组织 UInt8/UInt16 原始数值的上传布局，不在主线程重新拆分和交错。
+适合的分块 TIFF 按不重叠 core 读取，一像素 halo 从已驻留的邻块核心做整数 GPU 复制；仅加载
+当前屏幕采样确实需要的邻块，不递归扩展整圈数据。边缘依赖未就绪时保留旧画面，对已就绪区域
+继续按独占覆盖渐进更新。条带及不适用布局保留有界窗口回退，不通过选择更粗 overview 提速。
+
+点击“选择文件夹”，会列出目录下的 TIFF，并按完整相对路径关联同目录 `.tif.ovr`。
+一次加载下拉框选中的影像，不是自动镶嵌所有文件；同名但不同目录的文件不会关联到错误 OVR。
+当前验证目录包含四个 UInt8 RGB 原图/外部 OVR 对和一个内部 COG。已有 GeoTIFF 坐标键作为
+定位依据，本功能不承诺替没有坐标键的任意 TIFF 解析 TFW/XML。浮点、调色板与跨 CRS 显示仍可选正式 Canvas。
+
+页面的 `haloCopies`、`haloCopyBytes` 和 `preparedUploads` 区分 GPU 边缘复制与 CPU 上传，
+默认源路径 `packMs=0` 只表示没有主线程打包，并不表示 Worker 或浏览器内部完全零复制。
+诊断参数 `?pipeline=legacy` 保留旧平面窗口读取用于对照；它不是旧版本所有行为的完整复刻。
+`pnpm benchmark:luma:raster:dynamic --data-dir <测试目录> --include-cdf` 增加该目录五份原始 TIFF 的测试。
