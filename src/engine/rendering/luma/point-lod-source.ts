@@ -69,8 +69,17 @@ export class LumaPointLodSource {
         type: 'circle' as const,
         pointLod: { cellSize: request.cellSize },
       };
-      // The resident buffer holds the global bounded representative set. Panning
-      // changes uniforms only; do not crop and repack it for every pointer move.
+      // Refine over whole visible chunks when the global grid hits its budget.
+      // Coverage changes with chunk IDs, so panning inside the same chunks still
+      // reuses the resident buffer and the main-thread view cache remains valid.
+      const selected = pointChunks.filter((chunk) => visible.has(chunk.id));
+      const coverage = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const chunk of selected) {
+        coverage[0] = Math.min(coverage[0], chunk.bounds[0]);
+        coverage[1] = Math.min(coverage[1], chunk.bounds[1]);
+        coverage[2] = Math.max(coverage[2], chunk.bounds[2]);
+        coverage[3] = Math.max(coverage[3], chunk.bounds[3]);
+      }
       const selection = this.lod.query(
         spec,
         layer,
@@ -81,6 +90,7 @@ export class LumaPointLodSource {
         {
           width: request.width,
           height: request.height,
+          bounds: coverage,
           getCandidates: () => {
             let mapping = this.featureMaps.get(layerId);
             if (!mapping) {
@@ -92,7 +102,6 @@ export class LumaPointLodSource {
                 for (const _point of normalizePointShape(layer.shapes![id])) mapping[cursor++] = id;
               this.featureMaps.set(layerId, mapping);
             }
-            const selected = pointChunks.filter((chunk) => visible.has(chunk.id));
             const candidates = new Uint32Array(selected.reduce((n, c) => n + c.ids.length, 0));
             let cursor = 0;
             for (const chunk of selected)

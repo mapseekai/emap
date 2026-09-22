@@ -179,6 +179,12 @@ export function renderLayers(
               {
                 width: ctx.viewport.width ?? 1024,
                 height: ctx.viewport.height ?? 768,
+                bounds: [
+                  bounds[0] - padding,
+                  bounds[1] - padding,
+                  bounds[2] + padding,
+                  bounds[3] + padding,
+                ],
                 painting: true,
                 getCandidates: () => getCandidates(ctx, layer.source, ml, padding),
               },

@@ -16,12 +16,13 @@ export interface PointLodView {
   height: number;
   /** Full-view original candidates, consulted only at a budget-limited scale. */
   getCandidates?: () => Uint32Array | null;
+  /** Conservative full-view bounds, never the pointer query rectangle. */
+  bounds?: readonly number[];
   /** Record the actual painted level and crop for CSS snapshot navigation. */
   painting?: boolean;
 }
 
 interface Level {
-  singlePoint: boolean;
   selection: PointLodSelection;
   index: InstanceType<typeof Flatbush> | null;
   bounds: readonly number[];
@@ -41,6 +42,12 @@ interface Entry {
   cellSize: number;
   budget: number;
   levels: Map<number, Level>;
+  local?: {
+    requested: number;
+    candidates: Uint32Array | null;
+    bounds: readonly number[] | undefined;
+    level: Level | null;
+  };
   bypassBelow: number;
   budgetFloor: number;
   small: boolean;
@@ -210,17 +217,81 @@ export class PointLod {
       }
       level = built;
       entry.levels.set(exponent, level);
-      if (entry.levels.size > MAX_LEVELS) entry.levels.delete(entry.levels.keys().next().value!);
+      if (entry.levels.size > MAX_LEVELS - (entry.local ? 1 : 0))
+        entry.levels.delete(entry.levels.keys().next().value!);
     }
-    // At deep zoom an indexed local crop can be cheap even when a global fine
-    // grid would exceed the budget. Otherwise retain useful coarser thinning.
-    if (exponent > requested && level.singlePoint) {
-      const candidates = view.getCandidates?.();
-      if (candidates && candidates.length <= budget) return finish(null);
+    // A global memory limit must not freeze the screen-space detail. Refine the
+    // full visible set, not the (possibly tiny) picking rectangle. Local detail
+    // stays thinned until the requested cells actually separate original points.
+    if (exponent > requested) {
+      const candidates = view.getCandidates?.() ?? null;
+      if (candidates || view.bounds) {
+        return finish(this.refine(entry, layer, mask, requested, candidates, view.bounds));
+      }
     }
     entry.levels.delete(exponent);
     entry.levels.set(exponent, level);
     return finish(level);
+  }
+
+  private refine(
+    entry: Entry,
+    layer: MapshaperLayer,
+    mask: Uint8Array | null,
+    requested: number,
+    candidates: Uint32Array | null,
+    bounds: readonly number[] | undefined,
+  ): Level | null {
+    const cached = entry.local;
+    const covered =
+      cached?.bounds &&
+      bounds &&
+      !candidates &&
+      !cached.candidates &&
+      cached.bounds[0] <= bounds[0] &&
+      cached.bounds[1] <= bounds[1] &&
+      cached.bounds[2] >= bounds[2] &&
+      cached.bounds[3] >= bounds[3];
+    if (
+      cached?.requested === requested &&
+      (covered || cached.bounds === bounds || cached.bounds?.every((v, i) => v === bounds?.[i])) &&
+      (cached.candidates === candidates ||
+        (cached.candidates &&
+          candidates &&
+          cached.candidates.length === candidates.length &&
+          cached.candidates.every((id, i) => id === candidates[i])))
+    )
+      return cached.level;
+
+    // Chunk queries may return out-of-order or duplicate feature IDs (MultiPoint).
+    // Work on a copy so first-original-point selection and drawing order survive.
+    const ordered = candidates?.slice().sort() ?? null;
+    // A declined broad-phase query needs a source scan. Keep a small overscan
+    // margin so adjacent pans can reuse it, rather than rescanning the whole layer.
+    const coverage = bounds?.slice();
+    if (coverage && !candidates) {
+      const padX = Math.min(2 ** requested * 4, (coverage[2] - coverage[0]) / 16);
+      const padY = Math.min(2 ** requested * 4, (coverage[3] - coverage[1]) / 16);
+      coverage[0] -= padX;
+      coverage[2] += padX;
+      coverage[1] -= padY;
+      coverage[3] += padY;
+    }
+    let exponent = requested;
+    let built = this.build(layer, mask, 2 ** exponent, entry.budget, {
+      candidates: ordered,
+      bounds: coverage,
+    });
+    while (built === 'budget')
+      built = this.build(layer, mask, 2 ** ++exponent, entry.budget, {
+        candidates: ordered,
+        bounds: coverage,
+      });
+    const level = typeof built === 'string' ? null : built;
+    entry.local = { requested, candidates, bounds: coverage, level };
+    // Include the one local index in the same three-level retention limit.
+    while (entry.levels.size >= MAX_LEVELS) entry.levels.delete(entry.levels.keys().next().value!);
+    return level;
   }
 
   private build(
@@ -228,6 +299,7 @@ export class PointLod {
     mask: Uint8Array | null,
     cell: number,
     budget: number,
+    local?: { candidates: Uint32Array | null; bounds?: readonly number[] },
   ): Level | 'small' | 'sparse' | 'budget' | 'unsafe' {
     if (!Number.isFinite(cell) || cell <= 0) return 'unsafe';
     const columns = new Map<number, Set<number>>();
@@ -236,14 +308,20 @@ export class PointLod {
       xy: number[] = [];
     const bounds = [Infinity, Infinity, -Infinity, -Infinity];
     let count = 0;
-    let singlePoint = true;
-    for (let id = 0; id < layer.shapes!.length; id++) {
+    let sourceCount = 0;
+    const candidates = local?.candidates;
+    const clip = local?.bounds;
+    for (let i = 0, n = candidates?.length ?? layer.shapes!.length; i < n; i++) {
+      const id = candidates ? candidates[i] : i;
+      if (candidates && i > 0 && id === candidates[i - 1]) continue;
       if (mask && mask[id] !== 1) continue;
       const points = normalizePointShape(layer.shapes![id]);
-      if (points.length > 1) singlePoint = false;
       for (let component = 0; component < points.length; component++) {
         const p = points[component];
         if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+        sourceCount++;
+        if (clip && (p[0] < clip[0] || p[1] < clip[1] || p[0] > clip[2] || p[1] > clip[3]))
+          continue;
         count++;
         const x = Math.floor(p[0] / cell),
           y = Math.floor(p[1] / cell);
@@ -262,13 +340,15 @@ export class PointLod {
         if (featureIds.length > budget) return 'budget';
       }
     }
-    if (count > 0 && count < MIN_POINTS) return 'small';
-    if (count > 0 && featureIds.length >= count * 0.9) return 'sparse';
+    if (!local && count > 0 && count < MIN_POINTS) return 'small';
+    if (!local && count > 0 && featureIds.length >= count * 0.9) return 'sparse';
+    // Full detail is safe only when every valid candidate component survived.
+    // A small feature count alone says nothing about density or MultiPoint cost.
+    if (candidates && sourceCount > 0 && featureIds.length === sourceCount) return 'sparse';
     const index = featureIds.length ? new Flatbush(featureIds.length) : null;
     for (let i = 0; i < xy.length; i += 2) index!.add(xy[i], xy[i + 1], xy[i], xy[i + 1]);
     index?.finish();
     return {
-      singlePoint,
       selection: {
         featureIds: Uint32Array.from(featureIds),
         componentIds: Uint32Array.from(componentIds),

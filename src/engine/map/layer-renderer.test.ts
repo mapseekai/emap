@@ -820,6 +820,25 @@ describe('automatic point LOD', () => {
 });
 
 describe('point LOD drawing contracts', () => {
+  it('supplies full-view bounds for continuous detail when the candidate index returns null', () => {
+    const { ctx, ml, events } = fixture('circle', false);
+    if (ctx.layers[0].type === 'circle') ctx.layers[0].pointLod = { cellSize: 8 };
+    ml.shapes = Array.from({ length: 160_000 }, (_, id) => [[id % 400, Math.floor(id / 400)]]);
+    ctx.viewport.updateSize(128, 128);
+    ctx.getRenderCandidates = () => null;
+    const draw = vi.spyOn(ctx.painter, 'drawPoints');
+    for (const scale of [0.5, 1, 2, 3]) {
+      ctx.viewport.applyCameraState([64 / scale, 64 / scale], scale);
+      draw.mockClear();
+      events.length = 0;
+      renderLayers(ctx, 1 / scale, 1);
+      const ids = draw.mock.calls.flatMap((call) => [...call[2]!]);
+      const row = ids.filter((id) => id < 400);
+      expect((row[1] - row[0]) * scale).toBeLessThanOrEqual(8);
+      expect(ids.length).toBeLessThanOrEqual(2048);
+    }
+  });
+
   it('keeps original MultiPoint components and attribute buckets at DPR 1 and 2', () => {
     for (const ratio of [1, 2]) {
       const { ctx, ml, events, dataset } = fixture('circle', true);

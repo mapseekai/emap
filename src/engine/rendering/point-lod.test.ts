@@ -260,6 +260,40 @@ describe('point LOD review regressions', () => {
 });
 
 describe('bounded LOD fallback and painted crops', () => {
+  it('refines the visible candidates instead of stretching a budget-limited global grid', () => {
+    const layer: MapshaperLayer = {
+      geometry_type: 'point',
+      shapes: Array.from({ length: 160_000 }, (_, id) => [[id % 400, Math.floor(id / 400)]]),
+    };
+    const dataset = { layers: [layer] };
+    const spec: CircleLayerSpecification = { id: 'dots', source: 's', type: 'circle' };
+    const cache = new PointLod();
+    for (const scale of [0.5, 1, 2, 3]) {
+      const bounds = [0, 0, 128 / scale, 128 / scale];
+      const ids = Uint32Array.from(
+        Array.from({ length: 160_000 }, (_, id) => id).filter(
+          (id) => id % 400 <= bounds[2] && Math.floor(id / 400) <= bounds[3],
+        ),
+      );
+      const selection = cache.query(
+        spec,
+        layer,
+        dataset,
+        null,
+        new AffineTransform(scale, -scale, 0, 128),
+        bounds,
+        { width: 128, height: 128, getCandidates: () => ids, painting: true },
+      );
+      // Still dense at these scales: only show original representatives, at the
+      // requested screen spacing, even once the local feature count is small.
+      expect(selection).not.toBeNull();
+      const row = [...selection!.featureIds].filter((id) => id < 400);
+      expect((row[1] - row[0]) * scale).toBeLessThanOrEqual(8);
+      expect(selection!.featureIds.length).toBeLessThanOrEqual(2048);
+      expect(cache.queryPainted(spec, layer, dataset, null, bounds)).toEqual(selection);
+    }
+  });
+
   it('coarsens rather than disabling dense data when the viewport budget is exceeded', () => {
     const { query, cache, spec, layer, dataset } = fixture();
     expect(query()).not.toBeNull();
@@ -292,13 +326,88 @@ describe('bounded LOD fallback and painted crops', () => {
         view,
       ),
     ).toBe(coarse);
-    // A sparse full viewport can safely use the original spatial index path.
-    expect(
-      cache.query(spec, layer, dataset, null, new AffineTransform(64, -64), [0, 0, 1, 1], {
-        ...view,
-        getCandidates: () => new Uint32Array([0, 1]),
+  });
+
+  it('refines the full viewport when the candidate index declines a broad query', () => {
+    const { cache, spec, layer, dataset } = fixture();
+    const bounds = [0, 0, 0.5, 0.5];
+    const view = { width: 16, height: 16, bounds, getCandidates: () => null };
+    const transform = new AffineTransform(32, -32, 0, 16);
+    const result = cache.query(spec, layer, dataset, null, transform, bounds, view)!;
+    expect(result.featureIds.length).toBeGreaterThan(4);
+    expect(result.featureIds.length).toBeLessThanOrEqual(32);
+    // A pointer rectangle must use the same full-view representatives.
+    const tiny = [0, 0, 0.1, 0.1];
+    const picked = cache.query(spec, layer, dataset, null, transform, tiny, view)!;
+    expect([...picked.featureIds]).toEqual(
+      [...result.featureIds].filter((id) => {
+        const p = layer.shapes![id]![0] as number[];
+        return p[0] <= tiny[2] && p[1] <= tiny[3];
       }),
-    ).toBeNull();
+    );
+    for (const shape of layer.shapes!)
+      Object.defineProperty(shape!, '0', {
+        get() {
+          throw new Error('warm local rescan');
+        },
+      });
+    expect(cache.query(spec, layer, dataset, null, transform, bounds, view)).toEqual(result);
+    // Small pans inside the cached overscan must not scan hidden coordinates.
+    expect(() =>
+      cache.query(spec, layer, dataset, null, transform, [0.01, 0, 0.51, 0.5], {
+        ...view,
+        bounds: [0.01, 0, 0.51, 0.5],
+      }),
+    ).not.toThrow();
+  });
+
+  it('keeps local source order, filters and MultiPoint identity when candidate rows repeat', () => {
+    const { cache, spec, layer, dataset } = fixture();
+    const candidates = new Uint32Array([2, 1, 2, 0]);
+    layer.shapes![0] = [
+      [0, 0],
+      [0.3, 0],
+    ];
+    layer.shapes![1] = [
+      [0.1, 0],
+      [0.4, 0],
+    ];
+    layer.shapes![2] = [
+      [0.2, 0],
+      [0.5, 0],
+    ];
+    const mask = new Uint8Array(layer.shapes!.length).fill(1);
+    mask[0] = 0;
+    const transform = new AffineTransform(32, -32);
+    const bounds = [-100, -100, 100, 100];
+    const view = { width: 16, height: 16, getCandidates: () => candidates };
+    const query = () => cache.query(spec, layer, dataset, mask, transform, bounds, view)!;
+    const result = query();
+    expect([...result.featureIds]).toEqual([1, 1, 2]);
+    expect([...result.componentIds]).toEqual([0, 1, 1]);
+    expect([...candidates]).toEqual([2, 1, 2, 0]);
+    expect(query()).toBe(result);
+    mask[1] = 0;
+    dataset.attributeVersion!++;
+    // Both surviving components occupy separate cells, so full detail is safe.
+    expect(query()).toBeNull();
+  });
+
+  it('does not reuse a local selection for different candidates on pan', () => {
+    const { cache, spec, layer, dataset } = fixture();
+    const transform = new AffineTransform(32, -32);
+    const bounds = [-100, -100, 100, 100];
+    const query = (ids: number[]) =>
+      cache.query(spec, layer, dataset, null, transform, bounds, {
+        width: 16,
+        height: 16,
+        getCandidates: () => Uint32Array.from(ids),
+      })!;
+    const first = query([0, 1, 2, 3]);
+    expect(query([0, 1, 2, 3])).toBe(first);
+    const next = query([100, 101, 102, 103]);
+    expect(next).not.toBe(first);
+    expect([...next.featureIds].every((id) => id >= 100)).toBe(true);
   });
 
   it('does not mistake a small feature candidate count for sparse MultiPoint data', () => {

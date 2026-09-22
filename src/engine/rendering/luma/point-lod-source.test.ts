@@ -30,6 +30,60 @@ function request(source: FullGeometrySource, scale = 0.1): PointLodRequest {
   };
 }
 describe('luma adapter reuses the existing PointLod', () => {
+  it('refines visible chunks through the global budget limit for Canvas and GPU packets', async () => {
+    const dataset: MapshaperDataset = {
+      layers: [
+        {
+          geometry_type: 'point',
+          shapes: Array.from({ length: 160_000 }, (_, id) => [[id % 400, Math.floor(id / 400)]]),
+        },
+      ],
+    };
+    const source = new FullGeometrySource(dataset, [0, 0, 400, 400]);
+    await source.initialize(signal());
+    try {
+      for (const scale of [0.5, 1, 2, 3]) {
+        const transform = new AffineTransform(scale, -scale, 0, 128);
+        const packet = source.queryPointLod({
+          transform,
+          width: 128,
+          height: 128,
+          cellSize: 8,
+          visibleChunkIds: source.visible(transform, 128, 128, 8).map((c) => c.id),
+          knownKeys: [],
+        })[0];
+        expect(packet.key).not.toBeNull();
+        const row = [...packet.featureIds!].filter((id) => id < 400);
+        expect((row[1] - row[0]) * scale).toBeLessThanOrEqual(8);
+        expect(packet.count).toBeLessThanOrEqual(2048);
+        expect(packet.geometry!.count).toBe(packet.count);
+        const reused = source.queryPointLod({
+          transform,
+          width: 128,
+          height: 128,
+          cellSize: 8,
+          visibleChunkIds: source.visible(transform, 128, 128, 8).map((c) => c.id),
+          knownKeys: [packet.key!],
+        })[0];
+        expect(reused.key).toBe(packet.key);
+        expect(reused.geometry).toBeUndefined();
+      }
+      const transform = new AffineTransform(9, -9, 0, 128);
+      expect(
+        source.queryPointLod({
+          transform,
+          width: 128,
+          height: 128,
+          cellSize: 8,
+          visibleChunkIds: source.visible(transform, 128, 128, 8).map((c) => c.id),
+          knownKeys: [],
+        })[0].key,
+      ).toBeNull();
+    } finally {
+      source.dispose();
+    }
+  });
+
   it('defaults to 3 CSS pixels and validates the same 1..64 range', () => {
     expect(DEFAULT_LUMA_POINT_LOD_CELL_SIZE).toBe(3);
     for (const n of [0, 65, NaN, Infinity]) expect(() => validatePointLodCellSize(n)).toThrow();

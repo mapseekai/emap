@@ -501,6 +501,7 @@ export class CanvasRenderService {
           : cache.query(spec, ml, dataset, mask, this.deps.view._viewport.transform, bounds, {
               width: this.deps.view._viewport.width ?? 1024,
               height: this.deps.view._viewport.height ?? 768,
+              bounds: renderBounds ?? undefined,
               getCandidates: () =>
                 renderBounds
                   ? this.deps.cache._featureQuery.getRenderCandidates(sourceId, ml, renderBounds)
