@@ -1,3 +1,4 @@
+import { perspectiveActive } from '../../../../src/domain/geo/perspective-transform';
 import { normalizePointShape } from '../../../../src/domain/source/layer-utils';
 import type { AffineTransform } from '../../../../src/domain/geo/transform';
 import type { MapshaperDataset } from '../../../../src/shared/types/mapshaper-types';
@@ -39,15 +40,20 @@ export class PointLodRenderCache {
   }
   private describe(t: AffineTransform, dimensions: readonly number[], chunks: readonly SpatialChunk[]): LodView {
     const [width, height] = dimensions;
+    // Use the near-side sampling scale, while retaining the existing world-anchored
+    // grid and original feature/component identity. Visible chunks already use the camera footprint.
+    const scale=perspectiveActive(t)?1/t.groundResolution():Math.max(Math.abs(t.mx),Math.abs(t.my));
+    const mx=perspectiveActive(t)?Math.sign(t.mx)*scale:t.mx;
+    const my=perspectiveActive(t)?Math.sign(t.my)*scale:t.my;
     const request: PointLodRequest = {
-      transform: { mx: t.mx, my: t.my, bx: t.bx, by: t.by }, width, height,
+      transform: { mx, my, bx: t.bx, by: t.by }, width, height,
       cellSize: this.cellSize, visibleChunkIds: chunks.filter(c => c.kind === 'point').map(c => c.id),
       knownKeys: [],
     };
     // The existing LOD uses world-anchored binary scale cells. DPR and pan offset
     // do not change a global representative set; visible chunk IDs only control
     // the original policy's cheap-local-full-detail bypass at fine scales.
-    const exponent = Math.floor(Math.log2(this.cellSize / Math.max(Math.abs(t.mx), Math.abs(t.my))));
+    const exponent = Math.floor(Math.log2(this.cellSize / scale));
     const key = [this.dataset.editVersion ?? 0, this.dataset.attributeVersion ?? 0,
       width, height, this.cellSize, exponent, ...request.visibleChunkIds].join(',');
     return { key, request };

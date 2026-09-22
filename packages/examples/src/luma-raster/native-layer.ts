@@ -1,3 +1,4 @@
+import { groundBounds, cameraUniforms } from '../../../../src/domain/geo/perspective-transform';
 import {
   planNativeHalo,
   planPackedRasterBatch,
@@ -112,7 +113,7 @@ export class NativeRasterLayer {
   ) {}
 
   update(view: AffineTransform, width: number, height: number, dpr: number): void {
-    const signature = [view.mx, view.my, view.bx, view.by, width, height, dpr].join(':');
+    const signature = [view.mx, view.my, view.bx, view.by, width, height, dpr, ...cameraUniforms(view)].join(':');
     if (this.disposed || signature === this.signature) return;
     const started = performance.now(),
       plan = planNativeRasterTiles(this.source.metadata, view, width, height, dpr);
@@ -130,9 +131,7 @@ export class NativeRasterLayer {
     this.stats.firstTileMs = 0;
     this.stats.settledMs = 0;
     this.published.clear();
-    const a = view.unproject(0, height),
-      b = view.unproject(width, 0);
-    this.bounds = [a[0], a[1], b[0], b[1]];
+    this.bounds = groundBounds(view, width, height);
     this.patches = clipCoverage(this.patches, this.bounds);
     this.stats.planningMs += performance.now() - started;
     this.wanted = plan.tiles;

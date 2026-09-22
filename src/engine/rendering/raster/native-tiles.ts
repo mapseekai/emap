@@ -1,3 +1,4 @@
+import { groundBounds, perspectiveActive } from '../../../domain/geo/perspective-transform';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { RasterMetadata, RasterLevel, RasterWindow } from '../../../domain/raster/types';
 import { selectRasterLevel } from './tile';
@@ -26,16 +27,18 @@ export function planNativeRasterTiles(
     view.my >= 0
   )
     throw new Error('Native raster requires a finite north-up source-CRS view.');
-  const a = view.unproject(0, height),
-    b = view.unproject(width, 0),
+  const footprint = groundBounds(view, width, height),
     extent = metadata.bounds;
   const box: RasterWindow = [
-    Math.max(a[0], extent[0]),
-    Math.max(a[1], extent[1]),
-    Math.min(b[0], extent[2]),
-    Math.min(b[1], extent[3]),
+    Math.max(footprint[0], extent[0]),
+    Math.max(footprint[1], extent[1]),
+    Math.min(footprint[2], extent[2]),
+    Math.min(footprint[3], extent[3]),
   ];
-  let pixelSize = 2 ** (Math.floor(Math.log2(1 / view.mx / Math.min(2, dpr)) * 2) / 2);
+  // Preserve the original 2D policy; perspective additionally resolves the near
+  // side of the ground plane before applying the existing bounded tile budget.
+  const resolution = perspectiveActive(view) ? view.groundResolution() : 1 / view.mx;
+  let pixelSize = 2 ** (Math.floor(Math.log2(resolution / Math.min(2, dpr)) * 2) / 2);
   if (box[0] >= box[2] || box[1] >= box[3]) return { tiles: [], level: -1, pixelSize };
   // Match the single-source, 32 MiB formal Canvas display-tile planning budget.
   const count = () => {

@@ -1,3 +1,8 @@
+import {
+  cameraUniforms,
+  groundSnapshotMatrix,
+  perspectiveActive,
+} from '../../../../src/domain/geo/perspective-transform';
 import { AffineTransform } from '../../../../src/domain/geo/transform';
 
 /** Canvas fast-nav's snapshot-relative transform, shared by the experimental GPU APIs.
@@ -85,7 +90,14 @@ export class FastNavPreview {
     } else if (this.refresh) this.schedule();
   }
   private same(a: AffineTransform | null, b: AffineTransform): boolean {
-    return !!a && a.mx === b.mx && a.my === b.my && a.bx === b.bx && a.by === b.by;
+    return (
+      !!a &&
+      a.mx === b.mx &&
+      a.my === b.my &&
+      a.bx === b.bx &&
+      a.by === b.by &&
+      cameraUniforms(a).every((v, i) => v === cameraUniforms(b)[i])
+    );
   }
   /** Returns true only when the caller must NOT submit a new scene frame. */
   preview(view: AffineTransform, key: string): boolean {
@@ -97,12 +109,12 @@ export class FastNavPreview {
     this.latest = view.clone();
     if (this.frame && !this.same(this.frame, view)) this.refresh = true;
     if (this.capturePending) {
-      if (this.bitmap) this.show(view);
+      if (this.bitmap) return this.show(view);
       return true;
     }
     if (!this.bitmap || !this.frame) return false;
     if (this.interacting || (this.refresh && !this.due)) {
-      this.show(view);
+      if (!this.show(view)) return false;
       if (!this.interacting && this.refresh && !this.timer) this.schedule();
       return true;
     }
@@ -121,26 +133,37 @@ export class FastNavPreview {
       this.copied = true;
     }
   }
-  private show(view: AffineTransform): void {
-    if (!this.bitmap || !this.frame || !this.source) return;
+  private show(view: AffineTransform): boolean {
+    if (!this.bitmap || !this.frame || !this.source) return false;
     this.copyBitmap();
-    const delta = new AffineTransform(view.mx / this.frame.mx, view.my / this.frame.my);
-    const origin = view.project(...this.frame.unproject(0, 0));
-    delta.translate(...origin);
-    this.canvas.style.transform = `translate(${delta.bx}px,${delta.by}px) scale(${delta.mx},${delta.my})`;
+    if (perspectiveActive(view) || perspectiveActive(this.frame)) {
+      const width = this.source.clientWidth || parseFloat(this.source.style.width);
+      const height = this.source.clientHeight || parseFloat(this.source.style.height);
+      const matrix = groundSnapshotMatrix(this.frame, view, width, height);
+      if (!matrix) {
+        this.reset();
+        return false;
+      }
+      this.canvas.style.transform = `matrix3d(${matrix.join(',')})`;
+    } else {
+      const delta = new AffineTransform(view.mx / this.frame.mx, view.my / this.frame.my);
+      const origin = view.project(...this.frame.unproject(0, 0));
+      delta.translate(...origin);
+      this.canvas.style.transform = `translate(${delta.bx}px,${delta.by}px) scale(${delta.mx},${delta.my})`;
+    }
     this.canvas.hidden = false;
     this.source.style.visibility = 'hidden';
     this.shown = true;
     this.host.dataset.navigation = 'snapshot';
     this.counters.previewFrames++;
     this.onChange();
+    return true;
   }
   /** Keep the previous frame while full-detail blocks for the latest view arrive. */
   hold(view: AffineTransform): boolean {
     if (!this.shown || !this.bitmap) return false;
     this.latest = view.clone();
-    this.show(view);
-    return true;
+    return this.show(view);
   }
   record(
     source: HTMLCanvasElement,

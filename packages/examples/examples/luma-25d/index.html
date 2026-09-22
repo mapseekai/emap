@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Emap · luma 2.5D 地图</title></head>
+<body><header id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt=""><span>Emap / Examples</span></a><strong>luma · 2.5D 透视地图</strong></header>
+<main class="layout"><aside>
+<h1>2.5D 地图</h1><p class="hint">地面透视投影 · 矢量与栅格共享相机</p>
+<p id="status" role="status" data-state="loading">初始化相机与 GPU…</p>
+<label>GPU 后端<select id="backend"><option value="webgl">WebGL2</option><option value="webgpu">WebGPU</option></select></label>
+<div class="row"><button id="flat">二维</button><button id="perspective">2.5D</button><button id="fit">完整范围</button></div>
+<label>倾角 <output id="pitch-value">50°</output><input id="pitch" type="range" min="0" max="60" step="1" value="50"></label>
+<label>方位角 <output id="bearing-value">-25°</output><input id="bearing" type="range" min="-180" max="180" step="1" value="-25"></label>
+<p class="hint">左键拖动平移；滚轮按鼠标位置缩放；右键或 Shift＋拖动旋转、倾斜。单击地面查看坐标；方向键平移。</p>
+<section><h2>矢量性能</h2>
+<label class="check"><input id="point-lod-enabled" type="checkbox" checked>点网格聚合（3 CSS px 目标）</label>
+<label class="check"><input id="screen-filters" type="checkbox" checked>描边屏幕过滤</label>
+<label class="check"><input id="fast-nav" type="checkbox" checked>手势快照导航</label>
+<p class="hint">与 luma-benchmark 共用优化。手势期间复用上一帧，停止后刷新当前视图；原始坐标与面填充不变。</p></section>
+<section><h2>本地数据</h2><label class="check"><input id="keep" type="checkbox">叠加到现有数据（必须同一 CRS）</label>
+<label>GeoJSON 矢量<input id="file-input" type="file" accept=".geojson,.json"></label>
+<label>GeoTIFF / OVR<input id="raster-file" type="file" accept=".tif,.tiff,.ovr" multiple></label>
+<label>或选择数据文件夹<input id="raster-folder" type="file" webkitdirectory multiple></label>
+<label>影像<select id="raster-select"></select></label><button id="load-raster">加载所选影像</button>
+<label class="check"><input id="bilinear" type="checkbox" checked>双线性采样</label>
+<div class="row"><button id="demo">演示数据</button><button id="clear">清空</button><button id="cancel">取消加载</button></div>
+<p class="hint">支持 UInt8/UInt16、1–4 波段 TIFF 及外部 OVR。文件只在本机读取，不上传、不改写。没有 DEM 起伏、建筑拉伸或自动重投影。</p></section>
+
+<details><summary>渲染诊断</summary><pre id="stats"></pre></details>
+</aside><section id="map"><div id="stage" tabindex="0" aria-label="可倾斜旋转的地图"><canvas id="canvas2d" hidden></canvas><canvas id="webgl"></canvas><pre id="coordinates">单击地图读取源坐标</pre><div class="badge"><span id="crs">演示源坐标</span><span>luma GPU 透视 · 手势帧缓存</span></div></div></section></main>
+<script type="module" src="/src/luma-25d/main.ts"></script></body></html>

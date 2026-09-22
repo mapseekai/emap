@@ -1,3 +1,4 @@
+import { cameraGLSL } from './camera-shaders';
 import type { ModelProps } from '@luma.gl/engine';
 
 const uniforms = `
@@ -17,24 +18,13 @@ layout(std140) uniform emapUniforms {
   vec2 arrow;
   float pixelRatio;
   vec2 lowScale;
+  vec4 camera;
+  vec4 uvRect;
 } emap;
-`;
-const projection = `
-// Keep independent uniform scale operands for the high and low differences.
-// A compiler must not collapse hi+lo back to world-space f32 before subtracting.
-vec2 projectDifference(vec4 a, vec4 b) {
-  return (a.xy - b.xy) * emap.scale + (a.zw - b.zw) * emap.lowScale;
-}
-vec2 projectPosition(vec4 position) {
-  return projectDifference(position, emap.origin);
-}
-vec4 clipPosition(vec2 pixels) {
-  return vec4(pixels * vec2(2.0, -2.0) / emap.viewport, 0.0, 1.0);
-}
 `;
 export const emapModule = {
   name: 'emap',
-  vs: uniforms + projection,
+  vs: uniforms + cameraGLSL,
   fs: uniforms,
   uniformTypes: {
     origin: 'vec4<f32>',
@@ -52,6 +42,8 @@ export const emapModule = {
     arrow: 'vec2<f32>',
     pixelRatio: 'f32',
     lowScale: 'vec2<f32>',
+    camera: 'vec4<f32>',
+    uvRect: 'vec4<f32>',
   },
 } satisfies NonNullable<ModelProps['modules']>[number];
 const fragment = `#version 300 es
@@ -64,7 +56,7 @@ vec4 premultiply(float coverage) {
 `;
 export const fillVS = `#version 300 es
 in vec4 positions;
-void main() { gl_Position = clipPosition(projectPosition(positions)); }
+void main() { gl_Position = groundClipPosition(rawDifference(positions, emap.origin)); }
 `;
 export const fillFS = `${fragment}
 void main() { fragColor = premultiply(1.0); }
@@ -76,7 +68,7 @@ out vec2 localPosition;
 void main() {
   float extent = emap.parameters.x + emap.parameters.y + 1.0 / emap.pixelRatio;
   localPosition = corners * extent;
-  gl_Position = clipPosition(projectPosition(instancePositions) + localPosition);
+  gl_Position = billboardPosition(instancePositions, localPosition);
 }
 `;
 export const pointFS = `${fragment}
@@ -125,8 +117,8 @@ out vec2 localPosition;
 flat out float segmentLength;
 flat out float startDistance;
 void main() {
-  vec2 start = projectPosition(instanceStart);
-  vec2 end = projectPosition(instanceEnd);
+  vec2 start = projectSegmentPosition(instanceStart, instanceEnd);
+  vec2 end = projectSegmentPosition(instanceEnd, instanceStart);
   vec2 delta = projectDifference(instanceEnd, instanceStart);
   segmentLength = length(delta);
   vec2 direction = segmentLength > 1e-8 ? delta / segmentLength : vec2(1.0, 0.0);
@@ -198,9 +190,10 @@ export const imageVS = `#version 300 es
 in vec2 corners;
 out vec2 uv;
 void main() {
-  uv = (corners + 1.0) * 0.5;
-  vec2 pixels = mix(emap.rect.xy, emap.rect.zw, uv);
-  gl_Position = clipPosition(pixels - emap.viewport * 0.5);
+  vec2 local = (corners + 1.0) * 0.5;
+  uv = mix(emap.uvRect.xy, emap.uvRect.zw, local);
+  vec2 pixels = mix(emap.rect.xy, emap.rect.zw, local);
+  gl_Position = groundClipPosition(pixels - emap.viewport * 0.5);
 }
 `;
 export const imageFS = `${fragment}

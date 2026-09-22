@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore benchmark-equivalent vector optimizations in the luma 2.5D example: perspective-aware Worker screen paths, original-point LOD and ground-plane snapshot navigation. Prepare visible display dependencies first without changing the comparison harness's eager A/B mode, and release replaced or cancelled vector sources.
+
 ### Added
+
+- Add an opt-in luma 2.5D ground-plane camera and `luma-25d` example, with shared
+  WebGL2/WebGPU projection for vectors, RGBA images and native integer GeoTIFFs.
+  Support pitch/bearing, ground picking, pointer-anchored navigation, four-corner
+  culling, perspective-aware raster detail and per-region coverage uniforms.
+  Keep the default Canvas runtime and existing 2D behavior unchanged; document
+  the lack of terrain, extrusion, automatic reprojection and production editor integration.
 
 - Read nonoverlapping original raster cores and reuse resident integer GPU textures
   for exact halo edge/corner copies. Add a bounded Worker upload layout for UInt8/

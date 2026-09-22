@@ -1,3 +1,4 @@
+import { perspectiveActive, cameraUniforms } from '../../../../src/domain/geo/perspective-transform';
 import { ScreenPathCache, drawScreenPaths, type ScreenPathEntry } from './screen-path-cache';
 import type { ScreenPathRequest } from '../../../../src/engine/rendering/luma/screen-paths';
 import { FastNavPreview } from './fast-nav';
@@ -59,6 +60,7 @@ export class BenchmarkRenderers {
  }
  private screenRequest(view:AffineTransform):ScreenPathRequest {
   return {view:[view.mx,view.my,view.bx,view.by],width:this.dimensions[0],height:this.dimensions[1],pixelRatio:this.dimensions[2],
+    ...(perspectiveActive(view)?{perspective:{pitch:view.pitch,bearing:view.bearing}}:{}),
     initialScale:this.initialScale,smallArcs:this.smallArcFilterEnabled,halfPixel:this.halfPixelFilterEnabled,
     cull:this.pathCullingEnabled,padding:8,revision:this.renderRevision??this.scene?.dataset.editVersion??0};
  }
@@ -149,7 +151,7 @@ export class BenchmarkRenderers {
   this.canvas.width=Math.max(1,Math.round(width*dpr));this.canvas.height=Math.max(1,Math.round(height*dpr));
   this.gpu?.resize(width,height,dpr);this.signature='';
  }
- async prepare(scene:Scene,signal:AbortSignal,initial?:AffineTransform,progress:(message:string)=>void=()=>{}):Promise<void>{
+ async prepare(scene:Scene,signal:AbortSignal,initial?:AffineTransform,progress:(message:string)=>void=()=>{},options:{preload?:'all'|'visible'}={}):Promise<void>{
   this.clear();this.scene=scene;this.renderRevision=scene.dataset.editVersion??0;this.preparing=true;this.buildMs=0;this.uploadSubmitMs=0;const prepareGeneration=this.generation;
   try {
   const source=scene.lodSource??new FullGeometrySource(scene.dataset,[scene.bounds.xmin,scene.bounds.ymin,scene.bounds.xmax,scene.bounds.ymax]);
@@ -163,15 +165,26 @@ export class BenchmarkRenderers {
   this.initialScale=Math.abs(initial.mx);
   if(source.chunks.some(c=>c.kind==='line'))this.screenPaths=new ScreenPathCache(source,this.gpu,()=>{this.frameEpoch++;this.navigation.invalidateFrame();this.invalidate();},this.report);
   this.lodStats.totalChunks=source.chunks.length;this.lodStats.sourceVertices=scene.vertexCount;this.lodStats.sourceFeatures=scene.featureCount;
-  this.setView(initial);this.pinned=new Set(source.chunks.map(c=>c.id));
+  this.setView(initial);
+  const visibleOnly=options.preload==='visible';
+  if(visibleOnly) {
+   // Interactive entry points need a drawable view, not an A/B cache of every
+   // original mesh. Keep the comparison harness's eager preparation unchanged.
+   await this.pointLod?.warm(initial,this.dimensions,this.selected,signal);
+   await this.warmScreenPaths(initial,signal);
+  }
+  const jobs=visibleOnly?this.requiredRaw(initial):source.chunks;
+  this.pinned=new Set(jobs.map(c=>c.id));
   try {
-   for(let i=0;i<source.chunks.length;i++){
-    await lodYield(signal);await this.ensure(source,source.chunks[i]);
-    if(i%16===0)progress(`准备全精度几何 ${i+1}/${source.chunks.length}（不化简、不抽稀）`);
+   for(let i=0;i<jobs.length;i++){
+    await lodYield(signal);await this.ensure(source,jobs[i]);
+    if(i%16===0)progress(`准备${visibleOnly?'可见':'全量'}原始几何 ${i+1}/${jobs.length}（源数据不化简）`);
    }
   } finally {this.pinned=null;}
-  await this.pointLod?.warm(initial,this.dimensions,this.selected,signal);
-  await this.warmScreenPaths(initial,signal);
+  if(!visibleOnly) {
+   await this.pointLod?.warm(initial,this.dimensions,this.selected,signal);
+   await this.warmScreenPaths(initial,signal);
+  }
   this.buildMs=performance.now()-start;this.signature='';
   } finally {if(this.generation===prepareGeneration)this.preparing=false;}
  }
@@ -205,7 +218,7 @@ export class BenchmarkRenderers {
  }
  private setView(t:AffineTransform):void {
   if(!this.source)return;
-  if(this.editing&&this.editView&&t.mx===this.editView.mx&&t.my===this.editView.my&&t.bx===this.editView.bx&&t.by===this.editView.by){this.selected=this.editSelection;return;}
+  if(this.editing&&this.editView&&t.mx===this.editView.mx&&t.my===this.editView.my&&t.bx===this.editView.bx&&t.by===this.editView.by&&cameraUniforms(t).every((v,i)=>v===cameraUniforms(this.editView!)[i])){this.selected=this.editSelection;return;}
   this.selected=this.source.visible(t,this.dimensions[0],this.dimensions[1],Math.max(8,(this.pointPaint.radius??3)+0.5));
   this.lodStats.visibleChunks=this.selected.length;
  }
@@ -224,7 +237,9 @@ export class BenchmarkRenderers {
   const request=this.screenRequest(view);
   const filtered=this.screenEnabled()&&!this.screenPaths!.failed(request,this.selected);
   const screen=filtered?this.screenPaths!.get(request,this.selected):null;
+  const pointLayers=this.pointLod?.view(view,this.dimensions,this.selected);
   return this.selected.filter(c=>this.enabled(c)&&
+   !(c.kind==='point'&&pointLayers?.get(c.layer))&&
    !(filtered&&c.kind==='line'&&!screen?.get(c.id)?.packet.fallback));
  }
  requestView(transform:AffineTransform):void {
@@ -263,6 +278,9 @@ export class BenchmarkRenderers {
   (this.passMode==='fill'&&c.kind==='fill')||(this.passMode==='stroke'&&c.kind==='line')||(this.passMode==='points'&&c.kind==='point');}
  draw(backend:Backend,transform:AffineTransform,overlay?:(gpu:GpuRenderer)=>void,screen?:ReadonlyMap<number,ScreenPathEntry>):number {
   if(this.disposed||this.preparing||!this.scene||!this.source)return 0;
+  if(perspectiveActive(transform)) {
+    if(backend!=='luma')throw new Error('Perspective rendering requires the luma backend.');
+  }
   const start=performance.now();this.setView(transform);this.screenFilterApplied=!!screen;
   const entries:FrameEntry[]=[];let vertices=0,missing=0,segments=0,submitted=0,culled=0;
   const pointLayers=this.pointLod?.view(transform,this.dimensions,this.selected)??new Map();

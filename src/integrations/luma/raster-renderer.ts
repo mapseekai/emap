@@ -1,9 +1,15 @@
+import {
+  PerspectiveTransform,
+  perspectiveActive,
+  groundBounds,
+} from '../../domain/geo/perspective-transform';
 import type { RasterTextureResult } from '../../domain/raster/types';
 import {
   Buffer,
   Texture,
   type Device,
   type RenderPipeline,
+  type RenderPass,
   type Shader,
   type VertexArray,
   type Bindings,
@@ -17,6 +23,12 @@ import type { NativeRasterTile } from '../../engine/rendering/raster/native-tile
 import { rasterVS, rasterFS, rasterWGSL } from './raster-shaders';
 import { packRasterWindow } from './raster-packing';
 import type { RasterWindow } from '../../domain/raster/types';
+
+interface RegionUniform {
+  buffer: Buffer;
+  bindings: Bindings;
+  values: Float32Array;
+}
 
 export interface NumericRasterTexture {
   readonly tile: NativeRasterTile;
@@ -48,6 +60,7 @@ export class NumericRasterRenderer {
   private quad!: Buffer;
   private vao!: VertexArray;
   private tiles = new Set<NumericRasterTexture>();
+  private regionUniforms = new Map<NumericRasterTexture, RegionUniform[]>();
   private disposed = false;
   private packingScratch: Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | null = null;
   readonly stats = {
@@ -67,6 +80,7 @@ export class NumericRasterRenderer {
     frames: 0,
     cpuDrawMs: 0,
     uniformWrites: 0,
+    liveRegionUniforms: 0,
   };
   private constructor(
     readonly canvas: HTMLCanvasElement,
@@ -133,7 +147,7 @@ export class NumericRasterRenderer {
             type: 'uniform' as const,
             group: 0,
             location: 0,
-            minBindingSize: 128,
+            minBindingSize: 160,
           },
           {
             name: 'dataTexture',
@@ -306,7 +320,7 @@ export class NumericRasterRenderer {
         rowsPerImage: result.height,
       });
       uniform = this.device.createBuffer({
-        byteLength: 128,
+        byteLength: 160,
         usage: Buffer.UNIFORM | Buffer.COPY_DST,
       });
       const entry: NumericRasterTexture = {
@@ -315,7 +329,7 @@ export class NumericRasterRenderer {
         uniform,
         coreOnly,
         bindings: { rasterUniforms: uniform, dataTexture: texture },
-        values: new Float32Array(32).fill(NaN),
+        values: new Float32Array(40).fill(NaN),
         bytes: width * height * bytesPerPixel,
       };
       this.tiles.add(entry);
@@ -404,6 +418,24 @@ export class NumericRasterRenderer {
       pass.setVertexArray(this.vao);
       for (const e of entries) {
         if (!this.tiles.has(e)) continue;
+        if (perspectiveActive(view)) {
+          this.drawPerspectiveEntry(
+            pass,
+            e,
+            view,
+            width,
+            height,
+            w,
+            h,
+            metadata,
+            style,
+            bands,
+            range,
+            coverage?.get(e.tile.key) ?? (coverage ? [] : [e.tile.bounds]),
+          );
+          continue;
+        }
+        this.releaseRegionUniforms(e);
         const { tile } = e,
           b = tile.bounds,
           a = view.project(b[0], b[3]),
@@ -456,6 +488,14 @@ export class NumericRasterRenderer {
           h,
           width / w,
           height / h,
+          1,
+          0,
+          1,
+          0,
+          left,
+          top,
+          right,
+          bottom,
         ]);
         if (values.some((v, i) => v !== e.values[i])) {
           e.values.set(values);
@@ -490,8 +530,137 @@ export class NumericRasterRenderer {
       this.stats.cpuDrawMs += performance.now() - started;
     }
   }
+  /** A separate buffer per coverage region is essential for deferred WebGPU submission. */
+  private drawPerspectiveEntry(
+    pass: RenderPass,
+    e: NumericRasterTexture,
+    view: PerspectiveTransform,
+    width: number,
+    height: number,
+    w: number,
+    h: number,
+    metadata: RasterMetadata,
+    style: RasterStyle,
+    bands: readonly number[],
+    range: ReturnType<typeof resolveRasterRanges>,
+    regions: readonly RasterWindow[],
+  ): void {
+    const footprint = groundBounds(view, width, height),
+      flat = view.flat;
+    const { tile } = e,
+      b = tile.bounds,
+      c = tile.core,
+      r = tile.window;
+    const gray = bands.length === 1;
+    const uniforms = this.regionUniforms.get(e) ?? [];
+    this.regionUniforms.set(e, uniforms);
+    let used = 0;
+    for (const region of regions) {
+      const crop = [
+        Math.max(region[0], b[0], footprint[0]),
+        Math.max(region[1], b[1], footprint[1]),
+        Math.min(region[2], b[2], footprint[2]),
+        Math.min(region[3], b[3], footprint[3]),
+      ];
+      if (crop[0] >= crop[2] || crop[1] >= crop[3]) continue;
+      const a = flat.project(crop[0], crop[3]),
+        z = flat.project(crop[2], crop[1]);
+      const corners = [
+        [crop[0], crop[1]],
+        [crop[0], crop[3]],
+        [crop[2], crop[1]],
+        [crop[2], crop[3]],
+      ].map(([x, y]) => view.project(x, y));
+      // A rectangle crossing the camera plane can still cover the viewport.
+      // Use a conservative screen rectangle; the fragment ray owns exact ground coverage.
+      let screen = [0, 0, width, height];
+      if (corners.every((p) => p.every(Number.isFinite)))
+        screen = [
+          Math.max(0, Math.floor(Math.min(...corners.map((p) => p[0])))),
+          Math.max(0, Math.floor(Math.min(...corners.map((p) => p[1])))),
+          Math.min(width, Math.ceil(Math.max(...corners.map((p) => p[0])))),
+          Math.min(height, Math.ceil(Math.max(...corners.map((p) => p[1])))),
+        ];
+      if (screen[0] >= screen[2] || screen[1] >= screen[3]) continue;
+      const px = (x: number) => c[0] - r[0] + ((x - b[0]) / (b[2] - b[0])) * (c[2] - c[0]);
+      const py = (y: number) => c[1] - r[1] + ((b[3] - y) / (b[3] - b[1])) * (c[3] - c[1]);
+      const values = Float32Array.from([
+        ...a,
+        ...z,
+        px(crop[0]),
+        py(crop[3]),
+        px(crop[2]),
+        py(crop[1]),
+        width,
+        height,
+        e.texture.width,
+        e.texture.height,
+        range[0][0],
+        range[gray ? 0 : 1][0],
+        range[gray ? 0 : 2][0],
+        2 **
+          (metadata.alphaBand === null ? tile.level.bits[0] : tile.level.bits[metadata.alphaBand]) -
+          1,
+        range[0][1],
+        range[gray ? 0 : 1][1],
+        range[gray ? 0 : 2][1],
+        0,
+        bands[0],
+        bands[gray ? 0 : 1],
+        bands[gray ? 0 : 2],
+        metadata.alphaBand ?? -1,
+        style.resampling === 'bilinear' ? 1 : 0,
+        metadata.noData ?? -1,
+        style.opacity ?? 1,
+        tile.level.photometric === 0 ? 1 : 0,
+        w,
+        h,
+        width / w,
+        height / h,
+        ...view.cameraUniforms,
+        ...screen,
+      ]);
+      let uniform = uniforms[used++];
+      if (!uniform) {
+        const buffer = this.device.createBuffer({
+          byteLength: 160,
+          usage: Buffer.UNIFORM | Buffer.COPY_DST,
+        });
+        uniform = {
+          buffer,
+          bindings: { rasterUniforms: buffer, dataTexture: e.texture },
+          values: new Float32Array(40).fill(NaN),
+        };
+        uniforms.push(uniform);
+        this.stats.liveRegionUniforms++;
+      }
+      if (values.some((v, i) => v !== uniform.values[i])) {
+        uniform.values.set(values);
+        uniform.buffer.write(values);
+        this.stats.uniformWrites++;
+      }
+      pass.setBindings(uniform.bindings, { _bindGroupCacheKeys: { 0: uniform.bindings } });
+      if (pass.draw({ vertexCount: 6 })) this.stats.drawCalls++;
+    }
+    while (uniforms.length > used) {
+      uniforms.pop()!.buffer.destroy();
+      this.stats.liveRegionUniforms--;
+    }
+  }
+
+  private releaseRegionUniforms(e: NumericRasterTexture): void {
+    const uniforms = this.regionUniforms.get(e);
+    if (!uniforms) return;
+    for (const u of uniforms) {
+      u.buffer.destroy();
+      this.stats.liveRegionUniforms--;
+    }
+    this.regionUniforms.delete(e);
+  }
+
   release(entry: NumericRasterTexture): void {
     if (!this.tiles.delete(entry)) return;
+    this.releaseRegionUniforms(entry);
     entry.texture.destroy();
     entry.uniform.destroy();
     this.stats.liveTextureBytes -= entry.bytes;

@@ -1,3 +1,8 @@
+import {
+  PerspectiveTransform,
+  groundBounds,
+  type PerspectiveOptions,
+} from '../../../domain/geo/perspective-transform';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { ArcVertexData } from '../../../shared/types/mapshaper-types';
 import type { GeometryBuffer } from '../../../integrations/luma/types';
@@ -5,6 +10,8 @@ import { pathGeometry } from './path-geometry';
 import type { Point } from './geometry';
 
 export interface ScreenPathRequest {
+  /** Optional ground camera, serialized explicitly for the geometry Worker. */
+  perspective?: PerspectiveOptions;
   view: [number, number, number, number];
   width: number;
   height: number;
@@ -71,6 +78,8 @@ export function validateScreenPathRequest(r: ScreenPathRequest): void {
   ) {
     throw new Error('Invalid Canvas screen-filter request');
   }
+  if (r.perspective !== undefined && (!r.perspective || typeof r.perspective !== 'object'))
+    throw new Error('Invalid perspective screen-filter request');
 }
 /** Match CanvasPainter._traceSnapped/drawPathSnapping without touching source arcs.
  * Only consecutive equal half-device-pixel commands are dropped (A-B-A is retained).
@@ -95,15 +104,12 @@ export function buildScreenPaths(
     bx * r.pixelRatio,
     by * r.pixelRatio,
   );
-  const view = new AffineTransform(mx, my, bx, by);
-  const a = view.unproject(-r.padding, -r.padding),
-    b = view.unproject(r.width + r.padding, r.height + r.padding);
-  const box = [
-    Math.min(a[0], b[0]),
-    Math.min(a[1], b[1]),
-    Math.max(a[0], b[0]),
-    Math.max(a[1], b[1]),
-  ];
+  const flat = new AffineTransform(mx, my, bx, by);
+  const perspective = r.perspective
+    ? new PerspectiveTransform(flat, r.width, r.height, r.perspective)
+    : null;
+  const view = perspective ?? flat;
+  const box = groundBounds(view, r.width, r.height, r.padding);
   const min = canvasMinArcLength(mx, r.initialScale);
   const fallback = (): ScreenPathPacket => ({
     geometry: { kind: 'path', vertices: new Float32Array(0), count: 0, segmentCount: 0 },
@@ -137,7 +143,21 @@ export function buildScreenPaths(
         y1 = Math.max(y1, yy[i]);
       }
     // Same strict width AND height test as mapshaper ArcCollection.arcIsSmaller.
-    if (r.smallArcs && x1 - x0 < min && y1 - y0 < min) {
+    let tiny = x1 - x0 < min && y1 - y0 < min;
+    if (r.smallArcs && perspective?.active) {
+      const corners = [
+        [x0, y0],
+        [x1, y0],
+        [x0, y1],
+        [x1, y1],
+      ].map(([x, y]) => view.project(x, y));
+      const threshold = min * Math.abs(mx);
+      tiny =
+        corners.every((p) => p.every(Number.isFinite)) &&
+        Math.max(...corners.map((p) => p[0])) - Math.min(...corners.map((p) => p[0])) < threshold &&
+        Math.max(...corners.map((p) => p[1])) - Math.min(...corners.map((p) => p[1])) < threshold;
+    }
+    if (r.smallArcs && tiny) {
       stats.tinyArcs++;
       continue;
     }
@@ -150,7 +170,13 @@ export function buildScreenPaths(
     let lastX = NaN,
       lastY = NaN;
     for (let i = start; i < end; i++) {
-      let [x, y] = pixelView.project(xx[i], yy[i]);
+      let [x, y] = perspective?.active
+        ? perspective.project(xx[i], yy[i])
+        : pixelView.project(xx[i], yy[i]);
+      if (perspective?.active) {
+        x *= r.pixelRatio;
+        y *= r.pixelRatio;
+      }
       if (!Number.isFinite(x) || !Number.isFinite(y)) return fallback();
       if (r.halfPixel) {
         // Canvas uses ToInt32, not Math.round/floor; preserve negative-coordinate truncation.

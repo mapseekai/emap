@@ -75,6 +75,7 @@ const route = (id: string) => `/examples/${id}/`;
 const sourceHtml = (id: string) => `packages/examples/examples/${id}/index.html`;
 
 const exampleDescriptions = {
+  'luma-25d': {zh: '共享透视相机下倾斜、旋转矢量与原生 GeoTIFF，支持地面坐标反算、鼠标锚点缩放及 WebGL2/WebGPU。', en: 'Tilts and rotates vector and native GeoTIFF data with one perspective camera, ground picking, pointer-anchored zoom and WebGL2/WebGPU.'},
   'luma-raster': {zh: '动态读取本地 TIFF 的原生块和金字塔，对照正式 Canvas 与 UInt8/UInt16 WebGL2/WebGPU 数据纹理，支持文件夹与外部 OVR。', en: 'Dynamically reads TIFF blocks and overviews; compares the formal Canvas pipeline with UInt8/UInt16 WebGL2/WebGPU textures, folder selection and external OVRs.'},
   'luma-vertex-editing': {
     zh: '以真实文件验证 luma 选择、原始顶点拖动及撤销重做；背景显示 LOD，编辑保留原始拓扑精度。',
@@ -813,6 +814,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('buffer', 'data-analysis', '缓冲区', 'Buffer', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('simplify', 'data-analysis', '几何简化', 'Simplify geometry', [docsOperations, docsPerformance], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('luma-vertex-editing', 'data-editing', 'luma 选择与顶点编辑', 'luma selection and vertex editing', [docsEditing, docsSelection, docsPerformance], 'TopologySource', ['luma-editor', 'history'], []),
+  recipe('luma-25d', 'style-interaction', 'luma 2.5D 地图', 'luma 2.5D map', [docsPerformance, docsCrs], 'Emap', ['luma', 'camera', 'raster'], ['inline:camera-calibration']),
   recipe('luma-raster', 'style-interaction', 'luma 动态栅格', 'luma dynamic raster', [docsPerformance], 'Emap', ['raster', 'luma-raster'], ['inline:local-file-selection']),
   recipe('luma-benchmark', 'style-interaction', 'luma WebGL2 性能对照', 'luma WebGL2 benchmark', [docsPerformance], 'TopologySource', ['luma-benchmark'], ['inline:local-file-selection']),
   recipe('point-lod', 'style-interaction', '密集点 LOD', 'Dense point LOD', [docsPerformance, docsStyling, docsSelection], 'Emap', ['point-lod'], ['inline:seeded-points']),

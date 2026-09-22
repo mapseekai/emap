@@ -1,3 +1,4 @@
+import { PerspectiveTransform } from '../../../domain/geo/perspective-transform';
 import { describe, it, expect } from 'vitest';
 import { planNativeRasterTiles } from './native-tiles';
 import { AffineTransform } from '../../../domain/geo/transform';
@@ -77,3 +78,33 @@ describe('native raster tile planning', () => {
     ).toThrow();
   });
 });
+
+for (const bearing of [-135, 45, 90, 180])
+  it(`covers inverse-projected viewport samples at bearing ${bearing}`, () => {
+    const view = new PerspectiveTransform(
+      new AffineTransform(2, -2, 256 - 240512 * 2, 256 + 4399488 * 2),
+      512,
+      512,
+      { pitch: 60, bearing },
+    );
+    const plan = planNativeRasterTiles(metadata, view, 512, 512, 1);
+    let checked = 0;
+    for (let y = 1; y < 512; y += 31)
+      for (let x = 1; x < 512; x += 31) {
+        const [gx, gy] = view.unproject(x, y);
+        if (
+          gx < metadata.bounds[0] ||
+          gx > metadata.bounds[2] ||
+          gy < metadata.bounds[1] ||
+          gy > metadata.bounds[3]
+        )
+          continue;
+        checked++;
+        expect(
+          plan.tiles.some(
+            (t) => gx >= t.bounds[0] && gx <= t.bounds[2] && gy >= t.bounds[1] && gy <= t.bounds[3],
+          ),
+        ).toBe(true);
+      }
+    expect(checked).toBeGreaterThan(100);
+  });

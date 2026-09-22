@@ -1,3 +1,4 @@
+import { groundBounds } from '../../../domain/geo/perspective-transform';
 import Flatbush from 'flatbush';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { PathDrawRange, PathRangeData } from '../../../integrations/luma/types';
@@ -79,12 +80,7 @@ export class PathRangeIndex {
     height: number,
     padding: number,
   ): PathRangeSelection {
-    const a = view.unproject(-padding, -padding),
-      b = view.unproject(width + padding, height + padding);
-    const x0 = Math.min(a[0], b[0]),
-      y0 = Math.min(a[1], b[1]),
-      x1 = Math.max(a[0], b[0]),
-      y1 = Math.max(a[1], b[1]);
+    const [x0, y0, x1, y1] = groundBounds(view, width, height, padding);
     // All visible: retain a single draw and avoid traversing all source ranges.
     if (
       x0 <= this.extent[0] &&

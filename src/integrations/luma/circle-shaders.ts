@@ -11,7 +11,7 @@ in vec4 instancePositions;
 out vec2 localPosition;
 void main() {
   localPosition = corners * (emap.parameters.x + 0.5);
-  gl_Position = clipPosition(projectPosition(instancePositions) + localPosition);
+  gl_Position = billboardPosition(instancePositions, localPosition);
 }
 `;
 export const circleFS = `#version 300 es
@@ -33,7 +33,7 @@ struct CircleOut {
 };
 @vertex fn vertexMain(@location(0) corners: vec2<f32>, @location(1) instancePositions: vec4<f32>) -> CircleOut {
   let local = corners * (emap.parameters.x + 0.5);
-  return CircleOut(clipPosition(projectPosition(instancePositions) + local), local);
+  return CircleOut(billboardPosition(instancePositions, local), local);
 }
 @fragment fn fragmentMain(p: CircleOut) -> @location(0) vec4<f32> {
   let distance = length(p.local);

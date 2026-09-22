@@ -1,3 +1,5 @@
+import { PerspectiveTransform } from '../../domain/geo/perspective-transform';
+import { AffineTransform } from '../../domain/geo/transform';
 import { describe, it, expect, vi } from 'vitest';
 import { NumericRasterRenderer } from './raster-renderer';
 
@@ -101,4 +103,71 @@ describe('numeric raster upload memory ownership', () => {
     expect(device.createTexture).not.toHaveBeenCalled();
     gpu.dispose();
   });
+});
+
+it('owns distinct deferred uniforms for disjoint perspective coverage and releases surplus slots', () => {
+  const { gpu, device } = setup();
+  const buffers: { destroy: ReturnType<typeof vi.fn>; write: ReturnType<typeof vi.fn> }[] = [];
+  device.createBuffer = vi.fn(() => {
+    const buffer = { destroy: vi.fn(), write: vi.fn() };
+    buffers.push(buffer);
+    return buffer;
+  });
+  const tile: any = {
+    key: 'pose',
+    core: [0, 0, 2, 2],
+    window: [0, 0, 2, 2],
+    bounds: [0, 0, 2, 2],
+    level: { bits: [8, 8, 8], photometric: 2 },
+  };
+  const entry = gpu.upload(tile, {
+    width: 2,
+    height: 2,
+    data: [new Uint8Array(4).fill(80), new Uint8Array(4).fill(160), new Uint8Array(4).fill(240)],
+  });
+  const pass = { setBindings: vi.fn(), draw: vi.fn(() => true) };
+  const view = new PerspectiveTransform(new AffineTransform(20, -20, 100, 100), 200, 200, {
+    pitch: 50,
+    bearing: 35,
+  });
+  const method = Reflect.get(gpu, 'drawPerspectiveEntry');
+  const draw = (regions: number[][]) =>
+    method.call(
+      gpu,
+      pass,
+      entry,
+      view,
+      200,
+      200,
+      250,
+      250,
+      { alphaBand: null, noData: null },
+      { opacity: 0.5 },
+      [0, 1, 2],
+      [
+        [0, 255],
+        [0, 255],
+        [0, 255],
+      ],
+      regions,
+    );
+  draw([
+    [0, 0, 1, 2],
+    [1, 0, 2, 2],
+  ]);
+  expect(gpu.stats.liveRegionUniforms).toBe(2);
+  expect(pass.setBindings.mock.calls[0][0].rasterUniforms).not.toBe(
+    pass.setBindings.mock.calls[1][0].rasterUniforms,
+  );
+  expect(buffers[1].write.mock.calls[0][0].byteLength).toBe(160);
+  expect(buffers[2].write.mock.calls[0][0].slice(0, 4)).not.toEqual(
+    buffers[1].write.mock.calls[0][0].slice(0, 4),
+  );
+  draw([[0, 0, 1, 2]]);
+  expect(gpu.stats.liveRegionUniforms).toBe(1);
+  expect(buffers[2].destroy).toHaveBeenCalledOnce();
+  gpu.release(entry);
+  expect(gpu.stats.liveRegionUniforms).toBe(0);
+  gpu.dispose();
+  expect(buffers.every((b) => b.destroy.mock.calls.length === 1)).toBe(true);
 });

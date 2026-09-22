@@ -1,3 +1,4 @@
+import { groundBounds } from '../../../../src/domain/geo/perspective-transform';
 import type { ScreenPathRequest, ScreenPathPacket } from '../../../../src/engine/rendering/luma/screen-paths';
 import type { PointLodRequest, PointLodPacket } from '../../../../src/engine/rendering/luma/point-lod-source';
 import type { CoordinatePatch } from '../../../../src/engine/rendering/luma/edit-patch';
@@ -125,15 +126,7 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
     }
   }
   visible(transform: AffineTransform, width: number, height: number, padding = 8): SpatialChunk[] {
-    const a = transform.unproject(-padding, -padding),
-      b = transform.unproject(width + padding, height + padding);
-    const ids: number[] =
-      this.index?.search(
-        Math.min(a[0], b[0]),
-        Math.min(a[1], b[1]),
-        Math.max(a[0], b[0]),
-        Math.max(a[1], b[1]),
-      ) ?? [];
+    const ids: number[] = this.index?.search(...groundBounds(transform, width, height, padding)) ?? [];
     return ids.sort((a, b) => a - b).map((id) => this.chunks[id]);
   }
   level(_transform: AffineTransform): number { return 0; }

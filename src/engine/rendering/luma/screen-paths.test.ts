@@ -1,3 +1,4 @@
+import { PerspectiveTransform } from '../../../domain/geo/perspective-transform';
 import { describe, expect, it } from 'vitest';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { Viewport } from '../../../domain/geo/viewport';
@@ -206,4 +207,54 @@ describe('Canvas screen-path parity (not geometry LOD)', () => {
       buildScreenPaths(raw, new Uint32Array([0]), request({ view: [0, 1, 0, 0] })),
     ).toThrow('Invalid');
   });
+});
+
+it('filters perspective commands in actual screen pixels, preserving source coordinates', () => {
+  const source = arcs([
+    [
+      [13000000, 4000000],
+      [13000000.01, 4000000.01],
+      [13000000.02, 4000000.02],
+      [13000040, 4000030],
+      [13000000, 4000000],
+    ],
+  ]);
+  const raw = source.getVertexData!(),
+    before = raw.xx.slice();
+  const r = request({
+    view: [1, -1, -12999900, 4000050],
+    pixelRatio: 2,
+    perspective: { pitch: 50, bearing: 35 },
+  });
+  const camera = new PerspectiveTransform(
+    new AffineTransform(...r.view),
+    r.width,
+    r.height,
+    r.perspective,
+  );
+  const expected: number[] = [];
+  for (let i = 0; i < raw.xx.length; i++) {
+    const p = camera.project(raw.xx[i], raw.yy[i]).map((v) => Math.trunc(v * r.pixelRatio * 2) / 2);
+    if (!expected.length || p[0] !== expected.at(-2) || p[1] !== expected.at(-1))
+      expected.push(...p);
+  }
+  const result = buildScreenPaths(raw, new Uint32Array([0]), r);
+  expect(result.fallback).toBe(false);
+  expect([...result.coordinates]).toEqual(expected);
+  expect(result.stats.duplicateVertices).toBeGreaterThan(0);
+  expect(raw.xx).toEqual(before);
+});
+it('falls back safely for an arc that crosses behind the perspective camera', () => {
+  const source = arcs([
+    [
+      [0, 0],
+      [0, -10000],
+    ],
+  ]);
+  const result = buildScreenPaths(
+    source.getVertexData!(),
+    new Uint32Array([0]),
+    request({ perspective: { pitch: 60, bearing: 0 } }),
+  );
+  expect(result.fallback).toBe(true);
 });

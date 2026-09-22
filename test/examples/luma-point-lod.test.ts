@@ -1,3 +1,4 @@
+import { PerspectiveTransform } from '../../src/domain/geo/perspective-transform';
 import { describe, expect, it, vi } from 'vitest';
 import { PointLodRenderCache } from '../../packages/examples/src/luma-benchmark/point-lod-cache';
 import { AffineTransform } from '../../src/domain/geo/transform';
@@ -125,4 +126,18 @@ describe('point LOD view/upload lifecycle', () => {
     expect(f.query).toHaveBeenCalledTimes(2);
     f.cache.clear();
   });
+});
+
+it('uses perspective ground resolution without discarding existing original-point LOD', async () => {
+  const f = setup(),
+    camera = new PerspectiveTransform(view, 800, 600, { pitch: 60, bearing: 40 });
+  await f.cache.warm(camera, dims, [chunk], signal());
+  const request = f.query.mock.calls[0][0] as unknown as { transform: { mx: number; my: number } };
+  expect(Math.abs(request.transform.mx)).toBeCloseTo(1 / camera.groundResolution(), 8);
+  expect(Math.abs(request.transform.mx)).toBeGreaterThan(Math.abs(view.mx));
+  camera.pan(12, -8);
+  await f.cache.warm(camera, dims, [chunk], signal());
+  expect(f.query).toHaveBeenCalledOnce();
+  expect(f.gpu.createMesh).toHaveBeenCalledOnce();
+  f.cache.clear();
 });

@@ -1,3 +1,4 @@
+import { PerspectiveTransform } from '../../src/domain/geo/perspective-transform';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FastNavPreview } from '../../packages/examples/src/luma-benchmark/fast-nav';
@@ -145,5 +146,36 @@ describe('luma snapshot navigation lifecycle', () => {
     expect(source.style.visibility).toBe('');
     expect(nav.canvas.hidden).toBe(true);
     expect(nav.canCapture).toBe(false);
+  });
+  it('tracks a bearing-only change and reprojects a cached ground frame in perspective', async () => {
+    const frame = new PerspectiveTransform(new AffineTransform(2, -2, 50, 100), 400, 200, {
+      pitch: 45,
+      bearing: 0,
+    });
+    nav.preview(frame, 'a');
+    nav.record(source, frame, 'a', 5);
+    resolve(bitmap());
+    await Promise.resolve();
+    nav.setInteracting(true);
+    const view = frame.clone().setOrientation({ bearing: 20 });
+    expect(nav.preview(view, 'a')).toBe(true);
+    expect(nav.canvas.style.transform.startsWith('matrix3d(')).toBe(true);
+    const m = nav.canvas.style.transform.slice(9, -1).split(',').map(Number);
+    for (const [x, y] of [
+      [0, 0],
+      [200, 100],
+      [400, 200],
+      [45, 127],
+    ]) {
+      const w = m[3] * x + m[7] * y + m[15],
+        expected = view.project(...frame.unproject(x, y));
+      expect((m[0] * x + m[4] * y + m[12]) / w).toBeCloseTo(expected[0], 6);
+      expect((m[1] * x + m[5] * y + m[13]) / w).toBeCloseTo(expected[1], 6);
+    }
+    nav.setInteracting(false);
+    await vi.advanceTimersByTimeAsync(160);
+    expect(redraw).toHaveBeenCalledOnce();
+    expect(nav.preview(view, 'a')).toBe(false);
+    expect(createImageBitmap).toHaveBeenCalledTimes(1);
   });
 });

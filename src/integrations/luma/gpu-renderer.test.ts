@@ -329,7 +329,7 @@ it('isolates screen-space path uniforms from source-coordinate edit uniforms', (
     frame: 1,
     width: 200,
     height: 100,
-    frameData: Float32Array.from({ length: 52 }, (_, i) => i + 10),
+    frameData: Float32Array.from({ length: 60 }, (_, i) => i + 10),
     styles: new Map(),
     device: { createBuffer: () => ({ write: (v: Float32Array) => writes.push(v.slice()) }) },
     stats: { uniformWrites: 0 },
@@ -341,7 +341,9 @@ it('isolates screen-space path uniforms from source-coordinate edit uniforms', (
   expect([...writes[1].slice(0, 6)]).toEqual([10, 11, 12, 13, 14, 15]);
   expect([...writes[0].slice(48, 50)]).toEqual([1, 1]);
   expect([...writes[1].slice(48, 50)]).toEqual([58, 59]);
-  expect(writes.every((v) => v.byteLength === 208)).toBe(true);
+  expect([...writes[0].slice(52, 56)]).toEqual([1, 0, 1, 0]);
+  expect([...writes[1].slice(52, 56)]).toEqual([62, 63, 64, 65]);
+  expect(writes.every((v) => v.byteLength === 240)).toBe(true);
 });
 
 it('forgets the editor bitmap texture and its obsolete bindings without double release', () => {
@@ -363,7 +365,7 @@ it('forgets the editor bitmap texture and its obsolete bindings without double r
 });
 
 it('writes both independent projection scales on every frame, including mirrored/nonuniform views', () => {
-  const data = new Float32Array(52);
+  const data = new Float32Array(60);
   const renderer = Object.assign(Object.create(GpuRenderer.prototype), {
     end: vi.fn(),
     frame: 0,

@@ -1,3 +1,4 @@
+import { groundBounds } from '../../../domain/geo/perspective-transform';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { RasterMetadata, RasterWindow } from '../../../domain/raster/types';
 import { intersectCoverage } from './coverage';
@@ -32,8 +33,9 @@ export function planNativeHalo(
     (metadata.resolution[1] * base.height) / level.height,
     ...metadata.origin,
   );
-  const p = pixels.unproject(...view.unproject(0, 0)),
-    q = pixels.unproject(...view.unproject(width, height));
+  const footprint = groundBounds(view, width, height);
+  const p = pixels.unproject(footprint[0], footprint[3]),
+    q = pixels.unproject(footprint[2], footprint[1]);
   const sampled: RasterWindow = [
     Math.max(0, Math.floor(p[0]) - 1),
     Math.max(0, Math.floor(p[1]) - 1),

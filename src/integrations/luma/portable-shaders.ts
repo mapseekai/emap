@@ -1,3 +1,4 @@
+import { cameraWGSL } from './camera-shaders';
 import { pathMsaaVS, pathMsaaFS, pathMsaaWGSL } from './path-shaders';
 import type { BufferLayout, ShaderLayout } from '@luma.gl/core';
 import {
@@ -56,8 +57,8 @@ vec2 joinOffset(vec2 a, vec2 b, float side, float width) {
  return normal*(side*width*size);
 }
 void main(){
- vec2 a=projectPosition(previousPosition), b=projectPosition(startPosition);
- vec2 c=projectPosition(endPosition), d=projectPosition(nextPosition);
+ vec2 a=projectPosition(previousPosition), b=projectSegmentPosition(startPosition,endPosition);
+ vec2 c=projectSegmentPosition(endPosition,startPosition), d=projectPosition(nextPosition);
  vec2 delta=projectDifference(endPosition,startPosition);float len=length(delta);segmentLength=len;
  vec2 dir=len>0.0?delta/len:vec2(1.0,0.0);
  float w=emap.parameters.x*0.5+0.5/emap.pixelRatio;
@@ -98,23 +99,21 @@ const uniformWGSL = `
 struct EmapUniforms {
  origin:vec4<f32>,scale:vec2<f32>,viewport:vec2<f32>,color:vec4<f32>,parameters:vec4<f32>,rect:vec4<f32>,
  vertices0:vec4<f32>,vertices1:vec4<f32>,vertices2:vec4<f32>,vertices3:vec4<f32>,vertices4:vec4<f32>,vertices5:vec4<f32>,
- arrow:vec2<f32>,pixelRatio:f32,lowScale:vec2<f32>,
+ arrow:vec2<f32>,pixelRatio:f32,lowScale:vec2<f32>,camera:vec4<f32>,uvRect:vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> emap:EmapUniforms;
-fn projectDifference(a:vec4<f32>,b:vec4<f32>)->vec2<f32>{return (a.xy-b.xy)*emap.scale+(a.zw-b.zw)*emap.lowScale;}
-fn projectPosition(p:vec4<f32>)->vec2<f32>{return projectDifference(p,emap.origin);}
-fn clipPosition(p:vec2<f32>)->vec4<f32>{return vec4<f32>(p*vec2<f32>(2.0,-2.0)/emap.viewport,0.0,1.0);}
+${cameraWGSL}
 fn premultiply(coverage:f32)->vec4<f32>{let a=emap.color.a*coverage;return vec4<f32>(emap.color.rgb*a,a);}
 `;
 const fillWGSL = `
-@vertex fn vertexMain(@location(0) positions:vec4<f32>)->@builtin(position) vec4<f32>{return clipPosition(projectPosition(positions));}
+@vertex fn vertexMain(@location(0) positions:vec4<f32>)->@builtin(position) vec4<f32>{return groundClipPosition(rawDifference(positions,emap.origin));}
 @fragment fn fragmentMain()->@location(0) vec4<f32>{return premultiply(1.0);}
 `;
 const pointWGSL = `
 struct PointOut{@builtin(position) position:vec4<f32>,@location(0) local:vec2<f32>};
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) instancePositions:vec4<f32>)->PointOut{
  let extent=emap.parameters.x+emap.parameters.y+1.0/emap.pixelRatio;let local=corners*extent;
- return PointOut(clipPosition(projectPosition(instancePositions)+local),local);
+ return PointOut(billboardPosition(instancePositions,local),local);
 }
 fn markerVertex(index:i32)->vec2<f32>{
  switch(index){
@@ -154,7 +153,7 @@ const lineWGSL =
   lineCommonWGSL +
   `
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) instanceStart:vec4<f32>,@location(2) instanceEnd:vec4<f32>,@location(3) instanceDistance:vec2<f32>)->LineOut{
- let a=projectPosition(instanceStart);let b=projectPosition(instanceEnd);let delta=projectDifference(instanceEnd,instanceStart);let len=length(delta);
+ let a=projectSegmentPosition(instanceStart,instanceEnd);let b=projectSegmentPosition(instanceEnd,instanceStart);let delta=projectDifference(instanceEnd,instanceStart);let len=length(delta);
  var dir=vec2<f32>(1.0,0.0);if(len>1e-8){dir=delta/len;}
  var extent=emap.parameters.x*0.5+1.0/emap.pixelRatio;if(emap.parameters.w>0.5){extent+=emap.arrow.y*0.45;}
  let local=vec2<f32>(mix(-extent,len+extent,(corners.x+1.0)*0.5),corners.y*extent);
@@ -196,7 +195,7 @@ fn joinOffset(a:vec2<f32>,b:vec2<f32>,side:f32,width:f32)->vec2<f32>{
  return normal*(side*width*size);
 }
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) previousPosition:vec4<f32>,@location(2) startPosition:vec4<f32>,@location(3) endPosition:vec4<f32>,@location(4) nextPosition:vec4<f32>,@location(5) pathDistance:vec2<f32>,@location(6) pathFlags:f32)->LineOut{
- let a=projectPosition(previousPosition);let b=projectPosition(startPosition);let c=projectPosition(endPosition);let d=projectPosition(nextPosition);
+ let a=projectPosition(previousPosition);let b=projectSegmentPosition(startPosition,endPosition);let c=projectSegmentPosition(endPosition,startPosition);let d=projectPosition(nextPosition);
  let delta=projectDifference(endPosition,startPosition);let len=length(delta);var dir=vec2<f32>(1.0,0.0);if(len>0.0){dir=delta/len;}
  let w=emap.parameters.x*0.5+0.5/emap.pixelRatio;let end=corners.x>0.0;let flags=u32(pathFlags);
  let cap=select((flags&1u)!=0u,(flags&2u)!=0u,end);
@@ -221,8 +220,8 @@ const imageWGSL = `
 @group(0) @binding(2) var imageSampler:sampler;
 struct ImageOut{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>};
 @vertex fn vertexMain(@location(0) corners:vec2<f32>)->ImageOut{
- let uv=(corners+vec2<f32>(1.0))*0.5;let pixels=mix(emap.rect.xy,emap.rect.zw,uv);
- return ImageOut(clipPosition(pixels-emap.viewport*0.5),uv);
+ let local=(corners+vec2<f32>(1.0))*0.5;let pixels=mix(emap.rect.xy,emap.rect.zw,local);
+ return ImageOut(groundClipPosition(pixels-emap.viewport*0.5),mix(emap.uvRect.xy,emap.uvRect.zw,local));
 }
 @fragment fn fragmentMain(p:ImageOut)->@location(0) vec4<f32>{let c=textureSample(imageTexture,imageSampler,p.uv);let a=c.a*emap.parameters.x;return vec4<f32>(c.rgb*a,a);}
 `;
@@ -268,7 +267,7 @@ export function shaderLayouts(
   const shaderLayout: ShaderLayout = {
     attributes: [],
     bindings: [
-      { name: 'emapUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 208 },
+      { name: 'emapUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 240 },
     ],
   };
   const bufferLayout: BufferLayout[] = [];

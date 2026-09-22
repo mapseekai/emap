@@ -718,6 +718,23 @@ describe('example catalog metadata', () => {
         expect(parsed.querySelector('#stage #webgl')).not.toBeNull();
         expect(parsed.querySelector('#mode')).not.toBeNull();
         expect(html).toContain('/src/luma-editor/main.ts');
+      } else if (example.id === 'luma-raster') {
+        // Dynamic raster mounts the normal controls from its module entry point.
+        expect(parsed.querySelector('#backend')).not.toBeNull();
+        expect(parsed.querySelector('#file-input')).not.toBeNull();
+        expect(html).toContain('/src/luma-raster/main.ts');
+        const entry = await readFile(resolve('packages/examples/src/luma-raster/main.ts'), 'utf8');
+        expect(entry).toContain('loadExampleRuntime');
+        expect(entry).toContain('emap.Emap.create(');
+        expect(entry).toContain('NativeRasterLayer');
+      } else if (example.id === 'luma-25d') {
+        // This opt-in camera uses its own GPU canvases, not the default affine map UI.
+        expect(parsed.querySelector('#stage #webgl')).not.toBeNull();
+        expect(parsed.querySelector('#pitch')?.getAttribute('max')).toBe('60');
+        expect(parsed.querySelector('#bearing')).not.toBeNull();
+        expect(parsed.querySelector('#raster-file')).not.toBeNull();
+        expect(parsed.querySelector('#raster-folder')).not.toBeNull();
+        expect(html).toContain('/src/luma-25d/main.ts');
       } else if (example.id === 'luma-benchmark') {
         // The isolated benchmark must not mount a basemap or the default Emap painter.
         expect(parsed.querySelector('#stage #canvas2d')).not.toBeNull();

@@ -6,7 +6,7 @@
 #map{position:relative;width:100%;height:calc(100vh - 222px);min-height:300px;background:#f3f3f3}.numeric-raster{position:absolute;inset:0;pointer-events:none;z-index:2}
 .details{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:16px}pre{white-space:pre-wrap;overflow:auto;max-height:400px;font-size:12px}.hint{padding:8px 16px;margin:0;background:#fafafa;line-height:1.5}
 </style></head><body>
-<header id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/">Emap / Examples</a><strong>动态栅格 · UInt8/UInt16 原始数值纹理</strong></header>
+<header id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt="" width="24" height="24">Emap / Examples</a><strong>动态栅格 · UInt8/UInt16 原始数值纹理</strong></header>
 <section class="toolbar"><label>后端 <select id="backend"><option value="webgl">luma WebGL2 / UInt8/UInt16</option><option value="webgpu">luma WebGPU / UInt8/UInt16</option><option value="canvas">Canvas / 正式动态流程</option></select></label>
 <input id="file-input" type="file" multiple accept=".tif,.tiff,.ovr"><button id="choose-folder">选择文件夹</button><input id="folder-input" type="file" multiple webkitdirectory hidden><select id="file-select" aria-label="文件"></select><button id="load">加载文件</button><button id="cancel">取消加载</button><button id="fit">完整范围</button><button id="native">原始像元 1:1</button></section>
 <section class="toolbar"><label>拉伸 <select id="stretch"><option value="auto">自动 2–98%</option><option value="minmax">min / max</option><option value="percentile">2–98%</option><option value="none">类型范围</option></select></label>

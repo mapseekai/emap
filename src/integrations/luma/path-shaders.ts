@@ -49,7 +49,7 @@ void main() {
  vec2 fromStart = offset + (end ? da : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = end ? la : lb;
- gl_Position = clipPosition(projectPosition(curr) + offset * width);
+ gl_Position = clipPosition(projectSegmentPosition(curr, end ? prev : next) + offset * width);
 }`;
 export const pathMsaaFS = `#version 300 es
 precision highp float;
@@ -97,7 +97,7 @@ struct PathOut {
  if(startCap||endCap){offset=select(normal*side,dir*4.0*select(1.0,-1.0,startCap),joint>0.5);}
  let fromStart=offset+select(vec2<f32>(0.0),da,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- let position=clipPosition(projectPosition(curr)+offset*width);
+ let position=clipPosition(projectSegmentPosition(curr,select(next,prev,end))+offset*width);
  return PathOut(position,offset,local,select(lb,la,end));
 }
 @fragment fn fragmentMain(p:PathOut)->@location(0) vec4<f32> {

@@ -1,5 +1,11 @@
 # luma.gl v10 集成状态
 
+
+## Opt-in 2.5D camera
+
+See [luma 2.5D](luma-25d.md) and `examples/luma-25d/` for the shared vector/raster
+ground-plane perspective path. Default Canvas rendering remains unchanged.
+
 分支：`luma集成`。默认 viewer/editor 仍使用 Canvas2D；以下能力只接入两个独立实验示例。
 
 ## Canvas 屏幕过滤（本轮）

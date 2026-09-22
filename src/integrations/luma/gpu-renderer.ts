@@ -1,3 +1,8 @@
+import {
+  cameraUniforms,
+  perspectiveActive,
+  groundBounds,
+} from '../../domain/geo/perspective-transform';
 import { useMsaaPath, opaquePathGroup, type PathRenderMode } from './path-pipeline';
 import { PATH_CORNERS, PATH_INDICES } from './path-shaders';
 import {
@@ -66,7 +71,7 @@ export class GpuRenderer {
       images: Map<Texture, Bindings>;
     }
   >();
-  private frameData = new Float32Array(52);
+  private frameData = new Float32Array(60);
   private imageVertexArray: VertexArray | null = null;
   private msaaTexture: Texture | null = null;
   private msaaFramebuffer: Framebuffer | null = null;
@@ -521,6 +526,8 @@ export class GpuRenderer {
     ]);
     this.frameData[46] = this.pixelRatio;
     this.frameData.set([transform.mx, transform.my], 48);
+    this.frameData.set(cameraUniforms(transform), 52);
+    this.frameData.set([0, 0, 1, 1], 56);
     const canvasFramebuffer = this.device.canvasContext!.getCurrentFramebuffer();
     if (this.backend === 'webgpu' && !this.msaaFramebuffer)
       this.resize(this.width, this.height, this.pixelRatio);
@@ -543,17 +550,23 @@ export class GpuRenderer {
     return true;
   }
 
-  private style(kind: PipelineKind, paint: MeshPaint, rect?: number[], identity = '') {
+  private style(
+    kind: PipelineKind,
+    paint: MeshPaint,
+    rect?: number[],
+    identity = '',
+    uv?: number[],
+  ) {
     const key = kind + ':' + JSON.stringify(paint) + ':' + identity;
     let entry = this.styles.get(key);
     if (!entry) {
       const buffer = this.device.createBuffer({
-        byteLength: 208,
+        byteLength: 240,
         usage: Buffer.UNIFORM | Buffer.COPY_DST,
       });
       entry = {
         buffer,
-        values: new Float32Array(52),
+        values: new Float32Array(60),
         frame: -1,
         bindings: { emapUniforms: buffer },
         images: new Map(),
@@ -566,6 +579,7 @@ export class GpuRenderer {
       if (paint.screenSpace) {
         v.set([this.width / 2, this.height / 2, 0, 0, 1, 1], 0);
         v.set([1, 1], 48);
+        v.set([1, 0, 1, 0], 52);
       }
       v.set(paint.color, 8);
       v.set([1, 0, 0, 1], 12);
@@ -593,6 +607,7 @@ export class GpuRenderer {
       } else if (kind === 'image') {
         v[12] = paint.color[3];
         if (rect) v.set(rect, 16);
+        if (uv) v.set(uv, 56);
       }
       entry.buffer.write(v);
       entry.frame = this.frame;
@@ -810,25 +825,55 @@ export class GpuRenderer {
     immutable = false,
   ): void {
     if (!this.pass || !Number.isFinite(opacity) || opacity <= 0) return;
-    const [left, top] = this.transform.project(bounds[0], bounds[3]);
-    const [right, bottom] = this.transform.project(bounds[2], bounds[1]);
+    const flat = perspectiveActive(this.transform) ? this.transform.flat : this.transform;
     const pr = this.pixelRatio;
-    const rect = [left, top, right, bottom].map((v) => Math.round(v * pr));
-    if (!rect.every(Number.isFinite) || rect[2] <= rect[0] || rect[3] <= rect[1]) return;
-    const scissor = [...rect];
-    if (clip) {
-      const a = this.transform.project(clip[0], clip[3]),
-        b = this.transform.project(clip[2], clip[1]);
-      scissor[0] = Math.max(scissor[0], Math.round(a[0] * pr));
-      scissor[1] = Math.max(scissor[1], Math.round(a[1] * pr));
-      scissor[2] = Math.min(scissor[2], Math.round(b[0] * pr));
-      scissor[3] = Math.min(scissor[3], Math.round(b[1] * pr));
+    let rect: number[], scissor: number[], uv: number[] | undefined;
+    if (perspectiveActive(this.transform)) {
+      // Crop in source Float64 before upload. Homogeneous clipping preserves
+      // the projected quadrilateral and perspective-correct texture coordinates.
+      const footprint = groundBounds(this.transform, this.width, this.height);
+      const crop = [
+        Math.max(bounds[0], footprint[0], clip?.[0] ?? -Infinity),
+        Math.max(bounds[1], footprint[1], clip?.[1] ?? -Infinity),
+        Math.min(bounds[2], footprint[2], clip?.[2] ?? Infinity),
+        Math.min(bounds[3], footprint[3], clip?.[3] ?? Infinity),
+      ];
+      if (crop[0] >= crop[2] || crop[1] >= crop[3]) return;
+      const a = flat.project(crop[0], crop[3]),
+        b = flat.project(crop[2], crop[1]);
+      rect = [...a, ...b].map((v) => v * pr);
+      uv = [
+        (crop[0] - bounds[0]) / (bounds[2] - bounds[0]),
+        (bounds[3] - crop[3]) / (bounds[3] - bounds[1]),
+        (crop[2] - bounds[0]) / (bounds[2] - bounds[0]),
+        (bounds[3] - crop[1]) / (bounds[3] - bounds[1]),
+      ];
+      scissor = [0, 0, this.canvas.width, this.canvas.height];
+    } else {
+      const a = flat.project(bounds[0], bounds[3]),
+        b = flat.project(bounds[2], bounds[1]);
+      rect = [...a, ...b].map((v) => Math.round(v * pr));
+      scissor = [...rect];
+      if (clip) {
+        const a = flat.project(clip[0], clip[3]),
+          b = flat.project(clip[2], clip[1]);
+        scissor[0] = Math.max(scissor[0], Math.round(a[0] * pr));
+        scissor[1] = Math.max(scissor[1], Math.round(a[1] * pr));
+        scissor[2] = Math.min(scissor[2], Math.round(b[0] * pr));
+        scissor[3] = Math.min(scissor[3], Math.round(b[1] * pr));
+      }
+      scissor[0] = Math.max(0, scissor[0]);
+      scissor[1] = Math.max(0, scissor[1]);
+      scissor[2] = Math.min(this.canvas.width, scissor[2]);
+      scissor[3] = Math.min(this.canvas.height, scissor[3]);
     }
-    scissor[0] = Math.max(0, scissor[0]);
-    scissor[1] = Math.max(0, scissor[1]);
-    scissor[2] = Math.min(this.canvas.width, scissor[2]);
-    scissor[3] = Math.min(this.canvas.height, scissor[3]);
-    if (!scissor.every(Number.isFinite) || scissor[2] <= scissor[0] || scissor[3] <= scissor[1])
+    if (
+      ![...rect, ...scissor].every(Number.isFinite) ||
+      rect[2] <= rect[0] ||
+      rect[3] <= rect[1] ||
+      scissor[2] <= scissor[0] ||
+      scissor[3] <= scissor[1]
+    )
       return;
     this.flushCircles();
     this.pointGroup = null;
@@ -851,7 +896,8 @@ export class GpuRenderer {
       'image',
       { color: [1, 1, 1, Math.min(1, opacity)] },
       rect.map((v) => v / pr),
-      bounds.join(','),
+      bounds.join(',') + ':' + (clip?.join(',') ?? ''),
+      uv,
     );
     let bindings = style.images.get(entry.texture);
     const sampler = smoothing ? this.linear : this.nearest;

@@ -146,3 +146,34 @@ describe('near-to-far render dependency regression', () => {
     expect(gpu.drawMesh.mock.calls.map((c) => c[0].kind)).toEqual(['fill', 'path']);
   });
 });
+
+it('keeps full comparison preloading by default and supports visible-only preparation', async () => {
+  for (const visibleOnly of [false, true]) {
+    const { r, source } = fixture([line, fill]);
+    const outside = { ...fill, id: 99 };
+    Object.assign(source, { chunks: [line, fill, outside], initialize: vi.fn(async () => {}) });
+    const ensure = vi.fn(async () => {}),
+      warm = vi.fn(async () => {});
+    Reflect.set(r, 'clear', vi.fn());
+    Reflect.set(r, 'ensure', ensure);
+    Reflect.set(r, 'warmScreenPaths', warm);
+    Reflect.set(r, 'requiredRaw', () => [fill]);
+    const scene = {
+      dataset: { layers: [{ geometry_type: 'polygon' }] },
+      lodSource: source,
+      vertexCount: 1000,
+      featureCount: 100,
+    };
+    await r.prepare(
+      scene as any,
+      new AbortController().signal,
+      view,
+      () => {},
+      visibleOnly ? { preload: 'visible' } : {},
+    );
+    expect(ensure.mock.calls.map((c) => (c as any)[1].id)).toEqual(
+      visibleOnly ? [fill.id] : [line.id, fill.id, outside.id],
+    );
+    expect(warm).toHaveBeenCalledOnce();
+  }
+});

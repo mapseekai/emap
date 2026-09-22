@@ -1,3 +1,4 @@
+import { groundBounds } from '../../../domain/geo/perspective-transform';
 import { TriangulationCache } from './triangulation-cache';
 import { buildScreenPaths, type ScreenPathRequest, type ScreenPathPacket } from './screen-paths';
 import { LumaPointLodSource, type PointLodRequest, type PointLodPacket } from './point-lod-source';
@@ -93,16 +94,20 @@ function displayArcs(paths: readonly (readonly Point[])[]): ArcCollection {
  */
 export class FullGeometrySource {
   private readonly triangulationCache = new TriangulationCache();
-  get triangulationStats() { return { ...this.triangulationCache.stats }; }
+  get triangulationStats() {
+    return { ...this.triangulationCache.stats };
+  }
   private pointLod: LumaPointLodSource | null = null;
   queryPointLod(request: PointLodRequest): PointLodPacket[] {
     this.pointLod ??= new LumaPointLodSource(this.dataset);
     return this.pointLod.query(request, this.chunks);
   }
   buildScreenPaths(chunk: SpatialChunk, request: ScreenPathRequest): ScreenPathPacket {
-    if(chunk.kind!=='line'||!this.vertices)throw new Error('Screen path filter requires raw arcs');
-    if(request.revision!==(this.dataset.editVersion??0))throw new Error('Stale screen path revision');
-    return buildScreenPaths(this.vertices,chunk.ids,request);
+    if (chunk.kind !== 'line' || !this.vertices)
+      throw new Error('Screen path filter requires raw arcs');
+    if (request.revision !== (this.dataset.editVersion ?? 0))
+      throw new Error('Stale screen path revision');
+    return buildScreenPaths(this.vertices, chunk.ids, request);
   }
   readonly chunks: SpatialChunk[] = [];
   private spatial: InstanceType<typeof Flatbush> | null = null;
@@ -333,14 +338,7 @@ export class FullGeometrySource {
     return points;
   }
   visible(transform: AffineTransform, width: number, height: number, padding = 8): SpatialChunk[] {
-    const a = transform.unproject(-padding, -padding),
-      b = transform.unproject(width + padding, height + padding);
-    const rect: Rect = [
-      Math.min(a[0], b[0]),
-      Math.min(a[1], b[1]),
-      Math.max(a[0], b[0]),
-      Math.max(a[1], b[1]),
-    ];
+    const rect: Rect = groundBounds(transform, width, height, padding);
     const ids: number[] = this.spatial?.search(...rect) ?? [];
     return ids
       .sort((a, b) => a - b)
@@ -371,7 +369,8 @@ export class FullGeometrySource {
       }
       geometry = pathGeometry(paths);
     } else {
-      const features: Point[][][] = [], featureIds: number[] = [];
+      const features: Point[][][] = [],
+        featureIds: number[] = [];
       for (const id of chunk.ids) {
         const shape = chunk.shapes![id] as PathShape | null;
         if (!shape) continue;
@@ -393,11 +392,19 @@ export class FullGeometrySource {
           } else if (ring.length)
             throw new Error('Cannot triangulate a ring with fewer than three distinct positions.');
         }
-        features.push(rings);featureIds.push(id);
+        features.push(rings);
+        featureIds.push(id);
         shapes.push(parts);
       }
-      geometry = polygonGeometry(features, (i) => (coordinates, holes, group) =>
-        this.triangulationCache.triangulate(`${chunk.layer}:${featureIds[i]}:${group}`, coordinates, holes));
+      geometry = polygonGeometry(
+        features,
+        (i) => (coordinates, holes, group) =>
+          this.triangulationCache.triangulate(
+            `${chunk.layer}:${featureIds[i]}:${group}`,
+            coordinates,
+            holes,
+          ),
+      );
     }
     const retained =
       chunk.kind === 'point' ? geometry.count : paths.reduce((n, p) => n + p.length, 0);
@@ -527,6 +534,9 @@ export interface ChunkGeometryAccess {
   build(chunk: SpatialChunk, level: number): DisplayChunk | Promise<DisplayChunk>;
   patch?(patch: CoordinatePatch, signal: AbortSignal): Promise<SpatialChunk[]>;
   queryPointLod?(request: PointLodRequest): PointLodPacket[] | Promise<PointLodPacket[]>;
-  buildScreenPaths?(chunk: SpatialChunk, request: ScreenPathRequest): ScreenPathPacket | Promise<ScreenPathPacket>;
+  buildScreenPaths?(
+    chunk: SpatialChunk,
+    request: ScreenPathRequest,
+  ): ScreenPathPacket | Promise<ScreenPathPacket>;
   dispose(): void;
 }

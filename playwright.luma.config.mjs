@@ -5,6 +5,7 @@ import base from './playwright.config.mjs';
 export default defineConfig({
   ...base,
   testMatch: [
+    'luma-25d.spec.mjs',
     'luma-benchmark.spec.mjs',
     'luma-raster.spec.mjs',
     'luma-raster-dynamic.spec.mjs',
