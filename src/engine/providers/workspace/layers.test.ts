@@ -31,3 +31,38 @@ describe('labels are parent-layer configuration, not extra layers', () => {
     expect(() => service.setLayerLabel('unknown', { field: 'name' })).toThrow('not found');
   });
 });
+
+describe('icons belong to existing point layers', () => {
+  const setup = () =>
+    new LayerServiceImpl({
+      document: { _sources: new Map([['s', {}]]), layers: {} },
+      events: new EventDispatcher(),
+      signals: { requestRender: vi.fn() },
+    } as any);
+  it('supports image symbols and labels together without adding layer IDs', () => {
+    const service = setup();
+    service.addLayer({ id: 'p', source: 's', type: 'circle', label: { field: 'name' } });
+    const icon = { url: '/pin.png', anchor: [0.5, 1] as [number, number] };
+    service.setLayerIcon('p', icon);
+    icon.anchor[0] = 0;
+    const layer = service.getLayer('p');
+    expect(layer?.type === 'circle' && layer.icon?.anchor).toEqual([0.5, 1]);
+    expect(layer?.label).toEqual({ field: 'name' });
+    expect(service.getLayers()).toHaveLength(1);
+    service.setLayerIcon('p', null);
+    expect(service.getLayer('p')).not.toHaveProperty('icon', expect.anything());
+    expect(service.getLayers()).toHaveLength(1);
+  });
+  it('rejects nonpoint icons and failed changes without mutating layer configuration', () => {
+    const service = setup();
+    service.addLayer({ id: 'p', source: 's', type: 'circle', icon: { url: '/pin.png' } });
+    service.addLayer({ id: 'f', source: 's', type: 'fill' });
+    expect(() => service.setLayerIcon('p', { url: '/x', size: NaN })).toThrow();
+    expect(() => service.setLayerIcon('f', { url: '/x' })).toThrow('point');
+    expect(() =>
+      service.addLayer({ id: 'bad', source: 's', type: 'fill', icon: { url: '/x' } } as any),
+    ).toThrow();
+    expect(service.getLayers()).toHaveLength(2);
+    expect(service.getLayer('p')).toHaveProperty('icon.url', '/pin.png');
+  });
+});

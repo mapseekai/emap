@@ -14,6 +14,15 @@ export type Rect = readonly [number, number, number, number];
 export interface MeshPaint {
   /** Derived Canvas screen paths only; original/edit meshes remain in source coordinates. */
   screenSpace?: boolean;
+  /** Internal immutable sprite style; source point buffers remain unchanged. */
+  icon?: {
+    size: readonly [number, number];
+    anchor: readonly [number, number];
+    offset: readonly [number, number];
+    angle: number;
+    tint: boolean;
+    textureSize: readonly [number, number];
+  };
   color: Rgba;
   width?: number;
   radius?: number;

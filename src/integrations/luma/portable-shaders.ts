@@ -1,3 +1,4 @@
+import { iconVS, iconFS, iconWGSL } from './icon-shaders';
 import { cameraWGSL } from './camera-shaders';
 import { pathMsaaVS, pathMsaaFS, pathMsaaWGSL } from './path-shaders';
 import type { BufferLayout, ShaderLayout } from '@luma.gl/core';
@@ -27,6 +28,7 @@ import type { GeometryBuffer } from './types';
 export type PipelineKind =
   | GeometryBuffer['kind']
   | 'image'
+  | 'icon'
   | 'circle'
   | 'circle-core'
   | 'circle-edge'
@@ -237,6 +239,7 @@ const glsl = {
   line: [lineVS, lineFS],
   path: [pathVS, pathFS],
   image: [imageVS, imageFS],
+  icon: [iconVS, iconFS],
 };
 const wgsl = {
   'path-msaa': pathMsaaWGSL,
@@ -250,6 +253,7 @@ const wgsl = {
   line: lineWGSL,
   path: pathWGSL,
   image: imageWGSL,
+  icon: iconWGSL,
 };
 export function shaderSource(kind: PipelineKind) {
   const [vs, fs] = glsl[kind];
@@ -283,7 +287,13 @@ export function shaderLayouts(
   } else {
     attribute('corners', 0, 'vec2<f32>', 'vertex');
     bufferLayout.push({ name: 'corners', format: 'float32x2', stepMode: 'vertex' });
-    if (kind === 'point' || kind === 'circle' || kind === 'circle-core' || kind === 'circle-edge') {
+    if (
+      kind === 'icon' ||
+      kind === 'point' ||
+      kind === 'circle' ||
+      kind === 'circle-core' ||
+      kind === 'circle-edge'
+    ) {
       attribute('instancePositions', 1, 'vec4<f32>', 'instance');
       bufferLayout.push({ name: 'instancePositions', format: 'float32x4', stepMode: 'instance' });
     } else if (kind === 'line') {
@@ -328,7 +338,7 @@ export function shaderLayouts(
       location: 1,
       sampleType: 'unfilterable-float',
     });
-  if (kind === 'image') {
+  if (kind === 'image' || kind === 'icon') {
     shaderLayout.bindings.push({ name: 'imageTexture', type: 'texture', group: 0, location: 1 });
     if (webgpu)
       shaderLayout.bindings.push({ name: 'imageSampler', type: 'sampler', group: 0, location: 2 });

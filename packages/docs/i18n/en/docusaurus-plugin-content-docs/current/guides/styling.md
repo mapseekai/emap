@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -224,3 +224,23 @@ Ordinary size, color and DPR changes reuse glyphs; very wide halos can request a
 The default Canvas renderer retains its compatible bitmap path.
 During navigation previews labels temporarily transform with the old frame and are
 laid out again when the gesture settles.
+
+## Image symbols on existing point layers
+
+`icon` replaces the symbol of an existing `circle` layer; it does not create an icon layer
+or an extra layer-tree node. Parent visibility, filters, point LOD and labels remain in place.
+
+```ts
+map.setLayerIcon('city-points', {
+  url: '/images/pin.png', size: 32, anchor: [0.5, 1],
+  rotation: 0, offset: [0, -2], opacity: 1,
+});
+map.setLayerIcon('city-points', null); // Restore the ordinary point symbol.
+```
+
+A numeric size is the CSS-pixel height with preserved aspect ratio; an explicit `[width, height]`
+sets both dimensions. Optional `rect: [x, y, width, height]` crops a shared atlas, and `tint`
+recolors its alpha mask. PNG/JPEG/WebP and self-contained SVG images are supported.
+The luma backends reuse resident point buffers; the default Canvas painter also supports this API.
+Loading failures keep ordinary points and report the error. No per-feature icon mapping,
+alpha-pixel picking or new icon clustering policy is introduced.

@@ -1,5 +1,10 @@
 # luma.gl v10 集成状态
 
+## 点图片符号
+
+现有点图层通过 `icon` / `setLayerIcon` 使用图片，不添加图层树节点。
+WebGL2/WebGPU 复用原点与 LOD 缓冲；共享图集、屏幕锚点、着色、透明度及 Canvas 兼容见 [点图标](luma-icons.md)。
+
 ## 绑定式文字注记
 
 点、线、面可配置附属 `label`，不增加图层树节点。现有 benchmark、2.5D 和编辑示例

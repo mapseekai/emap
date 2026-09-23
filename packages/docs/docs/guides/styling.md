@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -217,3 +217,22 @@ luma 路径采用 HarfBuzz 排版和按字形共享的 RGB MSDF，颜色与描�
 默认使用自托管 Noto 子集；自定义字体通过 `label.fontUrl` 提供 TTF/OTF/WOFF1。
 字号、颜色和 DPR 的常规变化复用字形，异常宽描边可能需要更宽的距离范围档。
 手势快照期间文字仍暂随旧画面变换，停止后刷新；默认 Canvas 路径保留兼容绘制。
+
+## 点图层的图片符号
+
+`icon` 替换现有 `circle` 图层的点符号，不新增 icon 图层或图层树节点。
+父图层显隐、过滤、原有点聚合和绑定注记保持不变。
+
+```ts
+map.setLayerIcon('city-points', {
+  url: '/images/pin.png', size: 32, anchor: [0.5, 1],
+  rotation: 0, offset: [0, -2], opacity: 1,
+});
+map.setLayerIcon('city-points', null); // 恢复普通点符号。
+```
+
+数字尺寸为 CSS 像素高度并保持宽高比；`[width,height]` 显式设置两维。
+`rect: [x,y,width,height]` 可裁剪共享图集，`tint` 可将原图 alpha 蒙版着色。
+支持 PNG/JPEG/WebP、自包含 SVG 和本地图片；图标加载失败保留普通点并报告错误。
+luma 后端复用原点/LOD 缓冲，默认 Canvas 也支持该配置。
+此版本没有逐要素字段映射、alpha 像素拾取或新的带数量聚类规则。

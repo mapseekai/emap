@@ -1,3 +1,5 @@
+import { installIconControls } from '../luma-benchmark/icon-controls';
+import type { IconOptions } from '../../../../src/engine/map/icon';
 import { installLabelControls } from '../luma-benchmark/label-controls';
 import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
@@ -13,6 +15,7 @@ import { EditorBackdrop } from './backdrop';
 import './style.css';
 
 let labelControls: ReturnType<typeof installLabelControls> | null = null;
+let iconControls: ReturnType<typeof installIconControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const result = document.getElementById(id);
@@ -126,6 +129,7 @@ pathCullingToggle.addEventListener('change',()=>{renderers.pathCullingEnabled=pa
 
 renderers.show('luma');
 labelControls = installLabelControls(el('editor'), renderers, requestDraw);
+iconControls = installIconControls(el('editor'), renderers, requestDraw);
 const pathStrategy=el<HTMLSelectElement>('path-strategy');
 pathStrategy.addEventListener('change',()=>{
   if(renderers.gpu)renderers.gpu.pathMode=pathStrategy.value as 'auto'|'reference'|'legacy';
@@ -153,6 +157,7 @@ function requestDraw(): void {
 }
 function draw(): void {
   labelControls?.refresh();
+  iconControls?.refresh();
   if (!scene || !session || disposed || phase === 'loading') return;
   try {
     session.setView(view, width, height);
@@ -482,6 +487,7 @@ async function restore(): Promise<void> {
 }
 function dispose(): void {
   labelControls?.dispose(); labelControls = null;
+  iconControls?.dispose(); iconControls = null;
   if (disposed) return;
   disposed = true;
   generation++;
@@ -503,6 +509,9 @@ async function start(): Promise<void> {
     get labelPlacements(){return renderers.labelPlacements;},
     get layers(){return renderers.getLayers();},
     setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
+    get iconStats(){return renderers.iconStats;},
+    settleIcons:()=>renderers.settleIcons(),
     setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
     settleLabels:()=>renderers.settleLabels(),
 

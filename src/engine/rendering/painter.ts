@@ -1,3 +1,4 @@
+import type { PointIcon } from './icons/images';
 import type { LabelFrame } from './labels/manager';
 import type { MeasurementMode, MeasurementPoint } from '../../domain/geo/measurement';
 
@@ -87,6 +88,15 @@ export interface ArrowDotPathOptions {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
+  /** @internal Optional image symbols, consuming the same original/LOD point selection. */
+  drawPointIcons?(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    icon: PointIcon,
+    shapeIndices?: Uint32Array,
+    componentIndices?: Uint32Array,
+  ): void;
+  /** @internal Release derived Canvas icon images on source replacement/disposal. */
+  clearIcons?(): void;
   /** @internal Optional owner-bound text pass; geometry-only painters remain compatible. */
   drawLabels?(frame: LabelFrame): void;
   /** Draw a north-up image in map coordinates without exposing the native canvas. */

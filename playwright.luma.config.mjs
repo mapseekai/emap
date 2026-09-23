@@ -7,6 +7,7 @@ export default defineConfig({
   testMatch: [
     'luma-25d.spec.mjs',
     'luma-labels.spec.mjs',
+    'luma-icons.spec.mjs',
     'luma-benchmark.spec.mjs',
     'luma-raster.spec.mjs',
     'luma-raster-dynamic.spec.mjs',

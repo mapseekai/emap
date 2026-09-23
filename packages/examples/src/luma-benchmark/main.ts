@@ -1,3 +1,5 @@
+import { installIconControls } from './icon-controls';
+import type { IconOptions } from '../../../../src/engine/map/icon';
 import { installLabelControls } from './label-controls';
 import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
@@ -11,6 +13,7 @@ import { animationTick, navigationFrame, summarize, type Samples } from './metri
 import './style.css';
 
 let labelControls: ReturnType<typeof installLabelControls> | null = null;
+let iconControls: ReturnType<typeof installIconControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -108,6 +111,7 @@ selector.querySelector<HTMLOptionElement>('option[value="luma"]')!.textContent=r
 selector.value = backend;
 renderers.show(backend);
 labelControls = installLabelControls(el('benchmark'), renderers, requestDraw);
+iconControls = installIconControls(el('benchmark'), renderers, requestDraw);
 el('device').textContent = renderers.gpu
   ? JSON.stringify(renderers.gpu.deviceInfo) : 'Canvas2D only';
 function fit() {
@@ -131,6 +135,7 @@ function refreshCounters() {
 
 function draw() {
   labelControls?.refresh();
+  iconControls?.refresh();
   if (!scene || disposed) return;
   try {
     const ms = renderers.drawInteractive(backend, transform);
@@ -376,6 +381,7 @@ function hidden() { if (document.hidden) { running?.abort(new Error('Tab hidden'
 document.addEventListener('visibilitychange', hidden);
 function dispose() {
   labelControls?.dispose(); labelControls = null;
+  iconControls?.dispose(); iconControls = null;
   if (disposed) return; disposed = true;
   loading?.abort(); running?.abort(); cancelAnimationFrame(scheduled);
   clearTimeout(wheelSettle);
@@ -431,6 +437,9 @@ async function start() {
     get labelPlacements(){return renderers.labelPlacements;},
     get layers(){return renderers.getLayers();},
     setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
+    get iconStats(){return renderers.iconStats;},
+    settleIcons:()=>renderers.settleIcons(),
     setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
     settleLabels:()=>renderers.settleLabels(),
  runScreen:(frames=60)=>compare(frames,true), loadFile, dispose, setPointLod,

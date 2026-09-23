@@ -1,3 +1,4 @@
+import type { IconOptions } from './icon';
 import type { LabelOptions } from './label';
 import { Context } from 'cordis';
 import '../../runtime/services/context';
@@ -340,6 +341,16 @@ export class Emap extends EventDispatcher {
     return this.ctx.layers.setPaintProperty(id, name, value);
   }
   /** Configure labels attached to a point, line or polygon layer without adding a tree node. */
+  /**
+   * Replace the image symbol on an existing point layer; null restores circles.
+   * @example
+   * map.setLayerIcon('poi', { url: '/images/pin.png', size: 32, anchor: [0.5, 1] });
+   * map.setLayerIcon('poi', null);
+   */
+  public setLayerIcon(id: string, options: IconOptions | null): void {
+    this.ctx.layers.setLayerIcon(id, options);
+  }
+
   public setLayerLabel(id: string, options: LabelOptions | null): void {
     this.ctx.layers.setLayerLabel(id, options);
   }

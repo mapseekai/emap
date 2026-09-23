@@ -1,3 +1,5 @@
+import { installIconControls } from '../luma-benchmark/icon-controls';
+import type { IconOptions } from '../../../../src/engine/map/icon';
 import { installLabelControls } from '../luma-benchmark/label-controls';
 import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
@@ -24,6 +26,7 @@ import { installNavigation } from './navigation';
 import './style.css';
 
 let labelControls: ReturnType<typeof installLabelControls> | null = null;
+let iconControls: ReturnType<typeof installIconControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -102,6 +105,7 @@ renderers.navigation.setEnabled(true);
 renderers.setPointStyle(3, 1);
 renderers.show('luma');
 labelControls = installLabelControls(document.querySelector<HTMLElement>('.layout > aside')!, renderers, request);
+iconControls = installIconControls(document.querySelector<HTMLElement>('.layout > aside')!, renderers, request);
 renderers.resize(width, height, dpr);
 function syncControls(): void {
   el<HTMLInputElement>('pitch').value = String(view.pitch);
@@ -140,6 +144,7 @@ function snapshot() {
 }
 function draw(exact = false): void {
   labelControls?.refresh();
+  iconControls?.refresh();
   if (disposed || fatal) return;
   try {
     if (native) {
@@ -577,6 +582,7 @@ for (const [x, y, color] of [
 }
 function dispose(): void {
   labelControls?.dispose(); labelControls = null;
+  iconControls?.dispose(); iconControls = null;
   if (disposed) return;
   disposed = true;
   loading?.abort();
@@ -600,6 +606,9 @@ Object.assign(window, {
     get labelPlacements(){return renderers.labelPlacements;},
     get layers(){return renderers.getLayers();},
     setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
+    get iconStats(){return renderers.iconStats;},
+    settleIcons:()=>renderers.settleIcons(),
     setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
     settleLabels:()=>renderers.settleLabels(),
 

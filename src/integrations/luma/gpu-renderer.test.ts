@@ -443,3 +443,66 @@ describe('raster scissor coordinate origins', () => {
       });
     }
 });
+
+describe('point icon GPU submission', () => {
+  it('uses the resident point buffer as instanced data and releases its additional vertex binding', () => {
+    const mesh: any = { kind: 'point', count: 7, bytes: 112, buffer: { destroy: vi.fn() } };
+    const pass = {
+      setPipeline: vi.fn(),
+      setBindings: vi.fn(),
+      setParameters: vi.fn(),
+      setVertexArray: vi.fn(),
+      draw: vi.fn(() => true),
+    };
+    const texture = {},
+      vao = { destroy: vi.fn() },
+      vertexArray = vi.fn(() => vao),
+      style = vi.fn(() => ({ buffer: {}, images: new Map() }));
+    const r: any = Object.assign(Object.create(GpuRenderer.prototype), {
+      pass,
+      meshes: new Set([mesh]),
+      canvas: { width: 800, height: 600 },
+      circleQueue: [],
+      device: { type: 'webgl' },
+      linear: {},
+      pipelines: new Map([['icon', { pipeline: 'icon' }]]),
+      imageTexture: vi.fn(() => ({ texture, smoothing: true })),
+      style,
+      vertexArray,
+      stats: { drawCalls: 0, iconDrawCalls: 0, iconFrameInstances: 0, liveBufferBytes: 112 },
+    });
+    const icon: any = {
+      asset: { image: {}, width: 64, height: 64 },
+      size: [32, 32],
+      anchor: [0.5, 1],
+      offset: [0, 0],
+      angle: 0,
+      rect: [0, 0, 64, 64],
+      color: [1, 1, 1, 1],
+    };
+    r.drawPointIcons(mesh, icon);
+    r.drawPointIcons(mesh, icon);
+    expect(vertexArray).toHaveBeenCalledOnce();
+    expect(vertexArray).toHaveBeenCalledWith('icon', mesh.buffer);
+    expect(pass.draw).toHaveBeenCalledWith({ vertexCount: 6, instanceCount: 7, isInstanced: true });
+    expect(r.stats.iconFrameInstances).toBe(14);
+    r.destroyMesh(mesh);
+    expect(vao.destroy).toHaveBeenCalledOnce();
+    expect(mesh.buffer.destroy).toHaveBeenCalledOnce();
+    expect(r.stats.liveBufferBytes).toBe(0);
+  });
+});
+
+it('releases icon style bindings when a shared image texture is evicted', () => {
+  const texture = { width: 64, height: 64, destroy: vi.fn() },
+    style = { buffer: { destroy: vi.fn() }, images: new Map([[texture, {}]]) };
+  const renderer: any = Object.assign(Object.create(GpuRenderer.prototype), {
+    styles: new Map([['icon:test', style]]),
+    stats: { liveTextureBytes: 16384, liveTextures: 1 },
+  });
+  renderer.destroyImage({ texture });
+  expect(texture.destroy).toHaveBeenCalledOnce();
+  expect(style.buffer.destroy).toHaveBeenCalledOnce();
+  expect(renderer.styles.size).toBe(0);
+  expect(renderer.stats.liveTextureBytes).toBe(0);
+});

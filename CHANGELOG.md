@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add image icon symbols to existing point layers via `CircleLayerSpecification.icon`
+  and `Emap.setLayerIcon`, without new layer-tree entries. Reuse point/LOD GPU buffers
+  in WebGL2/WebGPU with shared sprite textures, anchor/rotation/offset, tint and opacity;
+  retain Canvas/filter compatibility, bounded cancellable loading, nonfatal fallback,
+  label spacing, source ownership and resource cleanup. Add controls to existing luma pages.
+
 - Replace the luma label bitmap path with real glyph-level RGB MSDF generated from
   font outlines in a lazy, owned Worker. Shape with HarfBuzz/bidi, share glyphs
   across labels, sizes, colors and DPR, and render halo/fill in GLSL and WGSL.

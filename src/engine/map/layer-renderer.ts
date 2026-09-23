@@ -1,3 +1,4 @@
+import type { PointIconImages } from '../rendering/icons/images';
 import { pointLodForPainter } from '../rendering/point-lod';
 import type { Viewport } from '../../domain/geo/viewport';
 import type { CorePainter } from '../rendering/painter';
@@ -16,6 +17,7 @@ import type { StyleResolution, StyleResolver } from './style-resolver';
 import { applyMaskToCandidates, type FilterResolver } from './filter-resolver';
 
 export interface LayerRendererContext {
+  iconImages?: PointIconImages | null;
   layers: readonly LayerSpecification[];
   /** Full-frame layer IDs retained when rendering one source block at a time. */
   retainLayerIds?: ReadonlySet<string>;
@@ -164,7 +166,8 @@ export function renderLayers(
               layer: ml,
             })
           : null;
-      const radius = Number(style.radius) || 4;
+      const icon = ctx.painter.drawPointIcons ? ctx.iconImages?.get(layer.icon) : null;
+      const radius = Math.max(Number(style.radius) || 4, icon?.radius ?? 0);
       const bounds = ctx.viewport.getViewBounds();
       const padding = radius * pixelSize;
       const lod =
@@ -192,6 +195,10 @@ export function renderLayers(
           : null;
       if (lod) {
         if (!lod.featureIds.length) continue;
+        if (icon) {
+          ctx.painter.drawPointIcons!(ml.shapes, icon, lod.featureIds, lod.componentIds);
+          continue;
+        }
         if (fullResolution) {
           // One pass through survivors; styles still resolve by original feature ID.
           const membership = getStyleMembership(fullResolution, ml.shapes.length);
@@ -220,6 +227,10 @@ export function renderLayers(
       let candidates = getCandidates(ctx, layer.source, ml, padding);
       if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
       if (candidates?.length === 0) continue;
+      if (icon) {
+        ctx.painter.drawPointIcons!(ml.shapes, icon, candidates ?? undefined);
+        continue;
+      }
       const resolution = visibleStyleBuckets(fullResolution, candidates, ml.shapes.length);
       if (resolution) {
         for (let i = 0; i < resolution.buckets.length; i++) {

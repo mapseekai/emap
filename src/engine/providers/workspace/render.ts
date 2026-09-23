@@ -1,3 +1,4 @@
+import { PointIconImages } from '../../rendering/icons/images';
 import { BoundLabelManager, type LabelBinding } from '../../rendering/labels/manager';
 import type { RenderPass, RenderFrame } from '../../../runtime/services/contracts/render-pass';
 import { EventDispatcher } from '../../core/events';
@@ -49,6 +50,7 @@ interface Dependencies {
 /** render implementation, wired through explicit service dependencies. */
 export class CanvasRenderService {
   private _labels: BoundLabelManager | null = null;
+  private _icons: PointIconImages | null = null;
   private readonly _passes = new Map<RenderPass, RenderPassStage>();
   private _sourceOrder: string[] = [];
 
@@ -268,7 +270,32 @@ export class CanvasRenderService {
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
   }
 
+  private _prepareIcons(): void {
+    const icons = this.deps.layers
+      ._getEffectiveLayers()
+      .flatMap((layer) =>
+        layer.type === 'circle' &&
+        layer.icon?.enabled !== false &&
+        layer.icon &&
+        layer.layout?.visibility !== 'none'
+          ? [layer.icon]
+          : [],
+      );
+    if (!icons.length) {
+      this._icons?.dispose();
+      this._icons = null;
+      this._painter.clearIcons?.();
+      return;
+    }
+    this._icons ??= new PointIconImages(
+      () => this._scheduleRender(),
+      () => this._painter.clearIcons?.(),
+      (_url, error) => this.deps.events.fire('warning', { layerId: 'point-icons', error }),
+    );
+    this._icons.retain(icons);
+  }
   _renderImpl(): void {
+    this._prepareIcons();
     const transform = this.deps.view._viewport.transform;
     this._painter.setTransform(transform);
 
@@ -369,6 +396,7 @@ export class CanvasRenderService {
         sources: this.deps.document._sources,
         viewport: this.deps.view._viewport,
         painter: this._painter,
+        iconImages: this._icons,
         styleResolver: this.deps.layers._styleResolver,
         filterResolver: this.deps.layers._filterResolver,
         resolveSourceLayer: (sourceId, sourceLayerName) =>
@@ -406,7 +434,10 @@ export class CanvasRenderService {
         layer,
         options: spec.label,
         mask,
-        pointRadius: spec.type === 'circle' ? spec.paint?.['circle-radius'] : undefined,
+        pointRadius:
+          spec.type === 'circle'
+            ? Math.max(spec.paint?.['circle-radius'] ?? 4, this._icons?.get(spec.icon)?.radius ?? 0)
+            : undefined,
       });
     }
     if (!bindings.length) {
@@ -483,6 +514,9 @@ export class CanvasRenderService {
     else cache.clear();
   }
   dispose(): void {
+    this._icons?.dispose();
+    this._icons = null;
+    this._painter?.clearIcons?.();
     this._labels?.dispose();
     this._labels = null;
     if (this._rafId !== 0) cancelAnimationFrame(this._rafId);

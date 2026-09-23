@@ -1,3 +1,4 @@
+import { cloneIconOptions, type IconOptions } from '../../map/icon';
 import { cloneLabelOptions, validateLabelOptions, type LabelOptions } from '../../map/label';
 import type { LayerChangeReason } from '../../core/event-map';
 import { EventDispatcher } from '../../core/events';
@@ -181,6 +182,21 @@ export class LayerServiceImpl {
   }
 
   /** Replace only the parent layer's label configuration. null disables/removes labels. */
+  public setLayerIcon(id: string, options: IconOptions | null): void {
+    const icon = options === null ? undefined : cloneIconOptions(options);
+    const effective = this._layers.length ? this._layers : this._getEffectiveLayers();
+    const index = effective.findIndex((layer) => layer.id === id);
+    if (index < 0) throw new Error(`Layer "${id}" not found`);
+    if (effective[index].type !== 'circle')
+      throw new Error('Icons are supported only on circle/point layers.');
+    if (!this._layers.length) this._layers = effective.map(cloneLayerSpecification);
+    const layer = this._layers[index];
+    if (layer.type !== 'circle') return;
+    layer.icon = icon;
+    this.deps.signals.requestRender();
+    this._fireLayerChange('effective', id);
+  }
+
   public setLayerLabel(id: string, options: LabelOptions | null): void {
     const label = options === null ? undefined : cloneLabelOptions(options);
     let index = this._layers.findIndex((candidate) => candidate.id === id);

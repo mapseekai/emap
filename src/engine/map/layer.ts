@@ -1,3 +1,4 @@
+import { cloneIconOptions, type IconOptions } from './icon';
 import { cloneLabelOptions, type LabelOptions } from './label';
 import type {
   LineDashStyle,
@@ -78,6 +79,8 @@ export interface LineLayerSpecification extends LayerSpecificationBase {
 
 export interface CircleLayerSpecification extends LayerSpecificationBase {
   type: 'circle';
+  /** Optional image symbol replacing the circle, retaining layer/feature identity. */
+  icon?: IconOptions;
   /** Automatic density thinning; false draws all points. Cell size is in CSS pixels (default 8). */
   pointLod?: false | { cellSize?: number };
   paint?: CirclePaint;
@@ -102,6 +105,8 @@ export type LayerSpecification =
 export type LayerType = LayerSpecification['type'];
 
 export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecification {
+  if ('icon' in layer && layer.icon !== undefined && layer.type !== 'circle')
+    throw new Error('Icons are supported only on circle/point layers.');
   switch (layer.type) {
     case 'fill':
     case 'line':
@@ -122,6 +127,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'circle':
       return {
         ...layer,
+        ...(layer.icon && { icon: cloneIconOptions(layer.icon) }),
         ...(layer.label ? { label: cloneLabelOptions(layer.label) } : {}),
         ...(layer.pointLod && { pointLod: { ...layer.pointLod } }),
         paint: layer.paint ? { ...layer.paint } : undefined,

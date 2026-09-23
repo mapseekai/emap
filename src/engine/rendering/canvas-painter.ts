@@ -1,3 +1,5 @@
+import { CanvasPointIcons } from './icons/canvas';
+import type { PointIcon } from './icons/images';
 import { drawCanvasLabels, type LabelFrame } from './labels/manager';
 import {
   EditPainter,
@@ -254,6 +256,29 @@ function partPassesArcFilter(part: readonly number[], filter?: (i: number) => bo
 
 export class CanvasPainter implements EditPainter {
   private _ctx: CanvasRenderingContext2D;
+  private _icons: CanvasPointIcons | null = null;
+  /** @internal */
+  drawPointIcons(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    icon: PointIcon,
+    ids?: Uint32Array,
+    components?: Uint32Array,
+  ): void {
+    (this._icons ??= new CanvasPointIcons()).draw(
+      this._ctx,
+      this._transform,
+      this._pixelRatio,
+      shapes,
+      icon,
+      ids,
+      components,
+    );
+  }
+  /** @internal */
+  clearIcons(): void {
+    this._icons?.clear();
+    this._icons = null;
+  }
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();

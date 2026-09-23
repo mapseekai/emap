@@ -1,3 +1,5 @@
+import { PointIconImages, type PointIcon } from '../../../../src/engine/rendering/icons/images';
+import { cloneIconOptions, type IconOptions } from '../../../../src/engine/map/icon';
 import { MsdfLabelAtlas } from '../../../../src/integrations/msdf/atlas';
 import { BoundLabelManager, drawCanvasLabels, type LabelFrame } from '../../../../src/engine/rendering/labels/manager';
 import { cloneLabelOptions, type LabelOptions } from '../../../../src/engine/map/label';
@@ -31,6 +33,27 @@ const CACHE_BYTES=256*1024**2;
 interface Entry {display:DisplayChunk;mesh:GpuMesh|null;used:number;rangeIndex?:PathRangeIndex}
 interface FrameEntry {chunk:SpatialChunk;raw?:Entry;filtered?:ScreenPathEntry}
 export class BenchmarkRenderers {
+ private iconImages:PointIconImages|null=null;
+ private frameIcons=new Map<number,PointIcon>();
+ get iconStats(){return {...(this.iconImages?.stats??{pending:0,images:0,imageBytes:0,loads:0,errors:[]}),drawCalls:this.gpu?.stats.iconDrawCalls??0,instances:this.gpu?.stats.iconFrameInstances??0};}
+ async settleIcons():Promise<void>{this.syncIcons();await this.iconImages?.settled();this.syncIcons();}
+ setLayerIcon(id:string,options:IconOptions|null):void {
+  const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
+  if(spec.type!=='circle')throw new Error('Icons require an existing point layer.');
+  spec.icon=options===null?undefined:cloneIconOptions(options);
+  this.iconImages?.retry();this.syncIcons();this.frameEpoch++;this.signature='';
+  this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+ }
+ private syncIcons():void {
+  this.frameIcons??=new Map();this.frameIcons.clear();
+  const active=(this.layerSpecs??[]).flatMap((spec,index)=>spec.type==='circle'&&spec.icon&&spec.icon.enabled!==false&&spec.layout?.visibility!=='none'?[{index,icon:spec.icon}]:[]);
+  if(!active.length){this.iconImages?.dispose();this.iconImages=null;return;}
+  this.iconImages??=new PointIconImages(()=>{this.frameEpoch++;this.navigation.invalidateFrame();this.labelManager?.invalidateLayout();this.invalidate();},asset=>{this.gpu?.forgetImage(asset.image);this.cpu.clearIcons?.();});
+  this.iconImages.retain(active.map(o=>o.icon));
+  for(const {index,icon} of active){const ready=this.iconImages.get(icon);if(ready)this.frameIcons.set(index,ready);}
+ }
+ private pointSymbolPadding():number {let padding=Math.max(8,(this.pointPaint.radius??3)+0.5);for(const icon of this.frameIcons?.values()??[])padding=Math.max(padding,icon.radius);return padding;}
+
  private labelManager:BoundLabelManager|null=null;
  private labelError:string|null=null;
  private layerSpecs:LayerSpecification[]=[];
@@ -48,7 +71,7 @@ export class BenchmarkRenderers {
  setLayerVisibility(id:string,visibility:'visible'|'none'):void {
   if(!['visible','none'].includes(visibility))throw new Error('Invalid layer visibility');
   const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
-  spec.layout={...spec.layout,visibility};this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+  spec.layout={...spec.layout,visibility};this.syncIcons();this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
  }
  get labelControlRevision(){return `${this.generation}:${this.scene?.dataset.attributeVersion??0}`;}
  get labelPlacements(){return this.labelManager?.placements??[];}
@@ -59,7 +82,7 @@ export class BenchmarkRenderers {
    if(!spec.label||spec.label.enabled===false||spec.layout?.visibility==='none'||!this.scene)return [];
    if(this.passMode!=='all'&&((this.passMode==='points')!==(spec.type==='circle')))return [];
    const layer=resolveLayerInList(this.scene.dataset.layers,this.layerSpecs.indexOf(spec));
-   return layer?[{id:spec.id,dataset:this.scene.dataset,layer,options:spec.label,pointRadius:this.pointPaint.radius}]:[];
+   return layer?[{id:spec.id,dataset:this.scene.dataset,layer,options:spec.label,pointRadius:Math.max(this.pointPaint.radius??3,this.frameIcons?.get(this.layerSpecs.indexOf(spec))?.radius??0)}]:[];
   });
   if(!bindings.length){if(this.labelManager){this.labelManager.dispose();this.labelManager=null;this.labelError=null;this.gpu?.clearLabels();}return {key:'',labels:[]};}
   this.labelManager??=new BoundLabelManager(()=>{this.frameEpoch++;this.navigation.invalidateFrame();this.invalidate();},error=>{this.labelError=error.message;this.invalidate();},globalThis.document,new MsdfLabelAtlas(new URL(`${import.meta.env.BASE_URL}emap-msdf-worker.js`,location.href)));
@@ -264,7 +287,7 @@ export class BenchmarkRenderers {
  private setView(t:AffineTransform):void {
   if(!this.source)return;
   if(this.editing&&this.editView&&t.mx===this.editView.mx&&t.my===this.editView.my&&t.bx===this.editView.bx&&t.by===this.editView.by&&cameraUniforms(t).every((v,i)=>v===cameraUniforms(this.editView!)[i])){this.selected=this.editSelection;return;}
-  this.selected=this.source.visible(t,this.dimensions[0],this.dimensions[1],Math.max(8,(this.pointPaint.radius??3)+0.5));
+  this.selected=this.source.visible(t,this.dimensions[0],this.dimensions[1],this.pointSymbolPadding());
   this.lodStats.visibleChunks=this.selected.length;
  }
  setInteracting(value:boolean):void {
@@ -310,12 +333,12 @@ export class BenchmarkRenderers {
  async warmViews(views:readonly AffineTransform[],signal:AbortSignal):Promise<void>{
   this.pump?.abort();this.pump=null;const source=this.source;if(!source)return;
   const jobs=new Map<number,SpatialChunk>();
-  for(const view of views)for(const c of source.visible(view,this.dimensions[0],this.dimensions[1],Math.max(8,(this.pointPaint.radius??3)+0.5)))jobs.set(c.id,c);
+  for(const view of views)for(const c of source.visible(view,this.dimensions[0],this.dimensions[1],this.pointSymbolPadding()))jobs.set(c.id,c);
   this.pinned=new Set(jobs.keys());
   try{for(const c of jobs.values()){if(this.cache.has(c.id))continue;await lodYield(signal);await this.ensure(source,c);}}
   finally{this.pinned=null;}this.lodStats.pending=0;
   for(const view of views) await this.pointLod?.warm(view,this.dimensions,
-   source.visible(view,this.dimensions[0],this.dimensions[1],Math.max(8,(this.pointPaint.radius??3)+0.5)),signal);
+   source.visible(view,this.dimensions[0],this.dimensions[1],this.pointSymbolPadding()),signal);
  }
  private paint(c:SpatialChunk):MeshPaint{return c.kind==='fill'?fillPaint:c.kind==='point'?this.pointPaint:
   this.scene?.dataset.layers[c.layer].geometry_type==='polygon'?outlinePaint:linePaint;}
@@ -326,7 +349,7 @@ export class BenchmarkRenderers {
   if(perspectiveActive(transform)) {
     if(backend!=='luma')throw new Error('Perspective rendering requires the luma backend.');
   }
-  const start=performance.now();this.setView(transform);this.screenFilterApplied=!!screen;
+  const start=performance.now();this.syncIcons();this.setView(transform);this.screenFilterApplied=!!screen;
   const entries:FrameEntry[]=[];let vertices=0,missing=0,segments=0,submitted=0,culled=0;
   const pointLayers=this.pointLod?.view(transform,this.dimensions,this.selected)??new Map();
   const drawnPointLayers=new Set<number>();
@@ -362,7 +385,7 @@ export class BenchmarkRenderers {
    for(const {chunk,raw,filtered} of entries){
     if(filtered){drawScreenPaths(this.canvas.getContext('2d')!,filtered.packet,this.paint(chunk),this.dimensions[2]);continue;}
     const {shapes,arcs}=raw!.display;
-    if(chunk.kind==='point')this.cpu.drawPoints(shapes,{color:`rgba(37,99,235,${this.pointPaint.color[3]})`,radius:this.pointPaint.radius});
+    if(chunk.kind==='point'){const icon=this.frameIcons.get(chunk.layer);if(icon)this.cpu.drawPointIcons(shapes,icon);else this.cpu.drawPoints(shapes,{color:`rgba(37,99,235,${this.pointPaint.color[3]})`,radius:this.pointPaint.radius});}
     else if(chunk.kind==='fill'&&arcs)this.cpu.drawPolygonFill(shapes,arcs,FILL_COLOR,undefined,.55);
     else if(arcs)this.cpu.drawArcs(arcs,{color:LINE_COLOR,width:this.paint(chunk).width});
    }
@@ -375,6 +398,8 @@ export class BenchmarkRenderers {
       const paint=this.paint(chunk);
       if(filtered){if(filtered.mesh)gpu.drawMesh(filtered.mesh,{...paint,screenSpace:true});continue;}
       if(!raw?.mesh)continue;
+      const icon=chunk.kind==='point'?this.frameIcons.get(chunk.layer):undefined;
+      if(icon){gpu.drawPointIcons(raw.mesh,icon);continue;}
       const selected=this.pathCullingEnabled ? raw.rangeIndex?.select(transform,this.dimensions[0],this.dimensions[1],Math.max(8,(paint.width??1)*4+2)) : undefined;
       culled+=selected?.rejected??0;
       gpu.drawMesh(raw.mesh,paint,selected?.ranges);
@@ -426,7 +451,7 @@ export class BenchmarkRenderers {
     this.pinned=new Set(changed.map(c=>c.id));
     for(const c of changed){current();await this.ensure(source,c,stage);}
     current();this.editStats.geometryMs=performance.now()-at;at=performance.now();
-    const nextSelected=source.visible(view,this.dimensions[0],this.dimensions[1],Math.max(8,(this.pointPaint.radius??3)+0.5));
+    const nextSelected=source.visible(view,this.dimensions[0],this.dimensions[1],this.pointSymbolPadding());
     if(patch.points.length){this.pointLod?.clear();await this.pointLod?.warm(view,this.dimensions,this.selected,signal);current();}
     if(this.screenEnabled())await this.screenPaths!.warmChanged({...this.screenRequest(view),revision:patch.revision},nextSelected,new Set(changed.map(c=>c.id)),signal);
     current();this.editStats.screenMs=performance.now()-at;
@@ -457,6 +482,7 @@ export class BenchmarkRenderers {
  }
  show(backend:Backend):void {if(this.canvas.hidden!==(backend!=='canvas'))this.navigation.reset();this.canvas.hidden=backend!=='canvas';this.glCanvas.hidden=backend!=='luma';}
  clear():void {
+  this.iconImages?.dispose();this.iconImages=null;this.frameIcons?.clear();this.cpu.clearIcons?.();
   this.labelManager?.dispose();this.labelManager=null;this.layerSpecs=[];this.gpu?.clearLabels?.();
   this.preparing=false;this.editing=false;this.editView=null;this.editSelection=[];this.frameEpoch++;this.renderRevision=0;this.editStats.pending=false;
   this.navigation.reset();this.screenPaths?.dispose();this.screenPaths=null;this.screenFilterApplied=false;

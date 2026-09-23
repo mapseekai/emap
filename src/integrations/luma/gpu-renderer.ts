@@ -1,3 +1,4 @@
+import type { PointIcon } from '../../engine/rendering/icons/images';
 import { MsdfTextRenderer } from './msdf-text-renderer';
 import { GpuTextRenderer } from './text-renderer';
 import type { LabelFrame } from '../../engine/rendering/labels/manager';
@@ -36,6 +37,7 @@ export interface GpuMesh {
   bytes: number;
   vertexArray?: VertexArray;
   circleVertexArray?: VertexArray;
+  iconVertexArray?: VertexArray;
   pathMsaaVertexArray?: VertexArray;
   rangeVertexArrays?: Map<string, VertexArray>;
 }
@@ -240,6 +242,8 @@ export class GpuRenderer {
     circleCoreDraws: 0,
     circleEdgeDraws: 0,
     pointDepthResets: 0,
+    iconDrawCalls: 0,
+    iconFrameInstances: 0,
   };
   constructor(
     private canvas: HTMLCanvasElement,
@@ -339,6 +343,7 @@ export class GpuRenderer {
       'path-msaa',
       'path-msaa-reference',
       'image',
+      'icon',
     ] as const) {
       const layout = shaderLayouts(kind, this.backend === 'webgpu');
       const source = shaderSource(kind);
@@ -497,6 +502,7 @@ export class GpuRenderer {
     if (!this.meshes.delete(mesh)) return;
     mesh.vertexArray?.destroy();
     mesh.circleVertexArray?.destroy();
+    mesh.iconVertexArray?.destroy();
     mesh.pathMsaaVertexArray?.destroy();
     for (const vao of mesh.rangeVertexArrays?.values() ?? []) vao.destroy();
     mesh.rangeVertexArrays?.clear();
@@ -551,6 +557,7 @@ export class GpuRenderer {
     this.transform = transform.clone();
     this.frame++;
     this.stats.frames++;
+    this.stats.iconFrameInstances = 0;
     const [x, y] = transform.unproject(this.width / 2, this.height / 2),
       hx = Math.fround(x),
       hy = Math.fround(y);
@@ -644,6 +651,13 @@ export class GpuRenderer {
         entry.bindings.dashTexture = dash.texture;
         v.set([paint.width ?? 1, dash.period, dash.count, paint.arrow ? 1 : 0], 12);
         v.set([paint.arrow?.spacing ?? 32, paint.arrow?.size ?? 6], 44);
+      } else if (kind === 'icon' && paint.icon) {
+        const icon = paint.icon;
+        v.set([...icon.size, Math.cos(icon.angle), Math.sin(icon.angle)], 12);
+        v.set([...icon.anchor, ...icon.offset], 16);
+        v.set([1 / icon.textureSize[0], 1 / icon.textureSize[1]], 20);
+        v[44] = icon.tint ? 1 : 0;
+        if (uv) v.set(uv, 56);
       } else if (kind === 'image') {
         v[12] = paint.color[3];
         if (rect) v.set(rect, 16);
@@ -654,6 +668,57 @@ export class GpuRenderer {
       this.stats.uniformWrites++;
     }
     return entry;
+  }
+  /** Image symbols reuse the original point/LOD buffer, with no per-view point upload. */
+  drawPointIcons(mesh: GpuMesh, icon: PointIcon): void {
+    if (!this.pass || !this.meshes.has(mesh) || mesh.kind !== 'point' || icon.color[3] <= 0) return;
+    this.flushCircles();
+    this.pointGroup = null;
+    this.pass.setParameters({ scissorRect: [0, 0, this.canvas.width, this.canvas.height] });
+    this.fullScissor = true;
+    const entry = this.imageTexture(icon.asset.image, true);
+    if (!entry.smoothing) {
+      entry.texture.setSampler(this.linear);
+      entry.smoothing = true;
+    }
+    const [x, y, w, h] = icon.rect,
+      iw = icon.asset.width,
+      ih = icon.asset.height;
+    const style = this.style(
+      'icon',
+      {
+        color: icon.color,
+        icon: {
+          size: icon.size,
+          anchor: icon.anchor,
+          offset: icon.offset,
+          angle: icon.angle,
+          tint: !!icon.tint,
+          textureSize: [iw, ih],
+        },
+      },
+      undefined,
+      icon.rect.join(','),
+      [x / iw, y / ih, (x + w) / iw, (y + h) / ih],
+    );
+    let bindings = style.images.get(entry.texture);
+    if (!bindings) {
+      bindings = {
+        emapUniforms: style.buffer,
+        imageTexture: entry.texture,
+        ...(this.backend === 'webgpu' ? { imageSampler: this.linear } : {}),
+      };
+      style.images.set(entry.texture, bindings);
+    }
+    mesh.iconVertexArray ??= this.vertexArray('icon', mesh.buffer);
+    this.pass.setPipeline(this.pipelines.get('icon')!.pipeline);
+    this.pass.setBindings(bindings, { _bindGroupCacheKeys: { 0: bindings } });
+    this.pass.setVertexArray(mesh.iconVertexArray);
+    if (this.pass.draw({ vertexCount: 6, instanceCount: mesh.count, isInstanced: true })) {
+      this.stats.drawCalls++;
+      this.stats.iconDrawCalls++;
+      this.stats.iconFrameInstances += mesh.count;
+    }
   }
   drawMesh(mesh: GpuMesh, paint: MeshPaint, ranges?: readonly PathDrawRange[] | null): void {
     if (ranges && mesh.kind !== 'path') throw new Error('Instance ranges require a path mesh.');
@@ -1014,6 +1079,11 @@ export class GpuRenderer {
     this.pass.end();
     this.pass = null;
     this.device.submit();
+    for (const [key, entry] of this.styles)
+      if (key.startsWith('icon:') && entry.frame < this.frame) {
+        entry.buffer.destroy();
+        this.styles.delete(key);
+      }
     if (this.timedFrame && this.query) {
       const epoch = this.timingEpoch;
       this.timedFrame = false;
@@ -1048,7 +1118,11 @@ export class GpuRenderer {
     this.images.delete(image);
     this.destroyImage(entry);
     for (const [key, style] of this.styles) {
-      if (style.images.delete(entry.texture) && key.startsWith('image:') && !style.images.size) {
+      if (
+        style.images.delete(entry.texture) &&
+        (key.startsWith('image:') || key.startsWith('icon:')) &&
+        !style.images.size
+      ) {
         style.buffer.destroy();
         this.styles.delete(key);
       }
@@ -1062,6 +1136,13 @@ export class GpuRenderer {
     for (const style of this.styles.values()) style.images.clear();
   }
   private destroyImage(entry: ImageEntry): void {
+    // Dropped icon textures must not remain reachable from old bind-group maps.
+    for (const [key, style] of this.styles ?? []) {
+      if (key.startsWith('icon:') && style.images.delete(entry.texture) && !style.images.size) {
+        style.buffer.destroy();
+        this.styles.delete(key);
+      }
+    }
     entry.texture.destroy();
     this.stats.liveTextureBytes -= entry.texture.width * entry.texture.height * 4;
     this.stats.liveTextures--;
