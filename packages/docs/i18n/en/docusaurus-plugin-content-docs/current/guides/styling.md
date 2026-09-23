@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -244,3 +244,53 @@ recolors its alpha mask. PNG/JPEG/WebP and self-contained SVG images are support
 The luma backends reuse resident point buffers; the default Canvas painter also supports this API.
 Loading failures keep ordinary points and report the error. No per-feature icon mapping,
 alpha-pixel picking or new icon clustering policy is introduced.
+## Unified attached symbol settings
+
+Use `symbol.layout / symbol.paint` on the existing parent layer. Property names are inspired by
+MapLibre; settings are mapped to the existing label/icon renderer without adding a layer-tree node
+or replacing luma, MSDF, HarfBuzz or point LOD. Layer types remain circle/line/fill.
+
+```ts
+map.addLayer({
+  id: 'poi', type: 'circle', source: 'poi',
+  paint: { 'circle-radius': 4, 'circle-color': '#2563eb' },
+  symbol: {
+    images: { marker: { url: '/images/marker.png', size: [24, 32] } },
+    layout: {
+      'icon-image': 'marker', 'icon-size': 1, 'icon-anchor': 'bottom',
+      'text-field': ['get', 'name'], 'text-size': 14,
+      'text-offset': [0, 1.2], 'text-allow-overlap': false,
+    },
+    paint: {
+      'icon-opacity': 1, 'text-color': '#243447',
+      'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+    },
+  },
+});
+map.setSymbolLayoutProperty('poi', 'text-size', 20);
+map.setSymbolPaintProperty('poi', 'icon-opacity', 0.6);
+map.setSymbolLayoutProperty('poi', 'text-offset', null);
+// map.setLayerSymbol('poi', null); // Remove attached text/icons, keeping the parent
+```
+
+`text-offset` uses ems and is converted using text-size. `icon-size` multiplies the image definition's
+explicit reference CSS size: a height preserving aspect ratio, or [width,height]. It does not infer
+logical size from the image file. Icon offset is scaled then rotated; icon-anchor uses nine named
+anchors. Nested visibility affects attached symbols only; parent visibility still controls the layer.
+
+Supported properties are text-field/size/font/offset/allow-overlap/padding,
+icon-image/size/anchor/rotate/offset, text-color/halo-color/halo-width and icon-opacity/color.
+Text-font accepts one family/face name in an array. QGIS-style advanced labeling controls live in
+`symbol.labeling`: placement, priority, maxLabels, minScale, maxScale, fontUrl, fontWeight,
+fontStyle and enabled. The small icon-only compatibility block is `symbol.icon` with enabled
+and a custom normalized anchor; ordinary anchors still use `icon-anchor`.
+
+This is a settings subset, not a complete MapLibre Style document. No sprite/glyph service,
+transitions or data-driven sizes/colors/icon selection is added. Existing placement and alpha-mask
+icon coloring remain unchanged. Unsupported keys fail explicitly without modifying prior state.
+Whole-object replacement uses setLayerSymbol; removeLayerSymbol is equivalent to
+setLayerSymbol(id, null). Null/undefined in a property setter removes that property and restores its default.
+
+Legacy label/icon APIs remain supported. When symbol exists it is authoritative; legacy setters
+update its corresponding channel and preserve the other one. getLayer returns a cloned symbol
+and the materialized label/icon compatibility views.

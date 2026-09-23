@@ -1,3 +1,4 @@
+import type { SymbolStyle, SymbolLayout, SymbolPaint } from './symbol';
 import type { IconOptions } from './icon';
 import type { LabelOptions } from './label';
 import { Context } from 'cordis';
@@ -349,6 +350,48 @@ export class Emap extends EventDispatcher {
    */
   public setLayerIcon(id: string, options: IconOptions | null): void {
     this.ctx.layers.setLayerIcon(id, options);
+  }
+
+  /** Replace the existing layer's attached symbol, without adding a layer/tree node.
+   * @example
+   * map.setLayerSymbol('poi', { layout: { 'text-field': ['get', 'name'], 'text-size': 14 }, paint: { 'text-color': '#243447' } });
+   * map.setLayerSymbol('poi', null);
+   */
+  public setLayerSymbol(id: string, symbol: SymbolStyle | null): void {
+    this.ctx.layers.setLayerSymbol(id, symbol);
+  }
+
+  /** Remove attached text/icon symbol settings while keeping the parent layer.
+   * Equivalent to setLayerSymbol(id, null), but more explicit at call sites.
+   * @example
+   * map.removeLayerSymbol('poi');
+   */
+  public removeLayerSymbol(id: string): void {
+    this.ctx.layers.removeLayerSymbol(id);
+  }
+  /** Set one attached layout property; null restores the emap default.
+   * @example
+   * map.setSymbolLayoutProperty('poi', 'text-size', 18);
+   * map.setSymbolLayoutProperty('poi', 'text-offset', [0, 1.2]);
+   */
+  public setSymbolLayoutProperty<K extends keyof SymbolLayout>(
+    id: string,
+    name: K,
+    value: SymbolLayout[K] | null,
+  ): void {
+    this.ctx.layers.setSymbolLayoutProperty(id, name, value);
+  }
+  /** Set one attached paint property, independently of the parent geometry paint.
+   * @example
+   * map.setSymbolPaintProperty('poi', 'text-color', '#b42318');
+   * map.setSymbolPaintProperty('poi', 'icon-opacity', 0.8);
+   */
+  public setSymbolPaintProperty<K extends keyof SymbolPaint>(
+    id: string,
+    name: K,
+    value: SymbolPaint[K] | null,
+  ): void {
+    this.ctx.layers.setSymbolPaintProperty(id, name, value);
   }
 
   public setLayerLabel(id: string, options: LabelOptions | null): void {

@@ -1,5 +1,10 @@
 # luma.gl v10 集成状态
 
+## 附属 Symbol 样式设置
+
+现有图层支持 `symbol.layout / symbol.paint`，只在配置边界映射到既有 label/icon。
+不增加图层树节点，不替换 GPU/MSDF/LOD 实现。详见 [Symbol 映射](luma-symbol-style.md)。
+
 ## 点图片符号
 
 现有点图层通过 `icon` / `setLayerIcon` 使用图片，不添加图层树节点。

@@ -1,3 +1,4 @@
+import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from './icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
 import { installLabelControls } from './label-controls';
@@ -436,6 +437,9 @@ async function start() {
     get labelStats(){return renderers.labelStats;},
     get labelPlacements(){return renderers.labelPlacements;},
     get layers(){return renderers.getLayers();},
+    setLayerSymbol:(id:string,symbol:SymbolStyle|null)=>renderers.setLayerSymbol(id,symbol),
+    setSymbolLayoutProperty:<K extends keyof SymbolLayout>(id:string,name:K,value:SymbolLayout[K]|null)=>renderers.setSymbolLayoutProperty(id,name,value),
+    setSymbolPaintProperty:<K extends keyof SymbolPaint>(id:string,name:K,value:SymbolPaint[K]|null)=>renderers.setSymbolPaintProperty(id,name,value),
     setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
     setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
     get iconStats(){return renderers.iconStats;},

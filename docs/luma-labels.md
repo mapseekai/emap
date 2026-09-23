@@ -1,5 +1,9 @@
 # 点、线、面绑定式文字注记
 
+推荐新代码使用父图层的 `symbol.layout / symbol.paint`；以下原生接口仍然兼容。
+参见 [附属 Symbol 样式映射](luma-symbol-style.md)。
+
+
 ## 接入与所有权
 
 注记保存在现有 `LayerSpecification.label` 中；图层类型仍只有 `circle`、`line`、`fill`。

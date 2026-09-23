@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add an attached `symbol.layout` / `symbol.paint` settings mapper for existing point,
+  line and polygon layers, with QGIS-inspired `symbol.labeling` controls, explicit named
+  image reference sizes, em/factor/anchor conversions, atomic property setters and
+  synchronized legacy label/icon APIs. Add `removeLayerSymbol()` as the explicit alias
+  of `setLayerSymbol(id, null)`. Keep luma/MSDF/HarfBuzz/LOD/rendering unchanged and
+  document the supported MapLibre-inspired subset rather than claiming full Style Spec support.
+
 - Add image icon symbols to existing point layers via `CircleLayerSpecification.icon`
   and `Emap.setLayerIcon`, without new layer-tree entries. Reuse point/LOD GPU buffers
   in WebGL2/WebGPU with shared sprite textures, anchor/rotation/offset, tint and opacity;

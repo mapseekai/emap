@@ -459,4 +459,12 @@ export { inspectContext, inspectServices } from './runtime/context/inspection';
 export { settleContext } from './runtime/context/settle';
 
 export type { IconOptions } from './engine/map/icon';
+export type {
+  SymbolStyle,
+  SymbolLayout,
+  SymbolPaint,
+  SymbolImage,
+  SymbolLabeling,
+  SymbolIconSettings,
+} from './engine/map/symbol';
 export type { LabelOptions } from './engine/map/label';

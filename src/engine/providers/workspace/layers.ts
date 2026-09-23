@@ -1,3 +1,10 @@
+import {
+  materializeSymbolLayer,
+  replaceLayerSymbol,
+  changeSymbolProperty,
+} from '../../map/symbol-layer';
+import { withSymbolIcon, withSymbolLabel } from '../../map/symbol-compat';
+import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../map/symbol';
 import { cloneIconOptions, type IconOptions } from '../../map/icon';
 import { cloneLabelOptions, validateLabelOptions, type LabelOptions } from '../../map/label';
 import type { LayerChangeReason } from '../../core/event-map';
@@ -111,8 +118,10 @@ export class LayerServiceImpl {
     if (this._layers.some((l) => l.id === layer.id)) {
       throw new Error(`Layer "${layer.id}" already exists`);
     }
-    if (layer.label !== undefined) validateLabelOptions(layer.label);
+    // Validate original metadata before cloning; cloning must never sanitize invalid LOD input.
     assertValidPointLod(layer);
+    if (layer.symbol !== undefined) layer = materializeSymbolLayer(layer);
+    if (layer.label !== undefined) validateLabelOptions(layer.label);
     assertValidPaint(layer.id, layer.paint);
     assertValidFilter(layer.id, layer.filter);
     if (before) {
@@ -181,7 +190,42 @@ export class LayerServiceImpl {
     }
   }
 
-  /** Replace only the parent layer's label configuration. null disables/removes labels. */
+  public setLayerSymbol(id: string, symbol: SymbolStyle | null): void {
+    this._updateSymbolLayer(id, (layer) => replaceLayerSymbol(layer, symbol));
+  }
+
+  public removeLayerSymbol(id: string): void {
+    this.setLayerSymbol(id, null);
+  }
+  public setSymbolLayoutProperty<K extends keyof SymbolLayout>(
+    id: string,
+    name: K,
+    value: SymbolLayout[K] | null,
+  ): void {
+    this._updateSymbolLayer(id, (layer) => changeSymbolProperty(layer, 'layout', name, value));
+  }
+  public setSymbolPaintProperty<K extends keyof SymbolPaint>(
+    id: string,
+    name: K,
+    value: SymbolPaint[K] | null,
+  ): void {
+    this._updateSymbolLayer(id, (layer) => changeSymbolProperty(layer, 'paint', name, value));
+  }
+  private _updateSymbolLayer(
+    id: string,
+    update: (layer: LayerSpecification) => LayerSpecification,
+  ): void {
+    const effective = this._layers.length ? this._layers : this._getEffectiveLayers();
+    const index = effective.findIndex((layer) => layer.id === id);
+    if (index < 0) throw new Error(`Layer "${id}" not found`);
+    const next = update(effective[index]); // Validate all mappings before materializing defaults or changing state.
+    if (!this._layers.length) this._layers = effective.map(cloneLayerSpecification);
+    this._layers[index] = next;
+    this.deps.signals.requestRender();
+    this._fireLayerChange('effective', id);
+  }
+
+  /** Legacy point-icon configuration; mapped layers retain their symbol settings. */
   public setLayerIcon(id: string, options: IconOptions | null): void {
     const icon = options === null ? undefined : cloneIconOptions(options);
     const effective = this._layers.length ? this._layers : this._getEffectiveLayers();
@@ -192,7 +236,9 @@ export class LayerServiceImpl {
     if (!this._layers.length) this._layers = effective.map(cloneLayerSpecification);
     const layer = this._layers[index];
     if (layer.type !== 'circle') return;
-    layer.icon = icon;
+    if (layer.symbol)
+      this._layers[index] = replaceLayerSymbol(layer, withSymbolIcon(layer.symbol, icon ?? null));
+    else layer.icon = icon;
     this.deps.signals.requestRender();
     this._fireLayerChange('effective', id);
   }
@@ -207,7 +253,10 @@ export class LayerServiceImpl {
       this._layers = effective.map(cloneLayerSpecification);
     }
     if (index < 0) throw new Error(`Layer "${id}" not found`);
-    this._layers[index].label = label;
+    const layer = this._layers[index];
+    if (layer.symbol)
+      this._layers[index] = replaceLayerSymbol(layer, withSymbolLabel(layer.symbol, label ?? null));
+    else layer.label = label;
     this.deps.signals.requestRender();
     this._fireLayerChange('effective', id);
   }

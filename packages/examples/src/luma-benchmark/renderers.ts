@@ -1,3 +1,6 @@
+import { replaceLayerSymbol, changeSymbolProperty } from '../../../../src/engine/map/symbol-layer';
+import { withSymbolIcon, withSymbolLabel } from '../../../../src/engine/map/symbol-compat';
+import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { PointIconImages, type PointIcon } from '../../../../src/engine/rendering/icons/images';
 import { cloneIconOptions, type IconOptions } from '../../../../src/engine/map/icon';
 import { MsdfLabelAtlas } from '../../../../src/integrations/msdf/atlas';
@@ -33,14 +36,32 @@ const CACHE_BYTES=256*1024**2;
 interface Entry {display:DisplayChunk;mesh:GpuMesh|null;used:number;rangeIndex?:PathRangeIndex}
 interface FrameEntry {chunk:SpatialChunk;raw?:Entry;filtered?:ScreenPathEntry}
 export class BenchmarkRenderers {
+ private styleRevision=0;
  private iconImages:PointIconImages|null=null;
  private frameIcons=new Map<number,PointIcon>();
  get iconStats(){return {...(this.iconImages?.stats??{pending:0,images:0,imageBytes:0,loads:0,errors:[]}),drawCalls:this.gpu?.stats.iconDrawCalls??0,instances:this.gpu?.stats.iconFrameInstances??0};}
  async settleIcons():Promise<void>{this.syncIcons();await this.iconImages?.settled();this.syncIcons();}
+ setLayerSymbol(id:string,symbol:SymbolStyle|null):void {
+  this.updateSymbol(id,spec=>replaceLayerSymbol(spec,symbol));
+ }
+ removeLayerSymbol(id:string):void {this.setLayerSymbol(id,null);}
+ setSymbolLayoutProperty<K extends keyof SymbolLayout>(id:string,name:K,value:SymbolLayout[K]|null):void {
+  this.updateSymbol(id,spec=>changeSymbolProperty(spec,'layout',name,value));
+ }
+ setSymbolPaintProperty<K extends keyof SymbolPaint>(id:string,name:K,value:SymbolPaint[K]|null):void {
+  this.updateSymbol(id,spec=>changeSymbolProperty(spec,'paint',name,value));
+ }
+ private updateSymbol(id:string,change:(spec:LayerSpecification)=>LayerSpecification):void {
+  const index=this.layerSpecs.findIndex(l=>l.id===id);if(index<0)throw new Error(`Unknown vector layer: ${id}`);
+  const next=change(this.layerSpecs[index]);this.layerSpecs[index]=next;this.labelError=null;this.styleRevision++;
+  this.iconImages?.retry();this.syncIcons();this.frameEpoch++;this.signature='';
+  this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+ }
  setLayerIcon(id:string,options:IconOptions|null):void {
   const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
   if(spec.type!=='circle')throw new Error('Icons require an existing point layer.');
-  spec.icon=options===null?undefined:cloneIconOptions(options);
+  if(spec.symbol){this.setLayerSymbol(id,withSymbolIcon(spec.symbol,options));return;}
+  spec.icon=options===null?undefined:cloneIconOptions(options);this.styleRevision++;
   this.iconImages?.retry();this.syncIcons();this.frameEpoch++;this.signature='';
   this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
  }
@@ -65,15 +86,16 @@ export class BenchmarkRenderers {
  }
  setLayerLabel(id:string,options:LabelOptions|null):void {
   const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
-  spec.label=options===null?undefined:cloneLabelOptions(options);this.labelError=null;
+  if(spec.symbol){this.setLayerSymbol(id,withSymbolLabel(spec.symbol,options));return;}
+  spec.label=options===null?undefined:cloneLabelOptions(options);this.labelError=null;this.styleRevision++;
   this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
  }
  setLayerVisibility(id:string,visibility:'visible'|'none'):void {
   if(!['visible','none'].includes(visibility))throw new Error('Invalid layer visibility');
   const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
-  spec.layout={...spec.layout,visibility};this.syncIcons();this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+  spec.layout={...spec.layout,visibility};this.styleRevision++;this.syncIcons();this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
  }
- get labelControlRevision(){return `${this.generation}:${this.scene?.dataset.attributeVersion??0}`;}
+ get labelControlRevision(){return `${this.generation}:${this.scene?.dataset.attributeVersion??0}:${this.styleRevision}`;}
  get labelPlacements(){return this.labelManager?.placements??[];}
  get labelStats(){return {...this.labelManager?.stats,error:this.labelError,gpu:this.gpu?.textStats};}
  async settleLabels():Promise<void>{await this.labelManager?.settled();}

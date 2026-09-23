@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -236,3 +236,51 @@ map.setLayerIcon('city-points', null); // 恢复普通点符号。
 支持 PNG/JPEG/WebP、自包含 SVG 和本地图片；图标加载失败保留普通点并报告错误。
 luma 后端复用原点/LOD 缓冲，默认 Canvas 也支持该配置。
 此版本没有逐要素字段映射、alpha 像素拾取或新的带数量聚类规则。
+## 统一的附属 Symbol 样式
+
+推荐将文字和图标配置放入父图层的 `symbol.layout / symbol.paint`。属性名借鉴 MapLibre，
+底层只映射到现有 label/icon，不新增图层树节点，不切换渲染器。`type` 仍是 circle/line/fill。
+
+```ts
+map.addLayer({
+  id: 'poi', type: 'circle', source: 'poi',
+  paint: { 'circle-radius': 4, 'circle-color': '#2563eb' },
+  symbol: {
+    images: { marker: { url: '/images/marker.png', size: [24, 32] } },
+    layout: {
+      'icon-image': 'marker', 'icon-size': 1, 'icon-anchor': 'bottom',
+      'text-field': ['get', 'name'], 'text-size': 14,
+      'text-offset': [0, 1.2], 'text-allow-overlap': false,
+    },
+    paint: {
+      'icon-opacity': 1, 'text-color': '#243447',
+      'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+    },
+  },
+});
+map.setSymbolLayoutProperty('poi', 'text-size', 20);
+map.setSymbolPaintProperty('poi', 'icon-opacity', 0.6);
+map.setSymbolLayoutProperty('poi', 'text-offset', null);
+map.removeLayerSymbol('poi'); // 同时去掉附属文字/图标，保留父图层
+// map.setLayerSymbol('poi', null); // 等价写法
+```
+
+`text-offset` 单位为 em，随 text-size 换算为像素；`icon-size` 是 images 中 size 的倍率。
+图片 size 是显式基准 CSS 尺寸，不是自动读取的源图片尺寸：数字表示等比高度，数组表示宽高。
+icon-offset 先乘倍率再随 icon-rotate 旋转，icon-anchor 使用 center/bottom/top-left 等九种名称。
+`symbol.layout.visibility` 仅开关附属符号，父图层 visibility 仍控制整个图层。
+
+支持 text-field/size/font/offset/allow-overlap/padding，icon-image/size/anchor/rotate/offset，
+text-color/halo-color/halo-width 和 icon-opacity/color。text-font 当前为单一字体名称数组。
+QGIS 风格的高级文字注记设置放在 `symbol.labeling`：placement、priority、maxLabels、
+minScale、maxScale、fontUrl、fontWeight、fontStyle、enabled。图标仅有的原生兼容项放在
+`symbol.icon`：enabled 和自定义归一化 anchor；常规锚点继续使用 `icon-anchor`。
+
+这是属性映射子集，不是完整 MapLibre Style 文档；没有完整 sprite/glyphs 服务、样式过渡、
+逐要素颜色/字号/图标表达式。原有 placement、点 LOD、图片 alpha 蒙版与 MSDF 实现保持不变。
+未知或暂不支持的属性明确报错。原始配置在校验失败时保持不变。
+`setLayerSymbol` 替换整个对象；`removeLayerSymbol` 与 `setLayerSymbol(id, null)` 等价。
+单属性接口的 null/undefined 删除该值并恢复默认。
+
+旧 label/icon 接口继续工作；symbol 存在时是权威配置，旧 setter 会同步更新对应 symbol 通道，
+保留另一通道。`getLayer()` 会返回 symbol 深拷贝及已映射的 label/icon 兼容视图。

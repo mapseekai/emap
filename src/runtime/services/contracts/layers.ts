@@ -1,3 +1,4 @@
+import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../engine/map/symbol';
 import type { IconOptions } from '../../../engine/map/icon';
 import type { LabelOptions } from '../../../engine/map/label';
 import type { LayerChangeReason } from '../../../engine/core/event-map';
@@ -26,6 +27,18 @@ export interface LayerContract {
   getRenderedLayers(): readonly LayerSpecification[];
   setLayerVisibility(id: string, visibility: 'visible' | 'none'): void;
   setPaintProperty(id: string, name: string, value: unknown): void;
+  setLayerSymbol(id: string, symbol: SymbolStyle | null): void;
+  removeLayerSymbol(id: string): void;
+  setSymbolLayoutProperty<K extends keyof SymbolLayout>(
+    id: string,
+    name: K,
+    value: SymbolLayout[K] | null,
+  ): void;
+  setSymbolPaintProperty<K extends keyof SymbolPaint>(
+    id: string,
+    name: K,
+    value: SymbolPaint[K] | null,
+  ): void;
   setLayerIcon(id: string, options: IconOptions | null): void;
   setLayerLabel(id: string, options: LabelOptions | null): void;
   setFilter(id: string, expression: StyleExpression | null): void;

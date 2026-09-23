@@ -1,3 +1,4 @@
+import { cloneSymbolStyle, type SymbolStyle } from './symbol';
 import { cloneIconOptions, type IconOptions } from './icon';
 import { cloneLabelOptions, type LabelOptions } from './label';
 import type {
@@ -55,6 +56,8 @@ export interface LayerLayout {
 }
 
 interface LayerSpecificationBase {
+  /** Preferred attached symbol settings. When present, label/icon are materialized compatibility views. */
+  symbol?: SymbolStyle;
   /** Attached feature labels; not a standalone render/tree layer. */
   label?: LabelOptions;
   id: string;
@@ -112,6 +115,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'line':
       return {
         ...layer,
+        ...(layer.symbol !== undefined ? { symbol: cloneSymbolStyle(layer.symbol) } : {}),
         ...(layer.label ? { label: cloneLabelOptions(layer.label) } : {}),
         paint: layer.paint
           ? {
@@ -127,6 +131,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'circle':
       return {
         ...layer,
+        ...(layer.symbol !== undefined ? { symbol: cloneSymbolStyle(layer.symbol) } : {}),
         ...(layer.icon && { icon: cloneIconOptions(layer.icon) }),
         ...(layer.label ? { label: cloneLabelOptions(layer.label) } : {}),
         ...(layer.pointLod && { pointLod: { ...layer.pointLod } }),

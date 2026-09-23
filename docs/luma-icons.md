@@ -1,5 +1,9 @@
 # 现有点图层的图片符号
 
+推荐新代码使用父图层的 `symbol.layout / symbol.paint`；以下原生接口仍然兼容。
+参见 [附属 Symbol 样式映射](luma-symbol-style.md)。
+
+
 ## 配置与所有权
 
 图标保存在 `CircleLayerSpecification.icon`，不新增 icon 图层、数据源或图层树节点。

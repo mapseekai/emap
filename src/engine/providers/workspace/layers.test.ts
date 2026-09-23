@@ -66,3 +66,103 @@ describe('icons belong to existing point layers', () => {
     expect(service.getLayer('p')).toHaveProperty('icon.url', '/pin.png');
   });
 });
+
+describe('attached symbol style API', () => {
+  function setup() {
+    return new LayerServiceImpl({
+      document: { _sources: new Map([['s', {}]]), layers: {} },
+      events: new EventDispatcher(),
+      signals: { requestRender: vi.fn() },
+    } as any);
+  }
+  it('accepts symbol on addLayer and adjusts independent layout/paint properties without changing tree entries', () => {
+    const service = setup();
+    service.addLayer({
+      id: 'p',
+      source: 's',
+      type: 'circle',
+      paint: { 'circle-radius': 4 },
+      symbol: {
+        images: { marker: { url: '/pin.png', size: [24, 32] } },
+        layout: {
+          'icon-image': 'marker',
+          'icon-size': 1,
+          'text-field': ['get', 'name'],
+          'text-size': 14,
+          'text-offset': [0, 1.2],
+        },
+      },
+    });
+    service.setSymbolLayoutProperty('p', 'text-size', 20);
+    service.setSymbolPaintProperty('p', 'icon-opacity', 0.5);
+    expect(service.getLayer('p')!.label!.offset).toEqual([0, 24]);
+    expect((service.getLayer('p') as any).icon.opacity).toBe(0.5);
+    expect(service.getLayer('p')!.paint).toEqual({ 'circle-radius': 4 });
+    expect(service.getLayers().map((l) => l.id)).toEqual(['p']);
+    service.setLayerLabel('p', { field: 'title', fontSize: 18 });
+    expect(service.getLayer('p')!.symbol!.layout!['text-field']).toEqual(['get', 'title']);
+    expect((service.getLayer('p') as any).icon.opacity).toBe(0.5);
+    service.setLayerIcon('p', { url: '/camera.png', size: 30 });
+    expect(service.getLayer('p')!.label!.field).toBe('title');
+    service.removeLayerSymbol('p');
+    expect(service.getLayer('p')!.symbol).toBeUndefined();
+    expect(service.getLayers()).toHaveLength(1);
+  });
+  it('keeps state unchanged on bad mappings, typo, wrong section and unresolved image names', () => {
+    const service = setup();
+    service.addLayer({
+      id: 'p',
+      source: 's',
+      type: 'circle',
+      symbol: { layout: { 'text-field': ['get', 'name'] } },
+    });
+    const before = service.getLayer('p');
+    expect(() => service.setSymbolLayoutProperty('p', 'icon-image', 'missing')).toThrow('missing');
+    expect(() => service.setSymbolPaintProperty('p', 'text-size' as any, 20)).toThrow('layout');
+    expect(() => service.setLayerSymbol('p', { layout: { 'text-size': NaN } })).toThrow();
+    expect(service.getLayer('p')).toEqual(before);
+    expect(() =>
+      service.addLayer({
+        id: 'bad',
+        source: 's',
+        type: 'fill',
+        symbol: { images: { i: { url: '/pin.png', size: 32 } }, layout: { 'icon-image': 'i' } },
+      }),
+    ).toThrow('point');
+    expect(service.getLayers()).toHaveLength(1);
+  });
+  it('copies symbol definitions on writes and reads so no caller can mutate stored settings', () => {
+    const service = setup();
+    const symbol: any = {
+      images: { i: { url: '/x.png', size: [20, 30] } },
+      layout: { 'icon-image': 'i', 'text-field': ['match', ['get', 'kind'], 1, 'A', 'B'] },
+    };
+    service.addLayer({ id: 'p', source: 's', type: 'circle', symbol });
+    symbol.images.i.size[0] = 400;
+    symbol.layout['text-field'][1][1] = 'broken';
+    const copy = service.getLayer('p')!;
+    expect(copy.symbol!.images!.i.size).toEqual([20, 30]);
+    (copy.symbol!.images!.i.size as number[])[0] = 500;
+    expect((service.getLayer('p') as any).icon.size).toEqual([20, 30]);
+    expect((service.getLayer('p')!.symbol!.layout!['text-field'] as any[])[1][1]).toBe('kind');
+  });
+});
+
+describe('symbol mapping keeps preexisting validation strict', () => {
+  it('does not normalize invalid pointLod values into valid empty objects', () => {
+    const service = new LayerServiceImpl({
+      document: { _sources: new Map([['s', {}]]), layers: {} },
+      events: new EventDispatcher(),
+      signals: { requestRender: vi.fn() },
+    } as any);
+    for (const pointLod of [true, null, 3, [], { cellSize: 0 }])
+      for (const symbol of [undefined, {}])
+        expect(() =>
+          service.addLayer({ id: 'bad', source: 's', type: 'circle', pointLod, symbol } as any),
+        ).toThrow('pointLod');
+    expect(() =>
+      service.addLayer({ id: 'bad', source: 's', type: 'circle', symbol: null } as any),
+    ).toThrow('symbol');
+    expect(service.getLayers()).toHaveLength(0);
+  });
+});
