@@ -691,6 +691,16 @@ export default defineConfig({
     emptyOutDir: true,
     outDir: 'dist',
     rollupOptions: {
+      output: {
+        // WebGLDevice and the WebGL barrel depend on each other upstream.
+        // Keep that package together without pulling the lazy WebGPU backend in.
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          if (id.replaceAll('\\', '/').includes('/node_modules/@luma.gl/webgl/')) {
+            return 'luma-webgl';
+          }
+        },
+      },
       input: {
         index: htmlInput('./index.html'),
         ...Object.fromEntries(
