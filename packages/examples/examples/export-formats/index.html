@@ -38,6 +38,8 @@
     </details>
 
     <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleArrow, loadExampleRuntime, } from '/src/example-runtime.ts';
 import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
@@ -54,7 +56,7 @@ const extensions = {
     geoparquet: '.parquet',
     geoarrow: '.arrow',
 };
-const map = await Emap.create({ container: 'map' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
 const releaseFormat = installFlatGeobufFormat(emap, map.formats);
 window.addEventListener('pagehide', releaseFormat, { once: true });
 await map.ctx.plugin(emapArrow.arrowFormatsPlugin);

@@ -1,3 +1,4 @@
+import { getExampleGpuBackend, installExampleRendererToolbar, navigateExampleRenderer } from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from '../luma-benchmark/icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
@@ -36,7 +37,8 @@ const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
 };
 const stage = el('stage'),
   glCanvas = el<HTMLCanvasElement>('webgl');
-const backend = new URLSearchParams(location.search).get('gpu') === 'webgpu' ? 'webgpu' : 'webgl';
+installExampleRendererToolbar();
+const backend = getExampleGpuBackend();
 el<HTMLSelectElement>('backend').value = backend;
 const lifetime = new AbortController(),
   events = { signal: lifetime.signal };
@@ -563,9 +565,7 @@ el('clear').addEventListener(
 el('backend').addEventListener(
   'change',
   () => {
-    const url = new URL(location.href);
-    url.searchParams.set('gpu', el<HTMLSelectElement>('backend').value);
-    location.assign(url);
+    navigateExampleRenderer(el<HTMLSelectElement>('backend').value === 'webgpu' ? 'webgpu' : 'webgl2');
   },
   events,
 );

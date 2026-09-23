@@ -1,3 +1,4 @@
+import { getExampleRenderer, installExampleRendererToolbar, syncExampleRendererToolbar } from '../renderer-choice';
 import { rasterFileSelections, type RasterFileSelection } from './files';
 import { loadExampleRuntime } from '../example-runtime';
 import { openGeoTIFF } from '../../../../src/integrations/geotiff/source';
@@ -19,10 +20,12 @@ import { NativeRasterLayer } from './native-layer';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const host = $('map'),
   backendInput = $<HTMLSelectElement>('backend');
-const initial = new URLSearchParams(location.search).get('gpu');
-backendInput.value = initial === 'webgpu' ? 'webgpu' : initial === 'canvas' ? 'canvas' : 'webgl';
+installExampleRendererToolbar();
+const initial = getExampleRenderer();
+backendInput.value = initial === 'webgpu' ? 'webgpu' : initial === 'canvas2d' ? 'canvas' : 'webgl';
 const emap = await loadExampleRuntime({ mode: 'local' });
-const map = await emap.Emap.create({ container: 'map', preset: 'viewer' });
+// This map supplies the affine view/interaction host; native GPU raster owns a separate canvas.
+const map = await emap.Emap.create({ container: 'map', preset: 'viewer', renderer: 'canvas2d' });
 const fiber = map.ctx.plugin(rasterPlugin({ cacheBytes: 32 * 1024 ** 2, concurrency: 2 }));
 await fiber.await();
 let file: File | undefined,
@@ -185,6 +188,7 @@ async function load(nextFile: File, nextOverview?: File, fit = true): Promise<vo
   file = nextFile;
   overview = nextOverview;
   backend = backendInput.value;
+  syncExampleRendererToolbar(backend === 'canvas' ? 'canvas2d' : backend === 'webgpu' ? 'webgpu' : 'webgl2');
   loadingStarted = performance.now();
   firstReadyMs = 0;
   openMs = 0;
@@ -357,6 +361,7 @@ $('native').onclick = () => {
     });
 };
 backendInput.onchange = () => {
+  syncExampleRendererToolbar(backendInput.value === 'canvas' ? 'canvas2d' : backendInput.value === 'webgpu' ? 'webgpu' : 'webgl2');
   if (file) void load(file, overview, false);
 };
 $<HTMLSelectElement>('stretch').onchange = () =>

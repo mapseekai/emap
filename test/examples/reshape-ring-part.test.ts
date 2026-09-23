@@ -1,3 +1,4 @@
+import { getExampleRenderer } from '../../packages/examples/src/renderer-choice';
 // @vitest-environment jsdom
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -85,12 +86,19 @@ async function executeExample() {
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
+      'getExampleRenderer',
       'installExampleMapUi',
       'autoLoadExampleFixtures',
       'loadExampleRuntime',
       'document',
       script,
-    )(installExampleMapUi, autoLoadExampleFixtures, loadExampleRuntime, document);
+    )(
+      getExampleRenderer,
+      installExampleMapUi,
+      autoLoadExampleFixtures,
+      loadExampleRuntime,
+      document,
+    );
   } catch (error) {
     document.head.innerHTML = originalHead;
     document.body.innerHTML = originalBody;

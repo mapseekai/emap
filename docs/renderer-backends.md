@@ -50,10 +50,27 @@ CorePainter 新增可选 finishFrame/dispose/createLabelAtlas/clearGeometryCache
 
 ## 手工入口
 
-`pnpm examples:luma`，然后打开 `/mapseekai/emap/examples/mixed-data-viewer/` 或 `geotiff-viewer/`。
-新“地图渲染后端”下拉使用正式 Emap.create；通过 ?renderer=canvas2d / webgl2 / webgpu 选择。
-切换会重新加载页面，本地文件需重新授权/选择。原有 luma-benchmark、luma-raster、luma-25d
-保留为独立性能/功能回归页面，不用它们代替正式 API 验证。
+`pnpm examples:luma`，然后打开 `/mapseekai/emap/examples/` 中任一示例。
+全部示例页顶部都有 Canvas2D / WebGL2 / WebGPU 按钮，当前选择高亮，默认 WebGL2。
+正式地图通过 `renderer: getExampleRenderer()` 将 URL 选择明确传给 `Emap.create()`，
+包括共享 DuckDB 示例运行器、多实例 Cordis 检查器和重建地图的 Worker 示例；不修改库的全局构造器。
+
+按钮修改当前页的 `?renderer=canvas2d|webgl2|webgpu` 后重新加载，保留其他查询参数和 URL 锚点。
+不是运行时热切换：本地文件需要重新选择，未保存的编辑会丢失。点击已选中的按钮不重载。
+工具栏先于设备创建挂载，GPU 初始化失败后仍能点击 Canvas2D 重新打开正式示例。
+原来的 geotiff-viewer / mixed-data-viewer 侧栏下拉已经合并进统一顶部按钮，不再有两份设置。
+
+专用实验继续使用现有渲染管线，不用它们代替正式 API 验证：
+- luma-benchmark 支持三种画面，保留原 A/B 切换并同步顶部状态。
+- luma-raster 支持三种栅格绘制路径；Canvas2D 是正式栅格流程，GPU 是原生数值纹理路径。
+  用于相机/交互的辅助 Emap 固定为 Canvas2D，不把隐藏的 GPU 主画布冒充 Canvas2D 对照。
+- luma-25d 与 luma-vertex-editing 专用管线只支持 WebGL2 / WebGPU，Canvas2D 按钮禁用并标注“仅 GPU”。
+  正式 vertex-editing 示例不受此限制，支持三种后端。
+实验旧的 `?gpu=webgl|webgpu|canvas` 和 benchmark `?renderer=canvas` 链接仍可用，
+新的明确 `renderer` 参数优先；切换时同步旧 GPU 参数，避免两份设置冲突。
+
+响应式工具栏可以换行，浮动页头按实际高度调整地图和侧栏位置。切换按钮支持键盘 Tab/Enter，
+并使用 aria-pressed 报告选择状态，禁用项有明确说明。
 
 ## 验证
 

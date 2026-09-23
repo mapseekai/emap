@@ -1,3 +1,4 @@
+import { getExampleRenderer } from './renderer-choice';
 import { append, area, attributeJoin, boundary, centroid, centroidX, centroidY, closeDuckDbRuntime, collect, convexHull, createDuckDbRuntimeFromJsDelivr, densify, dissolve, envelope, extractVertices, geometryType, isEmpty, isSimple, isValid, length, lineToPolygon, merge, multipartToSinglepart, near, nearest, pointToLine, polygonToLine, repairGeometry, reproject, perimeter, spatialFilter, spatialJoin, spatialRelation, simplify, simplifyPreserveTopology, x, y, } from '@mapseekai/emap/duckdb';
 import type { DuckDbRuntime, SpatialFilterPredicate, SpatialJoinPredicate, SpatialRelationOptions } from '@mapseekai/emap/duckdb';
 import type { MapshaperDataset, SourceLoadDraft } from '@mapseekai/emap';
@@ -144,7 +145,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     const maskLayerLabel = document.getElementById('mask-layer-label');
     const emap = await loadExampleRuntime();
     const { Emap, TopologySource, NavigationControl } = emap;
-    const map = await Emap.create({ container: 'map' });
+    const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
     await map.addControl(new NavigationControl(), 'top-left');
     await installExampleMapUi(map, emap);
     const mapContainer = map.getCanvasContainer();

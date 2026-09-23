@@ -51,6 +51,12 @@ const map = await Emap.create({ container: 'map', renderer });
 console.log(map.getRenderer()); // 'webgl2'
 ```
 
+所有示例页顶部均有 Canvas2D / WebGL2 / WebGPU 切换按钮。切换会重新加载当前示例，
+保留其他 URL 参数；本地文件需重新选择，未保存的编辑不会保留。正式地图示例均支持三种后端。
+专用 luma-25d 与 luma-vertex-editing 实验仅支持 GPU，Canvas2D 明确禁用；
+可在正式 vertex-editing 示例中对比三后端。GPU 创建失败时顶部按钮仍然可用。
+
+
 `renderer` 接受 `canvas2d`、`webgl2`、`webgpu`，省略时为 `webgl2`。它是创建时设置，
 不是运行时热切换 API。GPU 不可用或初始化失败时 `Emap.create()` 会 reject 并清理资源，
 不会静默改用 Canvas2D。需要兼容回退的宿主可捕获失败后显式重新创建 `renderer: 'canvas2d'` 的地图。

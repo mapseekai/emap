@@ -1,3 +1,4 @@
+import { getExampleGpuBackend, installExampleRendererToolbar, navigateExampleRenderer } from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from '../luma-benchmark/icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
@@ -78,7 +79,8 @@ function fail(error: unknown): void {
   drag = null;
   state(error instanceof Error ? error.message : String(error), 'error');
 }
-const requestedGpu = new URLSearchParams(location.search).get('gpu') === 'webgpu' ? 'webgpu' : 'webgl';
+installExampleRendererToolbar();
+const requestedGpu = getExampleGpuBackend();
 const renderers = await BenchmarkRenderers.create(
   el<HTMLCanvasElement>('canvas2d'),
   el<HTMLCanvasElement>('webgl'),
@@ -92,7 +94,7 @@ const renderers = await BenchmarkRenderers.create(
 if (renderers.gpu) {overlay = new EditorOverlay(renderers.gpu);backdrop=new EditorBackdrop(renderers.gpu,renderers.glCanvas,requestDraw);}
 el('renderer').textContent=renderers.gpu?.label ?? '所选 GPU 后端不可用';
 const gpuSelector=el<HTMLSelectElement>('gpu-backend');gpuSelector.value=requestedGpu;
-gpuSelector.addEventListener('change',()=>{const url=new URL(location.href);url.searchParams.set('gpu',gpuSelector.value);location.assign(url.href);});
+gpuSelector.addEventListener('change',()=>navigateExampleRenderer(gpuSelector.value === 'webgpu' ? 'webgpu' : 'webgl2'));
 const pointLodToggle=el<HTMLInputElement>('point-lod-enabled');
 const pointLodCell=el<HTMLInputElement>('point-lod-cell');
 async function setPointLod(enabled:boolean,cellSize=3):Promise<void>{

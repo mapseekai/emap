@@ -1,3 +1,4 @@
+import { getExampleRenderer } from '../../packages/examples/src/renderer-choice';
 import { mapLibrePlugin } from '../../src/integrations/maplibre/plugin';
 // @vitest-environment jsdom
 import { access, readFile } from 'node:fs/promises';
@@ -155,6 +156,7 @@ async function executeOnlineMapServicesExample(
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
+      'getExampleRenderer',
       'installExampleMapUi',
       'autoLoadExampleFixtures',
       'loadExampleRuntime',
@@ -163,6 +165,7 @@ async function executeOnlineMapServicesExample(
       'mapLibrePlugin',
       script,
     )(
+      getExampleRenderer,
       installExampleMapUi,
       autoLoadExampleFixtures,
       loadExampleRuntime,

@@ -121,6 +121,8 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -214,7 +216,7 @@ const services = [
         ],
     },
 ];
-const map = await Emap.create({ plugins: [mapLibrePlugin],
+const map = await Emap.create({ renderer: getExampleRenderer(), plugins: [mapLibrePlugin],
     container: 'map',
     mapLibre: { services, defaultBasemap: 'osm' },
 });

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Add shared Canvas2D / WebGL2 / WebGPU renderer buttons to every example header.
+  Pass the selected backend explicitly on every formal map creation, preserve other URL
+  settings on reload, keep recovery controls available before GPU initialization, and
+  reconcile legacy experimental selectors without claiming Canvas support for GPU-only demos.
+
 - Default formal `Emap.create()` maps to the luma WebGL2 main painter; accept explicit
   `renderer: 'canvas2d' | 'webgl2' | 'webgpu'` and expose `getRenderer()`. Keep the existing
   Canvas2D editing overlay, source/style/filter/history services, and explicit Canvas fallback.

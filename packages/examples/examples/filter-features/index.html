@@ -45,6 +45,8 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
@@ -52,7 +54,7 @@ const emap = await loadExampleRuntime();
 const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 // Filter expressions need `expressionPolicy: 'trusted'`; the library
 // default is `'disabled'`.
-const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map', expressionPolicy: 'trusted' });
 await map.addControl(new NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);
 await map.addControl(new HistoryControl(), 'top-left');

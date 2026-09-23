@@ -59,7 +59,12 @@ function examplesBrandPlugin(): Plugin {
               position: relative;
               box-sizing: border-box;
               min-height: 48px;
-              padding-right: 410px !important;
+              padding-right: 690px !important;
+              display: flex;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 10px;
+              height: auto !important;
               background: var(--emap-banner-bg) !important;
               color: var(--emap-banner-ink) !important;
               border-bottom: 1px solid var(--emap-example-border) !important;
@@ -113,6 +118,55 @@ function examplesBrandPlugin(): Plugin {
               color: var(--emap-banner-ink);
               font: 11px/1.2 var(--emap-example-font);
               white-space: nowrap;
+            }
+
+            .emap-example-context-tools, .emap-example-renderer-tools {
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+            }
+
+            .emap-example-renderer-tools { flex: 0 0 auto; }
+            .emap-example-renderer-caption { margin-right: 2px; }
+            #header [data-example-renderer] {
+              min-height: 28px;
+              padding: 4px 7px;
+              margin: 0;
+              border: 1px solid var(--emap-example-border-strong);
+              border-radius: 3px;
+              background: var(--emap-banner-bg);
+              color: var(--emap-banner-ink);
+              font: 500 11px/1.2 var(--emap-example-font);
+              cursor: pointer;
+            }
+            #header [data-example-renderer]:hover { background: var(--emap-example-accent); }
+            #header [data-example-renderer][aria-pressed="true"] {
+              background: var(--emap-example-primary);
+              border-color: var(--emap-example-primary);
+              color: var(--emap-example-primary-foreground);
+            }
+            #header [data-example-renderer]:disabled {
+              background: var(--emap-example-muted);
+              border-color: var(--emap-example-border);
+              color: var(--emap-example-muted-foreground);
+              cursor: not-allowed;
+            }
+            #header [data-example-renderer]:focus-visible {
+              outline: 2px solid var(--emap-example-primary);
+              outline-offset: 2px;
+            }
+            .emap-example-renderer-limit { font-size: 10px; color: var(--emap-example-muted-foreground); }
+            .emap-example-renderer-hint {
+              position: absolute; width: 1px; height: 1px; padding: 0;
+              overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+            }
+            @media (max-width: 1100px) {
+              #header { padding-right: 12px !important; }
+              #header > strong { display: none; }
+              .emap-example-map-tools {
+                position: static; margin-left: auto; flex-wrap: wrap;
+                justify-content: flex-end; max-width: 100%; min-width: 0; gap: 6px 10px;
+              }
             }
 
             #header .emap-example-source-button {
@@ -250,7 +304,7 @@ function examplesBrandPlugin(): Plugin {
               min-width: 320px;
               height: 100vh;
               margin: 0;
-              padding-top: 48px;
+              padding-top: var(--emap-example-header-height, 48px);
               background: var(--emap-example-background);
               color: var(--emap-banner-ink);
               font: 13px/1.3333 var(--emap-example-font);
@@ -279,8 +333,8 @@ function examplesBrandPlugin(): Plugin {
             }
 
             body.emap-example-with-floating-header > .panel {
-              top: 60px;
-              max-height: calc(100vh - 72px);
+              top: calc(var(--emap-example-header-height, 48px) + 12px);
+              max-height: calc(100vh - var(--emap-example-header-height, 48px) - 24px);
               overflow: auto;
               box-sizing: border-box;
             }

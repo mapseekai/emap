@@ -75,12 +75,14 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 const emap = await loadExampleRuntime();
 const { Emap, TopologySource, NavigationControl } = emap;
-const map = await Emap.create({ container: 'map' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
 await map.addControl(new NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);
 const SOURCE_ID = 'fill-source';

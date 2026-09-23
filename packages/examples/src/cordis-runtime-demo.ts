@@ -1,3 +1,4 @@
+import { getExampleRenderer } from './renderer-choice';
 import { Context, type Plugin } from 'cordis';
 import cordisPackage from 'cordis/package.json';
 import { inspectContext, inspectServices, settleContext } from '@mapseekai/emap/context';
@@ -13,7 +14,7 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     return node as T;
   };
   const emap = await loadExampleRuntime();
-  const map = await emap.Emap.create({ container: 'map', preset: 'editor' });
+  const map = await emap.Emap.create({ renderer: getExampleRenderer(), container: 'map', preset: 'editor' });
   await map.addControl(new emap.NavigationControl(), 'top-left');
   const definitions = new Map<string, Plugin>(editorPreset.filter(plugin => plugin.name).map(plugin => [plugin.name!, plugin]));
   const fibers = () => [...map.ctx.registry.values()].flatMap(runtime => [...runtime.fibers]);
@@ -179,7 +180,7 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
   document.body.append(hidden);
   try {
     for (const preset of ['viewer', 'headless', 'empty'] as const) {
-      const instance = await emap.Emap.create({ preset, ...(preset === 'viewer' ? { container: hidden } : {}) });
+      const instance = await emap.Emap.create({ renderer: getExampleRenderer(), preset, ...(preset === 'viewer' ? { container: hidden } : {}) });
       try { counts(preset, instance); } finally { await instance.dispose(); }
     }
   } finally { hidden.remove(); }

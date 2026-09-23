@@ -1,3 +1,4 @@
+import { getExampleRenderer, getExampleGpuBackend, installExampleRendererToolbar, navigateExampleRenderer, syncExampleRendererToolbar } from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from './icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
@@ -34,7 +35,8 @@ let disposed = false;
 let report: Record<string, unknown> | null = null;
 let previousLoad: Promise<void> = Promise.resolve();
 let preparation: Record<string, unknown> = {};
-let backend: Backend = new URLSearchParams(location.search).get('renderer') === 'canvas' ? 'canvas' : 'luma';
+installExampleRendererToolbar();
+let backend: Backend = getExampleRenderer() === 'canvas2d' ? 'canvas' : 'luma';
 function setStatus(message: string, state: string) {
   status.textContent = message;
   status.dataset.state = state;
@@ -55,7 +57,7 @@ function fail(error: unknown) {
   setStatus(error instanceof Error ? error.message : String(error), 'error');
 }
 let screenFilterUpdating=false;
-const requestedGpu = new URLSearchParams(location.search).get('gpu') === 'webgpu' ? 'webgpu' : 'webgl';
+const requestedGpu = getExampleGpuBackend();
 const renderers = await BenchmarkRenderers.create(el<HTMLCanvasElement>('canvas2d'), el<HTMLCanvasElement>('webgl'),
   () => {
     running?.abort();
@@ -71,6 +73,7 @@ const renderers = await BenchmarkRenderers.create(el<HTMLCanvasElement>('canvas2
   }, fail, () => requestDraw(), requestedGpu);
 if (!renderers.gpu) {
   backend = 'canvas';
+  syncExampleRendererToolbar('canvas2d');
   el('gpu-warning').textContent = `所选 GPU 后端不可用：${renderers.unavailableReason}。未伪装回退为 luma。`;
 }
 
@@ -105,7 +108,7 @@ for(const control of [smallArcToggle,halfPixelToggle])control.addEventListener('
  void setScreenFilters(smallArcToggle.checked,halfPixelToggle.checked).catch(fail);
 });
 const gpuSelector=el<HTMLSelectElement>('gpu-backend');gpuSelector.value=requestedGpu;
-gpuSelector.addEventListener('change',()=>{const url=new URL(location.href);url.searchParams.set('gpu',gpuSelector.value);location.assign(url.href);});
+gpuSelector.addEventListener('change',()=>navigateExampleRenderer(gpuSelector.value === 'webgpu' ? 'webgpu' : 'webgl2'));
 const passSelector=el<HTMLSelectElement>('pass-mode');
 passSelector.addEventListener('change',()=>{renderers.passMode=passSelector.value as import('./renderers').PassMode;requestDraw();});
 selector.querySelector<HTMLOptionElement>('option[value="luma"]')!.textContent=requestedGpu==='webgpu'?'luma / WebGPU':'luma / WebGL2';
@@ -254,6 +257,7 @@ function updatePointStyle() {
 for(const control of [pointStrategy,pointRadius,pointOpacity])control.addEventListener('change',()=>{try{updatePointStyle();}catch(error){fail(error);}});
 selector.addEventListener('change', () => {
   backend = selector.value as Backend; renderers.show(backend); requestDraw();
+  syncExampleRendererToolbar(backend === 'canvas' ? 'canvas2d' : requestedGpu === 'webgpu' ? 'webgpu' : 'webgl2');
 });
 el('fit').addEventListener('click', () => { fit(); requestDraw(); });
 cancel.addEventListener('click', () => { loading?.abort(); running?.abort(); setStatus('已取消。', scene ? 'ready' : 'idle'); });

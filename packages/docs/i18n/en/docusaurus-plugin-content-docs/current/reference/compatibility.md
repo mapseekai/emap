@@ -51,6 +51,13 @@ const map = await Emap.create({ container: 'map', renderer });
 console.log(map.getRenderer()); // 'webgl2'
 ```
 
+Every example header offers Canvas2D / WebGL2 / WebGPU buttons. Switching reloads the current
+example while preserving other URL parameters; local files must be selected again and unsaved
+edits are not retained. Formal map examples support all three backends. The dedicated luma-25d
+and luma-vertex-editing experiments are GPU-only and explicitly disable Canvas2D; the formal
+vertex-editing example supports all three. Recovery buttons remain available if GPU creation fails.
+
+
 `renderer` accepts canvas2d, webgl2, or webgpu and defaults to webgl2. Selection is creation-time,
 not a hot-swap API. Unsupported or failed GPU initialization rejects Emap.create() and releases resources;
 it never silently switches to Canvas2D. A host that needs fallback can catch the failure and explicitly

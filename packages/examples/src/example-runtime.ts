@@ -1,3 +1,4 @@
+import { installExampleRendererToolbar } from './renderer-choice';
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 import * as Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
@@ -64,6 +65,7 @@ function fallbackFor(assets: RuntimeAssetSet, name: RuntimeAssetName): string | 
     }
 }
 export async function loadExampleRuntime(options: RuntimeAssetOptions = {}): Promise<typeof globalThis.emap> {
+    installExampleRendererToolbar();
     const assets = resolveRuntimeAssets(options);
     const stylesheet = loadWithFallback('css', assets.css, fallbackFor(assets, 'css'), assets.integrity.css, appendStylesheet);
     const scripts = (async () => {
@@ -155,9 +157,10 @@ export async function installExampleMapUi(map: Emap, runtime: ExampleUiRuntime =
     if (!header)
         throw new Error('Example pages must provide a #header banner');
     mapsWithExampleUi.add(map);
-    header.querySelector('.emap-example-map-tools')?.remove();
+    const shell = installExampleRendererToolbar(root)!;
+    shell.querySelector('.emap-example-context-tools')?.remove();
     const tools = root.createElement('div');
-    tools.className = 'emap-example-map-tools';
+    tools.className = 'emap-example-context-tools';
     tools.setAttribute('role', 'group');
     tools.setAttribute('aria-label', 'Example source, map coordinate system, and basemap');
     const sourceText = embeddedExampleSource(root);
@@ -183,7 +186,7 @@ export async function installExampleMapUi(map: Emap, runtime: ExampleUiRuntime =
     basemapState.className = 'emap-example-basemap-state';
     basemapState.setAttribute('aria-live', 'polite');
     tools.append(crsLabel, basemapState);
-    header.append(tools);
+    shell.append(tools);
     await map.addControl(new runtime.StatusControl({ alignment: 'right', showMousePos: true, showEPSG: true }), 'bottom-right');
     await map.addControl(new runtime.ScaleControl(), 'bottom-left');
     let basemapControl: Control | null = null;

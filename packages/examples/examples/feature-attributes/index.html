@@ -81,12 +81,14 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 const emap = await loadExampleRuntime();
 const { Emap, TopologySource } = emap;
-const map = await Emap.create({
+const map = await Emap.create({ renderer: getExampleRenderer(),
     container: "map",
 });
 await map.addControl(new emap.NavigationControl(), "top-left");

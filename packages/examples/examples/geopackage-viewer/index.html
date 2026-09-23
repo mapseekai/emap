@@ -80,12 +80,14 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
 import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
 const emap = await loadExampleRuntime();
 const { Emap, TopologySource, NavigationControl } = emap;
-const map = await Emap.create({ container: 'map' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
 await map.addControl(new NavigationControl(), 'top-left');
 const base = '/mapseekai/emap/examples/';
 const status = document.getElementById('status');

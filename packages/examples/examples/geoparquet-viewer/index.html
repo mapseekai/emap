@@ -37,6 +37,8 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, loadExampleArrow, loadExampleRuntime, } from '/src/example-runtime.ts';
@@ -46,7 +48,7 @@ await emapArrow.initParquetWasm();
 document.getElementById('status').textContent = '上传 .parquet / .arrow 文件开始';
 document.getElementById('file-input').disabled = false;
 const { Emap, TopologySource } = emap;
-const map = await Emap.create({ container: 'map' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
 await map.ctx.plugin(emapArrow.arrowFormatsPlugin);
 await map.addControl(new emap.NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);

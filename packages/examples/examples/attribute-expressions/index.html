@@ -155,6 +155,8 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
@@ -162,7 +164,7 @@ const emap = await loadExampleRuntime();
 const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 // Demo loads only its own bundled data, so opt in to expression
 // evaluation. The library default is `'disabled'` for safety.
-const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map', expressionPolicy: 'trusted' });
 await map.addControl(new NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);
 await map.addControl(new HistoryControl(), 'top-left');

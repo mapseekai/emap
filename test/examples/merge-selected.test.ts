@@ -1,3 +1,4 @@
+import { getExampleRenderer } from '../../packages/examples/src/renderer-choice';
 // @vitest-environment jsdom
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -71,6 +72,7 @@ async function executeMergeSelectedExample() {
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
+      'getExampleRenderer',
       'installExampleMapUi',
       'autoLoadExampleFixtures',
       'loadExampleRuntime',
@@ -79,6 +81,7 @@ async function executeMergeSelectedExample() {
       'FileReader',
       script,
     )(
+      getExampleRenderer,
       installExampleMapUi,
       autoLoadExampleFixtures,
       loadExampleRuntime,

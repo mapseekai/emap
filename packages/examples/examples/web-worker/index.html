@@ -94,6 +94,8 @@
   </details>
 
   <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
 import { autoLoadExampleFixtures, exampleWorkerUrl, loadExampleRuntime, } from '/src/example-runtime.ts';
@@ -140,7 +142,7 @@ async function buildMap() {
     const mode = modeSel.value;
     const useWorker = mode === 'on' ? true : mode === 'auto' ? 'auto' : false;
     const workerThreshold = Number(thresholdInput.value) || 50000;
-    map = await Emap.create({
+    map = await Emap.create({ renderer: getExampleRenderer(),
         container: 'map',
         useWorker,
         workerThreshold,

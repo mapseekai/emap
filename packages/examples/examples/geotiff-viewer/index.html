@@ -18,8 +18,6 @@
 <summary><h1>原文件引用 · 按视口读取</h1></summary>
 <div class="emap-example-workbench-body">
 <section class="emap-example-section">
-<div class="emap-example-field"><label for="map-renderer">地图渲染后端</label><select id="map-renderer"></select></div>
-<p class="emap-example-hint">切换后重新创建地图；本地文件需重新选择。GPU 不可用时会明确报错，可选择 Canvas2D。</p>
 <div class="emap-example-field"><label>影像目录（推荐，自动关联 .ovr）</label><button id="directory-picker" type="button">选择影像目录</button></div>
 <div id="directory-raster-row" class="emap-example-field" hidden><label>目录中的 TIFF / BigTIFF（可多选）</label><div id="directory-raster-list" role="group" aria-label="目录中的 TIFF / BigTIFF"></div></div>
 <p id="directory-status" class="emap-example-hint">授权目录后，可勾选多个 TIFF；每个 a.tif 都会自动查找同目录 a.tif.ovr，无需再次选择金字塔。</p>
@@ -65,8 +63,8 @@
 </section>
 </div></details>
 <script type="module">
-import { installRendererChoice } from '/src/renderer-choice.ts';
-const renderer = installRendererChoice(document.getElementById('map-renderer'));
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+
 import { attachRasterBandControls } from '/src/raster-band-controls.ts';
 import { listGeoTIFFs, openRasterPair } from '/src/local-raster-directory.ts';
 import { rasterPlugin, geoTIFFPlugin } from '@mapseekai/emap/geotiff';
@@ -75,7 +73,7 @@ const emap = await loadExampleRuntime();
 const base = '/mapseekai/emap/examples/';
 const rasterFeature = rasterPlugin({ cacheBytes: 32 * 1024 ** 2, concurrency: 2 });
 const loader = geoTIFFPlugin({ workerUrl: base + 'emap-geotiff-worker.js' });
-const map = await emap.Emap.create({ container: 'map', preset: 'viewer', renderer, msdfWorkerUrl: base + 'emap-msdf-worker.js' }).catch(error => { document.getElementById('status').textContent = String(error); throw error; });
+const map = await emap.Emap.create({ container: 'map', preset: 'viewer', renderer: getExampleRenderer(), msdfWorkerUrl: base + 'emap-msdf-worker.js' }).catch(error => { document.getElementById('status').textContent = String(error); throw error; });
 const rasterFiber = map.ctx.plugin(rasterFeature); await rasterFiber.await();
 const loaderFiber = map.ctx.plugin(loader); await loaderFiber.await();
 const status = document.getElementById('status');
