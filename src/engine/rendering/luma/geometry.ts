@@ -33,13 +33,23 @@ export function readPart(arcs: ArcCollection, part: readonly number[]): Point[] 
   return points;
 }
 export function pointGeometry(points: readonly Point[]): GeometryBuffer {
-  const vertices = new Float32Array(points.length*4);
-  let count=0;
-  for (const [x,y] of points) if (Number.isFinite(x) && Number.isFinite(y)) {
-    const hx=Math.fround(x), hy=Math.fround(y), i=count++*4;
-    vertices[i]=hx; vertices[i+1]=hy; vertices[i+2]=x-hx; vertices[i+3]=y-hy;
-  }
-  return {kind:'point', vertices:count===points.length?vertices:vertices.subarray(0,count*4), count};
+  const vertices = new Float32Array(points.length * 4);
+  let count = 0;
+  for (const [x, y] of points)
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      const hx = Math.fround(x),
+        hy = Math.fround(y),
+        i = count++ * 4;
+      vertices[i] = hx;
+      vertices[i + 1] = hy;
+      vertices[i + 2] = x - hx;
+      vertices[i + 3] = y - hy;
+    }
+  return {
+    kind: 'point',
+    vertices: count === points.length ? vertices : vertices.subarray(0, count * 4),
+    count,
+  };
 }
 export function pointsFromShapes(
   shapes: Shapes,
@@ -103,34 +113,52 @@ interface Ring {
   edgeIndex?: InstanceType<typeof Flatbush>;
 }
 function containsPoint(ring: Ring, p: Point): boolean {
-  const points=ring.points;
-  const crosses=(i:number):boolean=>{
-    const a=points[i],b=points[(i+points.length-1)%points.length];
-    return (a[1]>p[1])!==(b[1]>p[1]) && p[0]<((b[0]-a[0])*(p[1]-a[1]))/(b[1]-a[1])+a[0];
+  const points = ring.points;
+  const crosses = (i: number): boolean => {
+    const a = points[i],
+      b = points[(i + points.length - 1) % points.length];
+    return (
+      a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
+    );
   };
-  let inside=false;
-  if(points.length<128){
-    for(let i=0;i<points.length;i++)if(crosses(i))inside=!inside;
-  }else{
+  let inside = false;
+  if (points.length < 128) {
+    for (let i = 0; i < points.length; i++) if (crosses(i)) inside = !inside;
+  } else {
     // The same even-odd ray predicate, but query only edges intersecting the ray.
     // A LUCC shell can contain thousands of holes: rescanning every shell vertex
     // for every candidate hole was the dominant load/edit cost, not GPU upload.
-    let spatial=ring.edgeIndex;
-    if(!spatial){
-      spatial=new Flatbush(points.length);
-      for(let i=0;i<points.length;i++){
-        const a=points[i],b=points[(i+points.length-1)%points.length];
-        spatial.add(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]));
+    let spatial = ring.edgeIndex;
+    if (!spatial) {
+      spatial = new Flatbush(points.length);
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i],
+          b = points[(i + points.length - 1) % points.length];
+        spatial.add(
+          Math.min(a[0], b[0]),
+          Math.min(a[1], b[1]),
+          Math.max(a[0], b[0]),
+          Math.max(a[1], b[1]),
+        );
       }
-      spatial.finish();ring.edgeIndex=spatial;
+      spatial.finish();
+      ring.edgeIndex = spatial;
     }
-    for(const i of spatial.search(p[0],p[1],ring.bounds[2],p[1]))if(crosses(i))inside=!inside;
+    for (const i of spatial.search(p[0], p[1], ring.bounds[2], p[1]))
+      if (crosses(i)) inside = !inside;
   }
   return inside;
 }
 /** Even-odd nesting is independent of winding and preserves nested islands. */
-export type PolygonTessellator = (coordinates: number[], holes: number[], group: number) => Iterable<number>;
-export function triangulateRings(paths: readonly (readonly Point[])[], tessellate?: PolygonTessellator): {
+export type PolygonTessellator = (
+  coordinates: number[],
+  holes: number[],
+  group: number,
+) => Iterable<number>;
+export function triangulateRings(
+  paths: readonly (readonly Point[])[],
+  tessellate?: PolygonTessellator,
+): {
   positions: Point[];
   indices: number[];
 } {
@@ -197,11 +225,15 @@ export function triangulateRings(paths: readonly (readonly Point[])[], tessellat
         positions.push(p);
       }
     }
-    for (const index of tessellate ? tessellate(coordinates, holes, i) : earcut(coordinates, holes)) indices.push(offset + index);
+    for (const index of tessellate ? tessellate(coordinates, holes, i) : earcut(coordinates, holes))
+      indices.push(offset + index);
   }
   return { positions, indices };
 }
-export function polygonGeometry(features: Iterable<readonly (readonly Point[])[]>, tessellate?: (feature: number) => PolygonTessellator): GeometryBuffer {
+export function polygonGeometry(
+  features: Iterable<readonly (readonly Point[])[]>,
+  tessellate?: (feature: number) => PolygonTessellator,
+): GeometryBuffer {
   const vertices: number[] = [],
     indices: number[] = [];
   let featureId = 0;

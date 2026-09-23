@@ -1,3 +1,4 @@
+import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 import { test, expect } from '@playwright/test';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,7 @@ import { basename, join } from 'node:path';
 import { makeRasterFixture } from '../utils/raster-fixture.ts';
 
 const url = '/mapseekai/emap/examples/geotiff-viewer/';
+test.beforeEach(async ({ page }) => installCanvasReadback(page));
 async function idle(page) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect.poll(() => page.evaluate(() => {
@@ -32,7 +34,7 @@ async function coverage(page) {
   return page.evaluate(async () => {
     const s = window.geotiffDemo, [left, bottom, right, top] = s.metadata.bounds;
     const canvas = document.querySelector('#map canvas');
-    const context = canvas.getContext('2d'), rect = canvas.getBoundingClientRect();
+    const pixels = await window.readCanvasPixels(canvas), rect = canvas.getBoundingClientRect();
     const missing = []; let valid = 0;
     for (const u of [0.1, 0.3, 0.5, 0.7, 0.9]) for (const v of [0.1, 0.3, 0.5, 0.7, 0.9]) {
       const x = left + (right-left)*u, y = top - (top-bottom)*v;
@@ -42,7 +44,7 @@ async function coverage(page) {
       const cx = Math.floor(px * canvas.width / rect.width), cy = Math.floor(py * canvas.height / rect.height);
       if (cx < 0 || cy < 0 || cx >= canvas.width || cy >= canvas.height) continue;
       valid++;
-      if (context.getImageData(cx, cy, 1, 1).data[3] === 0) missing.push([u, v]);
+      if (pixels[(cy * canvas.width + cx) * 4 + 3] === 0) missing.push([u, v]);
     }
     return { valid, missing, error: s.error, stats: s.stats(), levels: s.metadata.levels.map(l => [l.width, l.height]) };
   });

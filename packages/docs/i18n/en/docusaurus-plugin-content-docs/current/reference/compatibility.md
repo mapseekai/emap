@@ -2,7 +2,7 @@
 id: compatibility
 slug: /reference/compatibility
 title: Compatibility
-api: ["ArcCollection", "ArcCutPoint", "ArcIterator", "ArcVertexData", "ArrowDotPathOptions", "bumpAttributeVersion", "bumpEditVersion", "CanvasPainter", "Coord2", "DataTable", "DefaultMapshaperAdapter", "EditOverlayRenderer", "ExportedFile", "FeatureShape", "GeometryType", "getDefaultMapshaperAdapter", "Handler", "HandlerManager", "HandlerResult", "isHandler", "isPathLayer", "isPointLayer", "LegacyPointShape", "MapshaperAdapter", "MapshaperBBox", "MapshaperDataset", "MapshaperLayer", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions", "NormalizedPointerEvent", "PackedSession", "PathGeometryType", "PathLayer", "PathPart", "PathShape", "PointerModifiers", "PointerMoveEvent", "PointLayer", "PointShape", "PointStyle", "RunnerInputFiles", "SegmentIntersection", "setDefaultMapshaperAdapter", "SignedArcId", "StrokeStyle", "TopologySource.fromBytes", "Transform", "VertexDotStyle", "Emap", "MapOptions", "initParquetWasm", "setParquetWasm", "createDuckDbRuntimeFromJsDelivr"]
+api: ["RendererBackend", "Emap.getRenderer", "ArcCollection", "ArcCutPoint", "ArcIterator", "ArcVertexData", "ArrowDotPathOptions", "bumpAttributeVersion", "bumpEditVersion", "CanvasPainter", "Coord2", "DataTable", "DefaultMapshaperAdapter", "EditOverlayRenderer", "ExportedFile", "FeatureShape", "GeometryType", "getDefaultMapshaperAdapter", "Handler", "HandlerManager", "HandlerResult", "isHandler", "isPathLayer", "isPointLayer", "LegacyPointShape", "MapshaperAdapter", "MapshaperBBox", "MapshaperDataset", "MapshaperLayer", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions", "NormalizedPointerEvent", "PackedSession", "PathGeometryType", "PathLayer", "PathPart", "PathShape", "PointerModifiers", "PointerMoveEvent", "PointLayer", "PointShape", "PointStyle", "RunnerInputFiles", "SegmentIntersection", "setDefaultMapshaperAdapter", "SignedArcId", "StrokeStyle", "TopologySource.fromBytes", "Transform", "VertexDotStyle", "Emap", "MapOptions", "initParquetWasm", "setParquetWasm", "createDuckDbRuntimeFromJsDelivr"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -32,7 +32,7 @@ Version floors come from the root `package.json` `browserslist`:
 | API or capability | Scope | Emap use and scenario |
 | --- | --- | --- |
 | `document`, `HTMLElement`, `HTMLCanvasElement` | Required by browser presets | Creates canvases, controls, and overlays. |
-| Canvas 2D (`canvas.getContext('2d')`) | Required by browser presets | `CanvasPainter` drawing. |
+| Canvas 2D (`canvas.getContext('2d')`) | Required by browser presets | Canvas2D mode, editing/measurement affordances, and color parsing. |
 | `requestAnimationFrame` | Required by browser presets | Batches redraws. |
 | Pointer Events, mouse, and wheel events | Interactive presets | Pointer normalization and interaction. |
 | `fetch`, `Blob`, `ArrayBuffer`, `Uint8Array` | Data, import/export, snapshots | Fetches data and produces `Blob` values. |
@@ -40,7 +40,34 @@ Version floors come from the root `package.json` `browserslist`:
 | `Worker` | `useWorker`, GeoPackage Worker, DuckDB | Moves work off the UI thread. |
 | WebAssembly | GeoParquet, GeoPackage, DuckDB | Loads WASM runtimes. |
 
-Core maps run on main-thread Canvas 2D; `useWorker` defaults to `false`. Deploy Worker and WASM assets when enabled.
+The main map defaults to luma WebGL2. `useWorker` still controls data-operation routing, defaults to false, and is not a GPU switch. The browserslist floors above do not guarantee GPU availability: WebGL2 may be disabled, and WebGPU requires an available adapter and a secure context.
+
+## Choose a backend when creating a map
+
+```ts
+import { Emap, type RendererBackend } from '@mapseekai/emap';
+const renderer: RendererBackend = 'webgl2';
+const map = await Emap.create({ container: 'map', renderer });
+console.log(map.getRenderer()); // 'webgl2'
+```
+
+`renderer` accepts canvas2d, webgl2, or webgpu and defaults to webgl2. Selection is creation-time,
+not a hot-swap API. Unsupported or failed GPU initialization rejects Emap.create() and releases resources;
+it never silently switches to Canvas2D. A host that needs fallback can catch the failure and explicitly
+create a new map with renderer: 'canvas2d'. getRenderer() reports the actual main painter; headless,
+empty, disposed maps, and unreported custom painters return null.
+
+Points, paths, fills, icons, and labels draw directly on the selected GPU backend. Existing map services
+continue to own selection, editing, filtering and history. Handles, drawing previews, and measurement
+hints use the independent Canvas2D overlay, without another map or layer-tree node. The formal raster
+service retains its existing read/colorize/reproject tiles and composites them through the selected painter.
+Native integer textures, specialized chunk workers, and the 2.5D camera remain separate experimental
+paths; choosing a backend does not imply that every experimental optimization has migrated.
+
+GPU labels lazily load the MSDF Worker. Deploy dist/emap-msdf-worker.js with its sibling dist/msdf/
+directory. Direct package deployment resolves the worker beside the module; bundlers that rearrange
+assets should set msdfWorkerUrl: '/assets/emap-msdf-worker.js' and deploy msdf/ beside that worker.
+Disabled labels start no font worker; font errors affect labels only, never silently change the backend.
 
 ## Bundlers and TypeScript
 
@@ -64,7 +91,7 @@ Vite, webpack 5, and similar ESM bundlers resolve `parquet-wasm` binaries from m
 
 | Entry point or capability | Peer dependencies to install | Runtime assets |
 | --- | --- | --- |
-| Core `@mapseekai/emap` | None | Browser DOM and Canvas 2D |
+| Core `@mapseekai/emap` | None | DOM, Canvas2D overlay, and the selected GPU backend |
 | Arrow and GeoArrow from `@mapseekai/emap/arrow` | `apache-arrow` `^17.0.0` | ESM bundle |
 | GeoParquet import and export from the Arrow entry point | `apache-arrow` `^17.0.0`, `parquet-wasm` `^0.7.1` | `parquet_wasm_bg.wasm` or explicit `wasmInput` |
 | `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`, `apache-arrow` `^17.0.0` | DuckDB-Wasm Worker, WASM bundle, and optional spatial extension |

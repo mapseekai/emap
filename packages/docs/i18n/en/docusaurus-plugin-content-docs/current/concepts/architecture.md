@@ -10,7 +10,7 @@ verifiedVersion: 0.13.0
 
 # Current architecture and source layout
 
-Emap composes a GIS domain core, Canvas rendering, and optional integrations through its native Cordis plugin runtime; the public API is the `Emap` facade.
+Emap composes a GIS domain core, selectable Canvas2D / luma GPU rendering, and optional integrations through its native Cordis plugin runtime; the public API is the `Emap` facade.
 
 ```ts
 const map = await Emap.create({ container: 'map', preset: 'viewer' }); // create a browser map with browsing capability
@@ -41,7 +41,7 @@ src/
 | `ui/` | Browser controls, CSS, icons, and theme | controls, `assets/`, `theme/` |
 | `shared/` | Declarations without one business owner | ambient `.d.ts`, external declarations, stylesheet typing |
 
-Dependencies follow “inner domain, outer composition”: `runtime` may compose engine, domain, and integration capability; domain does not depend on Cordis, DOM, or a concrete provider. Hot-path pointer movement, hit testing, and Canvas drawing stay direct TypeScript calls.
+Dependencies follow “inner domain, outer composition”: `runtime` may compose engine, domain, and integration capability; domain does not depend on Cordis, DOM, or a concrete provider. Hot-path pointer movement, hit testing, and painter drawing stay direct TypeScript calls.
 
 ### `Emap.create()`
 
@@ -131,7 +131,7 @@ engine map + interaction handlers
         ↓
 render scheduler
         ↓
-Canvas painter
+CanvasPainter / LumaPainter
 ```
 
 Editing follows `EditCommand → history/transaction → source version → render invalidation`; geometry and attribute versions are independent, and async work checks versions before commit.

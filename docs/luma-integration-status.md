@@ -1,108 +1,37 @@
-# luma.gl v10 集成状态
+# luma 集成现状
 
-## 附属 Symbol 样式设置
+## 正式地图入口
 
-现有图层支持 `symbol.layout / symbol.paint`，只在配置边界映射到既有 label/icon。
-不增加图层树节点，不替换 GPU/MSDF/LOD 实现。详见 [Symbol 映射](luma-symbol-style.md)。
+Emap.create 支持 renderer: canvas2d / webgl2 / webgpu，默认 webgl2。
+通过原生 Cordis painterFactory 接入正式图层与编辑服务，不再只能在独立 benchmark 中选择 GPU。
+细节与验收范围见 [正式三后端](renderer-backends.md)。这里描述当前代码，不沿用旧报告的未提交状态。
 
-## 点图片符号
+## 已接入正式主链路
 
-现有点图层通过 `icon` / `setLayerIcon` 使用图片，不添加图层树节点。
-WebGL2/WebGPU 复用原点与 LOD 缓冲；共享图集、屏幕锚点、着色、透明度及 Canvas 兼容见 [点图标](luma-icons.md)。
+点、线、面直接 GPU 绘制；GPU 缓冲复用、原有 PointLod、源图层顺序、过滤和属性样式保持。
+附属文字采用 [MSDF 与 HarfBuzz](luma-labels.md)，[点图片符号](luma-icons.md) 复用点坐标。
+[Symbol 样式映射](luma-symbol-style.md) 仍为 symbol.layout / paint / labeling / images，不增加图层树节点。
+既有 GeoTIFF 的读取、重投影、着色与渐进瓦片通过所选 Painter 合成；选择与编辑仍由正式地图服务管理。
+编辑覆盖层继续使用独立 Canvas2D；不是把整幅矢量地图先栅格化再上传 GPU。
 
-## 绑定式文字注记
+## 保留的实验链路
 
-点、线、面可配置附属 `label`，不增加图层树节点。现有 benchmark、2.5D 和编辑示例
-提供字段/字体/描边/避让设置；WebGL2/WebGPU 共用有界 MSDF 字形图集与布局；HarfBuzz 排版与轮廓距离场在独立 Worker 中按需准备。
-默认 Emap 也可通过 `setLayerLabel` 配置，详情见 [文字注记](luma-labels.md)。
-
-
-## Opt-in 2.5D camera
-
-See [luma 2.5D](luma-25d.md) and `examples/luma-25d/` for the shared vector/raster
-ground-plane perspective path. Default Canvas rendering remains unchanged.
-
-分支：`luma集成`。默认 viewer/editor 仍使用 Canvas2D；以下能力只接入两个独立实验示例。
-
-## Canvas 屏幕过滤（本轮）
-
-两个实验页默认增加微小 arc / 半设备像素连续重复命令过滤，作用于背景描边。
-面填充、洞和原始编辑坐标不改变；这属于显示近似，不再称为严格全精度显示。
-`screenFilter=off` 恢复原始 GPU 路径；原始几何 A/B 与过滤后暖重绘分开统计。
-详见 [Canvas 屏幕过滤](luma-canvas-screen-filter.md)。历史全精度/快照报告不覆盖此模式。
-
-## 近景退远缓存修复
-
-交互显示不再等待已经淘汰的原始线 Buffer 重建：屏幕过滤路径可独立绘制。
-原始缓存的 256 MiB 预算不增加，在可淘汰资源中优先保留完整面三角网，避免退远重复三角化。
-手势结束使用最新视图，原始几何 A/B 仍可显式重建原始路径；过滤回退也保留完整原始路径。
-详见 [近景退远实测与边界](luma-zoom-out.md)。
-
-## 当前实现
-
-luma core/engine/webgl/webgpu 精确锁定 `10.0.0-alpha.1`。使用显式 RenderPass、缓存管线和顶点绑定，
-在 WebGL2 / WebGPU 下绘制点、路径、面和固定解码纹理。源数据始终是原生 mapshaper dataset。
-Worker 流式导入 GeoJSON，保留属性、坐标系和共享拓扑；视图变化复用完整几何缓存。
-
-**点背景现已按用户要求复用已有 PointLod，默认目标网格为 3 CSS 像素。线、面不恢复 LOD 化简。**
-每个网格选择原始代表点，不新增中心点或数量气泡；原生 dataset、选择、编辑和导出仍保持完整精度。
-可关闭点聚合进行全量对照。小图层和稀疏视图沿用已有策略，近景可恢复原始可见分块。
-普通 viewer/editor 的默认设置没有改变。详见 [点 LOD 接线](luma-point-lod.md)。
-历史测量不可当作本轮数据；聚合 FPS 与全精度 FPS 必须分开标识。
-
-点渲染参考 GeoArrow/deck.gl ScatterplotLayer，普通实心圆使用四顶点实例化和解析抗锯齿。
-自动优化仅对连续同色不透明圆点分离完全覆盖与分数覆盖；跨空间块先画所有 core，再画 fringe。
-不同颜色、非点图元、空心符号与半透明绘制构成顺序边界。没有改变坐标、点数、半径或分辨率。
-标准圆点模式使用相同着色器，关闭上述覆盖优化，用于正确性和性能对照。
-
-线渲染现提供 `auto / reference / legacy` 三种模式。默认对有多重采样支持的不透明实线使用
-六顶点索引实例、圆角连接和圆头，使用 MSAA 而非旧版的逐片元覆盖度混合；相邻同色绘制复用
-私有覆盖深度。坐标、原始线段、线宽和分辨率不变。不同颜色/图元之间保持顺序；半透明、虚线
-与无 MSAA 环境保留旧路径。`reference` 使用相同 MSAA 几何、关闭覆盖优化，用于像素对照。
-`legacy` 保留历史解析抗锯齿，不应要求它与 MSAA 逐像素相同。详见 [线优化](luma-line-optimization.md)。
-最终复测中 building 约 60 FPS，LUCC 远景约 38–43 FPS；big 全范围/远景仍约 7–10 FPS，未达到流畅交互。
-
-## 快照导航与路径过滤
-
-两个示例新增快照导航：平移/滚轮复用已完成画面，停止后绘制最新原始几何；不把快照当作 A/B 几何帧。
-增加保守的连续路径范围剔除，复用原始 Buffer/VAO 和距离/连接属性。不会按尺寸丢弃线面或化简顶点。
-已有点 LOD 选项保持独立。编辑页有选中要素时暂停快照导航，保证原始顶点标记与实时几何一致。
-详见 [快照导航与保守过滤](luma-fast-navigation.md)。全范围的 big 仍须提交全部原始线段；该模式改善交互而非免除完整重绘。
+- [2.5D 相机](luma-25d.md) 与 [2.5D 性能](luma-25d-performance.md)：pitch/bearing 尚未进入正式 View API。
+- [动态整数栅格](luma-raster-dynamic.md)、[源块与 halo 复用](luma-raster-block-reuse.md)：
+  Native integer GPU 纹理仍在 luma-raster/luma-25d 专用链路，不等同于正式瓦片合成路径。
+- [完整精度基线](luma-full-precision-performance.md)、[点优化](luma-point-optimization.md)、
+  [点 LOD](luma-point-lod.md)、[线优化](luma-line-optimization.md)、[屏幕过滤](luma-canvas-screen-filter.md)、
+  [快照导航](luma-fast-navigation.md)、[退远缓存](luma-zoom-out.md)：均为相应实验版本的证据，不能当作正式 Painter 的性能承诺。
+- [顶点编辑实验](luma-vertex-editing.md)、[局部刷新](luma-editor-refresh.md)、[深缩放精度](luma-zoom-precision.md)：
+  保留专用 Worker/patch 和三角网缓存验收，正式编辑使用原有命令与历史服务。
 
 ## 使用
 
-```bash
-pnpm examples:luma
-```
+`pnpm examples:luma` 启动示例。正式入口：mixed-data-viewer / geotiff-viewer；实验入口：
+luma-benchmark / luma-vertex-editing / luma-raster / luma-25d。
+GPU 创建失败不会静默降级；宿主需要兼容路径时应显式创建 Canvas2D 地图。
 
-入口：`/mapseekai/emap/examples/luma-benchmark/?gpu=webgl` 或 `?gpu=webgpu`。
-选择 GPU API、点聚合开关/网格大小、圆点策略、半径和透明度后加载真实本地文件。默认圆点半径为 3 CSS px、透明度为 1。
-切换 GPU API 会重新加载页面；无 WebGPU 时明确提示，不静默伪装为 WebGPU。
+## 后续整合重点
 
-原始顶点选择/移动示例：`/mapseekai/emap/examples/luma-vertex-editing/`，同样接受 `?gpu=webgpu`。
-背景与编辑覆盖层共用 GPU；编辑补丁按版本同步 Worker，仅重建受影响分块。
-
-本地文件沿用 emap 的导入限制；没有额外的 benchmark 64 MiB 文件或 256 MiB 几何拒绝门禁。
-流式 GeoJSON 单个 Feature 的文本窗口保护与文件总大小是不同限制。
-
-## 验证与边界
-
-全精度五文件基线见 [全精度实测](luma-full-precision-performance.md)。本轮点优化、像素对照与
-同数据 GeoArrow 参考见 [点优化](luma-point-optimization.md)。测试只使用授权真实文件做性能依据。
-
-默认渲染器迁移、所有属性样式、所有编辑工具、跨浏览器恢复和 GeoTIFF 端到端性能仍须分别验收。
-实验栅格场景只比较固定已解码瓦片的合成，不表示文件读取或解码加速。
-未提交、未推送、未发布。
-
-## LUCC 编辑刷新与首帧
-
-编辑示例的背景与原始编辑覆盖层分离：背景就绪后可缓存为纹理，手柄和选中轮廓仍每帧实时绘制。
-坐标补丁同步期间保留旧的完整背景，受影响的填充与描边准备后按版本一次切换，不再产生缺块过渡。
-同一视图仅重建受影响的屏幕描边块。原始三角网使用 128 MiB 的 Worker 缓存，局部移动通过
-方向、重叠检查后才能复用连接；洞归属变化、退化或不满足条件时仍完整三角化，不暗中化简。
-加载和上下文恢复期间禁止发布部分几何帧，首次呈现需等待完整准备。详见 `docs/luma-editor-refresh.md`。
-
-## 深度缩放坐标对齐
-
-已修复原始 GPU 坐标低位在深度缩放下丢失造成的手柄/边界错位，两后端统一投影与线段端点锚定。
-原始数据、屏幕过滤和编辑命令不变；实测范围见 [深度缩放精度](luma-zoom-precision.md)。
+按正式 API 验收大型矢量首次构建的响应性，再复用实验分块 Worker；之后分别接入原生整数栅格
+和正式相机/交互。不能因为三后端选择已接入，就把全部实验性能与 2.5D 编辑能力视为已验收。

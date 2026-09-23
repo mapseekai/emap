@@ -5,6 +5,8 @@ import type { MapshaperLayer } from '../../../shared/types/mapshaper-types';
 
 /** Renderer boundary: consumers never obtain Canvas, painter or scheduler state. */
 export interface RenderContract {
+  /** Actual main-map backend, absent for externally supplied unreported painters. */
+  readonly backend?: import('../../../engine/map/renderer').RendererBackend | null;
   /** Top-first order shared by vector sources and source-scoped render passes. */
   setSourceOrder(order: readonly string[]): void;
   getSourceOrder(): readonly string[];

@@ -250,7 +250,6 @@ it('stays stopped after a source error and releases its resources on disposal', 
   expect(source.dispose).toHaveBeenCalledOnce();
 });
 
-
 it('falls back to the bounded raw reader when a nonaligned texture exceeds the packed-output cap', async () => {
   const { layer, source, gpu, report } = setup(3072, 3072);
   Object.assign(source.metadata.levels[0], { tileWidth: 1536, tileHeight: 1536 });

@@ -1,3 +1,4 @@
+import { awaitWithSignal } from '../../../shared/await-with-signal';
 import { PointIconImages } from '../../rendering/icons/images';
 import { BoundLabelManager, type LabelBinding } from '../../rendering/labels/manager';
 import type { RenderPass, RenderFrame } from '../../../runtime/services/contracts/render-pass';
@@ -49,6 +50,10 @@ interface Dependencies {
 
 /** render implementation, wired through explicit service dependencies. */
 export class CanvasRenderService {
+  private _disposed = false;
+  get backend() {
+    return this._painter?.backend ?? null;
+  }
   private _labels: BoundLabelManager | null = null;
   private _icons: PointIconImages | null = null;
   private readonly _passes = new Map<RenderPass, RenderPassStage>();
@@ -192,6 +197,8 @@ export class CanvasRenderService {
     const width = this.deps.surface._container.clientWidth;
     const height = this.deps.surface._container.clientHeight;
     this.deps.view._viewport.updateSize(width, height);
+    this._painter.setPixelRatio(window.devicePixelRatio || 1);
+    this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
     this._painter.resize(width, height);
     this._overlayPainter.resize(width, height);
   }
@@ -289,12 +296,39 @@ export class CanvasRenderService {
     }
     this._icons ??= new PointIconImages(
       () => this._scheduleRender(),
-      () => this._painter.clearIcons?.(),
+      (asset) => {
+        this._painter.forgetImage?.(asset.image);
+        this._painter.clearIcons?.();
+      },
       (_url, error) => this.deps.events.fire('warning', { layerId: 'point-icons', error }),
     );
     this._icons.retain(icons);
   }
+  private _liveVertexState: unknown = null;
+  private _liveEditArcs: object | null = null;
+
+  private _syncLiveEditGeometry(): void {
+    if (!this._painter.clearGeometryCache) return;
+    const vertex =
+      this.deps.editState._editState.mode === 'vertex'
+        ? this.deps.editState._editState.vertex
+        : null;
+    if (vertex === this._liveVertexState) return;
+    const previous = this._liveEditArcs;
+    this._liveVertexState = vertex;
+    this._liveEditArcs = vertex?.arcs ?? null;
+    // Live vertex dragging deliberately avoids bumping dataset versions on every
+    // pointer event. Invalidate only its source when the preview state changes;
+    // unrelated sources keep their GPU buffers, and unchanged hovers are free.
+    for (const [sourceId, source] of this.deps.document._sources) {
+      const arcs = source.getArcs();
+      if ((previous && arcs === previous) || (this._liveEditArcs && arcs === this._liveEditArcs))
+        this._painter.clearGeometryCache({ sourceId });
+    }
+  }
+
   _renderImpl(): void {
+    this._syncLiveEditGeometry();
     this._prepareIcons();
     const transform = this.deps.view._viewport.transform;
     this._painter.setTransform(transform);
@@ -303,11 +337,17 @@ export class CanvasRenderService {
 
     const lineScale = this.deps.view._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
-    this._renderPasses('before-layers');
-    this._renderLayers(pixelSize, lineScale);
-    this._renderPasses('after-layers');
-    this._renderBoundLabels();
-    this._renderHighlight(transform, lineScale);
+    try {
+      this._renderPasses('before-layers');
+      this._renderLayers(pixelSize, lineScale);
+      this._painter.setLayerContext?.(null);
+      this._renderPasses('after-layers');
+      this._renderBoundLabels();
+      this._renderHighlight(transform, lineScale);
+    } finally {
+      this._painter.setLayerContext?.(null);
+      this._painter.finishFrame?.();
+    }
     this._renderEditOverlay();
   }
 
@@ -443,12 +483,16 @@ export class CanvasRenderService {
     if (!bindings.length) {
       this._labels?.dispose();
       this._labels = null;
+      this._painter.clearLabels?.();
       return;
     }
     this._labels ??= new BoundLabelManager(
       () => this._scheduleRender(),
       (error) => this.deps.events.fire('error', { error }),
+      globalThis.document,
+      this._painter.createLabelAtlas?.(),
     );
+    this._labels.pause(this._navSnapshotTransform !== null);
     const view = this.deps.view._viewport;
     this._painter.drawLabels(
       this._labels.request(
@@ -480,14 +524,14 @@ export class CanvasRenderService {
   }
 
   _overlayCanvas!: HTMLCanvasElement;
-  initialize(): void {
+  async initialize(): Promise<void> {
     const container = this.deps.surface._canvasContainer;
     this._canvas = document.createElement('canvas');
     this._canvas.style.position = 'absolute';
     this._canvas.style.top = '0';
     this._canvas.style.left = '0';
     container.appendChild(this._canvas);
-    this._painter = this.deps.painterFactory.create(this._canvas);
+    this._painter = await this._createPainter(this._canvas, 'main');
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._overlayCanvas = document.createElement('canvas');
     this._overlayCanvas.style.position = 'absolute';
@@ -495,7 +539,7 @@ export class CanvasRenderService {
     this._overlayCanvas.style.left = '0';
     this._overlayCanvas.style.pointerEvents = 'none';
     container.appendChild(this._overlayCanvas);
-    this._overlayPainter = this.deps.painterFactory.create(this._overlayCanvas);
+    this._overlayPainter = await this._createPainter(this._overlayCanvas, 'overlay');
     this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
     this._scheduler = new RenderScheduler({
@@ -506,14 +550,54 @@ export class CanvasRenderService {
     });
     this._updateSize();
   }
+  private async _createPainter(
+    canvas: HTMLCanvasElement,
+    role: 'main' | 'overlay',
+  ): Promise<EditPainter> {
+    const signal = this.deps.signal;
+    const pending = Promise.resolve(
+      this.deps.painterFactory.create(canvas, {
+        role,
+        signal,
+        invalidate: () => {
+          if (!this._disposed) this._scheduleRender();
+        },
+        report: (error) => {
+          if (!this._disposed) this.deps.events.fire('error', { error });
+        },
+      }),
+    ).then((painter) => {
+      if (signal.aborted) {
+        painter.dispose?.();
+        canvas.width = canvas.height = 0;
+        canvas.remove();
+        signal.throwIfAborted();
+      }
+      return painter;
+    });
+    const painter = await awaitWithSignal(pending, signal);
+    if (this._disposed || this.deps.signal.aborted) {
+      painter.dispose?.();
+      canvas.width = canvas.height = 0;
+      canvas.remove();
+      throw new DOMException('Map disposed before painter initialization', 'AbortError');
+    }
+    canvas.dataset.emapRenderer = painter.backend ?? 'custom';
+    return painter;
+  }
   clearLodCache(options: { sourceId?: string; layerId?: string } = {}): void {
     if (!this._painter) return;
+    this._painter.clearGeometryCache?.(options);
     const cache = pointLodForPainter(this._painter);
     if (options.layerId !== undefined) cache.clear(options.layerId);
     else if (options.sourceId !== undefined) cache.clearSource(options.sourceId);
     else cache.clear();
   }
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    this._liveVertexState = null;
+    this._liveEditArcs = null;
     this._icons?.dispose();
     this._icons = null;
     this._painter?.clearIcons?.();
@@ -531,6 +615,8 @@ export class CanvasRenderService {
     this._passes.clear();
     this._scheduler?.dispose();
     this.clearLodCache();
+    this._painter?.dispose?.();
+    this._overlayPainter?.dispose?.();
     // Detaching a DOM node alone does not release backing pixels when a host
     // still retains a disposed map/provider handle for diagnostics.
     for (const canvas of [this._canvas, this._overlayCanvas]) {

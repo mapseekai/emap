@@ -82,19 +82,35 @@ describe('full-precision spatial chunk contracts', () => {
     expect(index.visible(new AffineTransform(10, -10, -500, 700), 100, 100)).toContain(fill);
   });
   it('never changes point count or path detail with scale or legacy level arguments', async () => {
-    const points:MapshaperDataset={layers:[{geometry_type:'point',shapes:[[[0,0]],[[.00001,.00001]],[[.00002,.00002]]]}]};
-    const p=new FullGeometrySource(points,[0,0,1,1]);await p.initialize(new AbortController().signal);
-    expect(p.chunks.reduce((n,c)=>n+p.build(c,100).geometry.count,0)).toBe(3);
-    for(const c of p.chunks)expect(p.build(c,-100).geometry.vertices).toEqual(p.build(c,100).geometry.vertices);
-    const importer=getDefaultMapshaperAdapter().createPathImporter();
-    importer.startShape();importer.importLine([[0,0],[1e-9,1e-9],[2e-9,0]]);
-    const lines=new FullGeometrySource(importer.done(),[0,0,1,1]);await lines.initialize(new AbortController().signal);
-    const line=lines.chunks.find(c=>c.kind==='line')!;
-    const near=lines.build(line,-100),far=lines.build(line,100);
-    expect(near.geometry.kind).toBe('path');expect(far.geometry.segmentCount).toBe(2);
-    expect(far.geometry.vertices).toEqual(near.geometry.vertices);expect(far.omitted).toBe(0);
-    expect(lines.level(new AffineTransform(1e-12,-1e-12,0,0))).toBe(0);
-    p.dispose();lines.dispose();
+    const points: MapshaperDataset = {
+      layers: [
+        { geometry_type: 'point', shapes: [[[0, 0]], [[0.00001, 0.00001]], [[0.00002, 0.00002]]] },
+      ],
+    };
+    const p = new FullGeometrySource(points, [0, 0, 1, 1]);
+    await p.initialize(new AbortController().signal);
+    expect(p.chunks.reduce((n, c) => n + p.build(c, 100).geometry.count, 0)).toBe(3);
+    for (const c of p.chunks)
+      expect(p.build(c, -100).geometry.vertices).toEqual(p.build(c, 100).geometry.vertices);
+    const importer = getDefaultMapshaperAdapter().createPathImporter();
+    importer.startShape();
+    importer.importLine([
+      [0, 0],
+      [1e-9, 1e-9],
+      [2e-9, 0],
+    ]);
+    const lines = new FullGeometrySource(importer.done(), [0, 0, 1, 1]);
+    await lines.initialize(new AbortController().signal);
+    const line = lines.chunks.find((c) => c.kind === 'line')!;
+    const near = lines.build(line, -100),
+      far = lines.build(line, 100);
+    expect(near.geometry.kind).toBe('path');
+    expect(far.geometry.segmentCount).toBe(2);
+    expect(far.geometry.vertices).toEqual(near.geometry.vertices);
+    expect(far.omitted).toBe(0);
+    expect(lines.level(new AffineTransform(1e-12, -1e-12, 0, 0))).toBe(0);
+    p.dispose();
+    lines.dispose();
   });
   it('cancels initialization without mutating the source', async () => {
     const dataset: MapshaperDataset = { layers: [{ geometry_type: 'point', shapes: [[[1, 2]]] }] };
@@ -106,14 +122,16 @@ describe('full-precision spatial chunk contracts', () => {
   });
 });
 
-
 it('keeps outside point centers whose larger symbols overlap the viewport', async () => {
-  const source=new FullGeometrySource({layers:[{geometry_type:'point',shapes:[[[-40,50]],[[50,50]]]}]},[-50,0,100,100]);
+  const source = new FullGeometrySource(
+    { layers: [{ geometry_type: 'point', shapes: [[[-40, 50]], [[50, 50]]] }] },
+    [-50, 0, 100, 100],
+  );
   await source.initialize(new AbortController().signal);
-  const transform=new AffineTransform(1,-1,0,100);
-  const narrow=source.visible(transform,100,100,8);
-  const wide=source.visible(transform,100,100,65);
+  const transform = new AffineTransform(1, -1, 0, 100);
+  const narrow = source.visible(transform, 100, 100, 8);
+  const wide = source.visible(transform, 100, 100, 65);
   expect(wide.length).toBeGreaterThan(narrow.length);
-  expect(wide.some(c=>c.bounds[0]===-40)).toBe(true);
+  expect(wide.some((c) => c.bounds[0] === -40)).toBe(true);
   source.dispose();
 });

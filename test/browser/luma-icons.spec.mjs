@@ -87,7 +87,7 @@ test('public Emap icon API preserves filters, visibility, parent order and ordin
  await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');const url=await atlas(page);
  await page.evaluate(async({url,points})=>{
   lumaBenchmark.dispose();const host=document.createElement('div');host.id='formal-icon-test';Object.assign(host.style,{position:'fixed',inset:'0',width:'800px',height:'600px',background:'white',zIndex:'9999'});document.body.append(host);
-  const map=await emap.Emap.create({container:host,preset:'viewer'}),source=new emap.TopologySource('poi');
+  const map=await emap.Emap.create({container:host,preset:'viewer',renderer:'canvas2d'}),source=new emap.TopologySource('poi');
   await source.setData({filename:'poi.geojson',content:new TextEncoder().encode(JSON.stringify(points))});await map.addSource('poi',source);
   map.addLayer({id:'poi',source:'poi',type:'circle',icon:{url,rect:[0,0,64,64],size:40,anchor:[.5,1]}});
   map.setExtent(new emap.Bounds(-4,-4,4,4));window.formalIconMap=map;

@@ -122,6 +122,11 @@ export function renderLayers(
 
     const ml = ctx.resolveSourceLayer(layer.source, layer['source-layer']);
     const dataset = source.getDataset?.();
+    ctx.painter.setLayerContext?.({
+      id: layer.id,
+      sourceId: layer.source,
+      revision: dataset?.editVersion ?? 0,
+    });
     let featureMask: Uint8Array | null = null;
     if (layer.filter && dataset && ml?.shapes && ctx.filterResolver) {
       featureMask = ctx.filterResolver.mask({

@@ -32,7 +32,7 @@ function container(): HTMLElement {
 }
 describe('EmapEventMap runtime wiring (DX P10)', () => {
   it('keyed on() delivers the typed payload at runtime', async () => {
-    const map = await Emap.create({ container: container() });
+    const map = await Emap.create({ container: container(), renderer: 'canvas2d' });
     const seen: Array<{
       type: string;
       center?: [number, number];
@@ -44,7 +44,7 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
     expect(end!.center).toEqual([3, 4]);
   });
   it('off() unsubscribes a keyed listener', async () => {
-    const map = await Emap.create({ container: container() });
+    const map = await Emap.create({ container: container(), renderer: 'canvas2d' });
     let n = 0;
     const cb = () => {
       n++;
@@ -56,7 +56,7 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
     expect(n).toBe(1);
   });
   it('escape-hatch custom event still fires through the generic path', async () => {
-    const map = await Emap.create({ container: container() });
+    const map = await Emap.create({ container: container(), renderer: 'canvas2d' });
     let got = '';
     map.on('myCustomThing', (e: { type: string; payload?: string }) => {
       got = e.payload ?? '';
@@ -65,7 +65,7 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
     expect(got).toBe('hi');
   });
   it('delivers a cloned rendered-layer snapshot through the keyed listener', async () => {
-    const map = await Emap.create({ container: container() });
+    const map = await Emap.create({ container: container(), renderer: 'canvas2d' });
     const source = new TopologySource('runtime');
     source.setDataset({ layers: [], info: { crs_string: 'EPSG:4326' } });
     const seen: unknown[] = [];

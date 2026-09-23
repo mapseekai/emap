@@ -1,5 +1,8 @@
+import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 import { expect, test } from '@playwright/test';
 import { examples } from '../../docs-meta/examples.ts';
+
+test.beforeEach(async ({page}) => installCanvasReadback(page));
 
 function collectRuntimeErrors(page) {
   const errors = [];
@@ -38,10 +41,8 @@ test('GeoJSON viewer paints a real Canvas and survives pointer navigation', asyn
 
   await expect
     .poll(async () =>
-      canvas.evaluate((element) => {
-        const context = element.getContext('2d');
-        if (!context || element.width === 0 || element.height === 0) return 0;
-        const pixels = context.getImageData(0, 0, element.width, element.height).data;
+      canvas.evaluate(async (element) => {
+        const pixels = await window.readCanvasPixels(element);
         let painted = 0;
         for (let index = 3; index < pixels.length; index += 64) {
           if (pixels[index] !== 0) painted += 1;

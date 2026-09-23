@@ -87,7 +87,8 @@
       "types": "./dist/integrations/geotiff/index.d.ts",
       "import": "./dist/emap-geotiff.mjs"
     },
-    "./dist/emap-geotiff-worker.js": "./dist/emap-geotiff-worker.js"
+    "./dist/emap-geotiff-worker.js": "./dist/emap-geotiff-worker.js",
+    "./dist/emap-msdf-worker.js": "./dist/emap-msdf-worker.js"
   },
   "sideEffects": [
     "*.css",
@@ -114,7 +115,9 @@
     "LICENSE",
     "dist/emap-geopackage-worker.js",
     "dist/sql-wasm.wasm",
-    "dist/emap-geotiff-worker.js"
+    "dist/emap-geotiff-worker.js",
+    "dist/emap-msdf-worker.js",
+    "dist/msdf"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",

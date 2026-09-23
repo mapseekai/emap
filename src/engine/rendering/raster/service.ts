@@ -215,6 +215,7 @@ export class RasterRenderService implements RasterContract {
           layer.style.opacity ?? 1,
           layer.style.resampling === 'bilinear',
           patch.bounds,
+          true,
         );
       }
     }

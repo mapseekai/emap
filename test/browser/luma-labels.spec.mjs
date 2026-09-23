@@ -116,7 +116,7 @@ test('public Emap labels follow layer filters, visibility and removal without ne
     window.lumaBenchmark.dispose();
     const host=document.createElement('div');host.id='formal-label-test';
     Object.assign(host.style,{position:'fixed',inset:'0',width:'800px',height:'600px',background:'white',zIndex:'9999'});document.body.append(host);
-    const map=await emap.Emap.create({container:host,preset:'viewer'});
+    const map=await emap.Emap.create({container:host,preset:'viewer',renderer:'canvas2d'});
     const source=new emap.TopologySource('cities');
     await source.setData({filename:'cities.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features:[
       {type:'Feature',properties:{name:'北京 City A',value:1},geometry:{type:'Point',coordinates:[0,0]}},

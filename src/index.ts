@@ -458,6 +458,7 @@ export type { Plugin } from 'cordis';
 export { inspectContext, inspectServices } from './runtime/context/inspection';
 export { settleContext } from './runtime/context/settle';
 
+export type { RendererBackend } from './engine/map/renderer';
 export type { IconOptions } from './engine/map/icon';
 export type {
   SymbolStyle,

@@ -88,6 +88,15 @@ export interface ArrowDotPathOptions {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
+  /** @internal Optional lifecycle for GPU painters; existing synchronous painters remain valid. */
+  readonly backend?: import('../map/renderer').RendererBackend;
+  finishFrame?(): void;
+  dispose?(): void;
+  clearGeometryCache?(scope?: { sourceId?: string; layerId?: string }): void;
+  setLayerContext?(context: { id: string; sourceId: string; revision: number } | null): void;
+  createLabelAtlas?(): import('./labels/text-types').LabelAtlasProvider;
+  clearLabels?(): void;
+  forgetImage?(image: CanvasImageSource): void;
   /** @internal Optional image symbols, consuming the same original/LOD point selection. */
   drawPointIcons?(
     shapes: readonly (FeatureShape | null | undefined)[],
@@ -107,6 +116,8 @@ export interface CorePainter {
     smoothing?: boolean,
     /** Map-coordinate subregion; shared boundaries are snapped to device pixels. */
     clipBounds?: readonly [number, number, number, number],
+    /** Immutable decoded raster tiles can reuse their texture without per-frame uploads. */
+    immutable?: boolean,
   ): void;
   drawPaths(
     shapes: readonly (FeatureShape | null | undefined)[],

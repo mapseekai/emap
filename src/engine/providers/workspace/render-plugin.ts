@@ -1,4 +1,3 @@
-import { pluginSignal } from '../../../runtime/context/cancellation';
 import type { Plugin } from 'cordis';
 import { CanvasRenderService } from './render';
 export const renderPlugin: Plugin.Object = {
@@ -15,9 +14,16 @@ export const renderPlugin: Plugin.Object = {
     'view',
   ],
   provide: ['render'],
-  apply(ctx) {
-    const signal = pluginSignal(ctx);
-    ctx.effect(function* () {
+  async apply(ctx) {
+    const controller = new AbortController();
+    // Root disposal must cancel an unfinished device request before Cordis waits for
+    // this provider to finish loading. Both registrations remain native owned effects.
+    ctx.effect(() =>
+      ctx.root.effect(() => () => controller.abort(new DOMException('Map disposed', 'AbortError'))),
+    );
+    const signal = controller.signal;
+    // Await the effect: fire-and-forget async effects do not keep the provider LOADING.
+    await ctx.effect(async function* () {
       const value = new CanvasRenderService({
         cache: ctx.cache,
         document: ctx.document,
@@ -30,8 +36,9 @@ export const renderPlugin: Plugin.Object = {
         view: ctx.view,
       });
       yield ctx.effect(() => () => value.dispose());
+      await value.initialize();
+      signal.throwIfAborted();
       yield ctx.provide('render', value);
-      value.initialize();
       const events = ctx.mapEvents;
       const onRender = (event: {
         action?: import('../../map/types').RenderAction;

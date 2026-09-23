@@ -1,11 +1,14 @@
+import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 import { test, expect } from '@playwright/test';
 import { mkdtemp, readFile, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+test.beforeEach(async ({page}) => installCanvasReadback(page));
+
 const route = '/mapseekai/emap/examples/geotiff-viewer/';
-async function ready(page) {
-  await page.goto(route);
+async function ready(page, renderer) {
+  await page.goto(route + (renderer ? "?renderer=" + renderer : ""));
   await expect(page.locator('#levels')).toHaveText('4');
   await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().cachedBytes)).toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().activeReads + window.geotiffDemo.stats().queuedReads)).toBe(0);
@@ -23,13 +26,11 @@ test('local TIFF decodes in a classic Worker and paints the existing map canvas'
     const canvases = [...document.querySelectorAll('#map canvas')];
     return {
       pixel, crs: state.metadata.crs, error: state.error, stats: state.stats(),
-      painted: canvases.some(canvas => {
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return false;
-        const values = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      painted: (await Promise.all(canvases.map(async canvas => {
+        const values = await window.readCanvasPixels(canvas);
         for (let i = 0; i < values.length; i += 4) if (values[i] === 180 && values[i+3] > 0) return true;
         return false;
-      }),
+      }))).some(Boolean),
       canvasCount: canvases.length,
     };
   });
@@ -146,11 +147,10 @@ test('cached zoom levels do not multiply layer opacity', async ({ page }) => {
     await page.waitForTimeout(180);
     await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().activeReads + window.geotiffDemo.stats().queuedReads)).toBe(0);
   }
-  const alpha = await page.evaluate(() => {
+  const alpha = await page.evaluate(async () => {
     let maximum = 0;
     for (const canvas of document.querySelectorAll('#map canvas')) {
-      const context = canvas.getContext('2d'); if (!context) continue;
-      const bytes = context.getImageData(0,0,canvas.width,canvas.height).data;
+      const bytes = await window.readCanvasPixels(canvas);
       for(let i=0;i<bytes.length;i+=4) if(Math.abs(bytes[i]-180)<=2) maximum=Math.max(maximum,bytes[i+3]);
     }
     return maximum;
@@ -169,9 +169,9 @@ async function idleRaster(page) {
   })).toBe(0);
   await renderedFrame();
 }
-function rasterPixels() {
-  const canvas=document.querySelector('#map canvas');const context=canvas.getContext('2d');
-  const bytes=context.getImageData(0,0,canvas.width,canvas.height).data;
+async function rasterPixels() {
+  const canvas=document.querySelector('#map canvas');
+  const bytes=await window.readCanvasPixels(canvas);
   let count=0,min=255,max=0;
   for(let i=0;i<bytes.length;i+=4)if(bytes[i+3]>0){count++;min=Math.min(min,bytes[i]);max=Math.max(max,bytes[i]);}
   return {count,min,max};
@@ -273,8 +273,8 @@ test('RGB defaults can switch to one selected grayscale band and back without ch
   await expect.poll(()=>page.evaluate(()=>window.geotiffDemo.map.ctx.raster.toReferences()[0].style.bands)).toEqual([1]);
   await expect.poll(()=>page.evaluate(()=>window.geotiffDemo.stats().committedFrames)).toBeGreaterThan(initial);
   await idleRaster(page);
-  const pixels=await page.evaluate(()=>{
-    const canvas=document.querySelector('#map canvas'),data=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+  const pixels=await page.evaluate(async()=>{
+    const canvas=document.querySelector('#map canvas'),data=await window.readCanvasPixels(canvas);
     let count=0,colored=0,min=255,max=0;
     for(let i=0;i<data.length;i+=4)if(data[i+3]>0){count++;if(data[i]!==data[i+1]||data[i]!==data[i+2])colored++;min=Math.min(min,data[i]);max=Math.max(max,data[i]);}
     return {count,colored,min,max};
@@ -306,8 +306,8 @@ test('single-band numerical files select grayscale automatically and prevent inv
 });
 
 
-async function stagedRaster(page, transparent) {
-  await ready(page);await idleRaster(page);
+async function stagedRaster(page, transparent, renderer) {
+  await ready(page, renderer);await idleRaster(page);
   await page.evaluate(({transparent})=>{
     const state=window.geotiffDemo, metadata={...state.metadata,noData:0};
     const reference=state.map.ctx.raster.toReferences()[0].source;
@@ -350,8 +350,11 @@ async function stagedRaster(page, transparent) {
   await expect.poll(()=>page.evaluate(()=>window.progressiveFixture.waiting())).toBeGreaterThan(1);
   return before;
 }
-function progressivePixels() {
-  const canvas=document.querySelector('#map canvas'),bytes=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+async function progressivePixels() {
+  // WebGPU presentation textures auto-expire; read the accepted frame in the
+  // same task as submission, rather than acquiring a cleared future texture.
+  window.geotiffDemo.map.render();
+  const canvas=document.querySelector('#map canvas'),bytes=await window.readCanvasPixels(canvas);
   let old=0,fresh=0,background=0,maxAlpha=0;
   for(let i=0;i<bytes.length;i+=4){
     if(Math.abs(bytes[i]-73)<=2 && bytes[i+3]>0)old++;
@@ -387,14 +390,16 @@ test('a ready NoData block reveals the lower layer instead of the old raster',as
   expect(await page.evaluate(()=>window.geotiffDemo.error)).toBeNull();
 });
 
-test('fractional DPR and resampled mixed resolutions have no internal transparent seams',async({browser})=>{
+for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: fractional DPR and resampled mixed resolutions have no internal transparent seams`,async({browser},info)=>{
   const context=await browser.newContext({baseURL:'http://127.0.0.1:4173',deviceScaleFactor:1.5,viewport:{width:1311,height:823}});
   const page=await context.newPage();
+  await installCanvasReadback(page);
   try{
-    await stagedRaster(page,false);await page.evaluate(()=>window.progressiveFixture.releaseOne());
+    await stagedRaster(page,false,renderer);await page.evaluate(()=>window.progressiveFixture.releaseOne());
     await expect.poll(()=>page.evaluate(progressivePixels).then(p=>p.fresh)).toBeGreaterThan(1000);
-    const seams=await page.evaluate(()=>{
-      const canvas=document.querySelector('#map canvas'),bytes=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    const seams=await page.evaluate(async()=>{
+      window.geotiffDemo.map.render();
+      const canvas=document.querySelector('#map canvas'),bytes=await window.readCanvasPixels(canvas);
       let holes=0,maxAlpha=0;
       for(let y=Math.floor(canvas.height*.35);y<canvas.height*.65;y++)for(let x=Math.floor(canvas.width*.35);x<canvas.width*.65;x++){
         const alpha=bytes[(y*canvas.width+x)*4+3];if(alpha<126)holes++;maxAlpha=Math.max(maxAlpha,alpha);
@@ -402,6 +407,7 @@ test('fractional DPR and resampled mixed resolutions have no internal transparen
       return {holes,maxAlpha};
     });
     expect(seams).toEqual({holes:0,maxAlpha:128});
+    await page.screenshot({path:info.outputPath('fractional-progressive.png')});
     await page.evaluate(()=>window.progressiveFixture.releaseAll());await idleRaster(page);
   }finally{await context.close();}
 });

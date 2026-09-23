@@ -1398,14 +1398,17 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._dragging = false;
 
     const dataCoords = this._resolveDragCoords(px, py);
-    const sourceId = this._hoveredFeature.source;
+    // pushCommand fires historychange synchronously. Dropping an existing redo
+    // branch can clear hover state while this completed drag is being finalized.
+    const feature = this._hoveredFeature;
+    const sourceId = feature.source;
     const movedVertexIds = this._hoverVertexIds.slice();
     const finishingDetachedNode = this._matchesDetachedNode(this._hoveredFeature);
     if (movedVertexIds.length > 0) {
       getDefaultMapshaperAdapter().snapVertices(
         movedVertexIds,
         [dataCoords[0], dataCoords[1]],
-        this._hoveredFeature.arcs as unknown as ArcCollection,
+        feature.arcs as unknown as ArcCollection,
       );
       this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
       if (finishingDetachedNode && this._detachedNode) {
@@ -1417,7 +1420,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // during the drag (see paths/mapshaper-vertex-utils.mjs). Avoid a no-op
     // transformPoints() here: it walks every vertex and rebuilds every arc bbox,
     // which is a visible mouseup pause on large datasets.
-    const arcs = this._hoveredFeature.arcs;
+    const arcs = feature.arcs;
 
     // If the source has a low-detail LOD copy, rebuild it before the final
     // repaint. Deferring this into DisplayArcs.getScaledArcs() moves the O(N)
@@ -1454,15 +1457,15 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
     const coincidentVertexIds = getDefaultMapshaperAdapter().findNearestVertices(
       dataCoords,
-      this._hoveredFeature.shape,
+      feature.shape,
       arcs as unknown as ArcCollection,
     );
-    if (coincidentVertexIds.length > 0) {
+    if (coincidentVertexIds.length > 0 && this._hoveredFeature === feature) {
       this._hoverVertexIds = coincidentVertexIds;
     }
 
-    if (finishingDetachedNode && this._detachedNode && source) {
-      const layer = this._map.layers.resolve(sourceId, this._hoveredFeature.layer);
+    if (finishingDetachedNode && this._detachedNode && source && this._hoveredFeature === feature) {
+      const layer = this._map.layers.resolve(sourceId, feature.layer);
       const featureVertexId = this._findHoveredFeatureVertexId();
       if (
         layer &&
@@ -1470,7 +1473,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
         isSharedNode(
           source as TopologySource,
           layer,
-          this._hoveredFeature.id,
+          feature.id,
           featureVertexId,
           source.getLayers(),
         )
@@ -1481,11 +1484,11 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
     // Fire vertex_moved event with topology info
     this._map.fire('vertex_moved', {
-      id: this._hoveredFeature.id,
+      id: feature.id,
       source: sourceId,
-      layer: this._hoveredFeature.layer,
-      vertexIndex: this._hoverVertexIds[0] ?? null,
-      vertexIds: this._hoverVertexIds,
+      layer: feature.layer,
+      vertexIndex: coincidentVertexIds[0] ?? movedVertexIds[0] ?? null,
+      vertexIds: coincidentVertexIds.length ? coincidentVertexIds : movedVertexIds,
       coords: dataCoords,
     });
 

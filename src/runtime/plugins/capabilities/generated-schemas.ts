@@ -2959,6 +2959,515 @@ export const operationSchemas = {
                     },
                     additionalProperties: false,
                   },
+                  symbol: {
+                    type: 'object',
+                    properties: {
+                      layout: {
+                        type: 'object',
+                        properties: {
+                          visibility: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['visible'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['none'],
+                              },
+                            ],
+                            description:
+                              'Hides the attached text/icon only, not the parent geometry.',
+                          },
+                          'text-field': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                            description:
+                              'Literal text or the existing safe expression subset; no token-template expansion.',
+                          },
+                          'text-size': {
+                            type: 'number',
+                          },
+                          'text-font': {
+                            type: 'array',
+                            items: {
+                              type: 'string',
+                            },
+                            description:
+                              'One font family/face. MSDF keeps its own Noto/custom-font resolver.',
+                          },
+                          'text-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'em units, converted to the existing screen-pixel placement offset.',
+                          },
+                          'text-allow-overlap': {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          'text-padding': {
+                            type: 'number',
+                          },
+                          'icon-image': {
+                            type: 'string',
+                            description:
+                              'Name in symbol.images. Images retain the existing URL/rect cache.',
+                          },
+                          'icon-size': {
+                            type: 'number',
+                            description:
+                              'Multiplier of symbol.images[name].size; never a CSS-pixel height.',
+                          },
+                          'icon-anchor': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['center'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-right'],
+                              },
+                            ],
+                          },
+                          'icon-rotate': {
+                            type: 'number',
+                          },
+                          'icon-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Multiplied by icon-size, then rotated with the icon, before conversion to screen pixels.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      paint: {
+                        type: 'object',
+                        properties: {
+                          'text-color': {
+                            type: 'string',
+                          },
+                          'text-halo-color': {
+                            type: 'string',
+                          },
+                          'text-halo-width': {
+                            type: 'number',
+                          },
+                          'icon-opacity': {
+                            type: 'number',
+                          },
+                          'icon-color': {
+                            type: 'string',
+                            description:
+                              'Existing alpha-mask tint; does not require a MapLibre SDF sprite.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      images: {
+                        type: 'object',
+                        properties: {},
+                        additionalProperties: {
+                          type: 'object',
+                          properties: {
+                            url: {
+                              type: 'string',
+                            },
+                            size: {
+                              anyOf: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'array',
+                                  prefixItems: [
+                                    {
+                                      type: 'number',
+                                    },
+                                    {
+                                      type: 'number',
+                                    },
+                                  ],
+                                  minItems: 2,
+                                  maxItems: 2,
+                                },
+                              ],
+                              description:
+                                'Reference CSS-pixel height (preserving aspect) or [width,height], independent of source image resolution.',
+                            },
+                            rect: {
+                              type: 'array',
+                              prefixItems: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                              ],
+                              minItems: 4,
+                              maxItems: 4,
+                              description:
+                                'Optional original-image pixel crop, as in IconOptions.rect.',
+                            },
+                          },
+                          required: ['url', 'size'],
+                          additionalProperties: false,
+                        },
+                        description:
+                          'Local named image definitions; the same URL is shared by the existing renderer cache.',
+                      },
+                      labeling: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          fontUrl: {
+                            type: 'string',
+                          },
+                          fontWeight: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bold'],
+                              },
+                            ],
+                          },
+                          fontStyle: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['italic'],
+                              },
+                            ],
+                          },
+                          placement: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['auto'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['horizontal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['parallel'],
+                              },
+                            ],
+                          },
+                          priority: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                          },
+                          maxLabels: {
+                            type: 'number',
+                          },
+                          minScale: {
+                            type: 'number',
+                          },
+                          maxScale: {
+                            type: 'number',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Advanced text labeling controls that do not fit the MapLibre-inspired layout/paint subset.',
+                      },
+                      icon: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          anchor: {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Native fractional anchors not expressible by the nine named icon-anchor values.',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Icon-only compatibility controls for native anchors/enabled state.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description:
+                      'Preferred attached symbol settings. When present, label/icon are materialized compatibility views.',
+                  },
+                  label: {
+                    type: 'object',
+                    properties: {
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      field: {
+                        type: 'string',
+                        description:
+                          'Attribute column. Mutually exclusive with text. Null/missing values are not labelled.',
+                      },
+                      text: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Literal text or the existing safe style-expression subset (no JavaScript evaluation).',
+                      },
+                      fontFamily: {
+                        type: 'string',
+                      },
+                      fontUrl: {
+                        type: 'string',
+                        description:
+                          'Font outline URL for MSDF (TTF/OTF/WOFF1); resolved by the host, fetched locally in its Worker.',
+                      },
+                      fontSize: {
+                        type: 'number',
+                      },
+                      fontWeight: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bold'],
+                          },
+                        ],
+                      },
+                      fontStyle: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['italic'],
+                          },
+                        ],
+                      },
+                      color: {
+                        type: 'string',
+                      },
+                      haloColor: {
+                        type: 'string',
+                      },
+                      haloWidth: {
+                        type: 'number',
+                      },
+                      offset: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description: 'CSS pixel offset applied after placement.',
+                      },
+                      placement: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['auto'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['horizontal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['parallel'],
+                          },
+                        ],
+                        description:
+                          'Auto: around points, parallel to lines, interior of polygons.',
+                      },
+                      allowOverlap: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      priority: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Higher priorities are placed first; ties use parent layer order and feature ID.',
+                      },
+                      minScale: {
+                        type: 'number',
+                        description:
+                          'CRS-agnostic |mx| limits, in CSS pixels per source coordinate unit.',
+                      },
+                      maxScale: {
+                        type: 'number',
+                      },
+                      maxLabels: {
+                        type: 'number',
+                      },
+                      padding: {
+                        type: 'number',
+                        description: 'Collision spacing in CSS pixels, including the text halo.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description: 'Attached feature labels; not a standalone render/tree layer.',
+                  },
                   id: {
                     type: 'string',
                   },
@@ -3076,6 +3585,515 @@ export const operationSchemas = {
                     },
                     additionalProperties: false,
                   },
+                  symbol: {
+                    type: 'object',
+                    properties: {
+                      layout: {
+                        type: 'object',
+                        properties: {
+                          visibility: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['visible'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['none'],
+                              },
+                            ],
+                            description:
+                              'Hides the attached text/icon only, not the parent geometry.',
+                          },
+                          'text-field': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                            description:
+                              'Literal text or the existing safe expression subset; no token-template expansion.',
+                          },
+                          'text-size': {
+                            type: 'number',
+                          },
+                          'text-font': {
+                            type: 'array',
+                            items: {
+                              type: 'string',
+                            },
+                            description:
+                              'One font family/face. MSDF keeps its own Noto/custom-font resolver.',
+                          },
+                          'text-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'em units, converted to the existing screen-pixel placement offset.',
+                          },
+                          'text-allow-overlap': {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          'text-padding': {
+                            type: 'number',
+                          },
+                          'icon-image': {
+                            type: 'string',
+                            description:
+                              'Name in symbol.images. Images retain the existing URL/rect cache.',
+                          },
+                          'icon-size': {
+                            type: 'number',
+                            description:
+                              'Multiplier of symbol.images[name].size; never a CSS-pixel height.',
+                          },
+                          'icon-anchor': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['center'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-right'],
+                              },
+                            ],
+                          },
+                          'icon-rotate': {
+                            type: 'number',
+                          },
+                          'icon-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Multiplied by icon-size, then rotated with the icon, before conversion to screen pixels.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      paint: {
+                        type: 'object',
+                        properties: {
+                          'text-color': {
+                            type: 'string',
+                          },
+                          'text-halo-color': {
+                            type: 'string',
+                          },
+                          'text-halo-width': {
+                            type: 'number',
+                          },
+                          'icon-opacity': {
+                            type: 'number',
+                          },
+                          'icon-color': {
+                            type: 'string',
+                            description:
+                              'Existing alpha-mask tint; does not require a MapLibre SDF sprite.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      images: {
+                        type: 'object',
+                        properties: {},
+                        additionalProperties: {
+                          type: 'object',
+                          properties: {
+                            url: {
+                              type: 'string',
+                            },
+                            size: {
+                              anyOf: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'array',
+                                  prefixItems: [
+                                    {
+                                      type: 'number',
+                                    },
+                                    {
+                                      type: 'number',
+                                    },
+                                  ],
+                                  minItems: 2,
+                                  maxItems: 2,
+                                },
+                              ],
+                              description:
+                                'Reference CSS-pixel height (preserving aspect) or [width,height], independent of source image resolution.',
+                            },
+                            rect: {
+                              type: 'array',
+                              prefixItems: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                              ],
+                              minItems: 4,
+                              maxItems: 4,
+                              description:
+                                'Optional original-image pixel crop, as in IconOptions.rect.',
+                            },
+                          },
+                          required: ['url', 'size'],
+                          additionalProperties: false,
+                        },
+                        description:
+                          'Local named image definitions; the same URL is shared by the existing renderer cache.',
+                      },
+                      labeling: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          fontUrl: {
+                            type: 'string',
+                          },
+                          fontWeight: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bold'],
+                              },
+                            ],
+                          },
+                          fontStyle: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['italic'],
+                              },
+                            ],
+                          },
+                          placement: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['auto'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['horizontal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['parallel'],
+                              },
+                            ],
+                          },
+                          priority: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                          },
+                          maxLabels: {
+                            type: 'number',
+                          },
+                          minScale: {
+                            type: 'number',
+                          },
+                          maxScale: {
+                            type: 'number',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Advanced text labeling controls that do not fit the MapLibre-inspired layout/paint subset.',
+                      },
+                      icon: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          anchor: {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Native fractional anchors not expressible by the nine named icon-anchor values.',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Icon-only compatibility controls for native anchors/enabled state.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description:
+                      'Preferred attached symbol settings. When present, label/icon are materialized compatibility views.',
+                  },
+                  label: {
+                    type: 'object',
+                    properties: {
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      field: {
+                        type: 'string',
+                        description:
+                          'Attribute column. Mutually exclusive with text. Null/missing values are not labelled.',
+                      },
+                      text: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Literal text or the existing safe style-expression subset (no JavaScript evaluation).',
+                      },
+                      fontFamily: {
+                        type: 'string',
+                      },
+                      fontUrl: {
+                        type: 'string',
+                        description:
+                          'Font outline URL for MSDF (TTF/OTF/WOFF1); resolved by the host, fetched locally in its Worker.',
+                      },
+                      fontSize: {
+                        type: 'number',
+                      },
+                      fontWeight: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bold'],
+                          },
+                        ],
+                      },
+                      fontStyle: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['italic'],
+                          },
+                        ],
+                      },
+                      color: {
+                        type: 'string',
+                      },
+                      haloColor: {
+                        type: 'string',
+                      },
+                      haloWidth: {
+                        type: 'number',
+                      },
+                      offset: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description: 'CSS pixel offset applied after placement.',
+                      },
+                      placement: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['auto'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['horizontal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['parallel'],
+                          },
+                        ],
+                        description:
+                          'Auto: around points, parallel to lines, interior of polygons.',
+                      },
+                      allowOverlap: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      priority: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Higher priorities are placed first; ties use parent layer order and feature ID.',
+                      },
+                      minScale: {
+                        type: 'number',
+                        description:
+                          'CRS-agnostic |mx| limits, in CSS pixels per source coordinate unit.',
+                      },
+                      maxScale: {
+                        type: 'number',
+                      },
+                      maxLabels: {
+                        type: 'number',
+                      },
+                      padding: {
+                        type: 'number',
+                        description: 'Collision spacing in CSS pixels, including the text halo.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description: 'Attached feature labels; not a standalone render/tree layer.',
+                  },
                   id: {
                     type: 'string',
                   },
@@ -3125,6 +4143,114 @@ export const operationSchemas = {
                   type: {
                     type: 'string',
                     enum: ['circle'],
+                  },
+                  icon: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                      },
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      size: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                          },
+                        ],
+                        description:
+                          'Height in CSS pixels, retaining aspect ratio, or explicit [width, height]. Default 32.',
+                      },
+                      anchor: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description:
+                          'Normalized anchor in the cropped image. [0.5, 1] places a pin tip on the point.',
+                      },
+                      rotation: {
+                        type: 'number',
+                        description:
+                          'Clockwise rotation around the anchor, in screen-space degrees.',
+                      },
+                      offset: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description: 'Screen-space CSS pixel offset, applied after rotation.',
+                      },
+                      opacity: {
+                        type: 'number',
+                      },
+                      tint: {
+                        type: 'string',
+                        description:
+                          'Optional alpha-mask recoloring. Omit to preserve the original image colors.',
+                      },
+                      rect: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 4,
+                        maxItems: 4,
+                        description: 'Pixel crop [x, y, width, height] in a shared sprite image.',
+                      },
+                    },
+                    required: ['url'],
+                    additionalProperties: false,
+                    description:
+                      'Optional image symbol replacing the circle, retaining layer/feature identity.',
                   },
                   pointLod: {
                     anyOf: [
@@ -3228,6 +4354,515 @@ export const operationSchemas = {
                       },
                     },
                     additionalProperties: false,
+                  },
+                  symbol: {
+                    type: 'object',
+                    properties: {
+                      layout: {
+                        type: 'object',
+                        properties: {
+                          visibility: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['visible'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['none'],
+                              },
+                            ],
+                            description:
+                              'Hides the attached text/icon only, not the parent geometry.',
+                          },
+                          'text-field': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                            description:
+                              'Literal text or the existing safe expression subset; no token-template expansion.',
+                          },
+                          'text-size': {
+                            type: 'number',
+                          },
+                          'text-font': {
+                            type: 'array',
+                            items: {
+                              type: 'string',
+                            },
+                            description:
+                              'One font family/face. MSDF keeps its own Noto/custom-font resolver.',
+                          },
+                          'text-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'em units, converted to the existing screen-pixel placement offset.',
+                          },
+                          'text-allow-overlap': {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          'text-padding': {
+                            type: 'number',
+                          },
+                          'icon-image': {
+                            type: 'string',
+                            description:
+                              'Name in symbol.images. Images retain the existing URL/rect cache.',
+                          },
+                          'icon-size': {
+                            type: 'number',
+                            description:
+                              'Multiplier of symbol.images[name].size; never a CSS-pixel height.',
+                          },
+                          'icon-anchor': {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['center'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['top-right'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-left'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bottom-right'],
+                              },
+                            ],
+                          },
+                          'icon-rotate': {
+                            type: 'number',
+                          },
+                          'icon-offset': {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Multiplied by icon-size, then rotated with the icon, before conversion to screen pixels.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      paint: {
+                        type: 'object',
+                        properties: {
+                          'text-color': {
+                            type: 'string',
+                          },
+                          'text-halo-color': {
+                            type: 'string',
+                          },
+                          'text-halo-width': {
+                            type: 'number',
+                          },
+                          'icon-opacity': {
+                            type: 'number',
+                          },
+                          'icon-color': {
+                            type: 'string',
+                            description:
+                              'Existing alpha-mask tint; does not require a MapLibre SDF sprite.',
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                      images: {
+                        type: 'object',
+                        properties: {},
+                        additionalProperties: {
+                          type: 'object',
+                          properties: {
+                            url: {
+                              type: 'string',
+                            },
+                            size: {
+                              anyOf: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'array',
+                                  prefixItems: [
+                                    {
+                                      type: 'number',
+                                    },
+                                    {
+                                      type: 'number',
+                                    },
+                                  ],
+                                  minItems: 2,
+                                  maxItems: 2,
+                                },
+                              ],
+                              description:
+                                'Reference CSS-pixel height (preserving aspect) or [width,height], independent of source image resolution.',
+                            },
+                            rect: {
+                              type: 'array',
+                              prefixItems: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                              ],
+                              minItems: 4,
+                              maxItems: 4,
+                              description:
+                                'Optional original-image pixel crop, as in IconOptions.rect.',
+                            },
+                          },
+                          required: ['url', 'size'],
+                          additionalProperties: false,
+                        },
+                        description:
+                          'Local named image definitions; the same URL is shared by the existing renderer cache.',
+                      },
+                      labeling: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          fontUrl: {
+                            type: 'string',
+                          },
+                          fontWeight: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['bold'],
+                              },
+                            ],
+                          },
+                          fontStyle: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['normal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['italic'],
+                              },
+                            ],
+                          },
+                          placement: {
+                            anyOf: [
+                              {
+                                type: 'string',
+                                enum: ['auto'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['horizontal'],
+                              },
+                              {
+                                type: 'string',
+                                enum: ['parallel'],
+                              },
+                            ],
+                          },
+                          priority: {
+                            anyOf: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'array',
+                                items: {},
+                              },
+                            ],
+                          },
+                          maxLabels: {
+                            type: 'number',
+                          },
+                          minScale: {
+                            type: 'number',
+                          },
+                          maxScale: {
+                            type: 'number',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Advanced text labeling controls that do not fit the MapLibre-inspired layout/paint subset.',
+                      },
+                      icon: {
+                        type: 'object',
+                        properties: {
+                          enabled: {
+                            anyOf: [
+                              {
+                                type: 'boolean',
+                                enum: [false],
+                              },
+                              {
+                                type: 'boolean',
+                                enum: [true],
+                              },
+                            ],
+                          },
+                          anchor: {
+                            type: 'array',
+                            prefixItems: [
+                              {
+                                type: 'number',
+                              },
+                              {
+                                type: 'number',
+                              },
+                            ],
+                            minItems: 2,
+                            maxItems: 2,
+                            description:
+                              'Native fractional anchors not expressible by the nine named icon-anchor values.',
+                          },
+                        },
+                        additionalProperties: false,
+                        description:
+                          'Icon-only compatibility controls for native anchors/enabled state.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description:
+                      'Preferred attached symbol settings. When present, label/icon are materialized compatibility views.',
+                  },
+                  label: {
+                    type: 'object',
+                    properties: {
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      field: {
+                        type: 'string',
+                        description:
+                          'Attribute column. Mutually exclusive with text. Null/missing values are not labelled.',
+                      },
+                      text: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Literal text or the existing safe style-expression subset (no JavaScript evaluation).',
+                      },
+                      fontFamily: {
+                        type: 'string',
+                      },
+                      fontUrl: {
+                        type: 'string',
+                        description:
+                          'Font outline URL for MSDF (TTF/OTF/WOFF1); resolved by the host, fetched locally in its Worker.',
+                      },
+                      fontSize: {
+                        type: 'number',
+                      },
+                      fontWeight: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bold'],
+                          },
+                        ],
+                      },
+                      fontStyle: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['italic'],
+                          },
+                        ],
+                      },
+                      color: {
+                        type: 'string',
+                      },
+                      haloColor: {
+                        type: 'string',
+                      },
+                      haloWidth: {
+                        type: 'number',
+                      },
+                      offset: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description: 'CSS pixel offset applied after placement.',
+                      },
+                      placement: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['auto'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['horizontal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['parallel'],
+                          },
+                        ],
+                        description:
+                          'Auto: around points, parallel to lines, interior of polygons.',
+                      },
+                      allowOverlap: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      priority: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Higher priorities are placed first; ties use parent layer order and feature ID.',
+                      },
+                      minScale: {
+                        type: 'number',
+                        description:
+                          'CRS-agnostic |mx| limits, in CSS pixels per source coordinate unit.',
+                      },
+                      maxScale: {
+                        type: 'number',
+                      },
+                      maxLabels: {
+                        type: 'number',
+                      },
+                      padding: {
+                        type: 'number',
+                        description: 'Collision spacing in CSS pixels, including the text halo.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description: 'Attached feature labels; not a standalone render/tree layer.',
                   },
                   id: {
                     type: 'string',
@@ -3371,6 +5006,746 @@ export const operationSchemas = {
           value: {},
         },
         required: ['id', 'name', 'value'],
+        additionalProperties: false,
+      },
+    },
+    setLayerSymbol: {
+      parameters: ['id', 'symbol'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+          symbol: {
+            anyOf: [
+              {
+                type: 'null',
+              },
+              {
+                type: 'object',
+                properties: {
+                  layout: {
+                    type: 'object',
+                    properties: {
+                      visibility: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['visible'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['none'],
+                          },
+                        ],
+                        description: 'Hides the attached text/icon only, not the parent geometry.',
+                      },
+                      'text-field': {
+                        anyOf: [
+                          {
+                            type: 'string',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                        description:
+                          'Literal text or the existing safe expression subset; no token-template expansion.',
+                      },
+                      'text-size': {
+                        type: 'number',
+                      },
+                      'text-font': {
+                        type: 'array',
+                        items: {
+                          type: 'string',
+                        },
+                        description:
+                          'One font family/face. MSDF keeps its own Noto/custom-font resolver.',
+                      },
+                      'text-offset': {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description:
+                          'em units, converted to the existing screen-pixel placement offset.',
+                      },
+                      'text-allow-overlap': {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      'text-padding': {
+                        type: 'number',
+                      },
+                      'icon-image': {
+                        type: 'string',
+                        description:
+                          'Name in symbol.images. Images retain the existing URL/rect cache.',
+                      },
+                      'icon-size': {
+                        type: 'number',
+                        description:
+                          'Multiplier of symbol.images[name].size; never a CSS-pixel height.',
+                      },
+                      'icon-anchor': {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['left'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['right'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['center'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['top'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bottom'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['top-left'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['top-right'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bottom-left'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bottom-right'],
+                          },
+                        ],
+                      },
+                      'icon-rotate': {
+                        type: 'number',
+                      },
+                      'icon-offset': {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description:
+                          'Multiplied by icon-size, then rotated with the icon, before conversion to screen pixels.',
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                  paint: {
+                    type: 'object',
+                    properties: {
+                      'text-color': {
+                        type: 'string',
+                      },
+                      'text-halo-color': {
+                        type: 'string',
+                      },
+                      'text-halo-width': {
+                        type: 'number',
+                      },
+                      'icon-opacity': {
+                        type: 'number',
+                      },
+                      'icon-color': {
+                        type: 'string',
+                        description:
+                          'Existing alpha-mask tint; does not require a MapLibre SDF sprite.',
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                  images: {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: {
+                      type: 'object',
+                      properties: {
+                        url: {
+                          type: 'string',
+                        },
+                        size: {
+                          anyOf: [
+                            {
+                              type: 'number',
+                            },
+                            {
+                              type: 'array',
+                              prefixItems: [
+                                {
+                                  type: 'number',
+                                },
+                                {
+                                  type: 'number',
+                                },
+                              ],
+                              minItems: 2,
+                              maxItems: 2,
+                            },
+                          ],
+                          description:
+                            'Reference CSS-pixel height (preserving aspect) or [width,height], independent of source image resolution.',
+                        },
+                        rect: {
+                          type: 'array',
+                          prefixItems: [
+                            {
+                              type: 'number',
+                            },
+                            {
+                              type: 'number',
+                            },
+                            {
+                              type: 'number',
+                            },
+                            {
+                              type: 'number',
+                            },
+                          ],
+                          minItems: 4,
+                          maxItems: 4,
+                          description:
+                            'Optional original-image pixel crop, as in IconOptions.rect.',
+                        },
+                      },
+                      required: ['url', 'size'],
+                      additionalProperties: false,
+                    },
+                    description:
+                      'Local named image definitions; the same URL is shared by the existing renderer cache.',
+                  },
+                  labeling: {
+                    type: 'object',
+                    properties: {
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      fontUrl: {
+                        type: 'string',
+                      },
+                      fontWeight: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['bold'],
+                          },
+                        ],
+                      },
+                      fontStyle: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['normal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['italic'],
+                          },
+                        ],
+                      },
+                      placement: {
+                        anyOf: [
+                          {
+                            type: 'string',
+                            enum: ['auto'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['horizontal'],
+                          },
+                          {
+                            type: 'string',
+                            enum: ['parallel'],
+                          },
+                        ],
+                      },
+                      priority: {
+                        anyOf: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'array',
+                            items: {},
+                          },
+                        ],
+                      },
+                      maxLabels: {
+                        type: 'number',
+                      },
+                      minScale: {
+                        type: 'number',
+                      },
+                      maxScale: {
+                        type: 'number',
+                      },
+                    },
+                    additionalProperties: false,
+                    description:
+                      'Advanced text labeling controls that do not fit the MapLibre-inspired layout/paint subset.',
+                  },
+                  icon: {
+                    type: 'object',
+                    properties: {
+                      enabled: {
+                        anyOf: [
+                          {
+                            type: 'boolean',
+                            enum: [false],
+                          },
+                          {
+                            type: 'boolean',
+                            enum: [true],
+                          },
+                        ],
+                      },
+                      anchor: {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                        description:
+                          'Native fractional anchors not expressible by the nine named icon-anchor values.',
+                      },
+                    },
+                    additionalProperties: false,
+                    description:
+                      'Icon-only compatibility controls for native anchors/enabled state.',
+                  },
+                },
+                additionalProperties: false,
+              },
+            ],
+          },
+        },
+        required: ['id', 'symbol'],
+        additionalProperties: false,
+      },
+    },
+    removeLayerSymbol: {
+      parameters: ['id'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+        },
+        required: ['id'],
+        additionalProperties: false,
+      },
+    },
+    setSymbolLayoutProperty: {
+      parameters: ['id', 'name', 'value'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+          name: {
+            anyOf: [],
+          },
+          value: {
+            anyOf: [
+              {
+                type: 'null',
+              },
+              {
+                anyOf: [],
+              },
+            ],
+          },
+        },
+        required: ['id', 'name', 'value'],
+        additionalProperties: false,
+      },
+    },
+    setSymbolPaintProperty: {
+      parameters: ['id', 'name', 'value'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+          name: {
+            anyOf: [],
+          },
+          value: {
+            anyOf: [
+              {
+                type: 'null',
+              },
+              {
+                anyOf: [],
+              },
+            ],
+          },
+        },
+        required: ['id', 'name', 'value'],
+        additionalProperties: false,
+      },
+    },
+    setLayerIcon: {
+      parameters: ['id', 'options'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+          options: {
+            anyOf: [
+              {
+                type: 'null',
+              },
+              {
+                type: 'object',
+                properties: {
+                  url: {
+                    type: 'string',
+                  },
+                  enabled: {
+                    anyOf: [
+                      {
+                        type: 'boolean',
+                        enum: [false],
+                      },
+                      {
+                        type: 'boolean',
+                        enum: [true],
+                      },
+                    ],
+                  },
+                  size: {
+                    anyOf: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'array',
+                        prefixItems: [
+                          {
+                            type: 'number',
+                          },
+                          {
+                            type: 'number',
+                          },
+                        ],
+                        minItems: 2,
+                        maxItems: 2,
+                      },
+                    ],
+                    description:
+                      'Height in CSS pixels, retaining aspect ratio, or explicit [width, height]. Default 32.',
+                  },
+                  anchor: {
+                    type: 'array',
+                    prefixItems: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                    ],
+                    minItems: 2,
+                    maxItems: 2,
+                    description:
+                      'Normalized anchor in the cropped image. [0.5, 1] places a pin tip on the point.',
+                  },
+                  rotation: {
+                    type: 'number',
+                    description: 'Clockwise rotation around the anchor, in screen-space degrees.',
+                  },
+                  offset: {
+                    type: 'array',
+                    prefixItems: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                    ],
+                    minItems: 2,
+                    maxItems: 2,
+                    description: 'Screen-space CSS pixel offset, applied after rotation.',
+                  },
+                  opacity: {
+                    type: 'number',
+                  },
+                  tint: {
+                    type: 'string',
+                    description:
+                      'Optional alpha-mask recoloring. Omit to preserve the original image colors.',
+                  },
+                  rect: {
+                    type: 'array',
+                    prefixItems: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                    ],
+                    minItems: 4,
+                    maxItems: 4,
+                    description: 'Pixel crop [x, y, width, height] in a shared sprite image.',
+                  },
+                },
+                required: ['url'],
+                additionalProperties: false,
+              },
+            ],
+          },
+        },
+        required: ['id', 'options'],
+        additionalProperties: false,
+      },
+    },
+    setLayerLabel: {
+      parameters: ['id', 'options'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+          options: {
+            anyOf: [
+              {
+                type: 'null',
+              },
+              {
+                type: 'object',
+                properties: {
+                  enabled: {
+                    anyOf: [
+                      {
+                        type: 'boolean',
+                        enum: [false],
+                      },
+                      {
+                        type: 'boolean',
+                        enum: [true],
+                      },
+                    ],
+                  },
+                  field: {
+                    type: 'string',
+                    description:
+                      'Attribute column. Mutually exclusive with text. Null/missing values are not labelled.',
+                  },
+                  text: {
+                    anyOf: [
+                      {
+                        type: 'string',
+                      },
+                      {
+                        type: 'array',
+                        items: {},
+                      },
+                    ],
+                    description:
+                      'Literal text or the existing safe style-expression subset (no JavaScript evaluation).',
+                  },
+                  fontFamily: {
+                    type: 'string',
+                  },
+                  fontUrl: {
+                    type: 'string',
+                    description:
+                      'Font outline URL for MSDF (TTF/OTF/WOFF1); resolved by the host, fetched locally in its Worker.',
+                  },
+                  fontSize: {
+                    type: 'number',
+                  },
+                  fontWeight: {
+                    anyOf: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'string',
+                        enum: ['normal'],
+                      },
+                      {
+                        type: 'string',
+                        enum: ['bold'],
+                      },
+                    ],
+                  },
+                  fontStyle: {
+                    anyOf: [
+                      {
+                        type: 'string',
+                        enum: ['normal'],
+                      },
+                      {
+                        type: 'string',
+                        enum: ['italic'],
+                      },
+                    ],
+                  },
+                  color: {
+                    type: 'string',
+                  },
+                  haloColor: {
+                    type: 'string',
+                  },
+                  haloWidth: {
+                    type: 'number',
+                  },
+                  offset: {
+                    type: 'array',
+                    prefixItems: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'number',
+                      },
+                    ],
+                    minItems: 2,
+                    maxItems: 2,
+                    description: 'CSS pixel offset applied after placement.',
+                  },
+                  placement: {
+                    anyOf: [
+                      {
+                        type: 'string',
+                        enum: ['auto'],
+                      },
+                      {
+                        type: 'string',
+                        enum: ['horizontal'],
+                      },
+                      {
+                        type: 'string',
+                        enum: ['parallel'],
+                      },
+                    ],
+                    description: 'Auto: around points, parallel to lines, interior of polygons.',
+                  },
+                  allowOverlap: {
+                    anyOf: [
+                      {
+                        type: 'boolean',
+                        enum: [false],
+                      },
+                      {
+                        type: 'boolean',
+                        enum: [true],
+                      },
+                    ],
+                  },
+                  priority: {
+                    anyOf: [
+                      {
+                        type: 'number',
+                      },
+                      {
+                        type: 'array',
+                        items: {},
+                      },
+                    ],
+                    description:
+                      'Higher priorities are placed first; ties use parent layer order and feature ID.',
+                  },
+                  minScale: {
+                    type: 'number',
+                    description:
+                      'CRS-agnostic |mx| limits, in CSS pixels per source coordinate unit.',
+                  },
+                  maxScale: {
+                    type: 'number',
+                  },
+                  maxLabels: {
+                    type: 'number',
+                  },
+                  padding: {
+                    type: 'number',
+                    description: 'Collision spacing in CSS pixels, including the text halo.',
+                  },
+                },
+                additionalProperties: false,
+              },
+            ],
+          },
+        },
+        required: ['id', 'options'],
         additionalProperties: false,
       },
     },

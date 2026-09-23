@@ -703,6 +703,47 @@ describe('VertexEditHandler', () => {
     expect(renderSpy).toHaveBeenCalled();
   });
 
+  it('finishes a drag when synchronous history listeners clear hover after truncating redo', () => {
+    const mapMock = {
+      unproject: () => [12, 18] as [number, number],
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+      getSource: () => ({ refreshDisplayArcs: vi.fn() }),
+      pushCommand: vi.fn(() => callPrivate(handler, '_onHistoryChangeBound', { canRedo: false })),
+    };
+    const handler = new VertexEditHandler(mapMock as any, {
+      snapToEdge: false,
+      snapToVertex: false,
+    });
+    setPrivate(handler, '_historyCanRedo', true);
+    setPrivate(handler, '_dragging', true);
+    setPrivate(handler, '_dragFromCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [8, 20]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 3,
+      source: 'demo-source',
+      layer: 'roads',
+      shape: [[1]],
+      arcs: { getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }) },
+      geometryType: 'polyline',
+    });
+    expect(() => callPrivate(handler, '_finishDrag', 12, 18)).not.toThrow();
+    expect(mapMock.pushCommand).toHaveBeenCalledOnce();
+    expect(Reflect.get(handler, '_hoveredFeature')).toBeNull();
+    expect(mapMock.fire).toHaveBeenCalledWith(
+      'vertex_moved',
+      expect.objectContaining({
+        id: 3,
+        source: 'demo-source',
+        layer: 'roads',
+        vertexIds: [8, 20],
+        coords: [12, 18],
+      }),
+    );
+  });
+
   it('enable() activates edit mode and isEnabled() returns true', () => {
     const setEditModeSpy = vi.fn();
     const onSpy = vi.fn();

@@ -931,7 +931,10 @@ export class GpuRenderer {
   ): void {
     if (!this.pass || !Number.isFinite(opacity) || opacity <= 0) return;
     const flat = perspectiveActive(this.transform) ? this.transform.flat : this.transform;
-    const pr = this.pixelRatio;
+    // Backing dimensions are integer-rounded independently. CSS size * DPR can
+    // be fractional; using the nominal DPR for a snapped rectangle but the real
+    // backing dimensions for the GL viewport leaves partially covered seam pixels.
+    const deviceScale = [this.canvas.width / this.width, this.canvas.height / this.height];
     let rect: number[], scissor: number[], uv: number[] | undefined;
     if (perspectiveActive(this.transform)) {
       // Crop in source Float64 before upload. Homogeneous clipping preserves
@@ -946,7 +949,7 @@ export class GpuRenderer {
       if (crop[0] >= crop[2] || crop[1] >= crop[3]) return;
       const a = flat.project(crop[0], crop[3]),
         b = flat.project(crop[2], crop[1]);
-      rect = [...a, ...b].map((v) => v * pr);
+      rect = [...a, ...b].map((v, i) => v * deviceScale[i % 2]);
       uv = [
         (crop[0] - bounds[0]) / (bounds[2] - bounds[0]),
         (bounds[3] - crop[3]) / (bounds[3] - bounds[1]),
@@ -957,15 +960,15 @@ export class GpuRenderer {
     } else {
       const a = flat.project(bounds[0], bounds[3]),
         b = flat.project(bounds[2], bounds[1]);
-      rect = [...a, ...b].map((v) => Math.round(v * pr));
+      rect = [...a, ...b].map((v, i) => Math.round(v * deviceScale[i % 2]));
       scissor = [...rect];
       if (clip) {
         const a = flat.project(clip[0], clip[3]),
           b = flat.project(clip[2], clip[1]);
-        scissor[0] = Math.max(scissor[0], Math.round(a[0] * pr));
-        scissor[1] = Math.max(scissor[1], Math.round(a[1] * pr));
-        scissor[2] = Math.min(scissor[2], Math.round(b[0] * pr));
-        scissor[3] = Math.min(scissor[3], Math.round(b[1] * pr));
+        scissor[0] = Math.max(scissor[0], Math.round(a[0] * deviceScale[0]));
+        scissor[1] = Math.max(scissor[1], Math.round(a[1] * deviceScale[1]));
+        scissor[2] = Math.min(scissor[2], Math.round(b[0] * deviceScale[0]));
+        scissor[3] = Math.min(scissor[3], Math.round(b[1] * deviceScale[1]));
       }
       scissor[0] = Math.max(0, scissor[0]);
       scissor[1] = Math.max(0, scissor[1]);
@@ -1000,7 +1003,7 @@ export class GpuRenderer {
     const style = this.style(
       'image',
       { color: [1, 1, 1, Math.min(1, opacity)] },
-      rect.map((v) => v / pr),
+      rect.map((v, i) => v / deviceScale[i % 2]),
       bounds.join(',') + ':' + (clip?.join(',') ?? ''),
       uv,
     );

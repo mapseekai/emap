@@ -97,14 +97,26 @@ describe('view-keyed screen path cache', () => {
   });
 });
 
-it('refreshes only affected packets and retains the old complete revision until replacement is ready', async()=>{
- const {cache,build,gpu}=fixture();const two=[{id:0,kind:'line',layer:0},{id:1,kind:'line',layer:0}] as any;
- const signal=new AbortController().signal;await cache.warm(req(),two,signal);
- const old=cache.get(req(),two)!,untouched=old.get(1);let finish!:(p:ScreenPathPacket)=>void;
- build.mockImplementationOnce(()=>new Promise(r=>finish=r));
- const update=cache.warmChanged({...req(),revision:1},two,new Set([0]),signal);
- expect(cache.get(req(),two)).toBe(old);expect(gpu.destroyMesh).not.toHaveBeenCalled();
- finish(packet());await update;
- expect(build).toHaveBeenCalledTimes(3);expect(cache.get({...req(),revision:1},two)!.get(1)).toBe(untouched);
- expect(gpu.destroyMesh).toHaveBeenCalledTimes(1);cache.dispose();expect(gpu.destroyMesh).toHaveBeenCalledTimes(3);
+it('refreshes only affected packets and retains the old complete revision until replacement is ready', async () => {
+  const { cache, build, gpu } = fixture();
+  const two = [
+    { id: 0, kind: 'line', layer: 0 },
+    { id: 1, kind: 'line', layer: 0 },
+  ] as any;
+  const signal = new AbortController().signal;
+  await cache.warm(req(), two, signal);
+  const old = cache.get(req(), two)!,
+    untouched = old.get(1);
+  let finish!: (p: ScreenPathPacket) => void;
+  build.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+  const update = cache.warmChanged({ ...req(), revision: 1 }, two, new Set([0]), signal);
+  expect(cache.get(req(), two)).toBe(old);
+  expect(gpu.destroyMesh).not.toHaveBeenCalled();
+  finish(packet());
+  await update;
+  expect(build).toHaveBeenCalledTimes(3);
+  expect(cache.get({ ...req(), revision: 1 }, two)!.get(1)).toBe(untouched);
+  expect(gpu.destroyMesh).toHaveBeenCalledTimes(1);
+  cache.dispose();
+  expect(gpu.destroyMesh).toHaveBeenCalledTimes(3);
 });

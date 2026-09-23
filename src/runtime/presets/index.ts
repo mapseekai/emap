@@ -34,7 +34,7 @@ import {
   topologySourceFactoryPlugin,
 } from '../../engine/providers/workspace/base-plugins';
 import { cachePlugin } from '../../engine/providers/workspace/cache-plugin';
-import { canvasPainterPlugin } from '../../engine/providers/workspace/canvas-plugin';
+import { rendererPainterPlugin } from '../../engine/providers/workspace/renderer-plugin';
 import { controlContextPlugin } from '../../engine/providers/workspace/control-context-plugin';
 import { controlsPlugin } from '../../engine/providers/workspace/controls-plugin';
 import { documentPlugin } from '../../engine/providers/workspace/document-plugin';
@@ -95,7 +95,7 @@ export const headlessPreset: readonly Plugin[] = [
 export const viewerPreset: readonly Plugin[] = [
   ...viewerControlPlugins,
   ...headlessPreset,
-  canvasPainterPlugin,
+  rendererPainterPlugin,
   controlContextPlugin,
   surfacePlugin,
   renderPlugin,
@@ -138,6 +138,9 @@ export function resolvePlugins(options: EmapOptions): readonly Plugin[] {
   if (!selected) throw new Error(`Unknown preset: ${String(preset)}`);
   const excluded = new Set(options.excludePlugins ?? []);
   const replacements = new Set((options.plugins ?? []).map((plugin) => plugin.name ?? ''));
+  // Preserve callers explicitly replacing/excluding the former Canvas-only factory.
+  if (excluded.has('provider.canvas2d') || replacements.has('provider.canvas2d'))
+    excluded.add('provider.renderer');
   return [
     ...selected.filter(
       (plugin) => !excluded.has(plugin.name ?? '') && !replacements.has(plugin.name ?? ''),

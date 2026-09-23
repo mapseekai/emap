@@ -6,18 +6,18 @@
 
 [简体中文](README.zh-CN.md)
 
-`@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. It stores data in mapshaper topology structures, renders editable layers with Canvas2D, and requires no backend map service.
+`@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. It stores data in mapshaper topology structures, renders editable layers with Canvas2D, WebGL2, or WebGPU (default WebGL2), and requires no backend map service.
 
 ## What emap supports
 
 - **Data formats**: GeoJSON, TopoJSON, Shapefile ZIP, KML, and MSX snapshots out of the box; GeoArrow and GeoParquet through the optional `@mapseekai/emap/arrow` entry.
-- **Layers**: `fill`, `line`, and `circle` layers rendered with Canvas2D, with viewport culling, simplification-aware display arcs, and attribute-driven fill buckets.
+- **Layers**: `fill`, `line`, and `circle` layers with selectable rendering backends, with viewport culling, simplification-aware display arcs, and attribute-driven fill buckets.
 - **Editing**: select, draw, translate, rotate, scale, split, merge, reshape, auto-complete polygons, and edit vertices, rings, holes, and multipart geometry.
 - **History**: every mutation is a reversible command with undo, redo, transactions, validation, and selection restoration.
 - **Dataset operations**: `map.ops` exposes clip, erase, dissolve, buffer, filter, simplify, classify, join, projection, repair, and ring/part operations (see `MapshaperOps` in the API reference).
 - **Execution**: dataset operations can run in a Web Worker with stale-result protection.
 - **Analysis**: optional DuckDB-Wasm SQL and spatial operations through the restricted, typed `@mapseekai/emap/duckdb` entry.
-- **Basemaps**: optional MapLibre services for raster/vector basemaps and online overlays; editable Canvas layers stay managed by emap.
+- **Basemaps**: optional MapLibre services for raster/vector basemaps and online overlays; editable data layers stay managed by emap.
 
 ### Local raster files
 
@@ -61,6 +61,7 @@ import '@mapseekai/emap/style.css';
 
 const map = await Emap.create({
   container: 'map',
+  renderer: 'webgl2', // Default; also accepts 'canvas2d' and 'webgpu'
   expressionPolicy: 'disabled',
 });
 
@@ -339,14 +340,14 @@ DOM pointer input
   → source version checks, history, transaction, selection
   → render invalidation
   → RenderScheduler
-  → layer renderer / CanvasPainter
+  → layer renderer / CanvasPainter or LumaPainter
 ```
 
 Important boundaries:
 
 - `src/domain/source/` owns imported topology, CRS metadata, format-bound source state, and display-arc lifecycle.
 - `src/domain/edit/commands/` owns reversible live data changes; `src/domain/geo/` owns coordinate/projection math.
-- `src/engine/map/ops/` owns mapshaper-backed operation orchestration; `src/engine/core/handlers/` owns browser interaction; `src/engine/rendering/` owns Canvas rendering.
+- `src/engine/map/ops/` owns mapshaper-backed operation orchestration; `src/engine/core/handlers/` owns browser interaction; `src/engine/rendering/` owns rendering orchestration and painter contracts.
 - `src/runtime/` owns Cordis composition only: service contracts, providers, feature plugins, presets, and AI capability registration.
 - `src/integrations/mapshaper/adapter.ts` is the normal bridge to `mapshaper.internal.*`; MapLibre, Arrow, and DuckDB are explicit integration boundaries.
 - Public package subpaths (`/context`, `/services`, `/providers`, `/plugins`, `/presets`, `/ai`, `/maplibre`, `/arrow`, `/duckdb`, `/geopackage`) are stable package entry points and do not mirror internal folders one-for-one.

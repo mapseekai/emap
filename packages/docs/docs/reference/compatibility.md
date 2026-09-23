@@ -2,7 +2,7 @@
 id: compatibility
 slug: /reference/compatibility
 title: 兼容性
-api: ["ArcCollection", "ArcCutPoint", "ArcIterator", "ArcVertexData", "ArrowDotPathOptions", "bumpAttributeVersion", "bumpEditVersion", "CanvasPainter", "Coord2", "DataTable", "DefaultMapshaperAdapter", "EditOverlayRenderer", "ExportedFile", "FeatureShape", "GeometryType", "getDefaultMapshaperAdapter", "Handler", "HandlerManager", "HandlerResult", "isHandler", "isPathLayer", "isPointLayer", "LegacyPointShape", "MapshaperAdapter", "MapshaperBBox", "MapshaperDataset", "MapshaperLayer", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions", "NormalizedPointerEvent", "PackedSession", "PathGeometryType", "PathLayer", "PathPart", "PathShape", "PointerModifiers", "PointerMoveEvent", "PointLayer", "PointShape", "PointStyle", "RunnerInputFiles", "SegmentIntersection", "setDefaultMapshaperAdapter", "SignedArcId", "StrokeStyle", "TopologySource.fromBytes", "Transform", "VertexDotStyle", "Emap", "MapOptions", "initParquetWasm", "setParquetWasm", "createDuckDbRuntimeFromJsDelivr"]
+api: ["RendererBackend", "Emap.getRenderer", "ArcCollection", "ArcCutPoint", "ArcIterator", "ArcVertexData", "ArrowDotPathOptions", "bumpAttributeVersion", "bumpEditVersion", "CanvasPainter", "Coord2", "DataTable", "DefaultMapshaperAdapter", "EditOverlayRenderer", "ExportedFile", "FeatureShape", "GeometryType", "getDefaultMapshaperAdapter", "Handler", "HandlerManager", "HandlerResult", "isHandler", "isPathLayer", "isPointLayer", "LegacyPointShape", "MapshaperAdapter", "MapshaperBBox", "MapshaperDataset", "MapshaperLayer", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions", "NormalizedPointerEvent", "PackedSession", "PathGeometryType", "PathLayer", "PathPart", "PathShape", "PointerModifiers", "PointerMoveEvent", "PointLayer", "PointShape", "PointStyle", "RunnerInputFiles", "SegmentIntersection", "setDefaultMapshaperAdapter", "SignedArcId", "StrokeStyle", "TopologySource.fromBytes", "Transform", "VertexDotStyle", "Emap", "MapOptions", "initParquetWasm", "setParquetWasm", "createDuckDbRuntimeFromJsDelivr"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -10,7 +10,7 @@ verifiedVersion: 0.13.0
 
 # 兼容性
 
-浏览器渲染需要实际尺寸的 DOM 容器、Canvas 2D 和 ES modules；发布代码和 TypeScript 目标为 ES2022。
+浏览器地图需要实际尺寸的 DOM 容器、Canvas 2D 覆盖层和 ES modules；主画布支持 Canvas2D、WebGL2 与 WebGPU，默认 WebGL2。发布代码和 TypeScript 目标为 ES2022。
 
 ## 核心环境要求
 
@@ -32,7 +32,7 @@ verifiedVersion: 0.13.0
 | API 或能力 | 范围 | Emap 使用方式与场景 |
 | --- | --- | --- |
 | `document`、`HTMLElement`、`HTMLCanvasElement` | 浏览器 preset 必需 | 创建画布、控件和覆盖层。 |
-| Canvas 2D (`canvas.getContext('2d')`) | 浏览器 preset 必需 | `CanvasPainter` 绘制。 |
+| Canvas 2D (`canvas.getContext('2d')`) | 浏览器 preset 必需 | Canvas2D 后端、编辑手柄/测量提示及颜色解析。 |
 | `requestAnimationFrame` | 浏览器 preset 必需 | 合并帧内重绘。 |
 | Pointer Events、鼠标与滚轮事件 | 交互 preset | 指针归一化和交互。 |
 | `fetch`、`Blob`、`ArrayBuffer`、`Uint8Array` | 数据、导入导出与快照 | 获取数据和生成 `Blob`。 |
@@ -40,7 +40,31 @@ verifiedVersion: 0.13.0
 | `Worker` | `useWorker`、GeoPackage Worker 或 DuckDB 场景 | 移出 UI 线程。 |
 | WebAssembly | GeoParquet、GeoPackage 或 DuckDB 场景 | 加载 WASM runtime。 |
 
-核心地图在主线程 Canvas 2D 运行；`useWorker` 默认 `false`。启用 Worker 或 WASM 时部署对应资源。
+主地图默认使用 luma WebGL2；`useWorker` 仍只控制数据操作路由，默认 `false`，不是 GPU 开关。上面的 browserslist 下限不是设备 GPU 能力保证；WebGL2 可被浏览器或驱动禁用，WebGPU 还需要可用适配器与安全上下文。
+
+## 地图创建时选择渲染后端
+
+```ts
+import { Emap, type RendererBackend } from '@mapseekai/emap';
+const renderer: RendererBackend = 'webgl2';
+const map = await Emap.create({ container: 'map', renderer });
+console.log(map.getRenderer()); // 'webgl2'
+```
+
+`renderer` 接受 `canvas2d`、`webgl2`、`webgpu`，省略时为 `webgl2`。它是创建时设置，
+不是运行时热切换 API。GPU 不可用或初始化失败时 `Emap.create()` 会 reject 并清理资源，
+不会静默改用 Canvas2D。需要兼容回退的宿主可捕获失败后显式重新创建 `renderer: 'canvas2d'` 的地图。
+`getRenderer()` 返回实际主画布后端；headless、empty、已销毁地图或未声明后端的自定义 Painter 返回 null。
+
+点、线、面、图标和文字在 GPU 后端直接绘制。选择、编辑、过滤、历史仍由原地图服务管理；
+手柄、绘制预览、测量提示继续使用独立 Canvas2D 覆盖层，不额外创建地图或图层。
+正式栅格服务当前继续使用已有读取/着色/重投影瓦片，然后由所选 Painter 合成；
+原生整数纹理、专用分块 Worker 和 2.5D 相机的实验路径仍保留，不因后端切换就宣称已全部迁移。
+
+GPU 注记按需加载 MSDF Worker。发布 `dist/emap-msdf-worker.js` 及其同级 `dist/msdf/` 目录；
+直接部署包时默认从运行模块同目录解析 Worker。打包器重新组织文件时显式设置
+`msdfWorkerUrl: '/assets/emap-msdf-worker.js'`，并把 `msdf/` 放在该 Worker 同目录。
+不开启注记不启动字体 Worker；字体失败只影响注记，不改变已选择的地图后端。
 
 ## 打包器与 TypeScript
 
@@ -64,7 +88,7 @@ Vite、webpack 5 等 ESM 打包器可从模块 URL 解析 `parquet-wasm` 二进�
 
 | 使用的入口或能力 | 安装的 peer 依赖 | 运行时资源 |
 | --- | --- | --- |
-| 核心 `@mapseekai/emap` | 无 | 浏览器 DOM、Canvas 2D |
+| 核心 `@mapseekai/emap` | 无 | DOM、Canvas2D 覆盖层，及所选 GPU 后端 |
 | `@mapseekai/emap/arrow` 的 Arrow 与 GeoArrow | `apache-arrow` `^17.0.0` | ESM bundle |
 | Arrow 入口的 GeoParquet 导入和导出 | `apache-arrow` `^17.0.0`、`parquet-wasm` `^0.7.1` | `parquet_wasm_bg.wasm` 或显式 `wasmInput` |
 | `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`、`apache-arrow` `^17.0.0` | DuckDB-Wasm 的 Worker、WASM bundle 和可选 spatial extension |

@@ -1,3 +1,5 @@
+import { resolveRenderer } from './renderer';
+import type { RendererBackend } from './renderer';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from './symbol';
 import type { IconOptions } from './icon';
 import type { LabelOptions } from './label';
@@ -93,6 +95,7 @@ export class Emap extends EventDispatcher {
     const ctx = this.ctx;
     const config = Object.freeze({
       ...options,
+      renderer: resolveRenderer(options.renderer),
       plugins: Object.freeze([...(options.plugins ?? [])]),
       excludePlugins: Object.freeze([...(options.excludePlugins ?? [])]),
     });
@@ -132,6 +135,15 @@ export class Emap extends EventDispatcher {
     const map = new Emap(options);
     await map.ready;
     return map;
+  }
+
+  /** Actual active main-map backend; null for headless/empty or a custom unreported painter.
+   * @example
+   * const map = await Emap.create({ container: 'map', renderer: 'webgpu' });
+   * console.log(map.getRenderer()); // 'webgpu'
+   */
+  getRenderer(): RendererBackend | null {
+    return this._closed ? null : (this.ctx.get('render')?.backend ?? null);
   }
 
   /** Install additional functionality without modifying the engine façade. */

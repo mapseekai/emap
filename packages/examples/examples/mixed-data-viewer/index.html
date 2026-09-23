@@ -19,6 +19,8 @@
 <summary><h1>多矢量图层 + 多 GeoTIFF</h1></summary>
 <div class="emap-example-workbench-body">
 <section class="emap-example-section">
+<div class="emap-example-field"><label for="map-renderer">地图渲染后端</label><select id="map-renderer"></select></div>
+<p class="emap-example-hint">切换后重新创建地图；本地文件需重新选择。GPU 不可用时会明确报错，可选择 Canvas2D。</p>
 <h2>矢量数据</h2>
 <div class="emap-example-field"><label for="vector-input">添加矢量文件（可多选）</label><input id="vector-input" type="file" multiple accept=".geojson,.json,.topojson,.zip,.kml,.msx,.gpkg,.fgb,.parquet,.geoparquet,.arrow,.arrows,.feather" /></div>
 <p class="emap-example-hint">支持 GeoJSON、TopoJSON、Shapefile ZIP、KML、MSX、GeoPackage、FlatGeobuf、GeoParquet、GeoArrow。每个文件作为独立 source 添加，文件中的全部图层同时显示。</p>
@@ -40,6 +42,8 @@
 </div>
 </details>
 <script type="module">
+import { installRendererChoice } from '/src/renderer-choice.ts';
+const renderer = installRendererChoice(document.getElementById('map-renderer'));
 import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
 import { listGeoTIFFs, openRasterPair } from '/src/local-raster-directory.ts';
 import { loadExampleArrow, loadExampleRuntime, installExampleMapUi } from '/src/example-runtime.ts';
@@ -49,7 +53,7 @@ const emap = await loadExampleRuntime();
 const emapArrow = await loadExampleArrow();
 const base = '/mapseekai/emap/examples/';
 await emapArrow.initParquetWasm();
-const map = await emap.Emap.create({ container: 'map', preset: 'viewer' });
+const map = await emap.Emap.create({ container: 'map', preset: 'viewer', renderer, msdfWorkerUrl: base + 'emap-msdf-worker.js' }).catch(error => { document.getElementById('status').textContent = String(error); throw error; });
 await map.ctx.plugin(emapArrow.arrowFormatsPlugin);
 await map.ctx.plugin(geoPackagePlugin({ workerUrl: base + 'emap-geopackage-worker.js', wasmUrl: base + 'sql-wasm.wasm' }));
 const releaseFlatGeobuf = installFlatGeobufFormat(emap, map.formats);

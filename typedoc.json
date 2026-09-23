@@ -19,6 +19,7 @@
     "AttributeOps",
     "CircleLayerSpecification",
     "CorePainter",
+    "PainterCreationOptions",
     "CrsProjjsonLookup",
     "CrsStringToProjjsonOptions",
     "DrawOverlayState",

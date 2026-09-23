@@ -209,6 +209,10 @@ export async function createTestMap(): Promise<Emap> {
 /** Browser integration tests retain the real editor preset and DOM effects. */
 export async function createBrowserTestMap(options: EmapOptions): Promise<Emap> {
   return bridge(
-    await Emap.create({ ...options, plugins: [mapLibrePlugin, ...(options.plugins ?? [])] }),
+    await Emap.create({
+      renderer: 'canvas2d',
+      ...options,
+      plugins: [mapLibrePlugin, ...(options.plugins ?? [])],
+    }),
   );
 }

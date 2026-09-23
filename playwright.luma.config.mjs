@@ -5,6 +5,7 @@ import base from './playwright.config.mjs';
 export default defineConfig({
   ...base,
   testMatch: [
+    'map-renderers.spec.mjs',
     'luma-25d.spec.mjs',
     'luma-labels.spec.mjs',
     'luma-icons.spec.mjs',

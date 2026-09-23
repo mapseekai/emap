@@ -14,3 +14,34 @@ describe('map canvas teardown', () => {
     expect(overlay.remove).toHaveBeenCalledOnce();
   });
 });
+
+describe('live vertex geometry invalidation', () => {
+  it('invalidates only edited source buffers on preview changes, including clearing the preview', () => {
+    const arcs = {},
+      other = {};
+    const state = { mode: 'vertex', vertex: { arcs } };
+    const render = new CanvasRenderService({
+      editState: { _editState: state },
+      document: {
+        _sources: new Map([
+          ['edited', { getArcs: () => arcs }],
+          ['other', { getArcs: () => other }],
+        ]),
+      },
+    } as never);
+    const clearGeometryCache = vi.fn();
+    Reflect.set(render, '_painter', { clearGeometryCache });
+    const sync = () => Reflect.get(render, '_syncLiveEditGeometry').call(render);
+    sync();
+    sync();
+    expect(clearGeometryCache.mock.calls).toEqual([[{ sourceId: 'edited' }]]);
+    state.vertex = { arcs };
+    sync();
+    expect(clearGeometryCache).toHaveBeenCalledTimes(2);
+    state.mode = 'none';
+    sync();
+    sync();
+    expect(clearGeometryCache).toHaveBeenCalledTimes(3);
+    expect(clearGeometryCache).toHaveBeenLastCalledWith({ sourceId: 'edited' });
+  });
+});

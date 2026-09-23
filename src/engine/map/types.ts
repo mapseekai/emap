@@ -44,6 +44,10 @@ export interface SplitFeatureOptions {
   snapThreshold?: number;
 }
 export interface MapOptions {
+  /** Main-map backend. Defaults to webgl2; unavailable GPU backends reject creation without silent fallback. */
+  renderer?: import('./renderer').RendererBackend;
+  /** Optional MSDF worker URL for GPU labels; publish its sibling msdf/ assets too. */
+  msdfWorkerUrl?: string | URL;
   container: string | HTMLElement;
   interactive?: boolean;
   /** Native MapLibre basemap and online-overlay integration. */

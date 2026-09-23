@@ -10,7 +10,7 @@ verifiedVersion: 0.13.0
 
 # 当前技术架构与源码组织
 
-Emap 以 Cordis 原生插件运行时组合 GIS 领域内核、Canvas 渲染和可选集成；公共 API 由 `Emap` 门面提供。
+Emap 以 Cordis 原生插件运行时组合 GIS 领域内核、可选 Canvas2D / luma GPU 渲染和可选集成；公共 API 由 `Emap` 门面提供。
 
 ```ts
 const map = await Emap.create({ container: 'map', preset: 'viewer' }); // 创建浏览器地图和浏览能力
@@ -41,7 +41,7 @@ src/
 | `ui/` | 浏览器控件、CSS、图标和主题 | controls、`assets/`、`theme/` |
 | `shared/` | 没有单一业务所有者的共享声明 | ambient `.d.ts`、外部库声明、样式类型 |
 
-依赖遵循“领域在内、运行时组合在外”：`runtime` 可组合 engine、domain 和 integration；domain 不依赖 Cordis、DOM 或具体 Provider。高频 pointer、hit-test 和 Canvas draw 保持 TypeScript 直接调用。
+依赖遵循“领域在内、运行时组合在外”：`runtime` 可组合 engine、domain 和 integration；domain 不依赖 Cordis、DOM 或具体 Provider。高频 pointer、hit-test 和 Painter draw 保持 TypeScript 直接调用。
 
 ### `Emap.create()`
 
@@ -131,7 +131,7 @@ engine map + interaction handlers
         ↓
 render scheduler
         ↓
-Canvas painter
+CanvasPainter / LumaPainter
 ```
 
 编辑路径为 `EditCommand → history/transaction → source version → render invalidation`；几何与属性版本独立，异步任务提交前检查版本。

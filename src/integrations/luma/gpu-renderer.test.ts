@@ -403,45 +403,59 @@ it('writes both independent projection scales on every frame, including mirrored
 
 describe('raster scissor coordinate origins', () => {
   for (const backend of ['webgl', 'webgpu'] as const)
-    for (const dpr of [1, 1.25, 2]) {
-      it(`${backend} DPR ${dpr}: clips an off-center image in the backend coordinate system`, async () => {
-        const { AffineTransform } = await import('../../domain/geo/transform');
-        const pass = {
-          setParameters: vi.fn(),
-          setPipeline: vi.fn(),
-          setBindings: vi.fn(),
-          setVertexArray: vi.fn(),
-          draw: vi.fn(() => true),
-        };
-        const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
-          device: { type: backend },
-          pass,
-          canvas: { width: 200 * dpr, height: 100 * dpr },
-          pixelRatio: dpr,
-          transform: new AffineTransform(1, -1, 0, 100),
-          flushCircles: vi.fn(),
-          imageTexture: vi.fn(() => ({ texture: {}, smoothing: true })),
-          style: vi.fn(() => ({ buffer: {}, images: new Map() })),
-          linear: {},
-          nearest: {},
-          imageVertexArray: {},
-          pipelines: new Map([['image', { pipeline: {} }]]),
-          stats: { drawCalls: 0 },
+    for (const [width, height] of [
+      [200, 100],
+      [641, 479],
+    ])
+      for (const dpr of [1, 1.25, 2]) {
+        it(`${backend} ${width}x${height} DPR ${dpr}: clips an off-center image in the backend coordinate system`, async () => {
+          const { AffineTransform } = await import('../../domain/geo/transform');
+          const pass = {
+            setParameters: vi.fn(),
+            setPipeline: vi.fn(),
+            setBindings: vi.fn(),
+            setVertexArray: vi.fn(),
+            draw: vi.fn(() => true),
+          };
+          const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
+            device: { type: backend },
+            pass,
+            canvas: { width: Math.round(width * dpr), height: Math.round(height * dpr) },
+            width,
+            height,
+            pixelRatio: dpr,
+            transform: new AffineTransform(1, -1, 0, 100),
+            flushCircles: vi.fn(),
+            imageTexture: vi.fn(() => ({ texture: {}, smoothing: true })),
+            style: vi.fn(() => ({ buffer: {}, images: new Map() })),
+            linear: {},
+            nearest: {},
+            imageVertexArray: {},
+            pipelines: new Map([['image', { pipeline: {} }]]),
+            stats: { drawCalls: 0 },
+          });
+          renderer.drawImage({} as HTMLCanvasElement, [20, 10, 100, 70], 1, true, [25, 20, 95, 65]);
+          const rx = Math.round(width * dpr) / width,
+            ry = Math.round(height * dpr) / height;
+          const top = Math.round(35 * ry),
+            bottom = Math.round(80 * ry);
+          expect(pass.setParameters).toHaveBeenCalledWith({
+            scissorRect: [
+              Math.round(25 * rx),
+              backend === 'webgpu' ? top : Math.round(height * dpr) - bottom,
+              Math.round(95 * rx) - Math.round(25 * rx),
+              bottom - top,
+            ],
+          });
+          expect(pass.draw).toHaveBeenCalledOnce();
+          const style = Reflect.get(renderer, 'style');
+          const rect = style.mock.calls[0][2];
+          for (let i = 0; i < 4; i++) {
+            const ratio = i % 2 ? ry : rx;
+            expect(rect[i] * ratio).toBeCloseTo(Math.round([20, 30, 100, 90][i] * ratio), 10);
+          }
         });
-        renderer.drawImage({} as HTMLCanvasElement, [20, 10, 100, 70], 1, true, [25, 20, 95, 65]);
-        const top = Math.round(35 * dpr),
-          bottom = Math.round(80 * dpr);
-        expect(pass.setParameters).toHaveBeenCalledWith({
-          scissorRect: [
-            Math.round(25 * dpr),
-            backend === 'webgpu' ? top : 100 * dpr - bottom,
-            Math.round(95 * dpr) - Math.round(25 * dpr),
-            bottom - top,
-          ],
-        });
-        expect(pass.draw).toHaveBeenCalledOnce();
-      });
-    }
+      }
 });
 
 describe('point icon GPU submission', () => {

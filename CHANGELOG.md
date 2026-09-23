@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Default formal `Emap.create()` maps to the luma WebGL2 main painter; accept explicit
+  `renderer: 'canvas2d' | 'webgl2' | 'webgpu'` and expose `getRenderer()`. Keep the existing
+  Canvas2D editing overlay, source/style/filter/history services, and explicit Canvas fallback.
+  Await native provider/device readiness, clean failed/cancelled initialization and GPU resources,
+  reuse geometry and immutable raster textures, and deploy lazy sibling MSDF worker assets.
+  Formal raster colorization and View remain unchanged; specialized integer-raster and 2.5D
+  experimental paths are not implicitly promoted to full main-map parity.
+
 ### Fixed
+
+- Keep GPU main geometry synchronized with live vertex previews without invalidating unrelated
+  sources; finish a drag safely when history listeners clear hover state after truncating redo.
+  Snap raster patches and scissor to actual rounded backing dimensions at fractional DPR,
+  avoiding transparent seams while retaining half-opacity progressive coverage on all three backends.
+- Regenerate capability schemas to include the attached symbol API and its labeling/icon settings.
 
 - Restore benchmark-equivalent vector optimizations in the luma 2.5D example: perspective-aware Worker screen paths, original-point LOD and ground-plane snapshot navigation. Prepare visible display dependencies first without changing the comparison harness's eager A/B mode, and release replaced or cancelled vector sources.
 

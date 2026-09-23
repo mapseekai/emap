@@ -6,18 +6,18 @@
 
 [English](README.md)
 
-`@mapseekai/emap` 是运行在浏览器中的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。数据以 mapshaper 拓扑结构保存，业务图层使用 Canvas2D 渲染，不依赖任何后端地图服务。
+`@mapseekai/emap` 是运行在浏览器中的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。数据以 mapshaper 拓扑结构保存，业务图层可选择 Canvas2D、WebGL2 或 WebGPU 渲染（默认 WebGL2），不依赖任何后端地图服务。
 
 ## emap 支持什么
 
 - **数据格式**：内置 GeoJSON、TopoJSON、Shapefile ZIP、KML 和 MSX 快照；通过可选的 `@mapseekai/emap/arrow` 入口支持 GeoArrow 与 GeoParquet。
-- **图层**：`fill`、`line`、`circle` 三种图层，Canvas2D 渲染，支持视域裁剪、随简化级别切换的显示弧段和属性驱动的分桶填色。
+- **图层**：`fill`、`line`、`circle` 三种图层，支持三种渲染后端，支持视域裁剪、随简化级别切换的显示弧段和属性驱动的分桶填色。
 - **编辑**：选择、绘制、平移、旋转、缩放、拆分、合并、整形、多边形自动闭合，以及顶点、环、洞和多部件编辑。
 - **历史**：所有修改都是可撤销命令，支持撤销、重做、事务、校验和选择状态恢复。
 - **数据集操作**：`map.ops` 提供裁剪、擦除、融合、缓冲区、过滤、简化、分级、关联、投影、修复和环/部件操作（完整清单见 API 参考中的 `MapshaperOps`）。
 - **执行**：数据集操作可卸载到 Web Worker，并在提交前校验结果是否过期。
 - **分析**：通过受限且类型化的 `@mapseekai/emap/duckdb` 入口运行可选的 DuckDB-Wasm SQL 与空间分析。
-- **底图**：可选 MapLibre 服务管理栅格/矢量底图和在线叠加图层；可编辑 Canvas 图层始终由 emap 管理。
+- **底图**：可选 MapLibre 服务管理栅格/矢量底图和在线叠加图层；可编辑业务图层始终由 emap 管理。
 
 ## 安装
 
@@ -57,6 +57,7 @@ import '@mapseekai/emap/style.css';
 
 const map = await Emap.create({
   container: 'map',
+  renderer: 'webgl2', // 默认；也可选择 'canvas2d' 或 'webgpu'
   expressionPolicy: 'disabled',
 });
 
@@ -333,14 +334,14 @@ DOM 指针输入
   → Source 版本、历史、事务、选择状态
   → 渲染失效
   → RenderScheduler
-  → layer renderer / CanvasPainter
+  → layer renderer / CanvasPainter or LumaPainter
 ```
 
 关键边界：
 
 - `src/domain/source/`：拓扑数据、CRS、格式绑定 Source 状态和 DisplayArcs 生命周期。
 - `src/domain/edit/commands/`：可逆数据修改；`src/domain/geo/`：坐标、投影和测量数学。
-- `src/engine/map/ops/`：Mapshaper 支持的数据操作编排；`src/engine/core/handlers/`：浏览器交互；`src/engine/rendering/`：Canvas 渲染。
+- `src/engine/map/ops/`：Mapshaper 支持的数据操作编排；`src/engine/core/handlers/`：浏览器交互；`src/engine/rendering/`：渲染调度和 Painter 契约。
 - `src/runtime/`：只负责 Cordis 组合，包括 Service 契约、Provider、Feature Plugin、Preset 和 AI Capability 注册。
 - `src/integrations/mapshaper/adapter.ts`：访问 `mapshaper.internal.*` 的正常边界；MapLibre、Arrow、DuckDB 都有独立 integration 边界。
 - `/context`、`/services`、`/providers`、`/plugins`、`/presets`、`/ai`、`/maplibre`、`/arrow`、`/duckdb`、`/geopackage` 是稳定 package subpath，不要求与内部目录一一对应。

@@ -30,6 +30,7 @@ function msdfAssets(): RuntimeAssetEntry[] {
 }
 const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
   ...msdfAssets(),
+  ...msdfAssets().map(entry => ({ ...entry, requestPath: 'vendor/' + entry.requestPath, buildPath: 'vendor/' + entry.buildPath })),
   {
     requestPath: 'emap-geotiff-worker.js', buildPath: 'emap-geotiff-worker.js',
     developmentSource: 'emap-geotiff-worker.js', productionSource: 'emap-geotiff-worker.js',
