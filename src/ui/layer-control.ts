@@ -43,7 +43,7 @@ export class LayerControl implements Control {
   };
 
   private readonly _handleTriggerClick = (): void => {
-    this._setOpen(this._panel?.hidden ?? true);
+    this._setOpen(Boolean(this._panel?.hidden ?? true));
   };
 
   private readonly _handleCheckboxChange = (event: Event): void => {

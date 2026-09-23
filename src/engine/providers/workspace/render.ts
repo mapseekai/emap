@@ -1,3 +1,4 @@
+import { BoundLabelManager, type LabelBinding } from '../../rendering/labels/manager';
 import type { RenderPass, RenderFrame } from '../../../runtime/services/contracts/render-pass';
 import { EventDispatcher } from '../../core/events';
 import { AffineTransform } from '../../../domain/geo/transform';
@@ -47,6 +48,7 @@ interface Dependencies {
 
 /** render implementation, wired through explicit service dependencies. */
 export class CanvasRenderService {
+  private _labels: BoundLabelManager | null = null;
   private readonly _passes = new Map<RenderPass, RenderPassStage>();
   private _sourceOrder: string[] = [];
 
@@ -277,6 +279,7 @@ export class CanvasRenderService {
     this._renderPasses('before-layers');
     this._renderLayers(pixelSize, lineScale);
     this._renderPasses('after-layers');
+    this._renderBoundLabels();
     this._renderHighlight(transform, lineScale);
     this._renderEditOverlay();
   }
@@ -379,6 +382,54 @@ export class CanvasRenderService {
     );
   }
 
+  private _renderBoundLabels(): void {
+    if (!this._painter.drawLabels) return;
+    const bindings: LabelBinding[] = [];
+    for (const spec of this.deps.layers._getEffectiveLayers()) {
+      if (!spec.label || spec.label.enabled === false || spec.layout?.visibility === 'none')
+        continue;
+      const source = this.deps.document._sources.get(spec.source);
+      const dataset = source?.getDataset();
+      const layer = this.deps.document.layers.resolve(spec.source, spec['source-layer']);
+      if (!dataset || !layer) continue;
+      const mask = spec.filter
+        ? this.deps.layers._filterResolver.mask({
+            layerId: spec.id,
+            filter: spec.filter,
+            dataset,
+            layer,
+          })
+        : null;
+      bindings.push({
+        id: spec.id,
+        dataset,
+        layer,
+        options: spec.label,
+        mask,
+        pointRadius: spec.type === 'circle' ? spec.paint?.['circle-radius'] : undefined,
+      });
+    }
+    if (!bindings.length) {
+      this._labels?.dispose();
+      this._labels = null;
+      return;
+    }
+    this._labels ??= new BoundLabelManager(
+      () => this._scheduleRender(),
+      (error) => this.deps.events.fire('error', { error }),
+    );
+    const view = this.deps.view._viewport;
+    this._painter.drawLabels(
+      this._labels.request(
+        bindings,
+        view.transform,
+        view.width,
+        view.height,
+        window.devicePixelRatio || 1,
+      ),
+    );
+  }
+
   _renderHighlight(transform: AffineTransform, lineScale: number): void {
     const visibleKeys = this.deps.layers._getVisibleLayerKeys();
     this.deps.document._highlightManager.renderHighlights(
@@ -432,6 +483,8 @@ export class CanvasRenderService {
     else cache.clear();
   }
   dispose(): void {
+    this._labels?.dispose();
+    this._labels = null;
     if (this._rafId !== 0) cancelAnimationFrame(this._rafId);
     this._rafId = 0;
     this._pendingRender = 0;

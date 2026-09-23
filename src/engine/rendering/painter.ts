@@ -1,3 +1,4 @@
+import type { LabelFrame } from './labels/manager';
 import type { MeasurementMode, MeasurementPoint } from '../../domain/geo/measurement';
 
 import type { AffineTransform } from '../../domain/geo/transform';
@@ -86,6 +87,8 @@ export interface ArrowDotPathOptions {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
+  /** @internal Optional owner-bound text pass; geometry-only painters remain compatible. */
+  drawLabels?(frame: LabelFrame): void;
   /** Draw a north-up image in map coordinates without exposing the native canvas. */
   drawRasterImage(
     image: CanvasImageSource,

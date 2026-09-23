@@ -1,3 +1,4 @@
+import type { LabelOptions } from './label';
 import { Context } from 'cordis';
 import '../../runtime/services/context';
 import { contextFibers } from '../../runtime/context/inspection';
@@ -337,6 +338,10 @@ export class Emap extends EventDispatcher {
   }
   public setPaintProperty(id: string, name: string, value: unknown): void {
     return this.ctx.layers.setPaintProperty(id, name, value);
+  }
+  /** Configure labels attached to a point, line or polygon layer without adding a tree node. */
+  public setLayerLabel(id: string, options: LabelOptions | null): void {
+    this.ctx.layers.setLayerLabel(id, options);
   }
   public setFilter(id: string, expression: StyleExpression | null): void {
     return this.ctx.layers.setFilter(id, expression);

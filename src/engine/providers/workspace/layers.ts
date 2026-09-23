@@ -1,3 +1,4 @@
+import { cloneLabelOptions, validateLabelOptions, type LabelOptions } from '../../map/label';
 import type { LayerChangeReason } from '../../core/event-map';
 import { EventDispatcher } from '../../core/events';
 import { FilterEvaluationError, FilterResolver } from '../../map/filter-resolver';
@@ -109,6 +110,7 @@ export class LayerServiceImpl {
     if (this._layers.some((l) => l.id === layer.id)) {
       throw new Error(`Layer "${layer.id}" already exists`);
     }
+    if (layer.label !== undefined) validateLabelOptions(layer.label);
     assertValidPointLod(layer);
     assertValidPaint(layer.id, layer.paint);
     assertValidFilter(layer.id, layer.filter);
@@ -176,6 +178,22 @@ export class LayerServiceImpl {
       (layer.paint as Record<string, unknown>)[name] = value;
       this.deps.signals.requestRender();
     }
+  }
+
+  /** Replace only the parent layer's label configuration. null disables/removes labels. */
+  public setLayerLabel(id: string, options: LabelOptions | null): void {
+    const label = options === null ? undefined : cloneLabelOptions(options);
+    let index = this._layers.findIndex((candidate) => candidate.id === id);
+    if (index < 0 && this._layers.length === 0) {
+      const effective = this._getEffectiveLayers();
+      index = effective.findIndex((candidate) => candidate.id === id);
+      if (index < 0) throw new Error(`Layer "${id}" not found`);
+      this._layers = effective.map(cloneLayerSpecification);
+    }
+    if (index < 0) throw new Error(`Layer "${id}" not found`);
+    this._layers[index].label = label;
+    this.deps.signals.requestRender();
+    this._fireLayerChange('effective', id);
   }
 
   public setFilter(id: string, expression: StyleExpression | null): void {

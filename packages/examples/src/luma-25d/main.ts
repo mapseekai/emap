@@ -1,3 +1,5 @@
+import { installLabelControls } from '../luma-benchmark/label-controls';
+import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
 import { AffineTransform } from '../../../../src/domain/geo/transform';
 import { Bounds } from '../../../../src/domain/geo/bounds';
@@ -20,6 +22,8 @@ import { vectorScene, type Scene } from '../luma-benchmark/scene';
 import { calibrationRaster, calibrationScene } from './demo';
 import { installNavigation } from './navigation';
 import './style.css';
+
+let labelControls: ReturnType<typeof installLabelControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -97,6 +101,7 @@ renderers.setPointLod(true);
 renderers.navigation.setEnabled(true);
 renderers.setPointStyle(3, 1);
 renderers.show('luma');
+labelControls = installLabelControls(document.querySelector<HTMLElement>('.layout > aside')!, renderers, request);
 renderers.resize(width, height, dpr);
 function syncControls(): void {
   el<HTMLInputElement>('pitch').value = String(view.pitch);
@@ -134,6 +139,7 @@ function snapshot() {
   };
 }
 function draw(exact = false): void {
+  labelControls?.refresh();
   if (disposed || fatal) return;
   try {
     if (native) {
@@ -570,6 +576,7 @@ for (const [x, y, color] of [
   bitmapContext.fillRect(x, y, 32, 32);
 }
 function dispose(): void {
+  labelControls?.dispose(); labelControls = null;
   if (disposed) return;
   disposed = true;
   loading?.abort();
@@ -589,6 +596,13 @@ window.addEventListener('pagehide', dispose, { once: true });
 // Diagnostics for browser regression tests and interactive inspection, not the production Emap API.
 Object.assign(window, {
   luma25d: {
+    get labelStats(){return renderers.labelStats;},
+    get labelPlacements(){return renderers.labelPlacements;},
+    get layers(){return renderers.getLayers();},
+    setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
+    settleLabels:()=>renderers.settleLabels(),
+
     get state() {
       return phase;
     },

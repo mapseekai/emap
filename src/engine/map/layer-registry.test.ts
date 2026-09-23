@@ -102,3 +102,12 @@ describe('LayerRegistry.resolve', () => {
     expect(reg.resolve('src1', 'parks')).not.toBeNull();
   });
 });
+
+it('resolves explicit ordinals for mixed-geometry layers sharing a filename', () => {
+  const a = makeLayer({ name: 'shared', geometry_type: 'point' });
+  const b = makeLayer({ name: 'shared', geometry_type: 'polyline' });
+  expect(resolveLayerInList([a, b], 0)).toBe(a);
+  expect(resolveLayerInList([a, b], 1)).toBe(b);
+  expect(resolveLayerInList([a, b], 'shared')).toBe(a);
+  for (const id of [-1, 0.5, NaN, 2]) expect(resolveLayerInList([a, b], id)).toBeNull();
+});

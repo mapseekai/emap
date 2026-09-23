@@ -1,3 +1,6 @@
+import { MsdfTextRenderer } from './msdf-text-renderer';
+import { GpuTextRenderer } from './text-renderer';
+import type { LabelFrame } from '../../engine/rendering/labels/manager';
 import {
   cameraUniforms,
   perspectiveActive,
@@ -71,6 +74,43 @@ export class GpuRenderer {
       images: Map<Texture, Bindings>;
     }
   >();
+  private textRenderer: GpuTextRenderer | null = null;
+  private msdfTextRenderer: MsdfTextRenderer | null = null;
+  get textStats() {
+    return (
+      this.msdfTextRenderer?.stats ??
+      this.textRenderer?.stats ?? {
+        drawCalls: 0,
+        bufferUploads: 0,
+        textureUploads: 0,
+        liveTextureBytes: 0,
+        liveBufferBytes: 0,
+      }
+    );
+  }
+  drawLabels(frame: LabelFrame): void {
+    if (!this.pass) return;
+    if (!frame.labels.length) return; // A pending layout hides text without re-uploading its atlas on pan.
+    this.flushCircles();
+    this.pointGroup = null;
+    this.pass.setParameters({ scissorRect: [0, 0, this.canvas.width, this.canvas.height] });
+    this.fullScissor = true;
+    if ('mode' in frame.labels[0].raster) {
+      this.msdfTextRenderer ??= new MsdfTextRenderer(this.device, this.backend);
+      const calls = this.msdfTextRenderer.stats.drawCalls;
+      this.msdfTextRenderer.draw(this.pass, frame, this.width, this.height, this.pixelRatio);
+      this.stats.drawCalls += this.msdfTextRenderer.stats.drawCalls - calls;
+      return;
+    }
+    this.textRenderer ??= new GpuTextRenderer(this.device, this.backend);
+    const calls = this.textRenderer.stats.drawCalls;
+    this.textRenderer.draw(this.pass, frame, this.width, this.height);
+    this.stats.drawCalls += this.textRenderer.stats.drawCalls - calls;
+  }
+  clearLabels(): void {
+    this.textRenderer?.clear();
+    this.msdfTextRenderer?.clear();
+  }
   private frameData = new Float32Array(60);
   private imageVertexArray: VertexArray | null = null;
   private msaaTexture: Texture | null = null;
@@ -1031,6 +1071,10 @@ export class GpuRenderer {
     this.queuedCircleGroup = null;
     this.pass?.end();
     this.pass = null;
+    this.textRenderer?.dispose();
+    this.msdfTextRenderer?.dispose();
+    this.msdfTextRenderer = null;
+    this.textRenderer = null;
     for (const mesh of this.meshes) this.destroyMesh(mesh);
     for (const entry of this.images.values()) this.destroyImage(entry);
     for (const entry of this.dashes.values()) entry.texture.destroy();

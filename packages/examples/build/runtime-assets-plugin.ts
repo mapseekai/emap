@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { Plugin } from 'vite';
@@ -19,7 +19,17 @@ const examplesRoot = resolve(repoRoot, 'packages/examples');
 const sourceRoot = resolve(repoRoot, 'dist');
 const examplesBuildRoot = resolve(examplesRoot, 'dist');
 
+function msdfAssets(): RuntimeAssetEntry[] {
+  const paths = ['emap-msdf-worker.js'];
+  if (existsSync(resolve(sourceRoot, 'msdf'))) {
+    paths.push(...readdirSync(resolve(sourceRoot, 'msdf'), { recursive: true, withFileTypes: true })
+      .filter(e => e.isFile()).map(e => relative(sourceRoot, resolve(e.parentPath, e.name)).replaceAll('\\', '/')));
+  }
+  return paths.map(path => ({ requestPath:path, buildPath:path, developmentSource:path, productionSource:path,
+    contentType:path.endsWith('.wasm')?'application/wasm':path.endsWith('.woff')?'font/woff':path.endsWith('.json')?'application/json':path.endsWith('.txt')?'text/plain; charset=utf-8':'application/javascript; charset=utf-8' }));
+}
 const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
+  ...msdfAssets(),
   {
     requestPath: 'emap-geotiff-worker.js', buildPath: 'emap-geotiff-worker.js',
     developmentSource: 'emap-geotiff-worker.js', productionSource: 'emap-geotiff-worker.js',

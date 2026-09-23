@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Replace the luma label bitmap path with real glyph-level RGB MSDF generated from
+  font outlines in a lazy, owned Worker. Shape with HarfBuzz/bidi, share glyphs
+  across labels, sizes, colors and DPR, and render halo/fill in GLSL and WGSL.
+  Ship local OFL Noto subsets and explicit fontUrl loading, keep parent-layer
+  ownership/collision rules, bounded caches, cancellation and nonfatal font errors.
+
+- Add owner-bound `LayerSpecification.label` and `Emap.setLayerLabel` for point, line
+  and polygon annotations, with safe field/expression text, font/halo settings,
+  interior/parallel placement and cross-layer collision avoidance. Render bounded
+  MSDF glyph atlases as instanced luma WebGL2/WebGPU quads; inherit parent visibility,
+  filtering and data revisions without additional layer-tree entries. Add controls
+  to the existing benchmark, 2.5D and editor pages and an optional Canvas text pass.
+  Keep labels disabled by default and document placement/performance limits.
+
 - Add an opt-in luma 2.5D ground-plane camera and `luma-25d` example, with shared
   WebGL2/WebGPU projection for vectors, RGBA images and native integer GeoTIFFs.
   Support pitch/bearing, ground picking, pointer-anchored navigation, four-corner

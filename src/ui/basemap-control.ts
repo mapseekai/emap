@@ -104,7 +104,7 @@ export class BasemapControl implements Control {
   };
 
   private readonly _handleTriggerClick = (): void => {
-    this._setOpen(this._panel?.hidden ?? true);
+    this._setOpen(Boolean(this._panel?.hidden ?? true));
   };
 
   private readonly _handleRadioChange = (event: Event): void => {

@@ -1,3 +1,4 @@
+import { cloneLabelOptions, type LabelOptions } from './label';
 import type {
   LineDashStyle,
   PointMarkerShape,
@@ -53,6 +54,8 @@ export interface LayerLayout {
 }
 
 interface LayerSpecificationBase {
+  /** Attached feature labels; not a standalone render/tree layer. */
+  label?: LabelOptions;
   id: string;
   source: string;
   'source-layer'?: string;
@@ -104,6 +107,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'line':
       return {
         ...layer,
+        ...(layer.label ? { label: cloneLabelOptions(layer.label) } : {}),
         paint: layer.paint
           ? {
               ...layer.paint,
@@ -118,6 +122,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'circle':
       return {
         ...layer,
+        ...(layer.label ? { label: cloneLabelOptions(layer.label) } : {}),
         ...(layer.pointLod && { pointLod: { ...layer.pointLod } }),
         paint: layer.paint ? { ...layer.paint } : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,

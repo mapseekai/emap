@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -183,3 +183,37 @@ map.addLayer({
 - [面填充](/mapseekai/emap/examples/getting-started/polygon-fill/)
 - [线样式](/mapseekai/emap/examples/getting-started/lines/)
 - [属性样式](/mapseekai/emap/examples/attribute-styling/)
+
+## 绑定式文字注记
+
+`label` 是现有 `circle`、`line`、`fill` 图层的附属配置，不新增文字图层或图层树节点。
+关闭父图层可见性、设置过滤器或移除父图层时，注记同步更新。
+
+```ts
+map.addLayer({
+  id: 'city-points', source: 'cities', type: 'circle',
+  paint: { 'circle-radius': 5 },
+  label: { field: 'name', fontSize: 16, color: '#243447', haloWidth: 2 },
+});
+map.setLayerLabel('city-points', {
+  field: 'name', fontSize: 18, allowOverlap: false,
+  priority: ['get', 'population'],
+});
+map.setLayerLabel('city-points', null); // 移除注记，不移除城市图层
+```
+
+`setLayerLabel` 替换整个配置。`field` 与 `text` 二选一，后者支持字符串或已有的安全
+样式表达式子集。空值不显示；字号和描边使用 CSS 像素，`offset` 是像素偏移。
+点注记尝试周边位置，线注记整体沿线旋转且保持正向，面注记使用排除孔洞的内部锚点。
+`placement: 'horizontal'` 使线注记保持水平；尚不支持逐字沿曲线、引线、规则式注记
+或完整的 QGIS PAL 排布。面锚点在有效面内，但文字矩形不保证完全落在面内。
+
+默认 Canvas 支持该配置；luma 分支在现有 GPU RenderPass 中批量绘制字体图集。
+本地 `luma-benchmark`、`luma-25d` 和 `luma-vertex-editing` 示例包含父图层注记面板。
+未启用时不建立字体图集/注记索引；已启用时跨图层避让，最多显示 2,000 条/视图，
+默认 1,000 条/图层，候选最多 20,000。预算外候选不参与优先级全局比较。
+文字图集最多四张 1024×1024 RGBA 纹理，CPU/GPU 各约 16 MiB 上限，不含源索引。
+luma 路径采用 HarfBuzz 排版和按字形共享的 RGB MSDF，颜色与描边由 GPU 计算。
+默认使用自托管 Noto 子集；自定义字体通过 `label.fontUrl` 提供 TTF/OTF/WOFF1。
+字号、颜色和 DPR 的常规变化复用字形，异常宽描边可能需要更宽的距离范围档。
+手势快照期间文字仍暂随旧画面变换，停止后刷新；默认 Canvas 路径保留兼容绘制。

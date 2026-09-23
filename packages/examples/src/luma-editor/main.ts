@@ -1,3 +1,5 @@
+import { installLabelControls } from '../luma-benchmark/label-controls';
+import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
 import { importBenchmarkFile } from '../luma-benchmark/import-file';
 import { BenchmarkRenderers } from '../luma-benchmark/renderers';
@@ -9,6 +11,8 @@ import { Bounds } from '../../../../src/domain/geo/bounds';
 import { EditorOverlay } from './overlay';
 import { EditorBackdrop } from './backdrop';
 import './style.css';
+
+let labelControls: ReturnType<typeof installLabelControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const result = document.getElementById(id);
@@ -121,6 +125,7 @@ fastNavToggle.addEventListener('change',()=>{renderers.navigation.setEnabled(fas
 pathCullingToggle.addEventListener('change',()=>{renderers.pathCullingEnabled=pathCullingToggle.checked;renderers.navigation.reset();requestDraw();});
 
 renderers.show('luma');
+labelControls = installLabelControls(el('editor'), renderers, requestDraw);
 const pathStrategy=el<HTMLSelectElement>('path-strategy');
 pathStrategy.addEventListener('change',()=>{
   if(renderers.gpu)renderers.gpu.pathMode=pathStrategy.value as 'auto'|'reference'|'legacy';
@@ -147,6 +152,7 @@ function requestDraw(): void {
   });
 }
 function draw(): void {
+  labelControls?.refresh();
   if (!scene || !session || disposed || phase === 'loading') return;
   try {
     session.setView(view, width, height);
@@ -475,6 +481,7 @@ async function restore(): Promise<void> {
   }
 }
 function dispose(): void {
+  labelControls?.dispose(); labelControls = null;
   if (disposed) return;
   disposed = true;
   generation++;
@@ -492,6 +499,13 @@ async function start(): Promise<void> {
   await loadExampleRuntime({ mode: 'local' });
   Object.assign(window, {
     lumaEditor: {
+    get labelStats(){return renderers.labelStats;},
+    get labelPlacements(){return renderers.labelPlacements;},
+    get layers(){return renderers.getLayers();},
+    setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
+    settleLabels:()=>renderers.settleLabels(),
+
       load: loadFile,
       get screenFilterStats(){return renderers.screenFilterStats;},
     get cacheDiagnostics(){return renderers.cacheDiagnostics;},

@@ -22,3 +22,4 @@ minimumReleaseAgeExclude:
 
 patchedDependencies:
   apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch
+  msdfgen-wasm@1.0.0: patches/msdfgen-wasm@1.0.0.patch

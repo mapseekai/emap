@@ -26,8 +26,12 @@ import type { MapshaperLayer } from '../../shared/types/mapshaper-types';
  */
 export function resolveLayerInList(
   layers: ReadonlyArray<MapshaperLayer>,
-  layerId: string,
+  layerId: string | number,
 ): MapshaperLayer | null {
+  // Explicit ordinal addressing for imported datasets with duplicate display names.
+  // String canonical/name/id matching below is unchanged.
+  if (typeof layerId === 'number')
+    return Number.isInteger(layerId) && layerId >= 0 ? (layers[layerId] ?? null) : null;
   for (let i = 0; i < layers.length; i++) {
     const layer = layers[i];
     if (!layer) continue;
@@ -58,7 +62,7 @@ export class LayerRegistry {
    * Returns the FIRST hit; in a well-formed dataset every layer's
    * `getLayerId` is unique so the priority list is theoretical.
    */
-  resolve(sourceId: string, layerId?: string): MapshaperLayer | null {
+  resolve(sourceId: string, layerId?: string | number): MapshaperLayer | null {
     const source = this._sources.get(sourceId);
     if (!source) return null;
     const layers = source.getLayers() as MapshaperLayer[];

@@ -1,3 +1,4 @@
+import { drawCanvasLabels, type LabelFrame } from './labels/manager';
 import {
   EditPainter,
   DrawOverlayState,
@@ -1260,6 +1261,11 @@ export class CanvasPainter implements EditPainter {
     } finally {
       ctx.restore();
     }
+  }
+
+  /** @internal Renderer-owned label frame; configure labels through LayerSpecification. */
+  drawLabels(frame: LabelFrame): void {
+    drawCanvasLabels(this._ctx, frame, this._pixelRatio);
   }
 
   clear(): void {

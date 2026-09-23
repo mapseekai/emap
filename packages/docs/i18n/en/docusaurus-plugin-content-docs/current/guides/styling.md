@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
+api: ["LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.13.0
@@ -183,3 +183,44 @@ Successful `value` includes effective `breaks` or `categories`, `colors`, class 
 - [Polygon fill](/mapseekai/emap/examples/getting-started/polygon-fill/)
 - [Line styling](/mapseekai/emap/examples/getting-started/lines/)
 - [Attribute styling](/mapseekai/emap/examples/attribute-styling/)
+
+## Attached feature labels
+
+`label` belongs to an existing `circle`, `line` or `fill` layer. It does not create a
+text layer, data source or layer-tree entry. Parent visibility, filtering and removal
+also control its labels.
+
+```ts
+map.addLayer({
+  id: 'city-points', source: 'cities', type: 'circle',
+  paint: { 'circle-radius': 5 },
+  label: { field: 'name', fontSize: 16, color: '#243447', haloWidth: 2 },
+});
+map.setLayerLabel('city-points', {
+  field: 'name', fontSize: 18, allowOverlap: false,
+  priority: ['get', 'population'],
+});
+map.setLayerLabel('city-points', null); // Remove labels, not the parent layer
+```
+
+`setLayerLabel` replaces the entire configuration. Choose `field` or `text`; `text`
+accepts a literal string or the existing safe style-expression subset. Null values
+are skipped. Font sizes, halos and `offset` use CSS pixels. Point labels try nearby
+positions, line labels rotate as an upright text run, and polygon anchors avoid holes.
+`placement: 'horizontal'` keeps line labels horizontal. Per-character curved placement,
+callouts, rule-based labeling and the full QGIS PAL engine are not implemented.
+Polygon anchors are inside the valid area; the full text rectangle may extend outside it.
+
+The default Canvas renderer accepts this configuration. The luma branch draws batched
+font-atlas quads in the existing GPU render pass. The local `luma-benchmark`, `luma-25d`
+and `luma-vertex-editing` examples include parent-layer label settings. Labels are off
+by default and allocate no font atlas or label index until enabled. Placement uses
+cross-layer collision avoidance, at most 20,000 candidates and 2,000 labels per view,
+with a default limit of 1,000 per layer. Priorities only rank the bounded candidate set.
+Up to four 1024×1024 RGBA atlas pages require at most about 16 MiB each on CPU and GPU,
+excluding source indexes. The luma path uses HarfBuzz shaping and shared RGB MSDF glyphs, with GPU fill and halo.
+Default Noto subsets are hosted locally; custom outlines use `label.fontUrl` with TTF/OTF/WOFF1.
+Ordinary size, color and DPR changes reuse glyphs; very wide halos can request a wider distance-range tier.
+The default Canvas renderer retains its compatible bitmap path.
+During navigation previews labels temporarily transform with the old frame and are
+laid out again when the gesture settles.

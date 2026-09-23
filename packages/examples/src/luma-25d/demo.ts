@@ -1,3 +1,4 @@
+import { getDefaultMapshaperAdapter } from '../../../../src/integrations/mapshaper/adapter';
 import type { RasterSource, RasterMetadata } from '../../../../src/domain/raster/types';
 import { generateScene, vectorScene } from '../luma-benchmark/scene';
 
@@ -11,6 +12,11 @@ export async function calibrationScene(signal: AbortSignal) {
       [13001000 + (i % 3) * 3500, 4001000 + Math.floor(i / 3) * 3500],
     ]),
   });
+  for (const [index, layer] of generated.dataset.layers.entries()) {
+    layer.data = getDefaultMapshaperAdapter().createDataTable((layer.shapes ?? []).map((_, id) => ({
+      name: `${index === 0 ? '地块' : '控制点'} ${id + 1}`, code: id + 1,
+    })));
+  }
   return vectorScene(generated.dataset, '演示网格 / 原始面与控制点');
 }
 export function calibrationRaster(): RasterSource {

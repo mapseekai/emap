@@ -1,3 +1,4 @@
+import type { LabelOptions } from '../../../engine/map/label';
 import type { LayerChangeReason } from '../../../engine/core/event-map';
 import type { FilterResolver } from '../../../engine/map/filter-resolver';
 import type { LayerSpecification } from '../../../engine/map/layer';
@@ -24,6 +25,7 @@ export interface LayerContract {
   getRenderedLayers(): readonly LayerSpecification[];
   setLayerVisibility(id: string, visibility: 'visible' | 'none'): void;
   setPaintProperty(id: string, name: string, value: unknown): void;
+  setLayerLabel(id: string, options: LabelOptions | null): void;
   setFilter(id: string, expression: StyleExpression | null): void;
   getFilter(id: string): StyleExpression | undefined;
   moveLayer(id: string, beforeId?: string): void;

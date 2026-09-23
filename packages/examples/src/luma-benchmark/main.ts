@@ -1,3 +1,5 @@
+import { installLabelControls } from './label-controls';
+import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
 import { AffineTransform } from '../../../../src/domain/geo/transform';
 import { Bounds } from '../../../../src/domain/geo/bounds';
@@ -7,6 +9,8 @@ import { importBenchmarkFile } from './import-file';
 import { BenchmarkRenderers, type Backend } from './renderers';
 import { animationTick, navigationFrame, summarize, type Samples } from './metrics';
 import './style.css';
+
+let labelControls: ReturnType<typeof installLabelControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -103,6 +107,7 @@ passSelector.addEventListener('change',()=>{renderers.passMode=passSelector.valu
 selector.querySelector<HTMLOptionElement>('option[value="luma"]')!.textContent=requestedGpu==='webgpu'?'luma / WebGPU':'luma / WebGL2';
 selector.value = backend;
 renderers.show(backend);
+labelControls = installLabelControls(el('benchmark'), renderers, requestDraw);
 el('device').textContent = renderers.gpu
   ? JSON.stringify(renderers.gpu.deviceInfo) : 'Canvas2D only';
 function fit() {
@@ -125,6 +130,7 @@ function refreshCounters() {
 }
 
 function draw() {
+  labelControls?.refresh();
   if (!scene || disposed) return;
   try {
     const ms = renderers.drawInteractive(backend, transform);
@@ -369,6 +375,7 @@ el('export').addEventListener('click', () => {
 function hidden() { if (document.hidden) { running?.abort(new Error('Tab hidden')); blurNavigation(); } }
 document.addEventListener('visibilitychange', hidden);
 function dispose() {
+  labelControls?.dispose(); labelControls = null;
   if (disposed) return; disposed = true;
   loading?.abort(); running?.abort(); cancelAnimationFrame(scheduled);
   clearTimeout(wheelSettle);
@@ -419,7 +426,14 @@ async function start() {
     const overview = files.find((f) => f.name.toLowerCase() === `${file.name}.ovr`.toLowerCase());
     void loadFile(file, overview);
   });
-  Object.assign(window, { lumaBenchmark: { run: compare, runScreen:(frames=60)=>compare(frames,true), loadFile, dispose, setPointLod,
+  Object.assign(window, { lumaBenchmark: { run: compare,
+    get labelStats(){return renderers.labelStats;},
+    get labelPlacements(){return renderers.labelPlacements;},
+    get layers(){return renderers.getLayers();},
+    setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
+    setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
+    settleLabels:()=>renderers.settleLabels(),
+ runScreen:(frames=60)=>compare(frames,true), loadFile, dispose, setPointLod,
     get screenFilterStats(){return renderers.screenFilterStats;},
     get cacheDiagnostics(){return renderers.cacheDiagnostics;},
     setScreenFilters,

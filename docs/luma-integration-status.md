@@ -1,5 +1,11 @@
 # luma.gl v10 集成状态
 
+## 绑定式文字注记
+
+点、线、面可配置附属 `label`，不增加图层树节点。现有 benchmark、2.5D 和编辑示例
+提供字段/字体/描边/避让设置；WebGL2/WebGPU 共用有界 MSDF 字形图集与布局；HarfBuzz 排版与轮廓距离场在独立 Worker 中按需准备。
+默认 Emap 也可通过 `setLayerLabel` 配置，详情见 [文字注记](luma-labels.md)。
+
 
 ## Opt-in 2.5D camera
 

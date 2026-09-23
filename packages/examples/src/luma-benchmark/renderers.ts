@@ -1,3 +1,9 @@
+import { MsdfLabelAtlas } from '../../../../src/integrations/msdf/atlas';
+import { BoundLabelManager, drawCanvasLabels, type LabelFrame } from '../../../../src/engine/rendering/labels/manager';
+import { cloneLabelOptions, type LabelOptions } from '../../../../src/engine/map/label';
+import { cloneLayerSpecification, type LayerSpecification } from '../../../../src/engine/map/layer';
+import { resolveLayerInList } from '../../../../src/engine/map/layer-registry';
+import { getLayerId } from '../../../../src/domain/source/layer-utils';
 import { perspectiveActive, cameraUniforms } from '../../../../src/domain/geo/perspective-transform';
 import { ScreenPathCache, drawScreenPaths, type ScreenPathEntry } from './screen-path-cache';
 import type { ScreenPathRequest } from '../../../../src/engine/rendering/luma/screen-paths';
@@ -25,6 +31,42 @@ const CACHE_BYTES=256*1024**2;
 interface Entry {display:DisplayChunk;mesh:GpuMesh|null;used:number;rangeIndex?:PathRangeIndex}
 interface FrameEntry {chunk:SpatialChunk;raw?:Entry;filtered?:ScreenPathEntry}
 export class BenchmarkRenderers {
+ private labelManager:BoundLabelManager|null=null;
+ private labelError:string|null=null;
+ private layerSpecs:LayerSpecification[]=[];
+ getLayers():readonly LayerSpecification[]{return this.layerSpecs.map(cloneLayerSpecification);}
+ getLabelFields(id:string):string[]{
+  const spec=this.layerSpecs.find(l=>l.id===id);
+  const layer=spec&&this.scene?resolveLayerInList(this.scene.dataset.layers,this.layerSpecs.indexOf(spec)):null;
+  return layer?.data?.getFields?.()??Object.keys(layer?.data?.getRecordAt?.(0)??layer?.data?.getRecords?.()[0]??{});
+ }
+ setLayerLabel(id:string,options:LabelOptions|null):void {
+  const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
+  spec.label=options===null?undefined:cloneLabelOptions(options);this.labelError=null;
+  this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+ }
+ setLayerVisibility(id:string,visibility:'visible'|'none'):void {
+  if(!['visible','none'].includes(visibility))throw new Error('Invalid layer visibility');
+  const spec=this.layerSpecs.find(l=>l.id===id);if(!spec)throw new Error(`Unknown vector layer: ${id}`);
+  spec.layout={...spec.layout,visibility};this.frameEpoch++;this.navigation.reset();this.labelManager?.invalidateLayout();this.invalidate();
+ }
+ get labelControlRevision(){return `${this.generation}:${this.scene?.dataset.attributeVersion??0}`;}
+ get labelPlacements(){return this.labelManager?.placements??[];}
+ get labelStats(){return {...this.labelManager?.stats,error:this.labelError,gpu:this.gpu?.textStats};}
+ async settleLabels():Promise<void>{await this.labelManager?.settled();}
+ private labels(view:AffineTransform):LabelFrame {
+  const bindings=(this.layerSpecs??[]).flatMap(spec=>{
+   if(!spec.label||spec.label.enabled===false||spec.layout?.visibility==='none'||!this.scene)return [];
+   if(this.passMode!=='all'&&((this.passMode==='points')!==(spec.type==='circle')))return [];
+   const layer=resolveLayerInList(this.scene.dataset.layers,this.layerSpecs.indexOf(spec));
+   return layer?[{id:spec.id,dataset:this.scene.dataset,layer,options:spec.label,pointRadius:this.pointPaint.radius}]:[];
+  });
+  if(!bindings.length){if(this.labelManager){this.labelManager.dispose();this.labelManager=null;this.labelError=null;this.gpu?.clearLabels();}return {key:'',labels:[]};}
+  this.labelManager??=new BoundLabelManager(()=>{this.frameEpoch++;this.navigation.invalidateFrame();this.invalidate();},error=>{this.labelError=error.message;this.invalidate();},globalThis.document,new MsdfLabelAtlas(new URL(`${import.meta.env.BASE_URL}emap-msdf-worker.js`,location.href)));
+  this.labelManager.pause(this.interacting);
+  return this.labelManager.request(bindings,view,this.dimensions[0],this.dimensions[1],this.dimensions[2]);
+ }
+
  readonly cpu:CanvasPainter;
  readonly navigation:FastNavPreview;
  pathCullingEnabled=true;
@@ -155,7 +197,10 @@ export class BenchmarkRenderers {
   this.clear();this.scene=scene;this.renderRevision=scene.dataset.editVersion??0;this.preparing=true;this.buildMs=0;this.uploadSubmitMs=0;const prepareGeneration=this.generation;
   try {
   const source=scene.lodSource??new FullGeometrySource(scene.dataset,[scene.bounds.xmin,scene.bounds.ymin,scene.bounds.xmax,scene.bounds.ymax]);
-  this.source=source;const start=performance.now();await source.initialize(signal,progress);
+  this.source=source;
+  this.layerSpecs=scene.dataset.layers.map((layer,i)=>({id:`vector-${i}`,source:'luma',
+   'source-layer':getLayerId(layer,i),type:layer.geometry_type==='point'?'circle':layer.geometry_type==='polygon'?'fill':'line'}));
+  const start=performance.now();await source.initialize(signal,progress);
   if(scene.dataset.layers.some(l=>l.geometry_type==='point')){
    this.pointLod=new PointLodRenderCache(source,scene.dataset,this.gpu,()=>{this.frameEpoch++;this.navigation.invalidateFrame();this.invalidate();},this.report);
    this.pointLod.configure(this.pointLodEnabled,this.pointLodCellSize);
@@ -274,8 +319,8 @@ export class BenchmarkRenderers {
  }
  private paint(c:SpatialChunk):MeshPaint{return c.kind==='fill'?fillPaint:c.kind==='point'?this.pointPaint:
   this.scene?.dataset.layers[c.layer].geometry_type==='polygon'?outlinePaint:linePaint;}
- private enabled(c:SpatialChunk):boolean{return this.passMode==='all'||
-  (this.passMode==='fill'&&c.kind==='fill')||(this.passMode==='stroke'&&c.kind==='line')||(this.passMode==='points'&&c.kind==='point');}
+ private enabled(c:SpatialChunk):boolean{return this.layerSpecs?.[c.layer]?.layout?.visibility!=='none'&&(this.passMode==='all'||
+  (this.passMode==='fill'&&c.kind==='fill')||(this.passMode==='stroke'&&c.kind==='line')||(this.passMode==='points'&&c.kind==='point'));}
  draw(backend:Backend,transform:AffineTransform,overlay?:(gpu:GpuRenderer)=>void,screen?:ReadonlyMap<number,ScreenPathEntry>):number {
   if(this.disposed||this.preparing||!this.scene||!this.source)return 0;
   if(perspectiveActive(transform)) {
@@ -309,6 +354,7 @@ export class BenchmarkRenderers {
   Object.assign(this.lodStats,{drawnChunks:entries.filter(e=>(e.filtered?.packet.geometry.count??e.raw?.display.geometry.count??0)>0).length,displayVertices:vertices,
    missingChunks:missing,cacheBytes:this.cacheBytes,cacheEntries:this.cache.size,submittedSegments:submitted,
    candidateSegments:segments,culledSegments:0,workingSetOverBudgetBytes:Math.max(0,this.cacheBytes-CACHE_BYTES)});
+  const labelFrame=this.labels(transform);
   const calls=this.gpu?.stats.drawCalls??0;
   if(backend==='canvas'){
    this.cpu.setTransform(transform);this.cpu.clear();
@@ -320,6 +366,7 @@ export class BenchmarkRenderers {
     else if(chunk.kind==='fill'&&arcs)this.cpu.drawPolygonFill(shapes,arcs,FILL_COLOR,undefined,.55);
     else if(arcs)this.cpu.drawArcs(arcs,{color:LINE_COLOR,width:this.paint(chunk).width});
    }
+   if(labelFrame.labels.length)drawCanvasLabels(this.canvas.getContext('2d')!,labelFrame,this.dimensions[2]);
   }else{
    const gpu=this.gpu;if(!gpu)throw new Error(this.unavailableReason??'GPU unavailable');
    if(!gpu.begin(transform))throw new Error('GPU device unavailable');
@@ -331,7 +378,7 @@ export class BenchmarkRenderers {
       const selected=this.pathCullingEnabled ? raw.rangeIndex?.select(transform,this.dimensions[0],this.dimensions[1],Math.max(8,(paint.width??1)*4+2)) : undefined;
       culled+=selected?.rejected??0;
       gpu.drawMesh(raw.mesh,paint,selected?.ranges);
-    }overlay?.(gpu);
+    }gpu.drawLabels?.(labelFrame);overlay?.(gpu);
    }finally{gpu.end();}
   }
   this.lodStats.culledSegments=culled;this.lodStats.submittedSegments=submitted-culled;
@@ -410,6 +457,7 @@ export class BenchmarkRenderers {
  }
  show(backend:Backend):void {if(this.canvas.hidden!==(backend!=='canvas'))this.navigation.reset();this.canvas.hidden=backend!=='canvas';this.glCanvas.hidden=backend!=='luma';}
  clear():void {
+  this.labelManager?.dispose();this.labelManager=null;this.layerSpecs=[];this.gpu?.clearLabels?.();
   this.preparing=false;this.editing=false;this.editView=null;this.editSelection=[];this.frameEpoch++;this.renderRevision=0;this.editStats.pending=false;
   this.navigation.reset();this.screenPaths?.dispose();this.screenPaths=null;this.screenFilterApplied=false;
   this.pointLod?.clear();this.pointLod=null;

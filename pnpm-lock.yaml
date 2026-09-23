@@ -16,6 +16,7 @@ overrides:
 
 patchedDependencies:
   apache-arrow@17.0.0: f4a2f3a4aa360f366808f6ed229209c19761b8d49412347605ff3d36e7a5e7ab
+  msdfgen-wasm@1.0.0: dcf454d9cf6ccaf7b1ec82d09313aa2288826890627c29d8eb2353519030a554
 
 importers:
 
@@ -42,6 +43,9 @@ importers:
       '@tmcw/togeojson':
         specifier: ^5.8.1
         version: 5.8.1(@types/geojson@7946.0.16)
+      bidi-js:
+        specifier: 1.0.3
+        version: 1.0.3
       cordis:
         specifier: 4.0.0-rc.10
         version: 4.0.0-rc.10
@@ -60,6 +64,9 @@ importers:
       geotiff:
         specifier: 3.0.5
         version: 3.0.5
+      harfbuzzjs:
+        specifier: 0.10.3
+        version: 0.10.3
       kdbush:
         specifier: ^4.0.2
         version: 4.1.0
@@ -69,6 +76,9 @@ importers:
       mproj:
         specifier: ^0.1.2
         version: 0.1.3
+      msdfgen-wasm:
+        specifier: 1.0.0
+        version: 1.0.0(patch_hash=dcf454d9cf6ccaf7b1ec82d09313aa2288826890627c29d8eb2353519030a554)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.16
@@ -76,6 +86,15 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev64.0
         version: 1.33.1-dev64.0
+      '@fontsource/noto-sans-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-sc':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-sc':
+        specifier: 5.3.0
+        version: 5.3.0
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
@@ -1793,6 +1812,15 @@ packages:
 
   '@fontsource-variable/geist-mono@5.3.0':
     resolution: {integrity: sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw==}
+
+  '@fontsource/noto-sans-mono@5.3.0':
+    resolution: {integrity: sha512-DPZ+/Ng9HP5UKiALCKtoeGfA7zJzEjHFB/18OU/c3+4I9zZ3eMVAuFZb0SqzT89Yj7KNhJFYnYjyDaVKhdRuUg==}
+
+  '@fontsource/noto-sans-sc@5.3.0':
+    resolution: {integrity: sha512-HeqIlGm0+ohOKxZLuHj1qW6r6avHH0OWdKERAcSDI0RQ+MXrteuLKA+M+5eOA8rYy0MFvOR5AT0fQo2rUkye0Q==}
+
+  '@fontsource/noto-serif-sc@5.3.0':
+    resolution: {integrity: sha512-0/zaEFkidiWldE62rTeD74x8ygUsQvejiSNtO0LQxQk3qpaHnlMZ3w4C7yH80B4KTIg8VKeFP4oSgwWMchY9+g==}
 
   '@gerrit0/mini-shiki@3.23.0':
     resolution: {integrity: sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg==}
@@ -4379,6 +4407,9 @@ packages:
   handle-thing@2.0.1:
     resolution: {integrity: sha512-9Qn4yBxelxoh2Ow62nP+Ka/kMnOXRi8BXnRaUwezLNhqelnN49xKz4F/dPP8OYLxLxq6JDtZb2i9XznUQbNPTg==}
 
+  harfbuzzjs@0.10.3:
+    resolution: {integrity: sha512-GJnLUrgLMadlMYrBGEXwYEimObbysy3prWT4HyPpFQERvgTU/OZ+ReUlEPOum6w4RBtFXzXiCCmECOr4sz3qwQ==}
+
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
@@ -4989,6 +5020,9 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
+  maxrects-packer@2.7.3:
+    resolution: {integrity: sha512-bG6qXujJ1QgttZVIH4WDanhoJtvbud/xP/XPyf6A69C9RdA61BM4TomFALCq2nrTa+tARRIBB4LuIFsnUQU2wA==}
+
   mdast-util-directive@3.1.0:
     resolution: {integrity: sha512-I3fNFt+DHmpWCYAT7quoM6lHf9wuqtI+oCOfvILnoicNIqjh5E3dEJWiXuYME2gNe8vl1iMQwyUHa7bgFmak6Q==}
 
@@ -5337,6 +5371,9 @@ packages:
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
+
+  msdfgen-wasm@1.0.0:
+    resolution: {integrity: sha512-Ro4sZzriImt9OVb6ougc/p2N98yZ9PFUwO5YL/jR6af3cfGaZ0Nx8unbF2XU+79EXbgGdECoth6TwGabDOUrYA==}
 
   msgpackr-extract@3.0.3:
     resolution: {integrity: sha512-P0efT1C9jIdVRefqjzOQ9Xml57zpOXnIuS+csaB4MdZbTdmGDLo8XhzBG1N7aO11gKDDkJvBLULeFTo46wwreA==}
@@ -9936,6 +9973,12 @@ snapshots:
 
   '@fontsource-variable/geist-mono@5.3.0': {}
 
+  '@fontsource/noto-sans-mono@5.3.0': {}
+
+  '@fontsource/noto-sans-sc@5.3.0': {}
+
+  '@fontsource/noto-serif-sc@5.3.0': {}
+
   '@gerrit0/mini-shiki@3.23.0':
     dependencies:
       '@shikijs/engine-oniguruma': 3.23.0
@@ -12894,6 +12937,8 @@ snapshots:
 
   handle-thing@2.0.1: {}
 
+  harfbuzzjs@0.10.3: {}
+
   has-flag@4.0.0: {}
 
   has-property-descriptors@1.0.2:
@@ -13581,6 +13626,8 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
+  maxrects-packer@2.7.3: {}
+
   mdast-util-directive@3.1.0(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
@@ -14186,6 +14233,10 @@ snapshots:
   ms@2.0.0: {}
 
   ms@2.1.3: {}
+
+  msdfgen-wasm@1.0.0(patch_hash=dcf454d9cf6ccaf7b1ec82d09313aa2288826890627c29d8eb2353519030a554):
+    dependencies:
+      maxrects-packer: 2.7.3
 
   msgpackr-extract@3.0.3:
     dependencies:

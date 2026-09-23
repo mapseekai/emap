@@ -1,0 +1,18 @@
+diff --git a/package.json b/package.json
+index d31cf200f50dd9ef310b8cd3dd5626e8b3093bb9..03b311b03256736f73fee43cb5d5be45a4935a8d 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,12 @@
+       "require": "./dist/cjs/index.js",
+       "import": "./dist/esm/index.js"
+     },
+-    "./wasm": "./wasm/msdfgen.wasm"
++    "./wasm": "./wasm/msdfgen.wasm",
++    "./core": {
++      "types": "./dist/types/wasmModuleFactory.d.ts",
++      "import": "./dist/esm/wasmModuleFactory.js",
++      "require": "./dist/cjs/wasmModuleFactory.js"
++    }
+   },
+   "types": "dist/types/index.d.ts",
+   "files": [
