@@ -326,7 +326,7 @@ export class GpuRenderer {
   private nearest!: Sampler;
   private linear!: Sampler;
   private meshes = new Set<GpuMesh>();
-  private images = new Map<CanvasImageSource, ImageEntry>();
+  private images = new Map<CanvasImageSource | ImageData, ImageEntry>();
   private dashes = new Map<
     string,
     { texture: Texture; period: number; count: number; frame: number }
@@ -345,6 +345,8 @@ export class GpuRenderer {
     drawCalls: 0,
     liveBufferBytes: 0,
     textureUploads: 0,
+    pixelTextureUploads: 0,
+    pixelTextureUploadedBytes: 0,
     liveTextureBytes: 0,
     liveTextures: 0,
     uniformWrites: 0,
@@ -460,75 +462,12 @@ export class GpuRenderer {
       'line',
       'path',
       'path-msaa',
-      'path-msaa-reference',
       'path-msaa-compact',
-      'path-msaa-compact-reference',
       'path-msaa-compact-xy',
-      'path-msaa-compact-xy-reference',
       'image',
       'icon',
     ] as const) {
-      const layout = shaderLayouts(kind, this.backend === 'webgpu');
-      const source = shaderSource(kind);
-      // Explicit locations keep GLSL and WGSL layouts identical.
-      const located = (code: string) =>
-        layout.shaderLayout.attributes.reduce(
-          (text, a) =>
-            text.replace(
-              new RegExp(`in (vec[234]|float) ${a.name};`),
-              `layout(location=${a.location}) in $1 ${a.name};`,
-            ),
-          code,
-        );
-      const vs = this.device.createShader({
-        language: this.backend === 'webgpu' ? 'wgsl' : 'glsl',
-        stage: 'vertex',
-        source: this.backend === 'webgpu' ? source.source : located(source.vs),
-      });
-      const fs =
-        this.backend === 'webgpu'
-          ? vs
-          : this.device.createShader({ language: 'glsl', stage: 'fragment', source: source.fs });
-      try {
-        const pipeline = this.device.createRenderPipeline({
-          id: `emap-${kind}`,
-          vs,
-          fs,
-          ...layout,
-          vertexEntryPoint: 'vertexMain',
-          fragmentEntryPoint: 'fragmentMain',
-          topology: kind.startsWith('circle') ? 'triangle-strip' : 'triangle-list',
-          depthStencilAttachmentFormat: this.backend === 'webgpu' ? 'depth24plus' : undefined,
-          parameters: {
-            ...parameters,
-            depthCompare: 'always',
-            depthWriteEnabled: false,
-            ...(kind === 'path-msaa' ||
-            kind === 'path-msaa-compact' ||
-            kind === 'path-msaa-compact-xy'
-              ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
-              : {}),
-            ...(kind === 'circle-core'
-              ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
-              : {}),
-            ...(kind === 'circle-edge' ? { depthCompare: 'less' } : {}),
-            ...(kind === 'point-depth-reset'
-              ? {
-                  blend: false,
-                  colorMask: 0,
-                  depthCompare: 'greater-equal',
-                  depthWriteEnabled: true,
-                }
-              : {}),
-            ...(this.backend === 'webgpu' ? { sampleCount: 4 } : {}),
-          },
-        });
-        this.pipelines.set(kind, { pipeline, shaders: fs === vs ? [vs] : [vs, fs] });
-      } catch (error) {
-        vs.destroy();
-        if (fs !== vs) fs.destroy();
-        throw error;
-      }
+      this.pipelineEntry(kind);
     }
     if (this.backend === 'webgpu') {
       const owned = this.device;
@@ -544,13 +483,98 @@ export class GpuRenderer {
       });
     }
   }
+  /** Production variants are warmed during initialization; diagnostic variants
+   * are compiled only when requested, keeping their exact reference shaders. */
+  private pipelineEntry(kind: PipelineKind): { pipeline: RenderPipeline; shaders: Shader[] } {
+    const existing = this.pipelines.get(kind);
+    if (existing) return existing;
+    const layout = shaderLayouts(kind, this.backend === 'webgpu');
+    const source = shaderSource(kind);
+    // Explicit locations keep GLSL and WGSL layouts identical.
+    const located = (code: string) =>
+      layout.shaderLayout.attributes.reduce(
+        (text, a) =>
+          text.replace(
+            new RegExp(`in (vec[234]|float) ${a.name};`),
+            `layout(location=${a.location}) in $1 ${a.name};`,
+          ),
+        code,
+      );
+    const vs = this.device.createShader({
+      language: this.backend === 'webgpu' ? 'wgsl' : 'glsl',
+      stage: 'vertex',
+      source: this.backend === 'webgpu' ? source.source : located(source.vs),
+    });
+    let fs = vs;
+    try {
+      if (this.backend !== 'webgpu')
+        fs = this.device.createShader({
+          id: `emap-${kind}-fragment`,
+          language: 'glsl',
+          stage: 'fragment',
+          source: source.fs,
+        });
+      const pipeline = this.device.createRenderPipeline({
+        id: `emap-${kind}`,
+        vs,
+        fs,
+        ...layout,
+        vertexEntryPoint: 'vertexMain',
+        fragmentEntryPoint: 'fragmentMain',
+        topology: kind.startsWith('circle') ? 'triangle-strip' : 'triangle-list',
+        depthStencilAttachmentFormat: this.backend === 'webgpu' ? 'depth24plus' : undefined,
+        parameters: {
+          ...parameters,
+          depthCompare: 'always',
+          depthWriteEnabled: false,
+          ...(kind === 'path-msaa' ||
+          kind === 'path-msaa-compact' ||
+          kind === 'path-msaa-compact-xy'
+            ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
+            : {}),
+          ...(kind === 'circle-core'
+            ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
+            : {}),
+          ...(kind === 'circle-edge' ? { depthCompare: 'less' } : {}),
+          ...(kind === 'point-depth-reset'
+            ? {
+                blend: false,
+                colorMask: 0,
+                depthCompare: 'greater-equal',
+                depthWriteEnabled: true,
+              }
+            : {}),
+          ...(this.backend === 'webgpu' ? { sampleCount: 4 } : {}),
+        },
+      });
+      const entry = { pipeline, shaders: fs === vs ? [vs] : [vs, fs] };
+      this.pipelines.set(kind, entry);
+      if (kind.endsWith('-reference')) {
+        void Promise.all(entry.shaders.map((shader) => shader.getCompilationInfo()))
+          .then((logs) => {
+            const errors = logs.flat().filter((message) => message.type === 'error');
+            if (!this.disposed && errors.length)
+              this.report(new Error(errors.map((e) => e.message).join('\n')));
+          })
+          .catch((error) => {
+            if (!this.disposed)
+              this.report(error instanceof Error ? error : new Error(String(error)));
+          });
+      }
+      return entry;
+    } catch (error) {
+      vs.destroy();
+      if (fs !== vs) fs.destroy();
+      throw error;
+    }
+  }
   private vertexArray(
     kind: PipelineKind,
     buffer: Buffer,
     indices?: Buffer,
     firstInstance = 0,
   ): VertexArray {
-    const entry = this.pipelines.get(kind)!;
+    const entry = this.pipelineEntry(kind);
     const { bufferLayout } = shaderLayouts(kind, this.backend === 'webgpu');
     if (firstInstance)
       for (const binding of bufferLayout) {
@@ -1154,7 +1178,7 @@ export class GpuRenderer {
         this.pointGroup = group;
         this.pointDepthDirty = true;
       } else this.pointGroup = null;
-      this.pass.setPipeline(this.pipelines.get(kind)!.pipeline);
+      this.pass.setPipeline(this.pipelineEntry(kind).pipeline);
       this.pass.setBindings(style.bindings, { _bindGroupCacheKeys: { 0: style.bindings } });
       const draws = ranges ?? [{ firstInstance: 0, count: mesh.count }];
       for (const range of draws) {
@@ -1212,7 +1236,7 @@ export class GpuRenderer {
     for (const kind of ['circle-core', 'circle-edge'] as const) {
       // Each circle instance is retained in BOTH passes, not deduplicated.
       for (const { mesh, vao, bindings } of this.circleQueue) {
-        pass.setPipeline(this.pipelines.get(kind)!.pipeline);
+        pass.setPipeline(this.pipelineEntry(kind).pipeline);
         pass.setBindings(bindings, { _bindGroupCacheKeys: { 0: bindings } });
         pass.setVertexArray(vao);
         if (pass.draw({ vertexCount: 4, instanceCount: mesh.count, isInstanced: true })) {
@@ -1311,7 +1335,7 @@ export class GpuRenderer {
     return entry;
   }
   drawImage(
-    image: CanvasImageSource,
+    image: CanvasImageSource | ImageData,
     bounds: Rect,
     opacity = 1,
     smoothing = true,
@@ -1413,7 +1437,7 @@ export class GpuRenderer {
     if (this.pass.draw({ vertexCount: 6 })) this.stats.drawCalls++;
   }
 
-  private imageTexture(image: CanvasImageSource, immutable: boolean): ImageEntry {
+  private imageTexture(image: CanvasImageSource | ImageData, immutable: boolean): ImageEntry {
     const source = image as {
       width?: number;
       height?: number;
@@ -1426,6 +1450,17 @@ export class GpuRenderer {
     const height = source.videoHeight ?? source.displayHeight ?? source.height ?? 0;
     if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0)
       throw new Error('Raster image has invalid dimensions');
+    const pixels = 'data' in image ? image.data : undefined;
+    if (
+      pixels !== undefined &&
+      (!(pixels instanceof Uint8ClampedArray) || pixels.length !== width * height * 4)
+    )
+      throw new Error('Raster pixels must be tightly packed RGBA8 ImageData');
+    if (
+      width > this.device.limits.maxTextureDimension2D ||
+      height > this.device.limits.maxTextureDimension2D
+    )
+      throw new Error('Raster image exceeds the device texture limit');
     let entry = this.images.get(image);
     if (entry && (entry.texture.width !== width || entry.texture.height !== height)) {
       this.destroyImage(entry);
@@ -1449,13 +1484,21 @@ export class GpuRenderer {
       this.stats.liveTextures++;
     }
     if (entry.frame < 0 || (!immutable && entry.frame !== this.frame)) {
-      entry.texture.copyExternalImage({
-        image: image as Parameters<Texture['copyExternalImage']>[0]['image'],
-        width,
-        height,
-        premultipliedAlpha: false,
-        flipY: false,
-      });
+      if (pixels) {
+        // Native queue.writeTexture / texSubImage2D accepts tightly packed CPU
+        // rows. Do not impose the 256-byte alignment of GPU buffer-copy APIs.
+        entry.texture.writeData(pixels, { width, height, bytesPerRow: width * 4 });
+        this.stats.pixelTextureUploads++;
+        this.stats.pixelTextureUploadedBytes += pixels.byteLength;
+      } else {
+        entry.texture.copyExternalImage({
+          image: image as Parameters<Texture['copyExternalImage']>[0]['image'],
+          width,
+          height,
+          premultipliedAlpha: false,
+          flipY: false,
+        });
+      }
       this.stats.textureUploads++;
     }
     // Refresh insertion order so over-budget eviction is oldest-used first.
@@ -1517,7 +1560,7 @@ export class GpuRenderer {
   }
 
   /** Release a completed editor backdrop without retaining its bitmap or texture. */
-  forgetImage(image: CanvasImageSource): void {
+  forgetImage(image: CanvasImageSource | ImageData): void {
     const entry = this.images.get(image);
     if (!entry) return;
     this.images.delete(image);

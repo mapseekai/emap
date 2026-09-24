@@ -148,6 +148,9 @@ export interface RasterRenderResult {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+  /** Producer guarantee: alpha is only 0/255 and zero-alpha RGB is zero.
+   * Enables scan-free display preparation; omit for arbitrary/continuous-alpha output. */
+  readonly canonicalBinaryAlpha?: true;
   readonly diagnostics?: RasterTaskDiagnostics;
 }
 export interface RasterLevelProcessingStats {

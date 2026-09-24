@@ -76,6 +76,15 @@ describe('off-thread raster pipeline', () => {
         }),
       );
       const actual = await renderRasterBatch(reader, [request, structuredClone(request)]);
+      expect(actual[0].canonicalBinaryAlpha).toBe(
+        reader.metadata.alphaBand === null ? true : undefined,
+      );
+      if (actual[0].canonicalBinaryAlpha)
+        for (let i = 0; i < actual[0].rgba.length; i += 4) {
+          const alpha = actual[0].rgba[i + 3];
+          expect(alpha === 0 || alpha === 255).toBe(true);
+          if (!alpha) expect([...actual[0].rgba.subarray(i, i + 3)]).toEqual([0, 0, 0]);
+        }
       expect(actual[0].rgba).toEqual(expected);
       expect(actual[1].rgba).toEqual(expected);
       expect(actual[0].rgba.buffer).not.toBe(actual[1].rgba.buffer);

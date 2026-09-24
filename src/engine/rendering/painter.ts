@@ -133,6 +133,16 @@ export interface CorePainter {
     /** Immutable decoded raster tiles can reuse their texture without per-frame uploads. */
     immutable?: boolean,
   ): void;
+  /** @internal Optional direct RGBA8 upload; pixels follow the same map bounds,
+   * clipping, opacity and lifetime rules as drawRasterImage. No source samples change. */
+  drawRasterPixels?(
+    pixels: ImageData,
+    bounds: readonly [number, number, number, number],
+    opacity?: number,
+    smoothing?: boolean,
+    clipBounds?: readonly [number, number, number, number],
+    immutable?: boolean,
+  ): void;
   /** @internal Optional lazy unbucketed outline preparation. Shared arcs keep
    * their forward orientation, matching the legacy outline collector (including dashes).
    * Existing painters continue to receive the prepared arc list through drawArcs.

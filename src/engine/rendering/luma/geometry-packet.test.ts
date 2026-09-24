@@ -132,3 +132,45 @@ it('splits lossless XY strokes at record boundaries without inserting or losing 
     for (let i = 0; i < part.count; i++) expect(part.vertices[i * 12]).toBe(cursor++);
   }
 });
+
+it('uses one exact owned backing allocation for multi-mesh path output without copying neighbor records', async () => {
+  const { collectTransferables } = await import('../../worker/transferables');
+  const count = 150000,
+    vertices = new Float32Array((count + 3) * PATH_STRIDE);
+  const parts = splitGeometry({ kind: 'path', vertices, count });
+  expect(parts).toHaveLength(3);
+  expect(new Set(parts.map((p) => p.vertices.buffer)).size).toBe(1);
+  expect(parts[1].vertices.byteOffset).toBe(65536 * PATH_STRIDE * 4);
+  expect(collectTransferables(parts).filter((b) => b === vertices.buffer)).toHaveLength(1);
+});
+it('does not retain an oversized backing allocation when exposing a small geometry result', () => {
+  const backing = new Float32Array(1024 * 1024);
+  const vertices = backing.subarray(100, 108);
+  vertices.set([1, 2, 0, 0, 3, 4, 0, 0]);
+  const [part] = splitGeometry({ kind: 'point', count: 2, vertices });
+  expect(part.vertices).toEqual(vertices);
+  expect(part.vertices.buffer.byteLength).toBe(32);
+  expect(part.vertices.buffer).not.toBe(backing.buffer);
+});
+it('transferring assembled output does not detach source coordinates or Worker feature cache entries', async () => {
+  const { FeatureGeometryCache } = await import('./feature-geometry-cache');
+  const { collectTransferables } = await import('../../worker/transferables');
+  const cache = new FeatureGeometryCache();
+  const packet: GeometryPacket = {
+    kind: 'fill',
+    sourceId: 's',
+    cacheKey: 'n',
+    featureIds: new Int32Array([0]),
+    coordinates: Float64Array.from([0, 0, 1, 0, 1, 1, 0, 1, 0, 0]),
+    offsets: new Uint32Array([0, 5]),
+    features: new Uint32Array([0, 1]),
+  };
+  const result = buildGeometryPacket(packet, cache);
+  const clone = structuredClone(result, {
+    transfer: collectTransferables(result) as ArrayBuffer[],
+  });
+  expect(clone.geometries[0].count).toBe(6);
+  expect(packet.coordinates.byteLength).toBe(80);
+  expect(buildGeometryPacket(packet, cache).geometries[0].count).toBe(6);
+  expect(cache.stats.hits).toBe(1);
+});

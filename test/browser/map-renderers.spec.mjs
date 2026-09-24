@@ -132,6 +132,13 @@ for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: formal G
     return [...data.slice(i,i+4)];
   };});
   await expect.poll(()=>page.evaluate(()=>rasterMapPixel())).toEqual([180,0,0,255]);
+  if(renderer!=='canvas2d') {
+    const direct=await page.evaluate(()=>({gpu:geotiffDemo.map.ctx.render._painter.stats,raster:geotiffDemo.stats()}));
+    expect(direct.gpu.pixelTextureUploads).toBeGreaterThan(0);
+    expect(direct.raster.performance.canvasPreparedTiles).toBe(0);
+    expect(direct.raster.performance.pixelPreclassifiedTiles).toBeGreaterThan(0);
+    expect(direct.raster.pixelCacheBytes).toBe(direct.raster.cachedBytes);
+  }
   const warm=await page.evaluate(()=>geotiffDemo.map.ctx.render._painter.stats?.textureUploads);
   await page.evaluate(()=>{for(let i=0;i<5;i++)geotiffDemo.map.render();});
   if(renderer!=='canvas2d')expect(await page.evaluate(()=>geotiffDemo.map.ctx.render._painter.stats.textureUploads)).toBe(warm);

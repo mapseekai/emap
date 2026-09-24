@@ -125,7 +125,12 @@ describe('settled, progressive raster frames', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
-  async function harness(size = 256, cacheBytes = 64 * 1024 ** 2, presentationInterval = 0) {
+  async function harness(
+    size = 256,
+    cacheBytes = 64 * 1024 ** 2,
+    presentationInterval = 0,
+    pixels = false,
+  ) {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
       setTimeout(() => callback(performance.now()), 16),
@@ -176,7 +181,10 @@ describe('settled, progressive raster frames', () => {
       });
     const read = vi.spyOn(original, 'readWindow');
     service.addSource('test', original);
-    const painter = { drawRasterImage: vi.fn() } as unknown as RenderFrame['painter'];
+    const painter = {
+      drawRasterImage: vi.fn(),
+      ...(pixels ? { drawRasterPixels: vi.fn() } : {}),
+    } as unknown as RenderFrame['painter'];
     const frame: RenderFrame = {
       width: size,
       height: size,
@@ -193,11 +201,75 @@ describe('settled, progressive raster frames', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(service.getStats().pendingFrames).toBe(0);
     service.render(frame);
-    expect(painter.drawRasterImage).toHaveBeenCalled();
+    expect(pixels ? painter.drawRasterPixels : painter.drawRasterImage).toHaveBeenCalled();
     read.mockClear();
     vi.mocked(painter.drawRasterImage).mockClear();
     return { original, service, read, frame, painter, canvases };
   }
+  it('GPU-capable painters retain exact owned RGBA snapshots with no Canvas cache copy', async () => {
+    const { service, frame, painter, canvases, read } = await harness(512, 32 * 1024 ** 2, 0, true);
+    const stats = service.getStats();
+    expect(canvases).toHaveLength(0);
+    expect(stats.pixelCacheBytes).toBe(stats.cachedBytes);
+    expect(stats.canvasCacheBytes).toBe(0);
+    expect(stats.performance.pixelPreparedTiles).toBeGreaterThan(0);
+    expect(painter.drawRasterImage).not.toHaveBeenCalled();
+    const before = stats.cachedBytes;
+    service.render(frame);
+    expect(read).not.toHaveBeenCalled();
+    expect(service.getStats().cachedBytes).toBe(before);
+    const backing = new Uint8ClampedArray(4096),
+      rgba = backing.subarray(10, 34);
+    rgba.set([123, 45, 67, 255]);
+    const image = Reflect.get(service, 'prepareRasterImage').call(service, rgba, 3, 2) as ImageData;
+    rgba.fill(0);
+    expect(image.data.slice(0, 4)).toEqual(new Uint8ClampedArray([123, 45, 67, 255]));
+    expect(image.data.buffer.byteLength).toBe(24);
+    service.dispose();
+    expect(service.getStats().cachedBytes).toBe(0);
+    expect(service.getStats().pixelCacheBytes).toBe(0);
+  });
+  it('normalizes hidden RGB for NoData and keeps continuous-alpha tiles on the exact Canvas path', async () => {
+    const { service, canvases } = await harness(256, 32 * 1024 ** 2, 0, true);
+    const prepare = Reflect.get(service, 'prepareRasterImage').bind(service);
+    const input = new Uint8ClampedArray([100, 50, 25, 0, 100, 50, 25, 255]);
+    const binary = prepare(input, 2, 1) as ImageData;
+    expect(binary.data).toEqual(new Uint8ClampedArray([0, 0, 0, 0, 100, 50, 25, 255]));
+    expect(input[0]).toBe(100);
+    input[3] = 128;
+    const partial = prepare(input, 2, 1);
+    expect('data' in partial).toBe(false);
+    expect(canvases).toHaveLength(1);
+    expect(service.getStats().performance.pixelAlphaFallbackTiles).toBe(1);
+    partial.width = partial.height = 0;
+    service.dispose();
+  });
+  it('switching to a custom Canvas-only painter converts and replaces pixel cache ownership', async () => {
+    const { service, frame, canvases } = await harness(512, 32 * 1024 ** 2, 0, true);
+    const before = service.getStats().cachedBytes;
+    const drawRasterImage = vi.fn();
+    service.render({ ...frame, painter: { drawRasterImage } as unknown as RenderFrame['painter'] });
+    expect(drawRasterImage).toHaveBeenCalled();
+    expect(canvases.length).toBeGreaterThan(0);
+    expect(service.getStats().cachedBytes).toBe(before);
+    expect(service.getStats().pixelCacheBytes).toBe(0);
+    expect(service.getStats().canvasCacheBytes).toBe(before);
+    service.dispose();
+    expect(canvases.every((c) => c.width === 0 && c.height === 0)).toBe(true);
+  });
+  it('pressure fallback composites pixel tiles through temporary canvases without keeping duplicate cache copies', async () => {
+    const { service, frame, canvases } = await harness(512, 32 * 1024 ** 2, 0, true);
+    const before = service.getStats().pixelCacheBytes;
+    const layer = Reflect.get(service, 'layers').get('test');
+    const bounds = Reflect.get(service, 'displayed').get('test').bounds;
+    Reflect.get(service, 'preparePresentation').call(service, layer, bounds, 'EPSG:4326', frame, 1);
+    expect(canvases.length).toBeGreaterThan(1);
+    expect(canvases.slice(1).every((c) => c.width === 0 && c.height === 0)).toBe(true);
+    expect(service.getStats().pixelCacheBytes).toBe(before);
+    expect(service.getStats().canvasCacheBytes).toBeGreaterThan(0);
+    service.dispose();
+    expect(service.getStats().cachedBytes).toBe(0);
+  });
   it('reports current tile grid separately from cumulative planned/rendered work', async () => {
     const { service, frame } = await harness(512, 32 * 1024 ** 2);
     const before = service.getStats();

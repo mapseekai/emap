@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Share exact Worker-owned non-indexed geometry backing allocations across split meshes and
+  clip split fill storage as it is produced, avoiding retained full/clipped mesh arrays.
+- Warm only production luma pipelines; compile the three diagnostic reference variants on demand.
+- Upload canonical binary-alpha raster display pixels without a Canvas intermediary. Keep exact
+  owned snapshots, producer-side alpha classification, continuous-alpha compatibility and bounded
+  Canvas pressure fallbacks; expose representation and direct-upload diagnostics.
+
 - Reuse glyph/bitmap label buffer capacity, VAOs and bounded CPU staging across navigation;
   retain current collision, ordering and atlas-generation checks.
 - Yield within multi-mesh geometry uploads, reserve their full working set before yielding,

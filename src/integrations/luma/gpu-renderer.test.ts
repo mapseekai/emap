@@ -984,3 +984,79 @@ it('clearImages releases a shared image uniform once across multiple textures', 
   expect(g.styles.size).toBe(0);
   expect(g.stats.liveTextures).toBe(0);
 });
+
+for (const backend of ['webgl', 'webgpu'] as const)
+  it(`${backend}: uploads owned RGBA pixels directly, not through an external canvas`, () => {
+    const texture = {
+      width: 3,
+      height: 2,
+      copyExternalImage: vi.fn(),
+      writeData: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const g: any = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: {
+        type: backend,
+        createTexture: vi.fn(() => texture),
+        limits: { maxTextureDimension2D: 4096 },
+      },
+      images: new Map(),
+      styles: new Map(),
+      frame: 1,
+      linear: {},
+      stats: {
+        textureUploads: 0,
+        pixelTextureUploads: 0,
+        pixelTextureUploadedBytes: 0,
+        liveTextureBytes: 0,
+        liveTextures: 0,
+      },
+    });
+    const image = { width: 3, height: 2, data: new Uint8ClampedArray(24) };
+    image.data.set([255, 0, 0, 128]);
+    g.imageTexture(image, true);
+    g.frame++;
+    g.imageTexture(image, true);
+    expect(texture.copyExternalImage).not.toHaveBeenCalled();
+    expect(texture.writeData).toHaveBeenCalledExactlyOnceWith(image.data, {
+      width: 3,
+      height: 2,
+      bytesPerRow: 12,
+    });
+    expect(g.stats.pixelTextureUploads).toBe(1);
+    expect(g.stats.pixelTextureUploadedBytes).toBe(24);
+    g.frame++;
+    g.imageTexture(image, false);
+    expect(texture.writeData).toHaveBeenCalledTimes(2);
+    expect(() => g.imageTexture({ ...image, data: new Uint8ClampedArray(4) }, true)).toThrow();
+    g.forgetImage(image);
+    expect(texture.destroy).toHaveBeenCalledOnce();
+    expect(g.stats.liveTextures).toBe(0);
+  });
+
+it('warms production pipelines but compiles diagnostic reference variants only when explicitly selected', () => {
+  const resource = (props: any) => ({
+    ...props,
+    destroy: vi.fn(),
+    getCompilationInfo: async () => [],
+  });
+  const device: any = {
+    type: 'webgpu',
+    preferredColorFormat: 'bgra8unorm',
+    lost: new Promise(() => {}),
+    createBuffer: vi.fn(resource),
+    createSampler: vi.fn(resource),
+    createShader: vi.fn(resource),
+    createRenderPipeline: vi.fn(resource),
+    destroy: vi.fn(),
+  };
+  const canvas: any = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const g: any = new GpuRenderer(canvas, vi.fn(), vi.fn(), device);
+  expect(g.pipelines.size).toBe(13);
+  expect([...g.pipelines.keys()].some((k: any) => k.endsWith('-reference'))).toBe(false);
+  const a = g.pipelineEntry('path-msaa-compact-xy-reference');
+  expect(g.pipelines.size).toBe(14);
+  expect(g.pipelineEntry('path-msaa-compact-xy-reference')).toBe(a);
+  expect(device.createRenderPipeline).toHaveBeenCalledTimes(14);
+  g.dispose();
+});

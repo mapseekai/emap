@@ -25,6 +25,14 @@ export interface RasterPerformanceTotals {
   readonly planningPasses: number;
   readonly plannedTiles: number;
   readonly canvasUploadMs: number;
+  /** Optional for third-party services; cumulative CPU display representation work. */
+  readonly canvasPreparedTiles?: number;
+  readonly pixelPreparedTiles?: number;
+  /** Tiles classified at production time, avoiding a repeated UI-thread alpha scan. */
+  readonly pixelPreclassifiedTiles?: number;
+  /** Continuous-alpha tiles retain Canvas premultiplication/rounding semantics. */
+  readonly pixelAlphaFallbackTiles?: number;
+  readonly pixelPrepareMs?: number;
   readonly presentationWaitMs: number;
   readonly presentationFlushes: number;
   readonly workerMs: number;
@@ -89,6 +97,9 @@ export interface RasterLayerPlanningDiagnostics {
 }
 export interface RasterCacheStats {
   readonly cachedBytes: number;
+  /** CPU display-cache payload by representation; excludes GPU textures and source decode caches. */
+  readonly pixelCacheBytes?: number;
+  readonly canvasCacheBytes?: number;
   readonly cachedTiles: number;
   readonly activeReads: number;
   readonly queuedReads: number;

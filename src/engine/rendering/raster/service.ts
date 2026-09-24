@@ -60,7 +60,7 @@ interface Tile {
   revision: number;
   crs: string;
   bounds: RasterWindow;
-  image: HTMLCanvasElement | null;
+  image: HTMLCanvasElement | ImageData | null;
   bytes: number;
   span: number;
   fallback?: boolean;
@@ -144,6 +144,12 @@ export class RasterRenderService implements RasterContract {
   private readonly plannedLevels = new Map<number, number>();
   private planningDiagnostics: RasterPlanningDiagnostics | null = null;
   private canvasUploadMs = 0;
+  private rawPixels = false;
+  private pixelPrepareMs = 0;
+  private pixelPreparedTiles = 0;
+  private pixelPreclassifiedTiles = 0;
+  private pixelAlphaFallbackTiles = 0;
+  private canvasPreparedTiles = 0;
   private queue: Task[] = [];
   private wanted = new Set<string>();
   private bytes = 0;
@@ -185,6 +191,7 @@ export class RasterRenderService implements RasterContract {
   }
   readonly render = (frame: RenderFrame, layerId?: string): void => {
     if (this.disposed || !this.layers.size || frame.width <= 0 || frame.height <= 0) return;
+    this.rawPixels = typeof frame.painter.drawRasterPixels === 'function';
     const crs = this.deps.getCRS(),
       t = frame.transform;
     if (![t.mx, t.my, t.bx, t.by].every(Number.isFinite) || !t.mx || !t.my) return;
@@ -209,14 +216,33 @@ export class RasterRenderService implements RasterContract {
       for (const patch of displayed.patches) {
         const tile = this.cache.get(patch.key);
         if (!tile?.image || !intersects(patch.bounds, view)) continue;
-        frame.painter.drawRasterImage(
-          tile.image,
-          tile.bounds,
-          layer.style.opacity ?? 1,
-          layer.style.resampling === 'bilinear',
-          patch.bounds,
-          true,
-        );
+        if ('data' in tile.image && frame.painter.drawRasterPixels) {
+          frame.painter.drawRasterPixels(
+            tile.image,
+            tile.bounds,
+            layer.style.opacity ?? 1,
+            layer.style.resampling === 'bilinear',
+            patch.bounds,
+            true,
+          );
+        } else {
+          // A host may supply a different painter later. Convert once and replace
+          // the CPU cache owner, rather than keeping both RGBA and Canvas copies.
+          if ('data' in tile.image)
+            tile.image = this.uploadRasterTile(
+              tile.image.data,
+              tile.image.width,
+              tile.image.height,
+            );
+          frame.painter.drawRasterImage(
+            tile.image,
+            tile.bounds,
+            layer.style.opacity ?? 1,
+            layer.style.resampling === 'bilinear',
+            patch.bounds,
+            true,
+          );
+        }
       }
     }
     if (layerId !== undefined) return;
@@ -591,6 +617,39 @@ export class RasterRenderService implements RasterContract {
         });
     }
   }
+  private prepareRasterImage(
+    rgba: Uint8ClampedArray<ArrayBuffer>,
+    width: number,
+    height: number,
+    canonicalBinaryAlpha = false,
+  ): NonNullable<Tile['image']> {
+    if (!this.rawPixels) return this.uploadRasterTile(rgba, width, height);
+    const started = performance.now();
+    // Provider buffers may be recycled and can be views of larger allocations.
+    // Keep one exact owned CPU snapshot instead of a Canvas backing store; this
+    // bounded copy is intentional, not a zero-copy ownership assumption.
+    // Canvas quantizes premultiplied partial alpha. Keep its established path
+    // for continuous-alpha tiles rather than silently changing edge colors.
+    if (!canonicalBinaryAlpha) {
+      for (let i = 3; i < rgba.length; i += 4) {
+        if (rgba[i] !== 0 && rgba[i] !== 255) {
+          this.pixelAlphaFallbackTiles++;
+          return this.uploadRasterTile(rgba, width, height);
+        }
+      }
+    }
+    const data = rgba.slice();
+    // Built-in colorizers classify their output where it is produced. Generic
+    // sources keep the checked path; no unverified metadata-based alpha inference.
+    if (canonicalBinaryAlpha) this.pixelPreclassifiedTiles++;
+    else
+      for (let i = 3; i < data.length; i += 4)
+        if (!data[i]) data[i - 3] = data[i - 2] = data[i - 1] = 0;
+    const image = new ImageData(data, width, height);
+    this.pixelPreparedTiles++;
+    this.pixelPrepareMs += performance.now() - started;
+    return image;
+  }
   private uploadRasterTile(
     rgba: Uint8ClampedArray<ArrayBuffer>,
     width: number,
@@ -605,20 +664,18 @@ export class RasterRenderService implements RasterContract {
       throw new RasterError('RASTER_CANVAS_UNAVAILABLE', 'Cannot create raster tile context.');
     context.putImageData(new ImageData(rgba, width, height), 0, 0);
     this.canvasUploadMs += performance.now() - uploadStarted;
+    this.canvasPreparedTiles++;
     return image;
   }
 
-  private commitLoadedTile(task: Task, image: HTMLCanvasElement | null, signal: AbortSignal): void {
+  private commitLoadedTile(task: Task, image: Tile['image'], signal: AbortSignal): void {
     if (
       this.disposed ||
       signal.aborted ||
       !this.wanted.has(task.key) ||
       this.layers.get(task.layer.id)?.revision !== task.revision
     ) {
-      if (image) {
-        image.width = 0;
-        image.height = 0;
-      }
+      if (image && !('data' in image)) image.width = image.height = 0;
       return;
     }
     const tile: Tile = {
@@ -700,7 +757,12 @@ export class RasterRenderService implements RasterContract {
         );
       this.commitLoadedTile(
         task,
-        this.uploadRasterTile(result.rgba, plan.width, plan.height),
+        this.prepareRasterImage(
+          result.rgba,
+          plan.width,
+          plan.height,
+          result.canonicalBinaryAlpha === true,
+        ),
         signal,
       );
     }
@@ -728,12 +790,13 @@ export class RasterRenderService implements RasterContract {
       }
       throw error;
     }
-    let image: HTMLCanvasElement | null = null;
+    let image: Tile['image'] = null;
     if (plan) {
       this.planSucceeded++;
       this.plannedLevels.set(plan.level.id, (this.plannedLevels.get(plan.level.id) ?? 0) + 1);
       this.readRequests++;
       let rgba: Uint8ClampedArray<ArrayBuffer>;
+      let canonicalBinaryAlpha = false;
       if (source.renderTile) {
         const rendered = await awaitWithSignal(
           source.renderTile(
@@ -750,6 +813,7 @@ export class RasterRenderService implements RasterContract {
         );
         signal.throwIfAborted();
         rgba = rendered.rgba;
+        canonicalBinaryAlpha = rendered.canonicalBinaryAlpha === true;
         if (
           rendered.width !== plan.width ||
           rendered.height !== plan.height ||
@@ -764,8 +828,9 @@ export class RasterRenderService implements RasterContract {
         const result = await awaitWithSignal(source.readWindow(plan.request, signal), signal);
         signal.throwIfAborted();
         rgba = colorizeRasterTile(source.metadata, plan, result, style);
+        canonicalBinaryAlpha = source.metadata.alphaBand === null;
       }
-      image = this.uploadRasterTile(rgba, plan.width, plan.height);
+      image = this.prepareRasterImage(rgba, plan.width, plan.height, canonicalBinaryAlpha);
     } else this.planEmpty++;
     this.commitLoadedTile(task, image, signal);
   }
@@ -871,14 +936,26 @@ export class RasterRenderService implements RasterContract {
       );
       for (const patch of patches) {
         const tile = this.cache.get(patch.key);
-        if (tile?.image)
-          painter.drawRasterImage(
-            tile.image,
-            tile.bounds,
-            1,
-            layer.style.resampling === 'bilinear',
-            patch.bounds,
-          );
+        if (tile?.image) {
+          // Pressure-only fallback keeps the existing bounded Canvas composition.
+          // Materialize one temporary tile at a time and drop it synchronously.
+          const temporary = 'data' in tile.image;
+          const source =
+            'data' in tile.image
+              ? this.uploadRasterTile(tile.image.data, tile.image.width, tile.image.height)
+              : tile.image;
+          try {
+            painter.drawRasterImage(
+              source,
+              tile.bounds,
+              1,
+              layer.style.resampling === 'bilinear',
+              patch.bounds,
+            );
+          } finally {
+            if (temporary) source.width = source.height = 0;
+          }
+        }
       }
       const key = JSON.stringify(['fallback', ++this.snapshotSequence, layer.id]);
       const tile: Tile = {
@@ -955,10 +1032,8 @@ export class RasterRenderService implements RasterContract {
     if (!tile) return;
     this.cache.delete(key);
     this.bytes -= tile.bytes;
-    if (tile.image) {
-      tile.image.width = 0;
-      tile.image.height = 0;
-    }
+    if (tile.image && !('data' in tile.image)) tile.image.width = tile.image.height = 0;
+    tile.image = null;
   }
   private layer(id: string): Layer {
     const layer = this.layers.get(id);
@@ -1142,6 +1217,14 @@ export class RasterRenderService implements RasterContract {
       processing.reduce((total, value) => total + Number(value[key] ?? 0), 0);
     return {
       cachedBytes: this.bytes,
+      pixelCacheBytes: [...this.cache.values()].reduce(
+        (n, tile) => n + (tile.image && 'data' in tile.image ? tile.bytes : 0),
+        0,
+      ),
+      canvasCacheBytes: [...this.cache.values()].reduce(
+        (n, tile) => n + (tile.image && !('data' in tile.image) ? tile.bytes : 0),
+        0,
+      ),
       cachedTiles: this.cache.size,
       activeReads: this.active.size,
       queuedReads: this.queue.length,
@@ -1168,6 +1251,11 @@ export class RasterRenderService implements RasterContract {
         planningPasses: this.planningPasses,
         plannedTiles: this.plannedTiles,
         canvasUploadMs: this.canvasUploadMs,
+        canvasPreparedTiles: this.canvasPreparedTiles,
+        pixelPreparedTiles: this.pixelPreparedTiles,
+        pixelPreclassifiedTiles: this.pixelPreclassifiedTiles,
+        pixelAlphaFallbackTiles: this.pixelAlphaFallbackTiles,
+        pixelPrepareMs: this.pixelPrepareMs,
         presentationWaitMs: this.presentation.getDiagnostics().waitMs,
         presentationFlushes: this.presentation.getDiagnostics().flushes,
         workerMs: sum('workerMs'),

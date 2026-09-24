@@ -30,8 +30,13 @@ const MAX_VERTICES = 65536;
  * three neighbor records, and indexed fills remap complete triangles without clipping.
  */
 export function splitGeometry(geometry: GeometryBuffer): GeometryBuffer[] {
-  if (!geometry.count) return [];
-  const result: GeometryBuffer[] = [];
+  return [...geometryMeshes(geometry)];
+}
+/** Yield split fills so upload-storage clipping can discard each temporary mesh
+ * immediately. Non-indexed results share one exact derived backing allocation;
+ * this is never a source coordinate array or a feature-cache-owned buffer. */
+function* geometryMeshes(geometry: GeometryBuffer): Generator<GeometryBuffer> {
+  if (!geometry.count) return;
   if (geometry.kind !== 'fill') {
     const stride = geometry.compactStroke
       ? geometry.compactStrokeXY
@@ -43,15 +48,24 @@ export function splitGeometry(geometry: GeometryBuffer): GeometryBuffer[] {
           ? 4
           : 10;
     const limit = geometry.compactStroke ? 28672 : MAX_VERTICES;
+    const length =
+      (geometry.count + (geometry.kind === 'path' && !geometry.compactStroke ? 3 : 0)) * stride;
+    const input = geometry.vertices;
+    // A view must not keep an oversized staging/source allocation alive across
+    // transfer. Copy once only when the complete derived backing is not exact.
+    const vertices =
+      input.byteOffset === 0 && input.buffer.byteLength === length * 4
+        ? input
+        : input.slice(0, length);
     for (let first = 0; first < geometry.count; first += limit) {
       const count = Math.min(limit, geometry.count - first);
-      result.push({
+      yield {
         kind: geometry.kind,
         ...(geometry.compactStroke
           ? { compactStroke: true, compactStrokeXY: geometry.compactStrokeXY }
           : {}),
         count,
-        vertices: geometry.vertices.slice(
+        vertices: vertices.subarray(
           first * stride,
           (first + count + (geometry.kind === 'path' && !geometry.compactStroke ? 3 : 0)) * stride,
         ),
@@ -79,9 +93,9 @@ export function splitGeometry(geometry: GeometryBuffer): GeometryBuffer[] {
               },
             }
           : {}),
-      });
+      };
     }
-    return result;
+    return;
   }
   geometry = spatialFillGeometry(geometry);
   const source = geometry.indices!;
@@ -117,9 +131,8 @@ export function splitGeometry(geometry: GeometryBuffer): GeometryBuffer[] {
       count: indices.length,
     };
     mesh.fillRanges = buildFillRanges(mesh);
-    result.push(mesh);
+    yield mesh;
   }
-  return result;
 }
 export function buildGeometryPacket(
   packet: GeometryPacket,
@@ -301,22 +314,26 @@ export function buildGeometryPacket(
   const prepared = packet.compactStroke && screenSpace ? compactStrokeParts(geometry) : [geometry];
   const pathOutputInstances =
     packet.kind === 'path' ? prepared.reduce((n, g) => n + g.count, 0) : 0;
-  const full = prepared
-    .map((g) => spatialStrokeGeometry(g, !!packet.compactStroke && screenSpace))
-    .flatMap(splitGeometry);
-  const geometries = packet.storageBounds
-    ? full
-        .map((g) => compactFillStorage(g, packet.storageBounds!))
-        .filter((g): g is GeometryBuffer => g !== null)
-    : full;
-  const bytes = (parts: GeometryBuffer[]) =>
-    parts.reduce((n, g) => n + g.vertices.byteLength + (g.indices?.byteLength ?? 0), 0);
+  const geometries: GeometryBuffer[] = [];
+  let uploadCulledBytes = 0;
+  for (const preparedGeometry of prepared) {
+    const spatial = spatialStrokeGeometry(preparedGeometry, !!packet.compactStroke && screenSpace);
+    for (const mesh of geometryMeshes(spatial)) {
+      const clipped = packet.storageBounds ? compactFillStorage(mesh, packet.storageBounds) : mesh;
+      if (clipped) geometries.push(clipped);
+      if (packet.storageBounds)
+        uploadCulledBytes +=
+          mesh.vertices.byteLength +
+          (mesh.indices?.byteLength ?? 0) -
+          (clipped ? clipped.vertices.byteLength + (clipped.indices?.byteLength ?? 0) : 0);
+    }
+  }
   return {
     geometries,
     pathInputInstances,
     pathOutputInstances,
     directFeatures,
-    uploadCulledBytes: packet.storageBounds ? bytes(full) - bytes(geometries) : 0,
+    uploadCulledBytes,
     screenSpace,
     ...(screenStats ? { screenStats } : {}),
   };

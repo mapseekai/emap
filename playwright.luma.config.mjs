@@ -7,6 +7,7 @@ export default defineConfig({
   testMatch: [
     'map-renderers.spec.mjs',
     'map-resource-performance.spec.mjs',
+    'map-pixel-upload.spec.mjs',
     'map-render-commands.spec.mjs',
     'map-geometry-chunks.spec.mjs',
     'map-progressive.spec.mjs',

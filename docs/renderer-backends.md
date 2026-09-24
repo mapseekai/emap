@@ -156,3 +156,9 @@ Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快�
 
 描边只选择安全包络内的已有实例，原始坐标与长线布局不变；同色面页和裁剪后的连续区间共享绘制计划。
 非等比导航禁用不兼容的描边包络，过滤洞和回收区间不被跨越。实现、实测与边界见 [范围合批](luma-selected-range-batching.md)。
+
+## 资源与显示缓存诊断
+
+GPU 的 `painter.stats.memory` 分项统计已知载荷，`nominalKnownGpuBytes` 不代表驱动实际总显存。
+正式栅格可选像素上传保持旧 Painter 兼容，连续 alpha 保留 Canvas 语义。
+具体范围、数值与测试见 [三批审查修复](luma-audit-fixes.md)。

@@ -246,6 +246,9 @@ export async function renderRasterBatch(
     width: request.width,
     height: request.height,
     rgba: outputs[index],
+    // Without a source alpha band the colorizer writes only opaque valid pixels
+    // into initially zero outputs, including NoData/warp gaps. No extra scan.
+    ...(source.metadata.alphaBand === null ? { canonicalBinaryAlpha: true as const } : {}),
     ...(index === 0 ? { diagnostics: taskDiagnostics } : {}),
   }));
 }

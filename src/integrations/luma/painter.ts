@@ -68,8 +68,8 @@ export class LumaPainter implements EditPainter {
   private colors: GpuColors;
   private cache: PainterGeometryCache;
   private decoration: { canvas: HTMLCanvasElement; painter: CanvasPainter } | null = null;
-  private images = new Set<CanvasImageSource>();
-  private lastImages = new Set<CanvasImageSource>();
+  private images = new Set<CanvasImageSource | ImageData>();
+  private lastImages = new Set<CanvasImageSource | ImageData>();
   private chunks: GeometryChunkCache;
   private commands: (() => void)[] = [];
   private paintedCommands: (() => void)[] = [];
@@ -476,7 +476,7 @@ export class LumaPainter implements EditPainter {
   clearIcons(): void {
     /* Images are shared and released by their owner through forgetImage. */
   }
-  forgetImage(image: CanvasImageSource): void {
+  forgetImage(image: CanvasImageSource | ImageData): void {
     this.gpu.forgetImage(image);
     this.images.delete(image);
     this.lastImages.delete(image);
@@ -713,6 +713,20 @@ export class LumaPainter implements EditPainter {
     this.images.add(image);
     this.commands.push(() =>
       this.gpu.drawImage(image, bounds, opacity, smoothing, clip, immutable),
+    );
+  }
+  drawRasterPixels(
+    pixels: ImageData,
+    bounds: Rect,
+    opacity = 1,
+    smoothing = true,
+    clip?: Rect,
+    immutable = false,
+  ): void {
+    if (!this.active) return;
+    this.images.add(pixels);
+    this.commands.push(() =>
+      this.gpu.drawImage(pixels, bounds, opacity, smoothing, clip, immutable),
     );
   }
   drawLabels(frame: LabelFrame): void {
