@@ -214,6 +214,17 @@ function commonPlugins() {
 }
 
 export default [
+  {
+    input: 'src/engine/rendering/luma/geometry-worker-entry.ts',
+    onwarn: quietKnownCircularWarnings,
+    output: {
+      file: 'dist/emap-geometry-worker.js',
+      format: 'iife',
+      inlineDynamicImports: true,
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
   // Optional local GeoTIFF decoder. Classic Worker, self-contained; no vendor imports.
   {
     input: 'src/integrations/geotiff/worker-entry.ts',

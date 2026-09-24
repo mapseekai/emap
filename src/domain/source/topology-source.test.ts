@@ -1592,3 +1592,31 @@ describe('TopologySource format plugin routing', () => {
     );
   });
 });
+
+describe('source registration LOD ownership', () => {
+  it('reuses LOD only for silent metadata wrappers with unchanged geometry and version', () => {
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      { xx: Float64Array.from([0, 1, 0]), yy: Float64Array.from([0, 0, 0]) },
+    ]);
+    const dataset: MapshaperDataset = {
+      layers: [{ name: 'a', geometry_type: 'polygon', shapes: [[[0]]] }],
+      arcs,
+      editVersion: 0,
+    };
+    const source = new TopologySource('lod');
+    source.setDataset(dataset);
+    const first = source.getDisplayArcs();
+    const metadata = { ...dataset, info: { crs_string: 'EPSG:4326' } };
+    source.setDataset(metadata, false);
+    expect(source.getDisplayArcs()).toBe(first);
+    metadata.editVersion = 1;
+    source.setDataset({ ...metadata }, false);
+    expect(source.getDisplayArcs()).not.toBe(first);
+    const edited = source.getDisplayArcs();
+    source.setDataset({ ...metadata });
+    expect(source.getDisplayArcs()).not.toBe(edited);
+    const replaced = source.getDisplayArcs();
+    source.setDataset({ ...metadata, layers: metadata.layers.slice() }, false);
+    expect(source.getDisplayArcs()).not.toBe(replaced);
+  });
+});

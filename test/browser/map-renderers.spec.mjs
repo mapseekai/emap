@@ -173,5 +173,100 @@ test('published ESM default backend and sibling MSDF resources work without expe
   expect(await page.evaluate(()=>esmMap.getRenderer())).toBe('webgl2');
   await expect.poll(()=>page.evaluate(async()=>{esmMap.render();await esmMap.ctx.render._labels?.settled();esmMap.render();return esmMap.ctx.render._labels?.stats.placed??0;})).toBe(1);
   expect(page.workers().some(w=>w.url().includes('/__emap_dist/emap-msdf-worker.js'))).toBe(true);
+  // Published relative geometry Worker must work without experimental source imports.
+  await page.evaluate(async()=>{
+    const emap=await import('/__emap_dist/emap.mjs'),source=new emap.TopologySource('esm-lines');
+    await source.setData({filename:'line.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:Array.from({length:100100},(_,i)=>[i/100100-.5,.2+Math.sin(i/5000)*.1])}}]}))});
+    await esmMap.addSource('esm-lines',source);esmMap.addLayer({id:'esm-lines',source:'esm-lines',type:'line'});esmMap.render();
+  });
+  await expect.poll(()=>page.evaluate(()=>esmMap.ctx.render._painter.frameComplete&&esmMap.ctx.render._painter.stats.geometryChunks.pending===0)).toBe(true);
+  expect(page.workers().some(w=>w.url().includes('/__emap_dist/emap-geometry-worker.js'))).toBe(true);
   await page.evaluate(()=>esmMap.dispose());await expect.poll(()=>page.workers().length).toBe(0);expect(errors).toEqual([]);
+});
+
+
+async function composedPointPixel(page) {
+  // Read the compositor, not a new GPU frame. Calling map.render() here would
+  // hide a broken snapshot/navigation path, especially on WebGPU.
+  const image = await page.screenshot({ clip: { x: 0, y: 0, width: 800, height: 600 } });
+  return page.evaluate(async data => {
+    const image = new Image(); image.src = 'data:image/png;base64,' + data; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width=image.width; canvas.height=image.height;
+    const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+    const [x,y]=formalMap.getTransform().project(0,0);
+    const pixel=[...ctx.getImageData(Math.round(x),Math.round(y),1,1).data];
+    canvas.width=canvas.height=0;return pixel;
+  }, image.toString('base64'));
+}
+async function settleRequests(page) {
+  await page.evaluate(async()=>{await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);});
+  await expect.poll(()=>page.evaluate(()=>formalMap.ctx.render._pendingRender)).toBe(0);
+}
+for (const renderer of ['webgl2','webgpu']) {
+  test(`${renderer}: formal GPU navigation replays resident buffers at CSS size and settles the current camera`, async({page},info)=>{
+    const errors=[];page.on('pageerror',e=>errors.push(e.stack??e.message));
+    await runtime(page);await create(page,renderer);await settleRequests(page);
+    const before=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,cpu:formalMap.ctx.render._scheduler.lastFrameMs}));
+    expect(before.cpu).toBeLessThan(1000/30);
+    await page.mouse.move(690,540);await page.mouse.down();
+    for(let i=1;i<=20;i++){await page.mouse.move(690+i*4,540+i);await page.waitForTimeout(16);}
+    const during=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,fast:formalMap.ctx.render._scheduler.fastActive}));
+    expect(during.presentation.replays).toBeGreaterThan(before.presentation.replays);expect(during.uploads).toBe(before.uploads);
+    expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
+    const pixel=await composedPointPixel(page);expect(pixel[0]).toBeGreaterThan(180);expect(pixel[1]).toBeLessThan(90);
+    await page.screenshot({path:info.outputPath('snapshot-'+renderer+'.png')});
+    await page.mouse.up();await expect.poll(()=>page.evaluate(()=>formalMap.ctx.render._scheduler.fastActive)).toBe(false);await settleRequests(page);
+    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.complete)).toBeGreaterThan(before.presentation.complete);
+    expect(await page.evaluate(()=>formalMap.ctx.render._canvas.style.transform)).toBe('');
+    // Wheel zoom uses the same policy, with a delayed interaction end.
+    const wheel=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
+    await page.mouse.move(500,300);
+    for(let i=0;i<5;i++){await page.mouse.wheel(0,-30);await page.waitForTimeout(25);}
+    const zoom=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,fast:formalMap.ctx.render._scheduler.fastActive}));
+    expect(zoom.presentation.replays).toBeGreaterThan(wheel.presentation.replays);expect(zoom.uploads).toBe(wheel.uploads);
+    await expect.poll(()=>page.evaluate(()=>formalMap.ctx.render._scheduler.fastActive)).toBe(false);await settleRequests(page);
+    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.complete)).toBeGreaterThan(wheel.presentation.complete);
+    await page.evaluate(()=>formalMap.dispose());expect(errors).toEqual([]);
+  });
+  test(`${renderer}: style/filter/source invalidations replace snapshots during a live gesture`,async({page})=>{
+    const errors=[];page.on('pageerror',e=>errors.push(e.stack??e.message));
+    await runtime(page);await create(page,renderer);await settleRequests(page);
+    await page.mouse.move(680,540);await page.mouse.down();await page.mouse.move(720,550,{steps:5});await settleRequests(page);
+    expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
+    await page.evaluate(()=>formalMap.setPaintProperty('poi','circle-color','#22dd44'));await settleRequests(page);
+    let pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
+    const fresh=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
+    await page.mouse.move(740,555,{steps:4});await settleRequests(page);
+    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.replays)).toBeGreaterThan(fresh.presentation.replays);
+    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.uploads)).toBe(fresh.uploads);
+    pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
+    await page.evaluate(()=>formalMap.setFilter('poi',['==',['get','name'],'absent']));await settleRequests(page);
+    expect(await composedPointPixel(page)).toEqual([255,255,255,255]);
+    await page.evaluate(()=>formalMap.setFilter('poi',null));await settleRequests(page);
+    expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+    await page.evaluate(()=>{formalMap.removeLayer('poi');formalMap.removeSource('poi');});await settleRequests(page);
+    expect(await composedPointPixel(page)).toEqual([255,255,255,255]);
+    await page.mouse.up();await settleRequests(page);
+    const released=await page.evaluate(async()=>{const p=formalMap.ctx.render._painter;await formalMap.dispose();return p.stats;});
+    expect(released.geometryCache.bytes).toBe(0);expect(released.liveBufferBytes).toBe(0);expect(errors).toEqual([]);
+  });
+}
+
+
+for(const renderer of ['webgl2','webgpu'])test(`${renderer}: consecutive gestures before settle retain the painted camera reference`,async({page})=>{
+  await runtime(page);await create(page,renderer);await settleRequests(page);
+  const before=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
+  await page.evaluate(()=>{
+    const r=formalMap.ctx.render;r.beginNavigation();formalMap.ctx.view._viewport.pan(40,0);r.updateNavigation();
+  });await settleRequests(page);
+  await page.evaluate(()=>{
+    // Intentionally end and begin in one task, before the queued settle RAF.
+    const r=formalMap.ctx.render;r.endNavigation();r.beginNavigation();formalMap.ctx.view._viewport.pan(20,0);r.updateNavigation();
+  });await settleRequests(page);
+  expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.replays)).toBeGreaterThanOrEqual(before.presentation.replays+2);
+  expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.uploads)).toBe(before.uploads);
+  const pixel=await composedPointPixel(page);expect(pixel[0]).toBeGreaterThan(180);expect(pixel[1]).toBeLessThan(90);
+  await page.evaluate(()=>formalMap.ctx.render.endNavigation());await settleRequests(page);
+  expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.complete)).toBeGreaterThan(before.presentation.complete);
+  await page.evaluate(()=>formalMap.dispose());
 });

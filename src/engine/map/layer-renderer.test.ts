@@ -900,3 +900,52 @@ describe('point LOD drawing contracts', () => {
     expect(candidates).not.toHaveBeenCalled();
   });
 });
+
+describe('GPU outline candidate preparation', () => {
+  it('passes original candidates to a lazy painter while preserving the legacy fallback', () => {
+    const arcs = { size: () => 3 },
+      shapes = [[[~2, 1]], [[2, 0]]],
+      ml = { name: 'area', geometry_type: 'polygon', shapes };
+    const candidates = new Uint32Array([0, 1]),
+      filter = () => true;
+    const source = {
+      getDisplayArcs: () => null,
+      getArcs: () => arcs,
+      getDataset: () => ({ editVersion: 4 }),
+    };
+    const drawArcs = vi.fn(),
+      drawOutlinePaths = vi.fn();
+    const painter = { drawPolygonFill: vi.fn(), drawArcs, drawOutlinePaths };
+    const context = {
+      layers: [{ id: 'fill', type: 'fill', source: 's', paint: { 'line-width': 1 } }],
+      sources: new Map([['s', source]]),
+      painter,
+      viewport: {
+        getArcFilter: () => filter,
+        getViewBounds: () => [0, 0, 10, 10],
+        getMapScale: () => 2,
+      },
+      resolveSourceLayer: () => ml,
+      getLayerArcIds: vi.fn(),
+      getRenderCandidates: () => candidates,
+    };
+    renderLayers(context as unknown as LayerRendererContext, 1, 1);
+    expect(drawOutlinePaths).toHaveBeenCalledWith(
+      shapes,
+      expect.any(Object),
+      arcs,
+      filter,
+      candidates,
+      4,
+    );
+    expect(drawArcs).not.toHaveBeenCalled();
+    Reflect.deleteProperty(painter, 'drawOutlinePaths');
+    renderLayers(context as unknown as LayerRendererContext, 1, 1);
+    expect(drawArcs).toHaveBeenCalledWith(
+      arcs,
+      expect.any(Object),
+      filter,
+      new Uint32Array([2, 1, 0]),
+    );
+  });
+});

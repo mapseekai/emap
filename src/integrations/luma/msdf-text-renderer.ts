@@ -245,9 +245,18 @@ export class MsdfTextRenderer {
   }
   draw(pass: RenderPass, frame: LabelFrame, width: number, height: number, dpr: number): void {
     if (this.disposed) return;
-    if (frame.key !== this.key) {
+    const candidates = frame.labels.filter((l): l is MsdfLabel => 'mode' in l.raster);
+    const epochs = [...new Set(candidates.flatMap((l) => l.raster.glyphs.map((g) => g.page)))].map(
+      (page) => page.generation ?? 0,
+    );
+    const key = frame.key + ':' + epochs.join(',');
+    if (key !== this.key) {
       this.clearBatches();
-      const labels = frame.labels.filter((l): l is MsdfLabel => 'mode' in l.raster);
+      // Native navigation can replay a previous placement while a new layout is
+      // filling the bounded atlas. Never sample a recycled UV as another letter.
+      const labels = candidates.filter((l) =>
+        l.raster.glyphs.every((g) => (g.generation ?? 0) === (g.page.generation ?? 0)),
+      );
       const used = new Set(labels.flatMap((l) => l.raster.glyphs.map((g) => g.page)));
       for (const [source, p] of this.pages)
         if (!used.has(source)) {
@@ -285,7 +294,7 @@ export class MsdfTextRenderer {
           this.groups.push(batches);
           for (const run of runs.values()) batches.push(this.batch(run));
         }
-        this.key = frame.key;
+        this.key = key;
       } catch (e) {
         this.clearBatches();
         this.key = '';

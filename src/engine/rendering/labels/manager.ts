@@ -33,6 +33,12 @@ export interface PlacedLabel extends LabelPose {
   text: string;
   raster: TextRaster;
   bounds: Box;
+  /** Ground anchor + CSS offset allow camera replay without scaling glyphs. */
+  anchor?: XY;
+  screenOffset?: XY;
+  priority?: number;
+  allowOverlap?: boolean;
+  padding?: number;
 }
 export interface LabelFrame {
   key: string;
@@ -60,6 +66,9 @@ export class BoundLabelManager {
   private serial = 0;
   private requested = '';
   private frame: LabelFrame = EMPTY;
+  private frameView: AffineTransform | null = null;
+  private requestedContent = '';
+  private frameContent = '';
   private controller: AbortController | null = null;
   private task: Promise<void> = Promise.resolve();
   private disposed = false;
@@ -117,6 +126,7 @@ export class BoundLabelManager {
     width: number,
     height: number,
     dpr: number,
+    navigating = false,
   ): LabelFrame {
     if (this.disposed) return EMPTY;
     const active = bindings.filter(
@@ -129,14 +139,7 @@ export class BoundLabelManager {
       if (this.requested || this.indices.size) this.clear();
       return EMPTY;
     }
-    const key = JSON.stringify([
-      view.mx,
-      view.my,
-      view.bx,
-      view.by,
-      cameraUniforms(view),
-      width,
-      height,
+    const content = JSON.stringify([
       dpr,
       this.fontEpoch,
       active.map((b) => [
@@ -152,10 +155,25 @@ export class BoundLabelManager {
         b.pointRadius,
       ]),
     ]);
+    const key = JSON.stringify([
+      view.mx,
+      view.my,
+      view.bx,
+      view.by,
+      cameraUniforms(view),
+      width,
+      height,
+      content,
+    ]);
+    // Do not starve a long initial index/layout by cancelling it on every pointer
+    // event. Only content changes supersede an in-flight navigation layout.
+    if (navigating && this.stats.pending && this.requestedContent === content)
+      return this.frameContent === content ? this.preview(view, width, height) : EMPTY;
     if (!this.paused && key !== this.requested) {
       this.controller?.abort();
       const controller = (this.controller = new AbortController());
       this.requested = key;
+      this.requestedContent = content;
       this.stats.pending = true;
       const camera = view.clone();
       // Serial ownership of atlas pages; a cancelled job must settle before the next one writes.
@@ -164,7 +182,7 @@ export class BoundLabelManager {
         .then(async () => {
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
           controller.signal.throwIfAborted();
-          await this.layout(active, camera, width, height, dpr, key, controller.signal);
+          await this.layout(active, camera, width, height, dpr, key, controller.signal, content);
         })
         .catch((error) => {
           if (!controller.signal.aborted && !this.disposed) {
@@ -173,7 +191,52 @@ export class BoundLabelManager {
           }
         });
     }
-    return this.frame.key === key ? this.frame : EMPTY;
+    return this.frame.key === key
+      ? this.frame
+      : navigating && this.frameContent === content
+        ? this.preview(view, width, height)
+        : EMPTY;
+  }
+  /** Cheap camera-only text refresh between full layouts. Positions/collision
+   * bounds change, but glyph scale, halo and point-label offsets remain CSS-sized.
+   * New candidates are discovered by the asynchronous throttled request() path. */
+  preview(view: AffineTransform, width: number, height: number): LabelFrame {
+    if (!this.frameView || this.frameContent !== this.requestedContent || this.disposed)
+      return EMPTY;
+    const previous = this.frameView;
+    if (
+      view.mx === previous.mx &&
+      view.my === previous.my &&
+      view.bx === previous.bx &&
+      view.by === previous.by
+    )
+      return this.frame;
+    const grid = new LabelCollisionGrid(),
+      accepted = new Map<PlacedLabel, PlacedLabel>();
+    const ordered = [...this.frame.labels].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    for (const label of ordered) {
+      const ground = label.anchor ?? previous.unproject(label.x, label.y);
+      const [x, y] = view.project(...ground),
+        offset = label.screenOffset ?? [0, 0];
+      if (!Number.isFinite(x + y)) continue;
+      const angle = Math.atan2(
+        (Math.sin(label.angle) * view.my) / previous.my,
+        (Math.cos(label.angle) * view.mx) / previous.mx,
+      );
+      const pose = { x: x + offset[0], y: y + offset[1], angle };
+      const bounds = poseBounds(pose, label.raster.width, label.raster.height, label.padding ?? 2);
+      if (bounds[0] < 0 || bounds[1] < 0 || bounds[2] > width || bounds[3] > height) continue;
+      if (!label.allowOverlap && grid.collides(bounds)) continue;
+      grid.insert(bounds);
+      accepted.set(label, { ...label, ...pose, bounds });
+    }
+    return {
+      key: this.frame.key + ':nav:' + [view.mx, view.my, view.bx, view.by, width, height].join(':'),
+      labels: this.frame.labels.flatMap((label) => {
+        const next = accepted.get(label);
+        return next ? [next] : [];
+      }),
+    };
   }
   get placements() {
     return this.frame.labels.map((l) => ({
@@ -235,6 +298,7 @@ export class BoundLabelManager {
     dpr: number,
     key: string,
     signal: AbortSignal,
+    content: string,
   ): Promise<void> {
     const start = performance.now(),
       alive = new Set(bindings.map((b) => b.layer));
@@ -322,7 +386,7 @@ export class BoundLabelManager {
         capacitySkipped++;
         continue;
       }
-      const poses: LabelPose[] = [];
+      const poses: (LabelPose & { anchor?: XY })[] = [];
       if (layer.geometry_type === 'point') {
         for (const p of normalizePointShape(layer.shapes?.[id])) {
           const [x, y] = view.project(p[0], p[1]);
@@ -342,6 +406,7 @@ export class BoundLabelManager {
               x: x + dx * (measured.width / 2 + gap),
               y: y + dy * (measured.height / 2 + gap),
               angle: 0,
+              anchor: [p[0], p[1]],
             });
           if (poses.length >= 64) break;
         }
@@ -352,7 +417,7 @@ export class BoundLabelManager {
           const anchor = anchors.get(id);
           if (anchor) {
             const [x, y] = view.project(...anchor);
-            if (Number.isFinite(x + y)) poses.push({ x, y, angle: 0 });
+            if (Number.isFinite(x + y)) poses.push({ x, y, angle: 0, anchor });
           }
         } else if (layer.geometry_type === 'polyline') {
           const pose = linePose(
@@ -363,7 +428,7 @@ export class BoundLabelManager {
             measured.width,
             options.placement !== 'horizontal',
           );
-          if (pose) poses.push(pose);
+          if (pose) poses.push({ ...pose, anchor: view.unproject(pose.x, pose.y) });
         }
       }
       let placed = false;
@@ -381,8 +446,15 @@ export class BoundLabelManager {
           break;
         }
         grid.insert(box);
+        const anchor = p.anchor ?? view.unproject(p.x, p.y),
+          at = view.project(...anchor);
         accepted.push({
           ...pose,
+          anchor,
+          screenOffset: [pose.x - at[0], pose.y - at[1]],
+          priority: candidate.priority,
+          allowOverlap: options.allowOverlap,
+          padding: options.padding,
           ownerId: binding.id,
           featureId: id,
           text,
@@ -412,6 +484,8 @@ export class BoundLabelManager {
     }
     labels.sort((a, b) => a.order - b.order || a.featureId - b.featureId);
     this.frame = { key, labels };
+    this.frameView = view.clone();
+    this.frameContent = content;
     Object.assign(this.stats, {
       pending: false,
       candidates: candidates.length,
@@ -431,12 +505,16 @@ export class BoundLabelManager {
     this.controller?.abort();
     this.requested = '';
     this.frame = EMPTY;
+    this.frameView = null;
+    this.frameContent = this.requestedContent = '';
     this.stats.pending = false;
   }
   clear(): void {
     this.controller?.abort();
     this.requested = '';
     this.frame = EMPTY;
+    this.frameView = null;
+    this.frameContent = this.requestedContent = '';
     this.indices.clear();
     this.atlas.clear();
     Object.assign(this.stats, {

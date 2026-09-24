@@ -1,3 +1,9 @@
+import {
+  compactStrokeVS,
+  compactStrokeWGSL,
+  compactStrokeXYVS,
+  compactStrokeXYWGSL,
+} from './compact-stroke-shaders';
 import { iconVS, iconFS, iconWGSL } from './icon-shaders';
 import { cameraWGSL } from './camera-shaders';
 import { pathMsaaVS, pathMsaaFS, pathMsaaWGSL } from './path-shaders';
@@ -34,7 +40,11 @@ export type PipelineKind =
   | 'circle-edge'
   | 'point-depth-reset'
   | 'path-msaa'
-  | 'path-msaa-reference';
+  | 'path-msaa-reference'
+  | 'path-msaa-compact'
+  | 'path-msaa-compact-reference'
+  | 'path-msaa-compact-xy'
+  | 'path-msaa-compact-xy-reference';
 
 // Continuous path joins: do not enlarge every internal subpixel segment into a round capsule.
 const pathVS = `#version 300 es
@@ -228,6 +238,10 @@ struct ImageOut{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>}
 @fragment fn fragmentMain(p:ImageOut)->@location(0) vec4<f32>{let c=textureSample(imageTexture,imageSampler,p.uv);let a=c.a*emap.parameters.x;return vec4<f32>(c.rgb*a,a);}
 `;
 const glsl = {
+  'path-msaa-compact-xy': [compactStrokeXYVS, pathMsaaFS],
+  'path-msaa-compact-xy-reference': [compactStrokeXYVS, pathMsaaFS],
+  'path-msaa-compact': [compactStrokeVS, pathMsaaFS],
+  'path-msaa-compact-reference': [compactStrokeVS, pathMsaaFS],
   'path-msaa': [pathMsaaVS, pathMsaaFS],
   'path-msaa-reference': [pathMsaaVS, pathMsaaFS],
   'circle-core': [circleCoreVS, circleCoreFS],
@@ -242,6 +256,10 @@ const glsl = {
   icon: [iconVS, iconFS],
 };
 const wgsl = {
+  'path-msaa-compact-xy': compactStrokeXYWGSL,
+  'path-msaa-compact-xy-reference': compactStrokeXYWGSL,
+  'path-msaa-compact': compactStrokeWGSL,
+  'path-msaa-compact-reference': compactStrokeWGSL,
   'path-msaa': pathMsaaWGSL,
   'path-msaa-reference': pathMsaaWGSL,
   'circle-core': circleCoreWGSL,
@@ -296,6 +314,24 @@ export function shaderLayouts(
     ) {
       attribute('instancePositions', 1, 'vec4<f32>', 'instance');
       bufferLayout.push({ name: 'instancePositions', format: 'float32x4', stepMode: 'instance' });
+    } else if (kind.startsWith('path-msaa-compact')) {
+      const xy = kind.startsWith('path-msaa-compact-xy');
+      const names = xy
+        ? ['startXY', 'endXY', 'startJoin', 'endJoin']
+        : ['startPosition', 'endPosition', 'startJoin', 'endJoin'];
+      names.forEach((name, i) =>
+        attribute(name, i + 1, xy && i < 2 ? 'vec2<f32>' : 'vec4<f32>', 'instance'),
+      );
+      bufferLayout.push({
+        name: 'path',
+        stepMode: 'instance',
+        byteStride: xy ? 48 : 64,
+        attributes: names.map((name, i) => ({
+          attribute: name,
+          format: xy && i < 2 ? ('float32x2' as const) : ('float32x4' as const),
+          byteOffset: xy ? [0, 8, 16, 32][i] : i * 16,
+        })),
+      });
     } else if (kind === 'line') {
       attribute('instanceStart', 1, 'vec4<f32>', 'instance');
       attribute('instanceEnd', 2, 'vec4<f32>', 'instance');

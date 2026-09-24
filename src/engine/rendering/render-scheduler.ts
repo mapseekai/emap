@@ -25,7 +25,12 @@ export class RenderScheduler {
   private _settleRequested = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private _callbacks: RenderCallbacks) {}
+  constructor(
+    private _callbacks: RenderCallbacks,
+    // CPU submit time does not measure GPU execution. GPU maps reuse complete
+    // frames during navigation; legacy Canvas/custom painters keep adaptive mode.
+    private readonly _navigationMode: 'adaptive' | 'snapshot' = 'adaptive',
+  ) {}
 
   schedule(req: RenderRequest = {}): void {
     const action: RenderAction = req.action ?? 'redraw';
@@ -70,6 +75,8 @@ export class RenderScheduler {
     this._redrawPending = false;
     this._settleRequested = false;
     this._cancelSettle();
+    // A failed/incomplete replacement must never become a navigation snapshot.
+    this._snapshot = null;
     this._callbacks.fullRedraw();
   }
 
@@ -82,9 +89,10 @@ export class RenderScheduler {
 
   private _shouldUseFastNav(): boolean {
     if (!this._snapshot) return false;
-    if (this._lastFrameMs <= SLOW_FRAME_MS) return false;
+    if (this._navigationMode === 'adaptive' && this._lastFrameMs <= SLOW_FRAME_MS) return false;
 
     const current = this._callbacks.getSnapshot();
+    if (current.canvasWidth <= 0 || current.canvasHeight <= 0) return false;
     if (current.canvasWidth !== this._snapshot.canvasWidth) return false;
     if (current.canvasHeight !== this._snapshot.canvasHeight) return false;
     if (current.pixelRatio !== this._snapshot.pixelRatio) return false;

@@ -1,3 +1,4 @@
+import { arcVisibilityFilter } from './arc-visibility';
 import { AffineTransform } from './transform';
 import { Bounds } from './bounds';
 import { Tween } from '../../engine/core/tween';
@@ -228,11 +229,7 @@ export class Viewport {
     const adjustedMinLen = mapScale < 1 ? minPathLen * mapScale : minPathLen;
     const viewBBox = this._getViewBounds();
 
-    return (i: number): boolean => {
-      if (arcs.arcIsSmaller?.(i, adjustedMinLen)) return false;
-      if (viewBBox && arcs.arcIntersectsBBox && !arcs.arcIntersectsBBox(i, viewBBox)) return false;
-      return true;
-    };
+    return arcVisibilityFilter(arcs, adjustedMinLen, viewBBox);
   }
 
   getViewBounds(): number[] | null {

@@ -174,3 +174,77 @@ describe('RenderScheduler', () => {
     expect(requestRedraw).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('GPU navigation policy', () => {
+  afterEach(() => vi.useRealTimers());
+  function gpu(current = snapshot()) {
+    const callbacks = {
+      fullRedraw: vi.fn(),
+      requestRedraw: vi.fn(),
+      fastNav: vi.fn(),
+      getSnapshot: () => current,
+    };
+    return { callbacks, scheduler: new RenderScheduler(callbacks, 'snapshot') };
+  }
+  const nav = { action: 'nav' as const, navDelta: { tx: 12, ty: 3, sx: 1.2, sy: 1.2 } };
+  it('reuses a valid GPU frame even when CPU submission took less than one millisecond', () => {
+    const { scheduler, callbacks } = gpu();
+    scheduler.recordFrame(0.1, snapshot());
+    scheduler.schedule(nav);
+    expect(callbacks.fastNav).toHaveBeenCalledOnce();
+    expect(callbacks.fullRedraw).not.toHaveBeenCalled();
+    scheduler.notifyInteractionEnd();
+    scheduler.notifyInteractionEnd();
+    expect(callbacks.requestRedraw).toHaveBeenCalledOnce();
+    scheduler.dispose();
+  });
+  it('does not snapshot before a full frame, after a failed frame, or after resize/DPR changes', () => {
+    const { scheduler, callbacks } = gpu();
+    scheduler.schedule(nav);
+    expect(callbacks.fullRedraw).toHaveBeenCalledOnce();
+    scheduler.recordFrame(0.1, snapshot());
+    callbacks.fullRedraw.mockImplementationOnce(() => {
+      throw new Error('draw failed');
+    });
+    expect(() => scheduler.schedule()).toThrow('draw failed');
+    scheduler.schedule(nav);
+    expect(callbacks.fastNav).not.toHaveBeenCalled();
+    scheduler.dispose();
+    for (const changed of [
+      snapshot({ canvasWidth: 901 }),
+      snapshot({ canvasHeight: 601 }),
+      snapshot({ pixelRatio: 2 }),
+      snapshot({ canvasWidth: 0 }),
+    ]) {
+      const next = gpu(changed);
+      next.scheduler.recordFrame(0.1, snapshot());
+      next.scheduler.schedule(nav);
+      expect(next.callbacks.fastNav).not.toHaveBeenCalled();
+      next.scheduler.dispose();
+    }
+  });
+  it('redraws a content invalidation during navigation and subsequently resumes from the new frame', () => {
+    const { scheduler, callbacks } = gpu();
+    scheduler.recordFrame(0.1, snapshot());
+    scheduler.schedule(nav);
+    scheduler.schedule({ action: 'redraw' });
+    expect(callbacks.fullRedraw).toHaveBeenCalledOnce();
+    expect(scheduler.fastActive).toBe(false);
+    scheduler.recordFrame(0.2, snapshot());
+    scheduler.schedule(nav);
+    expect(callbacks.fastNav).toHaveBeenCalledTimes(2);
+    scheduler.dispose();
+  });
+  it('settles a late navigation frame and cancels fallback timers on dispose', () => {
+    vi.useFakeTimers();
+    const { scheduler, callbacks } = gpu();
+    scheduler.recordFrame(0.1, snapshot());
+    scheduler.notifyInteractionEnd(true);
+    scheduler.schedule(nav);
+    expect(callbacks.requestRedraw).toHaveBeenCalledOnce();
+    scheduler.schedule(nav);
+    scheduler.dispose();
+    vi.advanceTimersByTime(FAST_SETTLE_FALLBACK_MS);
+    expect(callbacks.requestRedraw).toHaveBeenCalledOnce();
+  });
+});

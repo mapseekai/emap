@@ -6,6 +6,10 @@ export default defineConfig({
   ...base,
   testMatch: [
     'map-renderers.spec.mjs',
+    'map-render-commands.spec.mjs',
+    'map-geometry-chunks.spec.mjs',
+    'map-progressive.spec.mjs',
+    'map-compact-strokes.spec.mjs',
     'luma-25d.spec.mjs',
     'luma-labels.spec.mjs',
     'luma-icons.spec.mjs',

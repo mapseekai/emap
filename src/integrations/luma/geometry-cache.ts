@@ -1,0 +1,920 @@
+import {
+  GEOMETRY_BATCH_JOBS,
+  GEOMETRY_BATCH_BYTES,
+  geometryBatchBytes,
+  geometryJobByteBound,
+  type GeometryBatchItem,
+} from '../../engine/rendering/luma/geometry-batch';
+import { FillRangeIndex } from '../../engine/rendering/luma/fill-ranges';
+import { arcVisibilityKey } from '../../domain/geo/arc-visibility';
+import {
+  geometryYield,
+  partitionGeometry,
+  selectGeometryJobs,
+  packGeometryJob,
+  type GeometryInput,
+  type GeometryPartition,
+  type GeometryJob,
+  type GeometryPacket,
+} from '../../engine/rendering/luma/geometry-jobs';
+import { PathRangeIndex } from '../../engine/rendering/luma/path-ranges';
+import type { GeometryResult } from '../../engine/rendering/luma/geometry-packet';
+import type { GpuMesh, GpuRenderer } from './gpu-renderer';
+import { GeometryWorker } from './geometry-worker';
+
+export interface GeometryOwner {
+  id: string;
+  sourceId: string;
+  revision: number;
+  content?: string;
+}
+interface Plan {
+  key: string;
+  sourceId: string;
+  controller: AbortController;
+  promise: Promise<GeometryPartition>;
+  count: number;
+  boundsBytes: number;
+  revision: number;
+  used: number;
+  ready: boolean;
+}
+export interface GeometryEntry {
+  id: string;
+  family: string;
+  owner: GeometryOwner;
+  job: GeometryJob;
+  state: 'queued' | 'building' | 'ready' | 'error';
+  meshes: GpuMesh[];
+  ranges: (PathRangeIndex | undefined)[];
+  screenSpace: boolean;
+  screenView?: readonly [number, number, number, number];
+  fillRanges: (FillRangeIndex | undefined)[];
+  fallback?: GeometryEntry;
+  bytes: number;
+  used: number;
+  screenStats?: GeometryResult['screenStats'];
+  error?: Error;
+  requiredBytes?: number;
+}
+export interface GeometryRequest {
+  input: GeometryInput;
+  owner: GeometryOwner;
+  plan: Plan;
+  controller: AbortController;
+  key: string;
+  entries: GeometryEntry[] | null;
+  fallback?: GeometryEntry[];
+  error?: Error;
+  frame: number;
+  /** Monotone cursor through this immutable selection; no repeated prefix scans. */
+  cursor: number;
+}
+type GeometryTransport = Pick<GeometryWorker, 'build' | 'dispose' | 'stats'> &
+  Partial<Pick<GeometryWorker, 'triangulation' | 'retainSources' | 'buildBatch'>>;
+interface Options {
+  invalidate(): void;
+  report(error: Error): void;
+  workerUrl: URL;
+  cacheBytes?: number;
+  /** Includes active plans; only inactive completed plans may be evicted. */
+  partitionCacheBytes?: number;
+  externalBytes?: () => number;
+  /** Internal test/host transport seam, not a second source dataset. */
+  transport?: GeometryTransport;
+}
+function sameArray(a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+function sameJob(a: GeometryJob, b: GeometryJob): boolean {
+  return sameArray(a.members, b.members) && sameArray(a.components, b.components);
+}
+function hashJob(job: GeometryJob): number {
+  let h = 2166136261;
+  for (const a of [job.members, job.components]) {
+    h = Math.imul(h ^ (a?.length ?? 0), 16777619);
+    if (a) for (const n of a) h = Math.imul(h ^ n, 16777619);
+  }
+  return h >>> 0;
+}
+/** Stable spatial chunk resources, separate from small immediate-mode draw slots.
+ * All builds happen after rendering yields; only selected XY packets cross the Worker.
+ */
+export class GeometryChunkCache {
+  private requests = new Map<string, GeometryRequest>();
+  private plans = new Map<string, Plan>();
+  private entries = new Map<string, GeometryEntry>();
+  private identities = new WeakMap<object, number>();
+  private serial = 0;
+  private frame = 0;
+  private collecting = false;
+  private wantedCache: Set<GeometryEntry> | null = null;
+  private protectedCache: Set<GeometryEntry> | null = null;
+  private trimCandidates: GeometryEntry[] | null = null;
+  private trimCursor = 0;
+  private presentationCost = 0;
+  private firstPresentation = true;
+  /** Dirty only when requests or pinned ownership change, not after every job. */
+  private selectionChanged(): void {
+    this.wantedCache = this.protectedCache = null;
+    this.trimCandidates = null;
+    this.trimCursor = 0;
+  }
+  didPresent(milliseconds: number): void {
+    this.presentationCost = this.presentationCost * 0.7 + Math.max(0, milliseconds) * 0.3;
+    this.firstPresentation = false;
+  }
+  private slots = new Map<string, number>();
+  private worker: GeometryTransport;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
+  private interacting = false;
+  private notification: ReturnType<typeof setTimeout> | null = null;
+  private pinned = new Set<GeometryEntry>();
+  private latest = new Map<string, GeometryEntry>();
+  private turn = 0;
+  private disposed = false;
+  /** Diagnostic seam; changing batching never changes logical chunks or GPU precision. */
+  batchJobs = GEOMETRY_BATCH_JOBS;
+  private active: { entries: Set<GeometryEntry>; controller: AbortController } | null = null;
+  private clock = 0;
+  private bytes = 0;
+  private externalEstimate = 0;
+  private residencyVersion = 0;
+  private settledVersion = -1;
+  private settledExternal = -1;
+  private settledRequests: GeometryRequest[] = [];
+  private get externalBytes(): number {
+    return this.options.externalBytes?.() ?? this.externalEstimate;
+  }
+  private limit: number;
+  readonly counters = {
+    maintenanceSkips: 0,
+    partitions: 0,
+    partitionHits: 0,
+    builds: 0,
+    cacheHits: 0,
+    evictions: 0,
+    cancellations: 0,
+    errors: 0,
+    peakBytes: 0,
+    maxMeshBytes: 0,
+    packMs: 0,
+    batchAdmissionMs: 0,
+    uploadCulledBytes: 0,
+    directFeatures: 0,
+    pathInputInstances: 0,
+    pathOutputInstances: 0,
+  };
+  constructor(
+    private readonly gpu: GpuRenderer,
+    private readonly options: Options,
+  ) {
+    this.worker = options.transport ?? new GeometryWorker(options.workerUrl);
+    this.limit = options.cacheBytes ?? 256 * 1024 ** 2;
+  }
+  get stats() {
+    const pending = [...this.requests.values()].reduce(
+      (n, r) =>
+        n +
+        (this.failed(r)
+          ? 0
+          : r.entries
+            ? r.entries.filter((e) => e.state === 'queued' || e.state === 'building').length
+            : r.error
+              ? 0
+              : 1),
+      0,
+    );
+    return {
+      ...this.counters,
+      ...this.worker.stats,
+      entries: this.entries.size,
+      visibleChunks: this.wanted().size,
+      visibleMeshes: [...this.wanted()].reduce((n, e) => n + e.meshes.length, 0),
+      bytes: this.bytes,
+      budgetBytes: this.limit,
+      workingSetOverBudgetBytes: Math.max(0, this.bytes + this.externalBytes - this.limit),
+      partitionBytes: [...this.plans.values()].reduce((n, p) => n + p.count * 4 + p.boundsBytes, 0),
+      pending,
+      paused: false,
+      interacting: this.interacting,
+      triangulation: this.worker.triangulation ? { ...this.worker.triangulation } : null,
+      selectionBytes: [...this.requests.values()].reduce(
+        (n, r) => n + (r.input.ids?.byteLength ?? 0) + (r.input.components?.byteLength ?? 0),
+        0,
+      ),
+      screenChunks: [...this.wanted()].filter((e) => e.screenSpace).length,
+      screenSegments: [...this.wanted()].reduce(
+        (n, e) => n + (e.screenStats?.outputSegments ?? 0),
+        0,
+      ),
+    };
+  }
+  admitExternal(incoming: number): void {
+    this.trim(incoming);
+    if (this.bytes + this.externalBytes + incoming > this.limit * 2)
+      throw new RangeError('Shared geometry working set exceeds its bounded allocation limit.');
+  }
+  identity(value: object | undefined): number {
+    if (!value) return 0;
+    let id = this.identities.get(value);
+    if (!id) {
+      id = ++this.serial;
+      this.identities.set(value, id);
+    }
+    return id;
+  }
+  begin(externalBytes = 0): void {
+    this.frame++;
+    this.selectionChanged();
+    this.collecting = true;
+    this.slots.clear();
+    this.externalEstimate = externalBytes;
+  }
+  private inputKey(input: GeometryInput, owner: GeometryOwner): string {
+    const visibility = input.arcs ? arcVisibilityKey(input.arcs, input.filter) : undefined;
+    return JSON.stringify([
+      owner.sourceId,
+      owner.id,
+      owner.revision,
+      input.kind,
+      this.identity(input.arcs),
+      this.identity(input.shapes),
+      input.arcs?.size(),
+      input.shapes?.length,
+      input.interval,
+      input.forward,
+      input.ordered,
+      visibility,
+      input.bounds,
+      input.viewBounds,
+      input.storageBounds,
+      input.screen,
+      input.compactStroke,
+    ]);
+  }
+  request(input: GeometryInput, owner: GeometryOwner): GeometryRequest {
+    this.selectionChanged();
+    const ownerId = JSON.stringify([owner.sourceId, owner.id]),
+      slot = this.slots.get(ownerId) ?? 0;
+    this.slots.set(ownerId, slot + 1);
+    const id = ownerId + ':' + slot,
+      key = this.inputKey(input, owner),
+      previous = this.requests.get(id);
+    if (
+      previous?.key === key &&
+      sameArray(previous.input.ids, input.ids) &&
+      sameArray(previous.input.components, input.components)
+    ) {
+      previous.frame = this.frame;
+      previous.plan.used = ++this.clock;
+      // Completion requires resident entries, not only an old ready flag.
+      // Recreate a lost selection defensively rather than leaving it pending
+      // forever or presenting an incomplete frame as complete.
+      if (previous.entries?.some((entry) => this.entries.get(entry.id) !== entry)) {
+        previous.cursor = 0;
+        previous.entries = previous.entries.map((entry) =>
+          this.entries.get(entry.id) === entry ? entry : this.entry(entry.job, previous),
+        );
+        this.schedule();
+      }
+      for (const entry of previous.entries ?? []) entry.used = ++this.clock;
+      return previous;
+    }
+    previous?.controller.abort();
+    const snapshot = { ...input, ids: input.ids?.slice(), components: input.components?.slice() },
+      controller = new AbortController();
+    const planKey = JSON.stringify([
+      owner.sourceId,
+      owner.revision,
+      input.kind === 'path' ? 'arcs' : input.kind,
+      input.ordered,
+      this.identity(input.kind === 'path' ? input.arcs : input.shapes),
+      this.identity(input.arcs),
+      input.bounds,
+    ]);
+    let plan = this.plans.get(planKey);
+    if (!plan) {
+      const signal = new AbortController();
+      plan = {
+        key: planKey,
+        sourceId: owner.sourceId,
+        controller: signal,
+        count: 0,
+        boundsBytes: 0,
+        revision: owner.revision,
+        used: ++this.clock,
+        ready: false,
+        promise: Promise.resolve(null as unknown as GeometryPartition),
+      };
+      const retained = plan;
+      retained.promise = (async () => {
+        await geometryYield(signal.signal);
+        const result = await partitionGeometry(snapshot, signal.signal);
+        retained.count = result.membership.length;
+        retained.boundsBytes =
+          (result.bounds?.byteLength ?? 0) + (result.batchIds?.byteLength ?? 0);
+        retained.ready = true;
+        this.counters.partitions++;
+        return result;
+      })();
+      // Request-specific consumers report the error; never leave an unhandled abort rejection.
+      void retained.promise.catch(() => {});
+      this.plans.set(planKey, retained);
+    } else {
+      plan.used = ++this.clock;
+      this.counters.partitionHits++;
+    }
+    const request: GeometryRequest = {
+      input: snapshot,
+      owner: { ...owner },
+      plan,
+      controller,
+      key,
+      entries: null,
+      fallback:
+        previous &&
+        previous.owner.revision === owner.revision &&
+        previous.owner.content === owner.content &&
+        previous.input.arcs === input.arcs &&
+        previous.input.shapes === input.shapes &&
+        previous.input.kind === input.kind &&
+        previous.input.compactStroke === input.compactStroke
+          ? this.drawable(previous)
+          : undefined,
+      frame: this.frame,
+      cursor: 0,
+    };
+    this.requests.set(id, request);
+    void (async () => {
+      const partition = await plan.promise;
+      controller.signal.throwIfAborted();
+      const jobs = await selectGeometryJobs(snapshot, partition, controller.signal);
+      controller.signal.throwIfAborted();
+      request.entries = jobs.map((job) => this.entry(job, request));
+      this.selectionChanged();
+      this.cancelObsolete();
+      this.schedule();
+      this.notify();
+    })().catch((error) => {
+      if (controller.signal.aborted || this.disposed) return;
+      request.error = error instanceof Error ? error : new Error(String(error));
+      this.counters.errors++;
+      this.options.report(request.error);
+      this.notify();
+    });
+    return request;
+  }
+  private entry(job: GeometryJob, request: GeometryRequest): GeometryEntry {
+    const base = JSON.stringify([
+      request.owner.id,
+      request.plan.key,
+      request.input.kind,
+      job.chunk,
+      hashJob(job),
+      request.input.compactStroke,
+    ]);
+    let family = base,
+      collision = 0,
+      old = this.latest.get(family);
+    while (old && !sameJob(old.job, job)) {
+      family = base + ':' + ++collision;
+      old = this.latest.get(family);
+    }
+    // A resident full-coverage mesh already contains this smaller view. Reuse
+    // it rather than uploading a clipped duplicate solely because the camera moved.
+    if (request.input.kind === 'fill' && request.input.storageBounds) {
+      const full = this.entries.get(
+        JSON.stringify([family, request.input.interval, request.input.screen, undefined]),
+      );
+      if (full?.state === 'ready' && sameJob(full.job, job)) {
+        full.used = ++this.clock;
+        this.counters.cacheHits++;
+        return full;
+      }
+    }
+    const prefix = JSON.stringify([
+      family,
+      request.input.interval,
+      request.input.screen,
+      request.input.storageBounds,
+    ]);
+    let id = prefix,
+      n = 0,
+      existing = this.entries.get(id);
+    while (existing && !sameJob(existing.job, job)) {
+      id = prefix + ':' + ++n;
+      existing = this.entries.get(id);
+    }
+    if (existing) {
+      existing.used = ++this.clock;
+      this.counters.cacheHits++;
+      return existing;
+    }
+    const metadataBytes = job.members.byteLength + (job.components?.byteLength ?? 0);
+    if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
+      throw new RangeError('Geometry selection cache exceeds its bounded working set.');
+    const entry: GeometryEntry = {
+      id,
+      family,
+      fallback:
+        old?.state === 'ready' && old.owner.content === request.owner.content ? old : undefined,
+      owner: request.owner,
+      job,
+      state: 'queued',
+      meshes: [],
+      ranges: [],
+      fillRanges: [],
+      screenSpace: false,
+      bytes: metadataBytes,
+      used: ++this.clock,
+    };
+    this.residencyVersion++;
+    this.entries.set(id, entry);
+    this.bytes += entry.bytes;
+    return entry;
+  }
+  /** Draw a chunk once: either its current mesh OR an exactly compatible old
+   * screen mesh. Never blend two versions and multiply semi-transparent alpha. */
+  drawable(request: GeometryRequest): GeometryEntry[] {
+    const selected = request.entries
+      ? request.entries.map((e) => {
+          if (e.state === 'ready') return e;
+          const latest = this.latest.get(e.family);
+          return latest?.state === 'ready' && latest.owner.content === request.owner.content
+            ? latest
+            : e.fallback;
+        })
+      : (request.fallback ?? []);
+    return selected.filter(
+      (e): e is GeometryEntry => !!e && e.state === 'ready' && this.entries.get(e.id) === e,
+    );
+  }
+  pin(entries: Iterable<GeometryEntry>): void {
+    this.trimCandidates = null;
+    this.trimCursor = 0;
+    this.pinned = new Set(entries);
+  }
+  complete(request: GeometryRequest): boolean {
+    return (
+      !!request.entries &&
+      request.entries.every((e) => e.state === 'ready' && this.entries.get(e.id) === e)
+    );
+  }
+  failed(request: GeometryRequest): boolean {
+    return !!request.error || !!request.entries?.some((e) => e.state === 'error');
+  }
+  private current(): GeometryRequest[] {
+    return [...this.requests.values()].filter(
+      (r) => r.frame === this.frame && !r.controller.signal.aborted,
+    );
+  }
+  private wanted(): Set<GeometryEntry> {
+    return (this.wantedCache ??= new Set(this.current().flatMap((r) => r.entries ?? [])));
+  }
+  private cancelObsolete(): void {
+    const active = this.active,
+      current = this.current();
+    if (!active || !current.every((r) => r.entries !== null || r.error)) return;
+    const wanted = this.wanted();
+    // A bounded batch may finish while any member remains useful, including a
+    // same-content camera refinement. Explicit source retirement still aborts it.
+    if (
+      [...active.entries].every(
+        (entry) =>
+          !wanted.has(entry) &&
+          !current.some(
+            (r) =>
+              r.owner.content === entry.owner.content &&
+              r.entries?.some((e) => e.family === entry.family),
+          ),
+      )
+    ) {
+      active.controller.abort();
+      this.counters.cancellations++;
+    }
+  }
+  finish(): void {
+    this.collecting = false;
+    const current = this.current();
+    if (
+      this.settledVersion === this.residencyVersion &&
+      !this.running &&
+      !this.active &&
+      this.settledExternal === this.externalBytes &&
+      current.length === this.requests.size &&
+      current.length === this.settledRequests.length &&
+      current.every((r, i) => r === this.settledRequests[i])
+    ) {
+      this.counters.maintenanceSkips++;
+      return;
+    }
+    this.settledRequests = [];
+    this.settledVersion = -1;
+    this.selectionChanged();
+    for (const [id, request] of this.requests)
+      if (request.frame !== this.frame) {
+        request.controller.abort();
+        this.requests.delete(id);
+      }
+    this.trimPlans();
+    const owners = new Set(
+      [...this.requests.values()].map((r) => JSON.stringify([r.owner.sourceId, r.owner.id])),
+    );
+    for (const entry of this.entries.values())
+      if (!owners.has(JSON.stringify([entry.owner.sourceId, entry.owner.id]))) this.drop(entry);
+    this.worker.retainSources?.(new Set(this.current().map((r) => r.owner.sourceId)));
+    this.cancelObsolete();
+    const wanted = this.wanted();
+    if (this.current().every((r) => r.entries !== null || r.error))
+      for (const entry of this.entries.values())
+        if (!wanted.has(entry) && (entry.state === 'queued' || entry.state === 'error'))
+          this.drop(entry);
+    this.trim(0);
+    for (const entry of wanted)
+      if (
+        entry.state === 'error' &&
+        entry.requiredBytes !== undefined &&
+        this.bytes + this.externalBytes + entry.requiredBytes <= this.limit * 2
+      ) {
+        entry.state = 'queued';
+        entry.error = undefined;
+        for (const r of this.current()) r.cursor = 0;
+      }
+    if (!this.running && !this.active && current.every((r) => this.complete(r))) {
+      this.settledRequests = current;
+      this.settledVersion = this.residencyVersion;
+      this.settledExternal = this.externalBytes;
+    }
+    this.schedule();
+  }
+  /** Retain compact completed spatial plans across full/low-detail switches.
+   * Exact arc identity remains in the key; different LOD bounds are not aliased.
+   * Inactive plans are bounded and disappear with their source/revision.
+   */
+  private trimPlans(): void {
+    const active = new Set([...this.requests.values()].map((r) => r.plan));
+    const revisions = new Map<string, Set<number>>();
+    for (const request of this.requests.values()) {
+      let versions = revisions.get(request.owner.sourceId);
+      if (!versions) revisions.set(request.owner.sourceId, (versions = new Set()));
+      versions.add(request.owner.revision);
+    }
+    for (const [key, plan] of this.plans) {
+      if (!active.has(plan) && (!plan.ready || !revisions.get(plan.sourceId)?.has(plan.revision))) {
+        plan.controller.abort();
+        this.plans.delete(key);
+      }
+    }
+    let bytes = 0;
+    for (const plan of this.plans.values()) bytes += plan.count * 4 + plan.boundsBytes;
+    const limit = this.options.partitionCacheBytes ?? 128 * 1024 ** 2;
+    if (bytes <= limit && this.plans.size <= 64) return;
+    const inactive = [...this.plans.values()]
+      .filter((p) => !active.has(p))
+      .sort((a, b) => a.used - b.used);
+    for (const plan of inactive) {
+      if (bytes <= limit && this.plans.size <= 64) break;
+      this.plans.delete(plan.key);
+      plan.controller.abort();
+      bytes -= plan.count * 4 + plan.boundsBytes;
+    }
+  }
+  setInteracting(value: boolean): void {
+    this.interacting = value;
+    // One bounded task at a time continues during navigation. Repaint notifications
+    // are coalesced more aggressively instead of withholding newly visible content.
+    this.schedule();
+  }
+  private notify(): void {
+    if (this.disposed || this.notification !== null) return;
+    // Do not rescan every request's complete prefix after each tiny Worker task.
+    // The timer is a UI progress deadline, not an instruction to redraw at 30fps.
+    const delay = this.firstPresentation
+      ? 0
+      : Math.max(this.interacting ? 80 : 32, Math.min(250, this.presentationCost * 4));
+    this.notification = setTimeout(() => {
+      this.notification = null;
+      if (!this.disposed) this.options.invalidate();
+    }, delay);
+  }
+  private queued(request: GeometryRequest): GeometryEntry | undefined {
+    if (request.error || !request.entries) return undefined;
+    while (request.cursor < request.entries.length) {
+      const entry = request.entries[request.cursor];
+      if (entry.state === 'error') return undefined;
+      if (entry.state === 'queued') return entry;
+      if (entry.state === 'building') return undefined;
+      request.cursor++;
+    }
+    return undefined;
+  }
+  private schedule(): void {
+    if (this.timer !== null || this.running || this.disposed) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.pump();
+    }, 0);
+  }
+  private nextQueued(): { request: GeometryRequest; entry: GeometryEntry } | undefined {
+    const available = this.current().filter((r) => !!this.queued(r));
+    const preview =
+      this.counters.builds === 0
+        ? available.find((r) => r.input.kind === 'path' || r.input.kind === 'point')
+        : undefined;
+    const request =
+      preview ?? (available.length ? available[this.turn++ % available.length] : undefined);
+    const entry = request && this.queued(request);
+    return request && entry ? { request, entry } : undefined;
+  }
+  private preparationError(request: GeometryRequest, entry: GeometryEntry, error: unknown): void {
+    if (this.disposed || this.entries.get(entry.id) !== entry) return;
+    entry.state = 'error';
+    entry.error = error instanceof Error ? error : new Error(String(error));
+    request.cursor = 0;
+    this.counters.errors++;
+    this.options.report(entry.error);
+  }
+  private acceptResult(
+    request: GeometryRequest,
+    entry: GeometryEntry,
+    result: GeometryResult,
+  ): void {
+    const fillRanges = result.geometries.map((g) =>
+      g.fillRanges ? new FillRangeIndex(g.fillRanges, g.count) : undefined,
+    );
+    const ranges = result.geometries.map((g) =>
+      g.pathRanges ? new PathRangeIndex(g.pathRanges, g.count) : undefined,
+    );
+    const cost =
+      ranges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
+      fillRanges.reduce((n, ranges) => n + (ranges?.bytes ?? 0), 0) +
+      result.geometries.reduce(
+        (n, g) =>
+          n +
+          (this.gpu.meshByteSize?.(g) ??
+            g.vertices.byteLength + Math.ceil((g.indices?.byteLength ?? 0) / 4) * 4),
+        0,
+      );
+    this.trim(cost);
+    if (this.bytes + this.externalBytes + cost > this.limit * 2) {
+      entry.requiredBytes = cost;
+      throw new RangeError(
+        'Visible GPU geometry exceeds the bounded working-set limit; zoom in or hide layers. Source data was not simplified or truncated.',
+      );
+    }
+    const meshes: GpuMesh[] = [];
+    try {
+      for (const geometry of result.geometries) {
+        // Pages own byte ranges, not geometry identity. Source revisions,
+        // LOD and screen bases still guard entries and ordered draw runs.
+        // Sharing retired storage across those versions avoids fragmentation.
+        const mesh = this.gpu.createMesh(
+          geometry,
+          JSON.stringify([request.owner.sourceId, request.owner.id]),
+        );
+        if (!mesh) continue;
+        meshes.push(mesh);
+
+        this.counters.maxMeshBytes = Math.max(this.counters.maxMeshBytes, mesh.bytes);
+      }
+    } catch (error) {
+      for (const mesh of meshes) this.gpu.destroyMesh(mesh);
+      throw error;
+    }
+    entry.meshes = meshes;
+    entry.ranges = ranges;
+    entry.fillRanges = fillRanges;
+    entry.bytes += cost;
+    entry.screenSpace = result.screenSpace;
+    entry.screenView = result.screenSpace ? request.input.screen?.view : undefined;
+    entry.fallback = undefined;
+    this.latest.set(entry.family, entry);
+    entry.screenStats = result.screenStats;
+    entry.state = 'ready';
+    entry.requiredBytes = undefined;
+    this.bytes += cost;
+    this.counters.peakBytes = Math.max(this.counters.peakBytes, this.bytes);
+    this.counters.builds++;
+    this.counters.uploadCulledBytes += result.uploadCulledBytes ?? 0;
+    this.counters.directFeatures += result.directFeatures ?? 0;
+    this.counters.pathInputInstances += result.pathInputInstances ?? 0;
+    this.counters.pathOutputInstances += result.pathOutputInstances ?? 0;
+  }
+  private async pump(): Promise<void> {
+    if (this.running || this.disposed) return;
+    this.running = true;
+    let progressed = false;
+    try {
+      while (!this.disposed) {
+        const first = this.nextQueued();
+        if (!first) break;
+        const controller = new AbortController();
+        this.active = { entries: new Set(), controller };
+        const tasks: { request: GeometryRequest; entry: GeometryEntry; packet: GeometryPacket }[] =
+          [];
+        let bytes = 0;
+        const packingStarted = performance.now();
+        // First feedback never waits for a batch. Large/unknown jobs stay isolated.
+        const maxJobs =
+          this.counters.builds === 0 || first.request.cursor === 0 || !this.worker.buildBatch
+            ? 1
+            : Math.max(
+                1,
+                Math.min(
+                  GEOMETRY_BATCH_JOBS,
+                  Number.isSafeInteger(this.batchJobs) ? this.batchJobs : 1,
+                ),
+              );
+        try {
+          for (let i = 0; i < maxJobs; i++) {
+            // Keep a batch inside one parent/paint request. A slow upper
+            // layer must not hold a lower layer's first result in the same reply.
+            const entryAfterFirst = i === 0 ? undefined : this.queued(first.request);
+            const next =
+              i === 0
+                ? first
+                : entryAfterFirst
+                  ? { request: first.request, entry: entryAfterFirst }
+                  : undefined;
+            if (!next) break;
+            const { request, entry } = next;
+            if (tasks.length) {
+              const admission = performance.now();
+              const bound = geometryJobByteBound(
+                request.input,
+                entry.job,
+                GEOMETRY_BATCH_BYTES - bytes,
+              );
+              this.counters.batchAdmissionMs += performance.now() - admission;
+              if (bound > GEOMETRY_BATCH_BYTES - bytes) break;
+            }
+            progressed = true;
+            entry.state = 'building';
+            this.active.entries.add(entry);
+            this.residencyVersion++;
+            request.cursor++;
+            const packing = performance.now();
+            let packet: GeometryPacket;
+            try {
+              packet = await packGeometryJob(request.input, entry.job, controller.signal);
+              if (packet.kind === 'fill') {
+                packet.sourceId = request.owner.sourceId;
+                packet.cacheKey = JSON.stringify([
+                  this.identity(request.input.arcs),
+                  this.identity(request.input.shapes),
+                ]);
+                packet.featureIds = entry.job.members.slice();
+              }
+            } catch (error) {
+              if (controller.signal.aborted) throw error;
+              this.preparationError(request, entry, error);
+              continue;
+            } finally {
+              this.counters.packMs += performance.now() - packing;
+            }
+            controller.signal.throwIfAborted();
+            bytes += geometryBatchBytes([packet]);
+            tasks.push({ request, entry, packet });
+            if (bytes >= GEOMETRY_BATCH_BYTES || performance.now() - packingStarted >= 4) break;
+          }
+          if (!tasks.length) continue;
+          const packets = tasks.map((task) => task.packet);
+          const results: GeometryBatchItem[] =
+            tasks.length > 1
+              ? await this.worker.buildBatch!(packets, controller.signal)
+              : [{ result: await this.worker.build(packets[0], controller.signal) }];
+          controller.signal.throwIfAborted();
+          let uploadSlice = performance.now();
+          for (let i = 0; i < tasks.length; i++) {
+            const { request, entry } = tasks[i];
+            if (this.disposed || this.entries.get(entry.id) !== entry) continue;
+            try {
+              const item = results[i];
+              if (!item || item.error !== undefined || !item.result)
+                throw new Error(item?.error ?? 'Invalid geometry batch result');
+              this.acceptResult(request, entry, item.result);
+            } catch (error) {
+              this.preparationError(request, entry, error);
+            }
+            if (i + 1 < tasks.length && performance.now() - uploadSlice >= 4) {
+              await geometryYield(controller.signal);
+              uploadSlice = performance.now();
+            }
+          }
+        } catch (error) {
+          for (const entry of this.active.entries) {
+            if (entry.state !== 'building' || this.entries.get(entry.id) !== entry) continue;
+            if (controller.signal.aborted) entry.state = 'queued';
+            else {
+              const request = tasks.find((task) => task.entry === entry)?.request;
+              if (request) this.preparationError(request, entry, error);
+            }
+          }
+          // Reserved cursors advance before dispatch; cancellation must rewind
+          // them or a reselected useful member could remain queued forever.
+          for (const request of this.current()) request.cursor = 0;
+        } finally {
+          this.residencyVersion++;
+          this.active = null;
+        }
+        this.notify();
+      }
+    } finally {
+      this.running = false;
+      if (
+        progressed &&
+        !this.disposed &&
+        this.current().every((r) => this.complete(r) || this.failed(r))
+      ) {
+        if (this.notification !== null) clearTimeout(this.notification);
+        this.notification = setTimeout(() => {
+          this.notification = null;
+          if (!this.disposed) this.options.invalidate();
+        }, 0);
+      }
+    }
+  }
+  private trim(incoming: number): void {
+    if (this.bytes + this.externalBytes + incoming <= this.limit) return;
+    if (!this.trimCandidates) {
+      // Protect requests from the preceding frame until all current slots exist.
+      const wanted = this.collecting
+        ? (this.protectedCache ??= new Set(
+            [...this.requests.values()]
+              .filter((r) => !r.controller.signal.aborted)
+              .flatMap((r) => r.entries ?? []),
+          ))
+        : this.wanted();
+      this.trimCandidates = [...this.entries.values()]
+        .filter((e) => !wanted.has(e) && !this.pinned.has(e) && !this.active?.entries.has(e))
+        .sort((a, b) => a.used - b.used);
+      this.trimCursor = 0;
+    }
+    while (
+      this.trimCursor < this.trimCandidates.length &&
+      this.bytes + this.externalBytes + incoming > this.limit
+    ) {
+      const entry = this.trimCandidates[this.trimCursor++];
+      if (this.entries.get(entry.id) !== entry) continue;
+      this.drop(entry);
+      this.counters.evictions++;
+    }
+  }
+  private drop(entry: GeometryEntry): void {
+    this.residencyVersion++;
+    if (this.active?.entries.has(entry)) this.active.controller.abort();
+    for (const mesh of entry.meshes) this.gpu.destroyMesh(mesh);
+    entry.meshes = [];
+    entry.ranges = [];
+    entry.fillRanges = [];
+    entry.fallback = undefined;
+    this.pinned.delete(entry);
+    if (this.latest.get(entry.family) === entry) this.latest.delete(entry.family);
+    this.bytes -= entry.bytes;
+    entry.bytes = 0;
+    this.entries.delete(entry.id);
+  }
+  clear(scope: { sourceId?: string; layerId?: string } = {}): void {
+    this.settledRequests = [];
+    this.settledVersion = -1;
+    this.selectionChanged();
+    const matches = (owner: GeometryOwner) =>
+      scope.layerId !== undefined
+        ? owner.id === scope.layerId
+        : scope.sourceId !== undefined
+          ? owner.sourceId === scope.sourceId
+          : true;
+    for (const [id, r] of this.requests)
+      if (matches(r.owner)) {
+        r.controller.abort();
+        this.requests.delete(id);
+      }
+    for (const e of this.entries.values()) if (matches(e.owner)) this.drop(e);
+    const retained = new Set([...this.requests.values()].map((r) => r.plan));
+    for (const [key, plan] of this.plans)
+      if (!retained.has(plan)) {
+        plan.controller.abort();
+        this.plans.delete(key);
+      }
+    this.worker.retainSources?.(new Set([...this.requests.values()].map((r) => r.owner.sourceId)));
+  }
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    if (this.notification !== null) clearTimeout(this.notification);
+    this.notification = null;
+    this.active?.controller.abort();
+    this.clear();
+    this.worker.dispose();
+    this.pinned.clear();
+    this.latest.clear();
+    this.selectionChanged();
+  }
+}

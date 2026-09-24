@@ -6,9 +6,12 @@ export interface MsdfAtlasPage {
   readonly width: number;
   readonly height: number;
   version: number;
+  /** Increments only when old UV allocations are recycled, not on append. */
+  generation?: number;
 }
 export interface MsdfGlyphQuad {
   page: MsdfAtlasPage;
+  generation?: number;
   rect: readonly [number, number, number, number];
   /** Glyph plane in label-local CSS pixels: center x/y, width/height. */
   plane: readonly [number, number, number, number];

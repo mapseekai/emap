@@ -37,6 +37,33 @@ export interface LayerRendererContext {
   ): Uint32Array | null;
 }
 
+const sourceDatasetIds = new WeakMap<MapshaperDataset, number>();
+let sourceDatasetSerial = 0;
+const sourceBoundsCache = new WeakMap<
+  MutableTopologySource,
+  { datasetId: number; revision: number; bounds: [number, number, number, number] | undefined }
+>();
+function stableSourceBounds(
+  source: MutableTopologySource,
+  dataset: MapshaperDataset | undefined,
+): [number, number, number, number] | undefined {
+  let datasetId = dataset ? sourceDatasetIds.get(dataset) : 0;
+  if (dataset && !datasetId) {
+    datasetId = ++sourceDatasetSerial;
+    sourceDatasetIds.set(dataset, datasetId);
+  }
+  const revision = dataset?.editVersion ?? 0,
+    previous = sourceBoundsCache.get(source);
+  if (previous && previous.datasetId === datasetId && previous.revision === revision)
+    return previous.bounds;
+  const extent = source.getExtent?.(),
+    bounds = extent
+      ? ([extent.xmin, extent.ymin, extent.xmax, extent.ymax] as [number, number, number, number])
+      : undefined;
+  sourceBoundsCache.set(source, { datasetId: datasetId ?? 0, revision, bounds });
+  return bounds;
+}
+
 const bucketMembership = new WeakMap<
   StyleResolution,
   {
@@ -126,6 +153,14 @@ export function renderLayers(
       id: layer.id,
       sourceId: layer.source,
       revision: dataset?.editVersion ?? 0,
+      bounds: stableSourceBounds(source, dataset),
+      content: JSON.stringify([
+        layer.paint,
+        layer.filter,
+        layer.label,
+        layer.type === 'circle' ? layer.icon : undefined,
+        dataset?.attributeVersion ?? 0,
+      ]),
     });
     let featureMask: Uint8Array | null = null;
     if (layer.filter && dataset && ml?.shapes && ctx.filterResolver) {
@@ -271,6 +306,17 @@ function drawOutline(
       geometryRevision,
       ...(candidates ? { shapeIndices: candidates } : {}),
     });
+    return;
+  }
+  if (ctx.painter.drawOutlinePaths) {
+    ctx.painter.drawOutlinePaths(
+      ml.shapes!,
+      style,
+      arcs,
+      viewportFilter,
+      candidates ?? undefined,
+      geometryRevision,
+    );
     return;
   }
   let arcIds: Uint32Array | null;

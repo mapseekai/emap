@@ -226,6 +226,7 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
         width: SIZE,
         height: SIZE,
         version: 0,
+        generation: 0,
         x: 1,
         y: 1,
         row: 0,
@@ -239,6 +240,7 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
       if (!p) return false;
       for (const k of p.keys) this.glyphs.delete(k);
       p.keys.clear();
+      p.generation = (p.generation ?? 0) + 1;
       p.data.fill(0);
       p.x = p.y = 1;
       p.row = 0;
@@ -293,6 +295,7 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
       const oy = (g.y - m.shape.top) * m.size + m.padding - m.height / 2;
       glyphs.push({
         page: entry.page,
+        generation: entry.page.generation ?? 0,
         rect: entry.rect,
         plane: [
           ox + ((l + r) * m.size) / 2 - (m.shear * (t + b) * m.size) / 2,

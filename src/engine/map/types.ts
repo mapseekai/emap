@@ -48,6 +48,10 @@ export interface MapOptions {
   renderer?: import('./renderer').RendererBackend;
   /** Optional MSDF worker URL for GPU labels; publish its sibling msdf/ assets too. */
   msdfWorkerUrl?: string | URL;
+  /** Bounded GPU geometry preparation Worker. Defaults to the sibling emap-geometry-worker.js. */
+  geometryWorkerUrl?: string | URL;
+  /** Half-device-pixel display filtering for large opaque solid GPU strokes. Defaults to true; source coordinates never change. */
+  screenPathFiltering?: boolean;
   container: string | HTMLElement;
   interactive?: boolean;
   /** Native MapLibre basemap and online-overlay integration. */

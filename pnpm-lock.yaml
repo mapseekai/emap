@@ -116,6 +116,9 @@ importers:
       '@types/earcut':
         specifier: 3.0.0
         version: 3.0.0
+      '@webgpu/types':
+        specifier: 0.1.72
+        version: 0.1.72
       '@zwishing/epsg-index':
         specifier: ^3.0.0
         version: 3.0.0

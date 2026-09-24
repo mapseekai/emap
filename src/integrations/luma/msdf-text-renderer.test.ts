@@ -92,3 +92,22 @@ describe('MSDF pass resource ownership', () => {
     r.dispose();
   });
 });
+
+it('does not sample recycled atlas glyphs when a previous navigation frame is replayed', () => {
+  const f = setup(),
+    renderer = new MsdfTextRenderer(f.device, 'webgl');
+  const page = f.page as typeof f.page & { generation: number };
+  page.generation = 0;
+  f.label.raster.glyphs[0].generation = 0;
+  const frame = { key: 'navigation', labels: [f.label] };
+  renderer.draw(f.pass, frame, 100, 100, 1);
+  expect(renderer.stats.glyphInstances).toBe(1);
+  page.generation = 1;
+  page.version++;
+  renderer.draw(f.pass, frame, 100, 100, 1);
+  expect(renderer.stats.glyphInstances).toBe(0);
+  f.label.raster.glyphs[0].generation = 1;
+  renderer.draw(f.pass, { key: 'new', labels: [f.label] }, 100, 100, 1);
+  expect(renderer.stats.glyphInstances).toBe(1);
+  renderer.dispose();
+});

@@ -212,6 +212,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   public type: 'topology' = 'topology';
   private _dataset: MapshaperDataset | undefined;
   private _displayArcs: DisplayArcs | null = null;
+  private _displayArcsRevision: number | undefined = -1;
   private _options: TopologySourceOptions;
   private _data: TopologySourceInput | undefined;
   private _loadVersion: number = 0;
@@ -602,6 +603,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       if (this._dataset?.arcs) {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
       }
+      this._displayArcsRevision = this._dataset?.editVersion;
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
       this._data = undefined;
 
@@ -863,6 +865,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   refreshDisplayArcs(): void {
     if (this._dataset?.arcs) {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
+      this._displayArcsRevision = this._dataset.editVersion;
     }
   }
 
@@ -874,12 +877,23 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    */
   public setDataset(dataset: MapshaperDataset, notify = true): void {
     for (const layer of dataset.layers) bindLayerFields(layer);
+    // Source registration changes CRS metadata on a shallow dataset wrapper.
+    // Keep the already prepared LOD only for that silent, unchanged-geometry
+    // commit. Explicit replacements and versioned/in-place edits still rebuild.
+    const keepDisplay =
+      !notify &&
+      dataset !== this._dataset &&
+      dataset.layers === this._dataset?.layers &&
+      dataset.arcs !== undefined &&
+      this._displayArcs?.getArcs() === dataset.arcs &&
+      this._displayArcsRevision === dataset.editVersion;
     this._dataset = dataset;
     if (dataset.arcs) {
-      this._displayArcs = new DisplayArcs(dataset.arcs);
+      if (!keepDisplay) this._displayArcs = new DisplayArcs(dataset.arcs);
     } else {
       this._displayArcs = null;
     }
+    this._displayArcsRevision = dataset.editVersion;
     // Re-capture the simplification floor: mapshaper's `-simplify` writes
     // a non-zero `retainedInterval` here; other ops typically leave it at 0.
     this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;

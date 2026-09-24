@@ -1,0 +1,475 @@
+import { describe, expect, it, vi } from 'vitest';
+import { GeometryChunkCache } from './geometry-cache';
+import { buildGeometryPacket } from '../../engine/rendering/luma/geometry-packet';
+import type { GeometryInput } from '../../engine/rendering/luma/geometry-jobs';
+import type { GpuRenderer } from './gpu-renderer';
+function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
+  const gpu = {
+    createMesh: vi.fn((g) => ({
+      kind: g.kind,
+      count: g.count,
+      bytes: g.vertices.byteLength + (g.indices?.byteLength ?? 0),
+    })),
+    destroyMesh: vi.fn(),
+  };
+  const transport = {
+    build: vi.fn(async (packet) => buildGeometryPacket(packet)),
+    dispose: vi.fn(),
+    stats: { workers: 0, jobs: 0, workerMs: 0, inputBytes: 0, peakInputBytes: 0 },
+  };
+  const report = vi.fn(),
+    invalidate = vi.fn();
+  const cache = new GeometryChunkCache(gpu as unknown as GpuRenderer, {
+    workerUrl: new URL('http://example.test/worker.js'),
+    transport,
+    report,
+    invalidate,
+    cacheBytes,
+    partitionCacheBytes,
+  });
+  const input: GeometryInput = {
+    kind: 'point',
+    shapes: [[[1, 1]], [[6, 6]], [[12, 12]]],
+    interval: 0,
+    bounds: [0, 0, 16, 16],
+  };
+  const frame = (value: GeometryInput = input, revision = 0) => {
+    cache.begin();
+    const r = cache.request(value, { id: 'p', sourceId: 's', revision });
+    cache.finish();
+    return r;
+  };
+  return { cache, gpu, transport, report, invalidate, input, frame };
+}
+describe('formal asynchronous chunk ownership', () => {
+  it('reuses overlapping spatial chunks across navigation and releases all resources on disposal', async () => {
+    const f = fixture(),
+      first = f.frame();
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true), { timeout: 4000 });
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+    const second = f.frame({ ...f.input, ids: new Uint32Array([0, 1]) });
+    await vi.waitFor(() => expect(f.cache.complete(second)).toBe(true));
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+    expect(f.cache.stats.cacheHits).toBe(2);
+    f.cache.dispose();
+    expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(3);
+    expect(f.cache.stats.bytes).toBe(0);
+    expect(f.cache.stats.partitionBytes).toBe(0);
+    expect(f.transport.dispose).toHaveBeenCalledOnce();
+  });
+  it('detects in-place selection edits and does not let old requests restore a removed source', async () => {
+    const f = fixture(),
+      ids = new Uint32Array([0]);
+    const first = f.frame({ ...f.input, ids });
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    ids[0] = 1;
+    const next = f.frame({ ...f.input, ids });
+    expect(next).not.toBe(first);
+    f.cache.clear({ sourceId: 's' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(f.cache.stats.entries).toBe(0);
+    expect(f.cache.stats.pending).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+    f.cache.dispose();
+  });
+  it('continues bounded preparation during navigation and coalesces progress notifications', async () => {
+    const f = fixture();
+    f.cache.setInteracting(true);
+    const r = f.frame();
+    await vi.waitFor(() => expect(f.cache.complete(r)).toBe(true), { timeout: 4000 });
+    expect(f.transport.build).toHaveBeenCalledTimes(3);
+    expect(f.cache.stats.interacting).toBe(true);
+    await vi.waitFor(() => expect(f.invalidate).toHaveBeenCalled());
+    expect(f.invalidate.mock.calls.length).toBeLessThanOrEqual(2);
+    f.cache.setInteracting(false);
+    f.cache.dispose();
+  });
+  it('enforces a hard working-set bound without dropping source members or entering an eviction loop', async () => {
+    const f = fixture(1),
+      r = f.frame();
+    await vi.waitFor(() => expect(f.cache.failed(r)).toBe(true), { timeout: 4000 });
+    const builds = f.transport.build.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    expect(f.gpu.createMesh).not.toHaveBeenCalled();
+    expect(f.report).toHaveBeenCalledOnce();
+    f.cache.dispose();
+  });
+  it('keeps source and layer invalidation scoped', async () => {
+    const f = fixture();
+    f.cache.begin();
+    const a = f.cache.request(f.input, { id: 'a', sourceId: 'a', revision: 0 }),
+      b = f.cache.request(f.input, { id: 'b', sourceId: 'b', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(a) && f.cache.complete(b)).toBe(true), {
+      timeout: 4000,
+    });
+    f.cache.clear({ sourceId: 'a' });
+    expect(f.cache.complete(b)).toBe(true);
+    expect(f.cache.stats.entries).toBe(3);
+    f.cache.dispose();
+  });
+});
+
+it('recovers a budget-rejected chunk after another owner releases memory, without repeated retries', async () => {
+  const f = fixture(30);
+  const a = { ...f.input, ids: Uint32Array.from([0]) },
+    b = { ...f.input, ids: Uint32Array.from([1]) };
+  f.cache.begin();
+  const first = f.cache.request(a, { id: 'a', sourceId: 'a', revision: 0 }),
+    second = f.cache.request(b, { id: 'b', sourceId: 'b', revision: 0 });
+  f.cache.finish();
+  await vi.waitFor(() => expect(f.cache.complete(first) && f.cache.complete(second)).toBe(true));
+  const c = { ...f.input, ids: Uint32Array.from([2]) };
+  f.cache.begin();
+  f.cache.request(a, { id: 'a', sourceId: 'a', revision: 0 });
+  f.cache.request(b, { id: 'b', sourceId: 'b', revision: 0 });
+  const third = f.cache.request(c, { id: 'c', sourceId: 'c', revision: 0 });
+  f.cache.finish();
+  await vi.waitFor(() => expect(f.cache.failed(third)).toBe(true));
+  f.cache.clear({ sourceId: 'a' });
+  f.cache.clear({ sourceId: 'b' });
+  f.cache.begin();
+  const retry = f.cache.request(c, { id: 'c', sourceId: 'c', revision: 0 });
+  f.cache.finish();
+  await vi.waitFor(() => expect(f.cache.complete(retry)).toBe(true));
+  f.cache.dispose();
+});
+
+it('notifies a drawable partial result before a deliberately slow later chunk finishes', async () => {
+  const f = fixture();
+  let release!: () => void;
+  let count = 0;
+  f.transport.build.mockImplementation(async (packet) => {
+    if (++count === 2)
+      await new Promise<void>((r) => {
+        release = r;
+      });
+    return buildGeometryPacket(packet);
+  });
+  const request = f.frame();
+  await vi.waitFor(() => expect(f.cache.drawable(request).length).toBe(1));
+  await vi.waitFor(() => expect(f.invalidate).toHaveBeenCalled());
+  expect(f.cache.complete(request)).toBe(false);
+  release();
+  await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+  f.cache.dispose();
+});
+
+it('uses a previous detail level only as provisional geometry, not as the completed new mesh', async () => {
+  const f = fixture();
+  const old = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+  const resident = f.cache.drawable(old);
+  f.cache.pin(resident);
+  let release!: () => void;
+  f.transport.build.mockImplementationOnce(async (packet) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return buildGeometryPacket(packet);
+  });
+  const next = f.frame({ ...f.input, interval: 0.5 });
+  await vi.waitFor(() => expect(typeof release).toBe('function'));
+  expect(f.cache.complete(next)).toBe(false);
+  expect(f.cache.drawable(next)).toEqual(resident);
+  release();
+  await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+  expect(f.cache.drawable(next)[0]).not.toBe(resident[0]);
+  f.cache.dispose();
+});
+
+it('lets a bounded compatible camera job finish rather than starving every refinement during navigation', async () => {
+  const f = fixture(),
+    releases: (() => void)[] = [];
+  const arcs = {
+    size: () => 1,
+    getArcIter() {
+      let i = 0;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (i === 2) return false;
+          this.x = 1 + i++;
+          this.y = 1;
+          return true;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  const path: GeometryInput = { kind: 'path', interval: 0, bounds: [0, 0, 16, 16], arcs };
+  const screen = {
+    view: [1, 1, 0, 0] as [number, number, number, number],
+    width: 100,
+    height: 100,
+    pixelRatio: 1,
+    initialScale: 0,
+    smallArcs: false,
+    halfPixel: true,
+    cull: false,
+    padding: 8,
+    revision: 0,
+  };
+  f.transport.build.mockImplementation(async (packet, signal?: AbortSignal) => {
+    await new Promise<void>((resolve, reject) => {
+      releases.push(resolve);
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    return buildGeometryPacket(packet);
+  });
+  f.frame({ ...path, screen });
+  await vi.waitFor(() => expect(releases).toHaveLength(1));
+  const next = f.frame({ ...path, screen: { ...screen, view: [1, 1, 10, 0] } });
+  await vi.waitFor(() => expect(next.entries).not.toBeNull());
+  expect(f.cache.stats.cancellations).toBe(0);
+  releases[0]();
+  await vi.waitFor(() => expect(releases).toHaveLength(2));
+  expect(f.cache.complete(next)).toBe(false);
+  expect(f.cache.drawable(next)).toHaveLength(1);
+  expect(f.cache.drawable(next)[0].screenView).toEqual([1, 1, 0, 0]);
+  releases[1]();
+  await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+  f.cache.dispose();
+});
+
+it('protects preceding-frame requests until every layer has registered its next draw slot', async () => {
+  const f = fixture(70);
+  const first = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  expect(f.cache.drawable(first)).toHaveLength(3);
+  // A newly ready chunk need not have appeared in the preceding progressive
+  // picture yet. The following point/overlay allocation happens before all
+  // vector owners have called request() for this frame.
+  f.cache.begin();
+  f.cache.admitExternal(16);
+  const next = f.cache.request(f.input, { id: 'p', sourceId: 's', revision: 0 });
+  f.cache.finish();
+  expect(f.cache.complete(next)).toBe(true);
+  expect(f.cache.drawable(next)).toHaveLength(3);
+  expect(f.gpu.destroyMesh).not.toHaveBeenCalled();
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+  f.cache.dispose();
+});
+
+it('does not report evicted request entries as complete and repairs their draw slots', async () => {
+  const f = fixture();
+  const first = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const stale = first.entries![0];
+  // Model a lost resident resource independently of its request state.
+  Reflect.get(f.cache, 'drop').call(f.cache, stale);
+  expect(f.cache.complete(first)).toBe(false);
+  const next = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+  expect(f.cache.drawable(next)).toHaveLength(3);
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(4);
+  f.cache.dispose();
+});
+
+it('reuses a resident full fill mesh when a smaller upload coverage is requested', async () => {
+  const f = fixture();
+  const path = [
+    [-10, -10],
+    [10, -10],
+    [10, 10],
+    [-10, 10],
+    [-10, -10],
+  ];
+  const input: GeometryInput = {
+    kind: 'fill',
+    interval: 0,
+    bounds: [-10, -10, 10, 10],
+    shapes: [[[0]]],
+    arcs: {
+      size: () => 1,
+      getArcIter() {
+        let i = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            if (i === path.length) return false;
+            [this.x, this.y] = path[i++];
+            return true;
+          },
+        };
+      },
+    } as unknown as NonNullable<GeometryInput['arcs']>,
+  };
+  const first = f.frame(input);
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const near = f.frame({ ...input, viewBounds: [-1, -1, 1, 1], storageBounds: [-2, -2, 2, 2] });
+  await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(1);
+  expect(f.cache.stats.cacheHits).toBeGreaterThan(0);
+  f.cache.dispose();
+});
+
+it('does not scan eviction candidates below budget or notify forever for ready requests', async () => {
+  const f = fixture(),
+    request = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+  await new Promise((r) => setTimeout(r, 50));
+  const notifications = f.invalidate.mock.calls.length;
+  const entries = Reflect.get(f.cache, 'entries') as Map<string, unknown>,
+    scan = vi.spyOn(entries, 'values');
+  f.cache.admitExternal(0);
+  expect(scan).not.toHaveBeenCalled();
+  scan.mockRestore();
+  f.frame();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(f.transport.build).toHaveBeenCalledTimes(3);
+  expect(f.invalidate.mock.calls.length).toBe(notifications);
+  f.cache.dispose();
+});
+it('keeps the final completion notification even after an expensive partial frame', async () => {
+  const f = fixture();
+  f.cache.didPresent(500);
+  const request = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+  await vi.waitFor(() => expect(f.invalidate).toHaveBeenCalled(), { timeout: 150 });
+  f.cache.dispose();
+});
+
+it('reuses completed partition plans across LOD identities and releases them on source removal', async () => {
+  const f = fixture();
+  const first = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const alternate = f.frame({ ...f.input, shapes: [[[2, 2]], [[7, 7]], [[11, 11]]] });
+  await vi.waitFor(() => expect(f.cache.complete(alternate)).toBe(true));
+  expect(f.cache.stats.partitions).toBe(2);
+  const restored = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(restored)).toBe(true));
+  expect(f.cache.stats.partitions).toBe(2);
+  expect(f.cache.stats.partitionHits).toBeGreaterThan(0);
+  f.cache.clear({ sourceId: 's' });
+  expect(f.cache.stats.partitionBytes).toBe(0);
+  f.cache.dispose();
+});
+
+it('evicts inactive LOD plans when the metadata retention budget is exhausted', async () => {
+  const f = fixture(1024 ** 2, 16);
+  const a = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(a)).toBe(true));
+  const b = f.frame({ ...f.input, shapes: [[[2, 2]], [[7, 7]], [[11, 11]]] });
+  await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+  // Once the new plan is ready, finish a frame so budget maintenance can run.
+  f.frame(b.input);
+  const again = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(again)).toBe(true));
+  expect(f.cache.stats.partitions).toBe(3);
+  f.cache.dispose();
+  expect(f.cache.stats.partitionBytes).toBe(0);
+});
+
+it('skips housekeeping only for unchanged settled resident frames and rechecks pressure or membership', async () => {
+  const f = fixture();
+  const r = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(r)).toBe(true));
+  f.frame();
+  const before = f.cache.stats.maintenanceSkips;
+  f.frame();
+  f.frame();
+  expect(f.cache.stats.maintenanceSkips).toBeGreaterThan(before);
+  const skipped = f.cache.stats.maintenanceSkips;
+  f.cache.begin(123);
+  f.cache.request(f.input, { id: 'p', sourceId: 's', revision: 0 });
+  f.cache.finish();
+  expect(f.cache.stats.maintenanceSkips).toBe(skipped);
+  const next = f.frame({ ...f.input, ids: new Uint32Array([1]) });
+  await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+  expect(f.cache.stats.maintenanceSkips).toBe(skipped);
+  f.cache.begin();
+  f.cache.finish();
+  expect(f.cache.stats.entries).toBe(0);
+  f.cache.clear();
+  f.cache.dispose();
+  expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(3);
+});
+
+it('batches small jobs after first feedback without changing logical meshes', async () => {
+  const f = fixture();
+  const buildBatch = vi.fn(async (packets: Parameters<typeof buildGeometryPacket>[0][]) =>
+    packets.map((p) => ({ result: buildGeometryPacket(p) })),
+  );
+  Object.assign(f.transport, { buildBatch });
+  const r = f.frame();
+  await vi.waitFor(() => expect(f.cache.complete(r)).toBe(true));
+  expect(f.transport.build).toHaveBeenCalledTimes(1);
+  expect(buildBatch).toHaveBeenCalledOnce();
+  expect(buildBatch.mock.calls[0][0]).toHaveLength(2);
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+  expect(f.cache.stats.builds).toBe(3);
+  f.cache.dispose();
+  expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(3);
+});
+it('isolates one failed batch member while retaining the other completed member', async () => {
+  const f = fixture();
+  Object.assign(f.transport, {
+    buildBatch: vi.fn(async (packets: Parameters<typeof buildGeometryPacket>[0][]) => [
+      { error: 'bad geometry' },
+      { result: buildGeometryPacket(packets[1]) },
+    ]),
+  });
+  const r = f.frame();
+  await vi.waitFor(() => expect(f.cache.failed(r)).toBe(true));
+  expect(f.report).toHaveBeenCalledTimes(1);
+  expect(f.cache.stats.builds).toBe(2);
+  expect(f.cache.drawable(r)).toHaveLength(2);
+  f.cache.dispose();
+});
+
+it('aborts a retired batch and rebuilds reselected members without stuck reserved cursors', async () => {
+  const f = fixture();
+  let wait = true;
+  const buildBatch = vi.fn(
+    (packets: Parameters<typeof buildGeometryPacket>[0][], signal: AbortSignal) => {
+      if (!wait) return Promise.resolve(packets.map((p) => ({ result: buildGeometryPacket(p) })));
+      wait = false;
+      return new Promise<never>((_, reject) =>
+        signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('cancelled', 'AbortError')),
+          { once: true },
+        ),
+      );
+    },
+  );
+  Object.assign(f.transport, { buildBatch });
+  f.frame();
+  await vi.waitFor(() => expect(buildBatch).toHaveBeenCalledTimes(1));
+  f.cache.clear({ sourceId: 's' });
+  const next = f.frame(f.input, 1);
+  await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+  expect(f.cache.stats.pending).toBe(0);
+  expect(f.report).not.toHaveBeenCalled();
+  f.cache.dispose();
+  expect(f.cache.stats.entries).toBe(0);
+});
+
+it("keeps parent requests out of each other's batch and dispatches their first jobs separately", async () => {
+  const f = fixture();
+  const buildBatch = vi.fn(async (packets: Parameters<typeof buildGeometryPacket>[0][]) =>
+    packets.map((p) => ({ result: buildGeometryPacket(p) })),
+  );
+  Object.assign(f.transport, { buildBatch });
+  const second: GeometryInput = {
+    ...f.input,
+    bounds: [100, 0, 116, 16],
+    shapes: [[[101, 1]], [[106, 6]], [[112, 12]]],
+  };
+  f.cache.begin();
+  const a = f.cache.request(f.input, { id: 'p', sourceId: 'a', revision: 0 });
+  const b = f.cache.request(second, { id: 'p', sourceId: 'b', revision: 0 });
+  f.cache.finish();
+  await vi.waitFor(() => expect(f.cache.complete(a) && f.cache.complete(b)).toBe(true));
+  expect(f.transport.build).toHaveBeenCalledTimes(2);
+  expect(buildBatch).toHaveBeenCalledTimes(2);
+  for (const [packets] of buildBatch.mock.calls) {
+    const source = packets[0].coordinates[0] < 50;
+    expect(packets.every((p) => p.coordinates[0] < 50 === source)).toBe(true);
+  }
+  f.cache.dispose();
+  expect(f.cache.stats.bytes).toBe(0);
+});

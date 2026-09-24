@@ -122,11 +122,13 @@ export class CanvasRenderService {
     }, delay);
   }
   cancelNavigation(): void {
+    this._cancelNavigationRefresh();
     const wasNavigating = this._navSnapshotTransform !== null;
     if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
     this._wheelSettleTimer = null;
     this._navSnapshotTransform = null;
     this._clearFastTransform();
+    this._painter?.setInteracting?.(false);
     if (wasNavigating) this.deps.events.fire('interactionend');
     this._scheduleRender();
   }
@@ -157,14 +159,21 @@ export class CanvasRenderService {
 
   _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
 
+  private _navigationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private _paintedTransform: { mx: number; my: number; bx: number; by: number } | null = null;
+
   _wheelSettleTimer: number | NodeJS.Timeout | null = null;
 
   static readonly _WHEEL_SETTLE_MS = 250;
 
   _ensureNavSnapshot(): void {
     if (this._navSnapshotTransform) return;
-    const t = this.deps.view._viewport.transform;
+    // A new gesture may overtake the previous gesture's queued settle redraw.
+    // Its reference is the pixels we actually painted, not the current camera.
+    const t = this._paintedTransform ?? this.deps.view._viewport.transform;
     this._navSnapshotTransform = { mx: t.mx, my: t.my, bx: t.bx, by: t.by };
+    this._painter?.setInteracting?.(true);
     this.deps.events.fire('interactionstart');
   }
 
@@ -183,12 +192,14 @@ export class CanvasRenderService {
   }
 
   _endNavGesture(): void {
+    this._cancelNavigationRefresh();
     const hasPendingNav = this._pendingAction === 'nav' && this._pendingRender > 0;
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) {
       clearTimeout(this._wheelSettleTimer);
       this._wheelSettleTimer = null;
     }
+    this._painter?.setInteracting?.(false);
     this._scheduler.notifyInteractionEnd(hasPendingNav);
     this.deps.events.fire('interactionend');
   }
@@ -269,11 +280,26 @@ export class CanvasRenderService {
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
-    // A full frame during a gesture replaces the bitmap that fast-nav transforms.
-    if (this._navSnapshotTransform) {
-      const { mx, my, bx, by } = this.deps.view._viewport.transform;
-      this._navSnapshotTransform = { mx, my, bx, by };
+    if (this._painter?.frameComplete === false && !this._painter.framePresented) {
+      if (this._painter.frameRetained && this._paintedTransform) {
+        const current = this.deps.view._viewport.transform,
+          previous = this._paintedTransform;
+        const sx = current.mx / previous.mx,
+          sy = current.my / previous.my;
+        this._applyFastTransform({
+          sx,
+          sy,
+          tx: current.bx - sx * previous.bx,
+          ty: current.by - sy * previous.by,
+        });
+        this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
+      } else this._paintedTransform = null;
+      return;
     }
+    // A full frame replaces the bitmap that all subsequent fast-nav gestures transform.
+    const { mx, my, bx, by } = this.deps.view._viewport.transform;
+    this._paintedTransform = { mx, my, bx, by };
+    if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
   }
 
@@ -384,10 +410,35 @@ export class CanvasRenderService {
     };
   }
 
+  private _cancelNavigationRefresh(): void {
+    if (this._navigationRefreshTimer !== null) clearTimeout(this._navigationRefreshTimer);
+    this._navigationRefreshTimer = null;
+  }
+  private _refreshNavigationSoon(): void {
+    if (this._navigationRefreshTimer !== null || !this._navSnapshotTransform || this._disposed)
+      return;
+    this._navigationRefreshTimer = setTimeout(() => {
+      this._navigationRefreshTimer = null;
+      if (!this._disposed && this._navSnapshotTransform) this._scheduleRender('redraw');
+    }, 80);
+  }
   _applyFastTransform(delta: AffineDelta): void {
-    this._canvas.style.transformOrigin = 'top left';
-    this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
-    // Keep preview strokes, handles and labels at their actual screen size.
+    const view = this.deps.view._viewport;
+    if (
+      this._painter.renderNavigation?.(
+        view.transform,
+        this._labels?.preview(view.transform, view.width, view.height),
+      )
+    ) {
+      this._clearFastTransform();
+      const { mx, my, bx, by } = view.transform;
+      this._paintedTransform = { mx, my, bx, by };
+      if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
+      this._refreshNavigationSoon();
+    } else {
+      this._canvas.style.transformOrigin = 'top left';
+      this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+    }
     this._renderEditOverlay();
   }
 
@@ -492,7 +543,7 @@ export class CanvasRenderService {
       globalThis.document,
       this._painter.createLabelAtlas?.(),
     );
-    this._labels.pause(this._navSnapshotTransform !== null);
+    this._labels.pause(this._navSnapshotTransform !== null && !this._painter.renderNavigation);
     const view = this.deps.view._viewport;
     this._painter.drawLabels(
       this._labels.request(
@@ -501,6 +552,7 @@ export class CanvasRenderService {
         view.width,
         view.height,
         window.devicePixelRatio || 1,
+        this._navSnapshotTransform !== null && !!this._painter.renderNavigation,
       ),
     );
   }
@@ -542,12 +594,17 @@ export class CanvasRenderService {
     this._overlayPainter = await this._createPainter(this._overlayCanvas, 'overlay');
     this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
-    this._scheduler = new RenderScheduler({
-      fullRedraw: () => this._renderFull(),
-      requestRedraw: () => this._scheduleRender('redraw', undefined, true),
-      fastNav: (delta) => this._applyFastTransform(delta),
-      getSnapshot: () => this._captureRenderSnapshot(),
-    });
+    this._scheduler = new RenderScheduler(
+      {
+        fullRedraw: () => this._renderFull(),
+        requestRedraw: () => this._scheduleRender('redraw', undefined, true),
+        fastNav: (delta) => this._applyFastTransform(delta),
+        getSnapshot: () => this._captureRenderSnapshot(),
+      },
+      this._painter.backend === 'webgl2' || this._painter.backend === 'webgpu'
+        ? 'snapshot'
+        : 'adaptive',
+    );
     this._updateSize();
   }
   private async _createPainter(
@@ -596,8 +653,10 @@ export class CanvasRenderService {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this._cancelNavigationRefresh();
     this._liveVertexState = null;
     this._liveEditArcs = null;
+    this._paintedTransform = null;
     this._icons?.dispose();
     this._icons = null;
     this._painter?.clearIcons?.();

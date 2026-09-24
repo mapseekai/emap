@@ -7,6 +7,8 @@ void Emap.create({
   container: 'map',
   renderer: 'webgpu',
   msdfWorkerUrl: new URL('https://example.test/emap-msdf-worker.js'),
+  geometryWorkerUrl: new URL('https://example.test/emap-geometry-worker.js'),
+  screenPathFiltering: false,
 });
 declare const map: Emap;
 const actual: RendererBackend | null = map.getRenderer();

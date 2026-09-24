@@ -45,3 +45,32 @@ describe('live vertex geometry invalidation', () => {
     expect(clearGeometryCache).toHaveBeenLastCalledWith({ sourceId: 'edited' });
   });
 });
+
+describe('navigation snapshot reference frame', () => {
+  it('keeps the last painted transform when a new gesture overtakes a queued settle redraw', () => {
+    const transform = { mx: 2, my: -2, bx: 0, by: 0 };
+    const render = new CanvasRenderService({
+      view: { _viewport: { transform } },
+      events: { fire: vi.fn() },
+    } as never);
+    Reflect.set(render, '_clearFastTransform', vi.fn());
+    Reflect.set(render, '_renderImpl', vi.fn());
+    Reflect.set(render, '_captureRenderSnapshot', () => ({
+      canvasWidth: 800,
+      canvasHeight: 600,
+      pixelRatio: 1,
+    }));
+    Reflect.set(render, '_scheduler', { recordFrame: vi.fn(), notifyInteractionEnd: vi.fn() });
+    render._renderFull();
+    render.beginNavigation();
+    transform.bx = 40;
+    expect(render._computeNavDelta().tx).toBe(40);
+    render.endNavigation();
+    render.beginNavigation();
+    transform.bx = 60;
+    expect(render._computeNavDelta().tx).toBe(60);
+    render._renderFull();
+    transform.bx = 70;
+    expect(render._computeNavDelta().tx).toBe(10);
+  });
+});

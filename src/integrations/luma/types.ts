@@ -1,12 +1,18 @@
 /** Render-only packed buffers; source datasets retain their original topology. */
 export interface GeometryBuffer {
   kind: 'fill' | 'line' | 'point' | 'path';
+  /** Valid-segment affine MSAA layout; not the raw shared-neighbor ABI. */
+  compactStroke?: boolean;
+  /** All endpoint low parts were exactly zero; no coordinate rounding occurred. */
+  compactStrokeXY?: boolean;
   /** Number of original non-zero path segments, excluding padding instances. */
   segmentCount?: number;
   /** Conservative source-space bounds of immutable contiguous path instance ranges. */
   pathRanges?: PathRangeData;
+  /** Immutable source-space bounds of indexed triangle ranges. */
+  fillRanges?: FillRangeData;
   vertices: Float32Array;
-  indices?: Uint32Array;
+  indices?: Uint16Array | Uint32Array;
   count: number;
 }
 export type Rgba = [number, number, number, number];
@@ -14,6 +20,8 @@ export type Rect = readonly [number, number, number, number];
 export interface MeshPaint {
   /** Derived Canvas screen paths only; original/edit meshes remain in source coordinates. */
   screenSpace?: boolean;
+  /** Original affine view for replaying derived screen paths at a new camera. */
+  screenView?: readonly [number, number, number, number];
   /** Internal immutable sprite style; source point buffers remain unchanged. */
   icon?: {
     size: readonly [number, number];
@@ -33,6 +41,9 @@ export interface MeshPaint {
 }
 
 export interface PathRangeData {
+  /** Compact screen envelope range metadata; extreme joins remain unculled. */
+  uncullable?: Uint8Array;
+  envelopeHalfWidths?: number;
   blockSize: number;
   bounds: Float64Array;
   segments: Uint32Array;
@@ -40,4 +51,13 @@ export interface PathRangeData {
 export interface PathDrawRange {
   firstInstance: number;
   count: number;
+}
+
+export interface FillRangeData {
+  blockSize: number;
+  bounds: Float64Array;
+}
+export interface FillDrawRange {
+  firstIndex: number;
+  indexCount: number;
 }

@@ -1,7 +1,7 @@
 import { groundBounds } from '../../../domain/geo/perspective-transform';
 import Flatbush from 'flatbush';
 import { AffineTransform } from '../../../domain/geo/transform';
-import type { PathDrawRange, PathRangeData } from '../../../integrations/luma/types';
+import type { PathDrawRange, PathRangeData, Rect } from '../../../integrations/luma/types';
 import type { Point } from './geometry';
 
 /** No geometry writes: each range describes the SAME instances in the existing GPU buffer.
@@ -48,11 +48,17 @@ export class PathRangeIndex {
   private index: InstanceType<typeof Flatbush> | null = null;
   private extent = [Infinity, Infinity, -Infinity, -Infinity];
   private total = 0;
+  private always: number[] = [];
+  private previousBounds: Rect | null = null;
+  private selected: PathRangeSelection | null = null;
+  readonly bytes: number;
   constructor(
     readonly data: PathRangeData,
     private count: number,
   ) {
     const n = data.segments.length;
+    this.bytes =
+      data.bounds.byteLength + data.segments.byteLength + (data.uncullable?.byteLength ?? 0);
     if (!n) return;
     this.index = new Flatbush(n);
     for (let i = 0; i < n; i++) {
@@ -66,6 +72,7 @@ export class PathRangeIndex {
         c = data.bounds[k + 2],
         d = data.bounds[k + 3];
       this.index.add(a, b, c, d);
+      if (data.uncullable?.[i]) this.always.push(i);
       this.total += data.segments[i];
       this.extent[0] = Math.min(this.extent[0], a);
       this.extent[1] = Math.min(this.extent[1], b);
@@ -73,6 +80,7 @@ export class PathRangeIndex {
       this.extent[3] = Math.max(this.extent[3], d);
     }
     this.index.finish();
+    this.bytes += this.index.data.byteLength + this.always.length * 8;
   }
   select(
     view: AffineTransform,
@@ -80,7 +88,22 @@ export class PathRangeIndex {
     height: number,
     padding: number,
   ): PathRangeSelection {
-    const [x0, y0, x1, y1] = groundBounds(view, width, height, padding);
+    return this.selectBounds(groundBounds(view, width, height, padding));
+  }
+  /** A paint scope computes this viewport once for all its immutable meshes. */
+  selectBounds(bounds: Rect): PathRangeSelection {
+    const last = this.previousBounds;
+    if (
+      last &&
+      this.selected &&
+      last[0] === bounds[0] &&
+      last[1] === bounds[1] &&
+      last[2] === bounds[2] &&
+      last[3] === bounds[3]
+    )
+      return this.selected;
+    this.previousBounds = [...bounds];
+    const [x0, y0, x1, y1] = bounds;
     // All visible: retain a single draw and avoid traversing all source ranges.
     if (
       x0 <= this.extent[0] &&
@@ -88,8 +111,11 @@ export class PathRangeIndex {
       x1 >= this.extent[2] &&
       y1 >= this.extent[3]
     )
-      return { ranges: null, segments: this.total, rejected: 0 };
-    const ids: number[] = this.index?.search(x0, y0, x1, y1) ?? [];
+      return (this.selected = { ranges: null, segments: this.total, rejected: 0 });
+    const ids: number[] = (this.index?.search(x0, y0, x1, y1) ?? []).filter(
+      (id: number) => !this.data.uncullable?.[id],
+    );
+    ids.push(...this.always);
     ids.sort((a, b) => a - b);
     const ranges: PathDrawRange[] = [];
     let segments = 0;
@@ -105,7 +131,7 @@ export class PathRangeIndex {
     }
     // Fragmented selections keep false positives instead of creating thousands of draw calls.
     if (ranges.length > 24 || segments > this.total * 0.8)
-      return { ranges: null, segments: this.total, rejected: 0 };
-    return { ranges, segments, rejected: this.total - segments };
+      return (this.selected = { ranges: null, segments: this.total, rejected: 0 });
+    return (this.selected = { ranges, segments, rejected: this.total - segments });
   }
 }

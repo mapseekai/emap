@@ -103,3 +103,23 @@ describe('asynchronous owner-bound labels', () => {
     f.manager.dispose();
   });
 });
+
+it('reprojects navigation anchors without scaling glyphs or CSS offsets, and immediately invalidates filtered content', async () => {
+  const f = fixture(),
+    frame = await prepare(f),
+    label = frame.labels[0],
+    writes = ctx.fillText.mock.calls.length;
+  const moved = new AffineTransform(2, 2, -100, -100),
+    preview = f.manager.preview(moved, 800, 600);
+  const next = preview.labels.find((l) => l.featureId === label.featureId)!;
+  expect(next).toBeDefined();
+  expect(next.raster).toBe(label.raster);
+  expect(next.x - moved.project(...next.anchor!)[0]).toBeCloseTo(label.screenOffset![0]);
+  expect(next.y - moved.project(...next.anchor!)[1]).toBeCloseTo(label.screenOffset![1]);
+  expect(ctx.fillText.mock.calls.length).toBe(writes);
+  (f.binding as any).mask = new Uint8Array([0, 1, 1]);
+  expect(f.manager.request([f.binding], moved, 800, 600, 1, true).labels).toHaveLength(0);
+  expect(f.manager.preview(moved, 800, 600).labels).toHaveLength(0);
+  await f.manager.settled();
+  f.manager.dispose();
+});

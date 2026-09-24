@@ -10,7 +10,8 @@ verifiedVersion: 0.13.0
 
 # Performance
 
-Tune four layers: Worker dataset replacement, shared-arc simplification, viewport spatial indexing, and dense-point render LOD.
+Tune dataset-operation and GPU-geometry Workers, shared-arc simplification, viewport/triangle
+indexes, dense-point LOD, bounded caches, progressive presentation, and navigation replenishment.
 
 
 ```ts
@@ -134,7 +135,7 @@ A fixed seed covers 100k, 1M, and 5M uniform and clustered points, reporting med
 The independent `luma-benchmark` waits for selected local files; it does not generate performance
 inputs. Canvas, WebGL2 and WebGPU share a native mapshaper dataset and conservative spatial culling.
 The existing PointLod is enabled for point backgrounds with a 3 CSS-pixel cell target. Lines and polygons remain full detail. GeoJSON streams through a Worker;
-full geometry is cached by revision. Default viewer/editor presets still use Canvas.
+full geometry is cached by revision. Formal viewer/editor presets now default to WebGL2, with explicit Canvas2D support.
 
 Open `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl` or `?gpu=webgpu`.
 Point aggregation has its own off switch and grid-size control, independent of symbol radius. Cells retain original representatives, not centroids or count bubbles.
@@ -319,3 +320,162 @@ fallback. Other sample types, palettes and cross-CRS display remain in the forma
 `?pipeline=legacy` keeps the planar reader as a diagnostic comparison, not an exact old-build
 reproduction. Add `--include-cdf` to `benchmark:luma:raster:dynamic` to include all five
 original TIFFs in the authorized `cdf20250916042716` folder.
+
+## Formal WebGL2 / WebGPU navigation and preparation caches
+
+These optimizations are enabled by default for formal maps with `renderer: 'webgl2'` or `'webgpu'`;
+no private benchmark flags are needed. Pan and wheel gestures replay resident GPU geometry at the
+current camera and coalesce new viewport planning approximately every 80 ms. New coverage and text
+can arrive before pointer release. Content changes invalidate old work. Canvas2D retains its adaptive
+bitmap policy; failed GPU submissions never become reusable navigation frames.
+
+Stable views reuse arc visibility and candidate-outline preparation instead of flattening/filtering
+again before a GPU mesh cache hit. Ordered input IDs and geometry revisions are still checked;
+dash direction, point density, layer order, selection and editing semantics remain unchanged.
+Additional selection snapshots share the existing geometry byte budget and owner lifecycle.
+
+Large formal GPU draws now use stable spatial chunks and a dedicated geometry Worker. The main
+thread cooperatively copies selected XY packets; triangulation and GPU packing run off-thread.
+The entire source dataset and attribute tables are never cloned into that Worker. Ready chunks are
+presented progressively by clearing and replaying available content in parent/bucket order, without
+accumulating alpha from previous partial frames. Icons preserve their original overlap order.
+
+```ts
+const map = await Emap.create({
+  container: 'map',
+  renderer: 'webgl2',
+  geometryWorkerUrl: '/assets/emap-geometry-worker.js', // Defaults beside the package bundle
+  screenPathFiltering: true,
+});
+```
+
+Screen filtering defaults to half-device-pixel display filtering of large opaque solid strokes,
+not source simplification or exact original-edge pixel parity. Dashes, arrows and translucent
+strokes retain raw paths. Set `screenPathFiltering: false` to disable it. Small layers and edit
+highlights remain synchronous. The geometry Worker is independent of the operation `useWorker` flag.
+
+The geometry soft budget is 256 MiB, with a bounded visible working set of at most 512 MiB.
+Over-budget work reports an error instead of truncating features. A single packet is limited to
+two million XY vertices; partition metadata has its own limit. Source data, JS/Worker temporaries,
+textures and driver memory are additional. Large `render()` calls can start asynchronous preparation
+and progressively present partial scenes rather than completing all geometry immediately.
+An additional exact per-feature Worker cache is bounded to 64 MiB / 20,000 entries; unchanged
+coordinates and ring offsets reuse triangulations across changing batch memberships.
+
+Chunking adds scheduling and draw-call costs, so compare cold responsiveness, settle time, cache
+reuse and memory separately instead of claiming every warm frame is faster. CPU submission time
+is not GPU execution time or FPS. Large polygons have conservative internal triangle-range indexes,
+reducing submitted indices without new coordinate uploads or dropping holes/enclosing triangles.
+Fragmented selections may conservatively draw the entire mesh.
+
+Existing labels reproject ground anchors with fixed CSS offsets; glyph and halo sizes do not scale
+with map zoom. Async layouts add newly visible labels during navigation. Atlas-generation checks
+prevent recycled UVs from displaying the wrong glyph. Cold tasks, file parsing and business indexes
+still cost time; active replenishment is not a promise of zero GPU work during a gesture.
+
+## Full GeoPackage browser stress test
+
+Run `pnpm benchmark:geopackage:browser --file /authorized/data.gpkg --renderer webgl2 --cycles 3`
+against the local example preview; webgpu and canvas2d are also supported. The harness checks native
+read-only SQLite row counts, the unchanged file hash, settled navigation, cache residency and disposal.
+It records import, rendering readiness, long tasks and process-group RSS separately. Default topology,
+point LOD, display arcs, paints and allocation budgets are retained. A passed stress route does not
+imply GPU rendering is faster than Canvas2D or that all viewports/DPRs fit memory.
+
+Cold polygon uploads use conservative viewport coverage and compact referenced vertices, retaining
+complete triangles and holes. Resident whole-source geometry remains reusable; source data is not clipped.
+The shared 256 MiB soft / 512 MiB hard geometry budget remains unchanged.
+
+### Binary batches and stable stroke caches
+
+The formal geometry Worker consumes flat XY/offset buffers. Complex polygons retain exact even-odd
+ring relationships; cheap single-ring features use a binary batch path. Child chunks have tight bounds,
+CPU preparation batches remain independent of small GPU allocations, and queue/eviction bookkeeping
+is incremental. Progressive notifications are coalesced using observed presentation cost.
+Opaque solid strokes use source-anchored detail frames at least as fine as the requested device resolution.
+Pans within existing coverage reuse these buffers; new coverage, members, revisions or detail levels still
+require preparation. The per-axis half-device-pixel approximation bound is retained, but the grid phase
+can change, so old and new filtered strokes are not claimed pixel-identical. Set `screenPathFiltering: false`
+to disable this approximation. Authoritative topology, export and editing coordinates are unchanged.
+Metadata-only registration reuses an unchanged DisplayArcs instead of constructing the same LOD twice.
+
+
+### Geometry cache and batch efficiency
+
+Formal GPU tessellation caching uses numeric feature keys and an intrusive LRU while retaining exact
+coordinate/ring-offset checks. Stable radix ordering preserves triangle order; eligible split fills
+use uint16 indices without changing coordinate precision or triangle contents. Four-byte upload
+padding is budgeted, never drawn. Large arc collections coalesce bounded consecutive batches after
+fine-chunk selection, preserving order, dash distances and endpoints; icons are not reordered.
+Completed LOD partition plans are retained in a bounded metadata cache and cleared on source removal
+or geometry revision changes. These defaults do not imply permanent residency of all geometry or
+faster GeoPackage decoding; full-file import and main-thread restoration remain separate costs.
+
+The GeoPackage browser benchmark accepts `--warm-frames 8` to record eight CPU submissions and draw
+counts after each view has settled. The default is 0. These measurements are not GPU duration/FPS
+and must not be added to file-read or cold-preparation timings.
+
+### Valid stroke instances and direct-upload buffer pages
+
+Formal affine GPU maps use valid-segment instances and precomputed join coefficients for suitable
+opaque solid strokes. Long-path storage regressions, nonuniform/perspective views, translucency,
+dashes and arrows retain the original path. No source coordinates or valid segments are removed.
+Precomputation changes floating-point evaluation order and may produce sparse MSAA boundary-sample
+differences; 4x antialiasing and the existing half-pixel display precision are retained.
+
+Compact strokes and uint16 fills upload directly into shared GPU pages. Only consecutive compatible
+resident slices are drawn together in their original order; no full-scene second copy is allocated.
+Page slack shares the original 256/512 MiB geometry limits. The 16 MiB new-page reserve is inside that
+budget, not extra GPU capacity. Releasing slices may temporarily increase fragmentation beyond the
+reserve; actual capacity remains accounted and empty pages are destroyed immediately. Index alignment
+uses complete zero-area triangles with a separate padding counter; they produce no pixels.
+
+`benchmark:geopackage:browser --warm-frames 8 --gpu-frames 12` samples CPU submission and GPU pass
+duration separately. GPU times are collected only when timestamp queries are supported; missing samples
+are not zero-duration results. Shared index buffers are counted once by physical object. Do not add
+CPU/GPU numbers or convert them directly to FPS. Precomputation and paging have cold-preparation costs,
+so not every view is faster.
+
+### Ordered command reuse and page recycling
+
+Formal GPU maps cache ordered meshes, exact visible ranges and compatible page spans instead of rebuilding
+submission plans and parsing identical styles on every frame. WebGPU automatically reuses stable fill and
+opaque MSAA-stroke commands while keeping four-sample antialiasing. Text, icons, raster images and unsupported
+paths retain their existing rendering. Command reuse does not reduce source features or actual triangles,
+and CPU savings must not be reported as proportional GPU savings.
+
+Retired page regions can be split and coalesced without moving live data or raising geometry budgets.
+Repeated ownership/eviction maintenance is skipped only for complete resident frames with unchanged
+requests and external memory pressure. File import and topology restoration remain separate costs.
+
+### Lossless stroke layouts and dependency invalidation
+
+Screen strokes omit only endpoint low components that are exactly zero, using 48-byte XY instances;
+nonzero low parts retain the 64-byte high/low layout. A task may hold both layouts, with their combined
+size still checked against the existing budget. Authoritative Float64 coordinates, caps and MSAA remain.
+Only uniform opaque MSAA stroke scopes may organize visible ranges by physical buffer; translucent
+strokes, dashes, arrows, icons and parent-layer order are not reordered. Retiring a mesh invalidates
+only the command scopes that reference it; unrelated recordings remain reusable. Import is unchanged,
+and equivalent speedups are not guaranteed at every viewport.
+
+### Bounded geometry microbatches
+
+Formal WebGL2/WebGPU maps coalesce small geometry jobs into at most eight jobs and 2 MiB of
+transferable backing storage per message. Large jobs remain isolated and one geometry Worker is used.
+The first job never waits for a batch; each chunk keeps its version and resource identity. Cancellation
+rewinds reserved cursors and cannot restore retired sources. Per-item errors retain other successful results.
+Unsimplified native arc lengths can avoid a coordinate-count scan. Speculative coordinate capacity is
+limited to 2 MiB; larger, retained-detail or custom inputs keep exact counting. Compaction may briefly
+retain the bounded capacity buffer plus its exact result.
+`geometryChunks.messages` and `jobs` distinguish requests from logical jobs; `batchAdmissionMs` records
+admission overhead separately. This improves rendering preparation, not GPU shading, file import or MSAA.
+Existing geometry and feature-cache budgets remain unchanged.
+
+### Resident stroke bounds and selected-range batching
+
+Formal GPU maps retain conservative contiguous-instance envelopes for eligible opaque screen strokes.
+Navigation selects resident Buffer ranges. Extreme joins stay drawable when safety cannot be proven,
+and nonuniform transforms do not reuse similarity-only envelopes. MSAA and coordinate/detail precision stay unchanged.
+Constant-RGBA fill scopes group by physical page. Adjacent partially visible slices can coalesce selected ranges,
+without crossing filtered holes, retired slices or unselected triangles. Candidate/submitted work and padding
+remain separately accounted. Lower submission overhead is not a guarantee of faster frames for every view or GPU.

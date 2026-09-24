@@ -20,7 +20,7 @@ const sourceRoot = resolve(repoRoot, 'dist');
 const examplesBuildRoot = resolve(examplesRoot, 'dist');
 
 function msdfAssets(): RuntimeAssetEntry[] {
-  const paths = ['emap-msdf-worker.js'];
+  const paths = ['emap-msdf-worker.js', 'emap-geometry-worker.js'];
   if (existsSync(resolve(sourceRoot, 'msdf'))) {
     paths.push(...readdirSync(resolve(sourceRoot, 'msdf'), { recursive: true, withFileTypes: true })
       .filter(e => e.isFile()).map(e => relative(sourceRoot, resolve(e.parentPath, e.name)).replaceAll('\\', '/')));

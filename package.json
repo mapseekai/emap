@@ -88,7 +88,8 @@
       "import": "./dist/emap-geotiff.mjs"
     },
     "./dist/emap-geotiff-worker.js": "./dist/emap-geotiff-worker.js",
-    "./dist/emap-msdf-worker.js": "./dist/emap-msdf-worker.js"
+    "./dist/emap-msdf-worker.js": "./dist/emap-msdf-worker.js",
+    "./dist/emap-geometry-worker.js": "./dist/emap-geometry-worker.js"
   },
   "sideEffects": [
     "*.css",
@@ -117,7 +118,8 @@
     "dist/sql-wasm.wasm",
     "dist/emap-geotiff-worker.js",
     "dist/emap-msdf-worker.js",
-    "dist/msdf"
+    "dist/msdf",
+    "dist/emap-geometry-worker.js"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -174,7 +176,9 @@
     "benchmark:luma:raster": "node scripts/benchmark-luma-raster.mjs",
     "benchmark:luma:raster:dynamic": "node scripts/benchmark-luma-raster-dynamic.mjs",
     "profile:luma:raster:memory": "node scripts/profile-luma-raster-memory.mjs",
-    "build:msdf": "node scripts/build-msdf-worker.mjs"
+    "build:msdf": "node scripts/build-msdf-worker.mjs",
+    "benchmark:formal:geometry": "node scripts/benchmark-formal-geometry.mjs",
+    "benchmark:geopackage:browser": "node scripts/benchmark-geopackage-browser.mjs"
   },
   "keywords": [
     "mapshaper",
@@ -209,6 +213,7 @@
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@types/earcut": "3.0.0",
+    "@webgpu/types": "0.1.72",
     "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^17.0.0",
     "esbuild": "^0.25.12",

@@ -81,3 +81,107 @@ describe('formal painter geometry cache', () => {
     expect(cache.stats.entries).toBe(0);
   });
 });
+
+describe('two-stage prepared geometry caching', () => {
+  it('skips preparation on equal snapshots, including selector copies, and retains geometry across different views', () => {
+    const { cache, gpu } = fixture();
+    const ids = new Uint32Array([1, 2]);
+    const prepare = vi.fn(() => ({
+      key: { references: [], values: ['path'], selections: [ids] },
+      build: geometry,
+    }));
+    const frame = (view: number, selection = ids) => {
+      cache.begin();
+      cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+      cache.getPrepared({ references: [], values: [view], selections: [selection] }, prepare);
+      cache.finish();
+    };
+    frame(1);
+    frame(1, ids.slice());
+    expect(prepare).toHaveBeenCalledOnce();
+    frame(2);
+    frame(2);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(gpu.createMesh).toHaveBeenCalledOnce();
+    ids[1] = 3;
+    frame(2);
+    expect(gpu.createMesh).toHaveBeenCalledTimes(2);
+    expect(cache.stats.bytes).toBe(geometry().vertices.byteLength + ids.byteLength * 2);
+    cache.clear();
+    expect(cache.stats).toEqual({ entries: 0, bytes: 0 });
+  });
+  it('accounts for changed preparation snapshots, with deferred budget eviction and no dangling owner references', () => {
+    const { cache, gpu } = fixture(24),
+      prepare = () => ({ key: { references: [], values: ['path'] }, build: geometry });
+    cache.begin();
+    cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+    cache.getPrepared({ references: [], values: [0], selections: [new Uint32Array([1])] }, prepare);
+    cache.finish();
+    expect(cache.stats.bytes).toBe(20);
+    cache.begin();
+    cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+    cache.getPrepared(
+      { references: [], values: [1], selections: [new Uint32Array([1, 2, 3])] },
+      prepare,
+    );
+    expect(cache.stats.bytes).toBe(28);
+    expect(gpu.destroyMesh).not.toHaveBeenCalled();
+    cache.finish();
+    expect(cache.stats).toEqual({ entries: 0, bytes: 0 });
+    expect(gpu.destroyMesh).toHaveBeenCalledOnce();
+  });
+  it('does not publish failed preparation keys or replace the old mesh on a failed allocation', () => {
+    const { cache, gpu } = fixture();
+    const draw = (view: number, prepare: () => any) => {
+      cache.begin();
+      cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+      return cache.getPrepared({ references: [], values: [view] }, prepare);
+    };
+    const good = () => ({ key: { references: [], values: [0] }, build: geometry });
+    draw(1, good);
+    cache.finish();
+    expect(() =>
+      draw(2, () => {
+        throw new Error('selection');
+      }),
+    ).toThrow('selection');
+    gpu.createMesh.mockImplementationOnce(() => {
+      throw new Error('allocation');
+    });
+    expect(() =>
+      draw(2, () => ({ key: { references: [], values: [1] }, build: geometry })),
+    ).toThrow('allocation');
+    expect(cache.stats.entries).toBe(1);
+    expect(gpu.destroyMesh).not.toHaveBeenCalled();
+    const retry = vi.fn(good);
+    draw(2, retry);
+    cache.finish();
+    expect(retry).toHaveBeenCalledOnce();
+    cache.clear({ sourceId: 's' });
+    expect(cache.stats.bytes).toBe(0);
+  });
+});
+
+it('retains a displayed replay frame above the soft limit but rejects new allocations above the hard limit', () => {
+  const gpu = {
+      createMesh: vi.fn((g) => ({ kind: g.kind, count: g.count, bytes: g.vertices.byteLength })),
+      destroyMesh: vi.fn(),
+    },
+    reserve = vi.fn();
+  const cache = new PainterGeometryCache(gpu as unknown as GpuRenderer, 10, true, reserve);
+  cache.begin();
+  cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+  cache.get({ references: [], values: ['point'] }, geometry);
+  cache.finish();
+  expect(cache.stats.bytes).toBe(16);
+  expect(gpu.destroyMesh).not.toHaveBeenCalled();
+  expect(reserve).toHaveBeenCalledWith(16);
+  cache.begin();
+  cache.contextFor({ id: 'p', sourceId: 's', revision: 0 });
+  cache.get({ references: [], values: ['point'] }, geometry);
+  cache.contextFor({ id: 'q', sourceId: 's', revision: 0 });
+  expect(() => cache.get({ references: [], values: ['point'] }, geometry)).toThrow('bounded');
+  expect(gpu.createMesh).toHaveBeenCalledOnce();
+  cache.clear();
+  expect(cache.stats.bytes).toBe(0);
+});

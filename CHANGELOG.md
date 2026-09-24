@@ -9,6 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Retain conservative resident stroke envelopes and group uniform fill pages; compile
+  adjacent partial draw ranges without crossing invisible or retired geometry.
+  Validate ranges against their original slices, retain owned WebGL range VAOs,
+  and disable similarity-only stroke clipping under nonuniform navigation.
+
+- Coalesce small formal GPU geometry jobs into bounded eight-job/2 MiB Worker messages,
+  retaining independent chunk/version identities, first feedback, cancellation and per-item errors.
+  Avoid a second coordinate scan for bounded unsimplified native arcs while keeping exact
+  counting for larger/retained/custom inputs. Keep one geometry Worker, source precision,
+  MSAA, GPU budgets and import behavior unchanged; report batching admission separately.
+
+- Pack uniform opaque strokes into lossless XY / high-low cohorts, omitting only exactly
+  zero low components; retain precise endpoints, source geometry, MSAA and the existing byte cap.
+  Group only order-independent opaque MSAA stroke scopes by physical buffers and selected ranges.
+  Retire cached draw plans by exact mesh dependencies instead of clearing unrelated scope bundles.
+
+- Cache exact ordered GPU draw plans and scope-local mesh styles; replay compatible
+  WebGPU mesh commands through a native MSAA4 bundle bridge without changing luma dependencies.
+  Preserve logical draw statistics, range/style/resource invalidation and mixed-pass ordering.
+  Split/coalesce retired geometry-page intervals without relocating live data and skip repeated
+  ownership maintenance only for unchanged complete resident frames under unchanged memory pressure.
+
+- Reduce opaque affine MSAA stroke work with valid-segment instances and Worker-precomputed
+  width-independent joins; retain long/raw, translucent, dashed, arrow and perspective paths.
+  Upload compact strokes and uint16 fills directly into bounded shared GPU pages, batch only
+  consecutive compatible resident slices, reuse freed slots and include page slack in existing
+  geometry limits. Preserve source geometry and 4x MSAA; floating-point join evaluation may
+  cause sparse edge-sample differences. Add separate CPU/GPU benchmark measurements.
+
+- Reduce formal GPU geometry overhead with numeric feature-cache keys and an intrusive LRU,
+  stable Morton radix ordering, lossless uint16 fill chunks with aligned uploads, and bounded
+  consecutive path batches after fine spatial selection. Retain completed LOD partition plans
+  within a bounded metadata cache and yield coordinate packing only at actual time slices.
+  Keep source precision, painter order, cancellation and the existing GPU memory limits.
+
+- Prepare formal GPU polygons and paths directly from flat coordinate/offset buffers;
+  batch cheap simple rings without per-feature meshes, use typed index remapping and
+  tight child bounds, and separate bounded CPU batches from small GPU allocations.
+  Reuse source-anchored, conservatively quantized stroke detail frames across pans;
+  the half-device-pixel approximation bound is retained, but snapping phase can differ.
+  Keep raw paths available with screenPathFiltering disabled. Use monotone job cursors,
+  cached ownership/eviction sets and cost-aware progressive presentation. Reuse unchanged
+  DisplayArcs on metadata-only source registration without weakening edit invalidation.
+
+- Present ready formal GPU geometry progressively in parent/paint order rather than waiting for
+  an entire viewport. Replay resident geometry at the current camera during navigation, coalesce
+  viewport replenishment, and preserve CSS label/icon dimensions. Add conservative indexed-triangle
+  culling within huge polygons and a bounded exact per-feature Worker tessellation cache.
+  Protect current replay buffers and shared allocation limits, cancel stale work, and guard MSDF
+  atlas generations against recycled UVs. Canvas2D retains its existing navigation policy.
+
+- Prepare large formal GPU geometry as stable, bounded chunks in a lazy dedicated Worker;
+  preserve overlapping chunk buffers, original attributes, source data and icon overlap order.
+  Add `geometryWorkerUrl` and optional `screenPathFiltering` (default true for opaque solid
+  large strokes). Submit complete ordered frames, cancel obsolete preparation, bound GPU
+  allocations, and report over-budget geometry instead of silently omitting source features.
+
 - Add shared Canvas2D / WebGL2 / WebGPU renderer buttons to every example header.
   Pass the selected backend explicitly on every formal map creation, preserve other URL
   settings on reload, keep recovery controls available before GPU initialization, and
@@ -23,6 +80,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   experimental paths are not implicitly promoted to full main-map parity.
 
 ### Fixed
+
+- Protect all preceding-frame geometry requests while the next frame is collecting
+  draw slots, and verify resident entries before declaring asynchronous geometry complete.
+  Recover missing entries instead of silently dropping chunks or stalling navigation.
+- Bound cold polygon GPU uploads to conservative viewport coverage with a small stable
+  guard band, retaining complete triangles, holes and original source records. Reuse
+  resident full-coverage meshes when possible; do not raise the shared geometry budget.
+
+- Reuse valid formal WebGL2/WebGPU frames during pan/zoom regardless of CPU submission
+  time, while retaining Canvas2D's adaptive navigation and full redraws for content changes.
+  Cache viewport-filtered arc and candidate-outline preparation before geometry lookup;
+  preserve signed/directional strokes, mutable selectors, edit revisions, source disposal,
+  and the existing bounded geometry budget without changing point density or display precision.
 
 - Keep GPU main geometry synchronized with live vertex previews without invalidating unrelated
   sources; finish a drag safely when history listeners clear hover state after truncating redo.

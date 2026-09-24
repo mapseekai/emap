@@ -6,6 +6,7 @@ const requiredBundles = [
   'dist/emap.mjs',
   'dist/emap.js',
   'dist/emap-worker.js',
+  'dist/emap-geometry-worker.js',
   'dist/emap-arrow.mjs',
   'dist/emap-arrow.js',
   'dist/emap-duckdb.mjs',

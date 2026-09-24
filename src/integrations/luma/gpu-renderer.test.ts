@@ -1,3 +1,4 @@
+import type { GeometryBuffer } from './types';
 import { describe, expect, it, vi } from 'vitest';
 import { GpuRenderer } from './gpu-renderer';
 
@@ -519,4 +520,236 @@ it('releases icon style bindings when a shared image texture is evicted', () => 
   expect(style.buffer.destroy).toHaveBeenCalledOnce();
   expect(renderer.styles.size).toBe(0);
   expect(renderer.stats.liveTextureBytes).toBe(0);
+});
+
+function indexFixture(backend: 'webgl' | 'webgpu') {
+  const allocations: {
+    byteLength: number;
+    indexType?: string;
+    write: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  }[] = [];
+  const device = {
+    type: backend,
+    createBuffer: vi.fn((props) => {
+      const buffer = {
+        ...props,
+        write: vi.fn((value) => {
+          if (backend === 'webgpu' && value.byteLength % 4) throw new Error('unaligned upload');
+        }),
+        destroy: vi.fn(),
+      };
+      allocations.push(buffer);
+      return buffer;
+    }),
+  };
+  const pass = {
+    draw: vi.fn(() => true),
+    setPipeline: vi.fn(),
+    setBindings: vi.fn(),
+    setVertexArray: vi.fn(),
+  };
+  // Only the allocation/draw ABI is mocked. Browser tests cover actual luma adapters.
+  const gpu = Object.create(GpuRenderer.prototype) as GpuRenderer;
+  Object.assign(gpu, {
+    device,
+    pass,
+    meshes: new Set(),
+    fullScissor: true,
+    pipelines: new Map([['fill', { pipeline: {} }]]),
+    style: () => ({ bindings: {} }),
+    vertexArray: () => ({ destroy: vi.fn() }),
+    flushCircles: () => {},
+    stats: {
+      uploads: 0,
+      uploadedBytes: 0,
+      liveBufferBytes: 0,
+      drawCalls: 0,
+      fillFrameCandidates: 0,
+      fillFrameSubmitted: 0,
+    },
+  });
+  return { gpu, allocations, pass };
+}
+describe('portable fill index ABI', () => {
+  for (const backend of ['webgl', 'webgpu'] as const) {
+    it(`${backend}: pads odd uint16 uploads but never draws padding or retains CPU data`, () => {
+      const f = indexFixture(backend);
+      const indices = Uint16Array.from([99, 0, 1, 2, 99]).subarray(1, 4);
+      const g: GeometryBuffer = { kind: 'fill', vertices: new Float32Array(12), indices, count: 3 };
+      const mesh = f.gpu.createMesh(g)!;
+      expect(f.allocations[1].indexType).toBe('uint16');
+      expect(f.allocations[1].byteLength).toBe(8);
+      expect(f.allocations[1].write.mock.calls[0][0]).toEqual(Uint16Array.from([0, 1, 2, 0]));
+      expect(f.allocations[1]).not.toHaveProperty('data');
+      expect(mesh.bytes).toBe(56);
+      f.gpu.drawMesh(mesh, { color: [1, 0, 0, 1] });
+      expect(f.pass.draw.mock.calls[0][0].indexCount).toBe(3);
+      f.gpu.destroyMesh(mesh);
+      expect(f.gpu.stats.liveBufferBytes).toBe(0);
+      for (const allocation of f.allocations) expect(allocation.destroy).toHaveBeenCalledOnce();
+    });
+    for (const ArrayType of [Uint16Array, Uint32Array]) {
+      it(`${backend}: ${ArrayType.name} uses the correct indexed draw offset`, () => {
+        const f = indexFixture(backend);
+        const mesh = f.gpu.createMesh({
+          kind: 'fill',
+          vertices: new Float32Array(24),
+          indices: ArrayType.from([0, 1, 2, 3, 4, 5]),
+          count: 6,
+        })!;
+        f.gpu.drawMesh(mesh, { color: [1, 0, 0, 1] }, undefined, [
+          { firstIndex: 3, indexCount: 3 },
+        ]);
+        expect(f.pass.draw.mock.calls[0][0]).toMatchObject(
+          backend === 'webgpu'
+            ? { firstIndex: 3, indexCount: 3 }
+            : { firstVertex: 3 * ArrayType.BYTES_PER_ELEMENT, indexCount: 3 },
+        );
+      });
+    }
+  }
+});
+
+describe('pooled resident draw spans', () => {
+  for (const backend of ['webgl', 'webgpu'] as const) {
+    const setup = () => {
+      const draw = vi.fn((_options: Record<string, number | boolean>) => true);
+      const pass = {
+        draw,
+        setPipeline: vi.fn(),
+        setBindings: vi.fn(),
+        setVertexArray: vi.fn(),
+        setParameters: vi.fn(),
+      };
+      const createBuffer = vi.fn((props: { byteLength: number }) => ({
+        ...props,
+        write: vi.fn(),
+        destroy: vi.fn(),
+      }));
+      const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
+        device: { type: backend, createBuffer },
+        meshPagesEnabled: true,
+        meshes: new Set(),
+        disposed: false,
+        lost: false,
+        fullScissor: true,
+        pass,
+        circleQueue: [],
+        pathMode: 'auto',
+        pathSamples: 4,
+        pointDepthDirty: false,
+        pointGroup: null,
+        pipelines: new Map([
+          ['fill', { pipeline: 'fill' }],
+          ['path-msaa-compact', { pipeline: 'compact' }],
+        ]),
+        style: () => ({ bindings: {} }),
+        vertexArray: vi.fn(() => ({ destroy: vi.fn() })),
+        stats: {
+          uploads: 0,
+          uploadedBytes: 0,
+          liveBufferBytes: 0,
+          drawCalls: 0,
+          fillFrameCandidates: 0,
+          fillFrameSubmitted: 0,
+          pathMsaaDraws: 0,
+        },
+      });
+      return { renderer, pass, createBuffer };
+    };
+    it(`${backend}: merges only adjacent slices, excludes a retired middle feature and counts real triangles`, () => {
+      const { renderer, pass } = setup();
+      const g = {
+        kind: 'fill' as const,
+        vertices: new Float32Array(12),
+        indices: new Uint16Array([0, 1, 2]),
+        count: 3,
+      };
+      const a = renderer.createMesh(g, 's')!,
+        b = renderer.createMesh(g, 's')!,
+        c = renderer.createMesh(g, 's')!;
+      const paint = { color: [1, 0, 0, 0.5] as [number, number, number, number] };
+      renderer.drawMeshBatch([a, b, c], paint);
+      expect(pass.draw).toHaveBeenCalledTimes(1);
+      expect(pass.draw.mock.calls[0][0].indexCount).toBe(15);
+      expect(renderer.stats.fillFrameSubmitted).toBe(3);
+      renderer.destroyMesh(b);
+      pass.draw.mockClear();
+      renderer.drawMeshBatch([a, c], paint);
+      expect(pass.draw).toHaveBeenCalledTimes(2);
+      const d = renderer.createMesh(g, 's')!;
+      expect(d.firstIndex).toBe(b.firstIndex);
+      pass.draw.mockClear();
+      renderer.drawMeshBatch([a, d, c], paint);
+      expect(pass.draw).toHaveBeenCalledTimes(1);
+      renderer.destroyMesh(a);
+      renderer.destroyMesh(c);
+      renderer.destroyMesh(d);
+      expect(renderer.stats.liveBufferBytes).toBe(0);
+      expect(renderer.pageStats.pages).toBe(0);
+    });
+    it(`${backend}: compact slice offsets remain correct when drawing individually or as a run`, () => {
+      const { renderer, pass } = setup();
+      const g = {
+        kind: 'path' as const,
+        compactStroke: true,
+        vertices: new Float32Array(16),
+        count: 1,
+      };
+      const a = renderer.createMesh(g, 's')!,
+        b = renderer.createMesh(g, 's')!;
+      const paint = { color: [1, 0, 0, 1] as [number, number, number, number], width: 2 };
+      renderer.drawMesh(b, paint);
+      expect(pass.draw.mock.calls[0][0].firstInstance ?? 0).toBe(backend === 'webgpu' ? 1 : 0);
+      pass.draw.mockClear();
+      renderer.drawMeshBatch([a, b], paint);
+      expect(pass.draw).toHaveBeenCalledTimes(1);
+      expect(pass.draw.mock.calls[0][0].instanceCount).toBe(2);
+      renderer.destroyMesh(a);
+      renderer.destroyMesh(b);
+      expect(renderer.stats.liveBufferBytes).toBe(0);
+    });
+  }
+});
+
+it('a retired mesh never suppresses other resident commands in the same ordered scope', () => {
+  const { gpu, pass } = indexFixture('webgl');
+  const geometry: GeometryBuffer = {
+    kind: 'fill',
+    vertices: new Float32Array(12),
+    indices: new Uint16Array([0, 1, 2]),
+    count: 3,
+  };
+  const retired = gpu.createMesh(geometry)!,
+    live = gpu.createMesh(geometry)!;
+  gpu.destroyMesh(retired);
+  gpu.drawMeshSequence([{ mesh: retired }, { mesh: live }], { color: [1, 0, 0, 1] });
+  expect(pass.draw).toHaveBeenCalledOnce();
+  gpu.destroyMesh(live);
+  expect(gpu.stats.liveBufferBytes).toBe(0);
+});
+
+it('physical page ordering is restricted to opaque solid MSAA path scopes', () => {
+  const { gpu } = indexFixture('webgl');
+  const plans: { orderOpaque: boolean }[] = [];
+  Object.assign(gpu, {
+    strokeBatchingEnabled: true,
+    pathMode: 'auto',
+    pathSamples: 4,
+    runMeshPlan: (p: { orderOpaque: boolean }) => plans.push(p),
+  });
+  const m = gpu.createMesh({ kind: 'path', vertices: new Float32Array(28), count: 1 })!;
+  for (const [opacity, dash] of [
+    [1, undefined],
+    [0.5, undefined],
+    [1, [2, 3]],
+  ] as const) {
+    gpu.drawMeshSequence([{ mesh: m }], { color: [1, 0, 0, opacity], width: 2, dash });
+  }
+  gpu.pathMode = 'legacy';
+  gpu.drawMeshSequence([{ mesh: m }], { color: [1, 0, 0, 1], width: 2 });
+  expect(plans.map((p) => !!p.orderOpaque)).toEqual([true, false, false, false]);
+  gpu.destroyMesh(m);
+  expect(gpu.stats.liveBufferBytes).toBe(0);
 });

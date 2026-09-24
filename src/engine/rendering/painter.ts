@@ -91,9 +91,23 @@ export interface CorePainter {
   /** @internal Optional lifecycle for GPU painters; existing synchronous painters remain valid. */
   readonly backend?: import('../map/renderer').RendererBackend;
   finishFrame?(): void;
+  /** @internal A progressive scene may be presented before every request is ready. */
+  readonly framePresented?: boolean;
+  renderNavigation?(view: AffineTransform, labels?: LabelFrame): boolean;
+  readonly frameComplete?: boolean;
+  readonly frameRetained?: boolean;
+  setInteracting?(value: boolean): void;
   dispose?(): void;
   clearGeometryCache?(scope?: { sourceId?: string; layerId?: string }): void;
-  setLayerContext?(context: { id: string; sourceId: string; revision: number } | null): void;
+  setLayerContext?(
+    context: {
+      id: string;
+      sourceId: string;
+      revision: number;
+      bounds?: readonly [number, number, number, number];
+      content?: string;
+    } | null,
+  ): void;
   createLabelAtlas?(): import('./labels/text-types').LabelAtlasProvider;
   clearLabels?(): void;
   forgetImage?(image: CanvasImageSource): void;
@@ -119,6 +133,11 @@ export interface CorePainter {
     /** Immutable decoded raster tiles can reuse their texture without per-frame uploads. */
     immutable?: boolean,
   ): void;
+  /** @internal Optional lazy unbucketed outline preparation. Shared arcs keep
+   * their forward orientation, matching the legacy outline collector (including dashes).
+   * Existing painters continue to receive the prepared arc list through drawArcs.
+   */
+  drawOutlinePaths?: CorePainter['drawPaths'];
   drawPaths(
     shapes: readonly (FeatureShape | null | undefined)[],
     style: StrokeStyle,
