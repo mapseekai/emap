@@ -28,9 +28,6 @@ importers:
       '@luma.gl/core':
         specifier: 10.0.0-alpha.1
         version: 10.0.0-alpha.1
-      '@luma.gl/engine':
-        specifier: 10.0.0-alpha.1
-        version: 10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)(@luma.gl/shadertools@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1))
       '@luma.gl/webgl':
         specifier: 10.0.0-alpha.1
         version: 10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)
@@ -2123,12 +2120,6 @@ packages:
 
   '@luma.gl/core@10.0.0-alpha.1':
     resolution: {integrity: sha512-aVJupOW212LR5WZ6eC5zLghhq5jcm+TwLVCwAra1wMQlPBkcRRWDctI9jFvyP3J7pWi2tQOT3M/9ySjQZQbCCw==}
-
-  '@luma.gl/engine@10.0.0-alpha.1':
-    resolution: {integrity: sha512-ilNp5ZbVpHPC46W8TjqSgDehv0NM2xccEZaOjz1S5NtV+TUJWQG8APPzretdZG0BN7x/2jaLQp1+8F0FVsx5Hg==}
-    peerDependencies:
-      '@luma.gl/core': ~10.0.0-alpha.1
-      '@luma.gl/shadertools': ~10.0.0-alpha.1
 
   '@luma.gl/shadertools@10.0.0-alpha.1':
     resolution: {integrity: sha512-qDWnwQoIqRgqplMDx/EJM5Zjqhd3QypQiAIHIgua1mLCzQ9ie17IyiuFK6doZfNIk+C0wkwjTjzUQeLTqeM2/g==}
@@ -10307,15 +10298,6 @@ snapshots:
       '@probe.gl/log': 4.1.2
       '@probe.gl/stats': 4.1.2
       '@types/offscreencanvas': 2019.7.3
-
-  '@luma.gl/engine@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)(@luma.gl/shadertools@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1))':
-    dependencies:
-      '@luma.gl/core': 10.0.0-alpha.1
-      '@luma.gl/shadertools': 10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)
-      '@math.gl/core': 4.1.0
-      '@math.gl/types': 4.1.0
-      '@probe.gl/log': 4.1.2
-      '@probe.gl/stats': 4.1.2
 
   '@luma.gl/shadertools@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)':
     dependencies:

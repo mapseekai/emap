@@ -325,7 +325,15 @@ export class MeshCommandCache {
     }
   }
   clear(): void {
-    for (const slot of this.entries.keys()) this.drop(slot);
+    const errors: unknown[] = [];
+    for (const slot of this.entries.keys()) {
+      try {
+        this.drop(slot);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Mesh command cleanup failed');
   }
   private drop(slot: number): void {
     const plan = this.entries.get(slot);
@@ -335,10 +343,11 @@ export class MeshCommandCache {
       slots?.delete(slot);
       if (!slots?.size) this.dependencies.delete(mesh);
     }
-    plan.dispose?.();
+    const dispose = plan.dispose;
     plan.native = undefined;
     plan.dispose = undefined;
     this.commands -= plan.weight;
     this.entries.delete(slot);
+    dispose?.();
   }
 }

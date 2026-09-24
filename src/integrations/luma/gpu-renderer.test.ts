@@ -670,18 +670,27 @@ describe('pooled resident draw spans', () => {
         b = renderer.createMesh(g, 's')!,
         c = renderer.createMesh(g, 's')!;
       const paint = { color: [1, 0, 0, 0.5] as [number, number, number, number] };
-      renderer.drawMeshBatch([a, b, c], paint);
+      renderer.drawMeshSequence(
+        [a, b, c].map((mesh) => ({ mesh })),
+        paint,
+      );
       expect(pass.draw).toHaveBeenCalledTimes(1);
       expect(pass.draw.mock.calls[0][0].indexCount).toBe(15);
       expect(renderer.stats.fillFrameSubmitted).toBe(3);
       renderer.destroyMesh(b);
       pass.draw.mockClear();
-      renderer.drawMeshBatch([a, c], paint);
+      renderer.drawMeshSequence(
+        [a, c].map((mesh) => ({ mesh })),
+        paint,
+      );
       expect(pass.draw).toHaveBeenCalledTimes(2);
       const d = renderer.createMesh(g, 's')!;
       expect(d.firstIndex).toBe(b.firstIndex);
       pass.draw.mockClear();
-      renderer.drawMeshBatch([a, d, c], paint);
+      renderer.drawMeshSequence(
+        [a, d, c].map((mesh) => ({ mesh })),
+        paint,
+      );
       expect(pass.draw).toHaveBeenCalledTimes(1);
       renderer.destroyMesh(a);
       renderer.destroyMesh(c);
@@ -703,7 +712,10 @@ describe('pooled resident draw spans', () => {
       renderer.drawMesh(b, paint);
       expect(pass.draw.mock.calls[0][0].firstInstance ?? 0).toBe(backend === 'webgpu' ? 1 : 0);
       pass.draw.mockClear();
-      renderer.drawMeshBatch([a, b], paint);
+      renderer.drawMeshSequence(
+        [a, b].map((mesh) => ({ mesh })),
+        paint,
+      );
       expect(pass.draw).toHaveBeenCalledTimes(1);
       expect(pass.draw.mock.calls[0][0].instanceCount).toBe(2);
       renderer.destroyMesh(a);
@@ -752,4 +764,223 @@ it('physical page ordering is restricted to opaque solid MSAA path scopes', () =
   expect(plans.map((p) => !!p.orderOpaque)).toEqual([true, false, false, false]);
   gpu.destroyMesh(m);
   expect(gpu.stats.liveBufferBytes).toBe(0);
+});
+
+describe('bounded GPU style and image lifetimes', () => {
+  function lifetime(backend: 'webgl' | 'webgpu' = 'webgl') {
+    const allocations: any[] = [];
+    const createBuffer = vi.fn((props) => {
+      const buffer = { byteLength: props.byteLength, write: vi.fn(), destroy: vi.fn() };
+      allocations.push(buffer);
+      return buffer;
+    });
+    const createTexture = vi.fn((props) => ({
+      ...props,
+      destroy: vi.fn(),
+      writeData: vi.fn(),
+      setSampler: vi.fn(),
+    }));
+    const g: any = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: {
+        type: backend,
+        createBuffer,
+        createTexture,
+        submit: vi.fn(),
+        limits: { maxTextureDimension2D: 4096 },
+      },
+      styles: new Map(),
+      images: new Map(),
+      dashes: new Map(),
+      meshes: new Set(),
+      pipelines: new Map(),
+      frameData: new Float32Array(60),
+      frame: 0,
+      width: 800,
+      height: 600,
+      nearest: {},
+      linear: {},
+      circleQueue: [],
+      stats: { uniformWrites: 0, liveBufferBytes: 0, liveTextureBytes: 0, liveTextures: 0 },
+    });
+    const end = () => {
+      g.pass = { end: vi.fn() };
+      g.end();
+    };
+    return { g, end, allocations };
+  }
+  it('retires inactive uniforms after submission instead of retaining historical paints', () => {
+    const { g, end, allocations } = lifetime();
+    for (let i = 1; i <= 1000; i++) {
+      g.frame = i;
+      g.style('point', { color: [0, 0, 1, 1], radius: i });
+      end();
+      expect(g.styles.size).toBe(1);
+    }
+    expect(allocations.filter((b) => !b.destroy.mock.calls.length)).toHaveLength(1);
+    g.frame++;
+    end();
+    expect(g.styles.size).toBe(0);
+    expect(allocations.every((b) => b.destroy.mock.calls.length === 1)).toBe(true);
+  });
+  it('keeps a style marked by native replay, then retires it after its plan ends', () => {
+    const { g, end } = lifetime('webgpu');
+    g.frame = 1;
+    const paint = { color: [1, 0, 0, 1] };
+    const style = g.style('fill', paint);
+    end();
+    g.frame++;
+    const ordering: string[] = [];
+    g.commandCache = { end: () => ordering.push('retire-plans') };
+    g.device.submit = () => ordering.push('submit');
+    style.buffer.destroy.mockImplementation(() => ordering.push('destroy-uniform'));
+    expect(g.style('fill', paint)).toBe(style);
+    end();
+    expect(style.buffer.destroy).not.toHaveBeenCalled();
+    g.frame++;
+    end();
+    expect(ordering.slice(-3)).toEqual(['retire-plans', 'submit', 'destroy-uniform']);
+  });
+  it('releases old dash textures along with inactive dash paints', () => {
+    const { g, end } = lifetime();
+    for (let i = 1; i <= 40; i++) {
+      g.frame = i;
+      g.style('path', { color: [0, 0, 1, 1], dash: [i, 3] });
+      end();
+      expect(g.dashes.size).toBe(1);
+    }
+    g.frame++;
+    end();
+    expect(g.dashes.size).toBe(0);
+  });
+  it('automatic texture eviction removes image bindings even after forgetImage can no longer find it', () => {
+    const { g, end } = lifetime();
+    const texture = { width: 40, height: 20, destroy: vi.fn() },
+      image = {};
+    const uniform = { destroy: vi.fn() };
+    g.frame = 3;
+    g.images.set(image, { texture, frame: 2, immutable: false });
+    g.styles.set('image:test', { frame: 3, buffer: uniform, images: new Map([[texture, {}]]) });
+    g.stats.liveTextures = 1;
+    g.stats.liveTextureBytes = 3200;
+    end();
+    g.forgetImage(image);
+    expect(texture.destroy).toHaveBeenCalledOnce();
+    expect(uniform.destroy).toHaveBeenCalledOnce();
+    expect(g.styles.size).toBe(0);
+  });
+  it('accounts style buffers and framebuffer attachments separately from geometry', () => {
+    const { g } = lifetime('webgpu');
+    g.style('fill', { color: [1, 0, 0, 1] });
+    g.msaaTexture = { width: 800, height: 600, samples: 4 };
+    g.pointDepthTexture = { width: 800, height: 600, samples: 4 };
+    expect(g.memoryStats.styleUniformBytes).toBe(240);
+    expect(g.memoryStats.attachmentNominalBytes).toBe(800 * 600 * 4 * 4 * 2);
+    expect(g.memoryStats.geometryBufferBytes).toBe(0);
+  });
+});
+
+it('destroys remaining GPU resources and the device even if ending a pass or a buffer destroy fails', () => {
+  const bad = {
+    destroy: vi.fn(() => {
+      throw new Error('buffer destroy failed');
+    }),
+  };
+  const good = { destroy: vi.fn() };
+  const mesh: any = { kind: 'fill', buffer: bad, indices: good, bytes: 60, count: 3 };
+  const device: any = { type: 'webgl', destroy: vi.fn(), gl: { getExtension: () => null } };
+  const g: any = Object.assign(Object.create(GpuRenderer.prototype), {
+    device,
+    canvas: { removeEventListener: vi.fn() },
+    pass: {
+      end: vi.fn(() => {
+        throw new Error('pass end failed');
+      }),
+    },
+    circleQueue: [],
+    meshes: new Set([mesh]),
+    images: new Map(),
+    dashes: new Map(),
+    pipelines: new Map(),
+    styles: new Map(),
+    stats: { liveBufferBytes: 60 },
+    quad: { destroy: vi.fn() },
+  });
+  expect(() => g.dispose()).toThrow();
+  expect(bad.destroy).toHaveBeenCalledOnce();
+  expect(good.destroy).toHaveBeenCalledOnce();
+  expect(g.quad.destroy).toHaveBeenCalledOnce();
+  expect(device.destroy).toHaveBeenCalledOnce();
+  expect(g.meshes.size).toBe(0);
+  expect(g.disposed).toBe(true);
+  expect(() => g.dispose()).not.toThrow();
+});
+
+for (const backend of ['webgl', 'webgpu'] as const)
+  it(`${backend}: repeated images reuse bindings and sampler changes remain explicit`, async () => {
+    const { AffineTransform } = await import('../../domain/geo/transform');
+    const pass = {
+      setParameters: vi.fn(),
+      setPipeline: vi.fn(),
+      setBindings: vi.fn(),
+      setVertexArray: vi.fn(),
+      draw: vi.fn(() => true),
+    };
+    const texture = { setSampler: vi.fn() };
+    const imageEntry = { texture, smoothing: true };
+    const style = { buffer: {}, images: new Map() };
+    const g: any = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: { type: backend },
+      pass,
+      canvas: { width: 200, height: 100 },
+      width: 200,
+      height: 100,
+      transform: new AffineTransform(1, -1, 0, 100),
+      flushCircles: vi.fn(),
+      imageTexture: () => imageEntry,
+      style: () => style,
+      linear: {},
+      nearest: {},
+      imageVertexArray: {},
+      pipelines: new Map([['image', { pipeline: {} }]]),
+      stats: { drawCalls: 0 },
+    });
+    const image = {};
+    for (let i = 0; i < 3; i++) g.drawImage(image, [20, 10, 100, 70]);
+    expect(new Set(pass.setBindings.mock.calls.map((call) => call[0])).size).toBe(1);
+    g.drawImage(image, [20, 10, 100, 70], 1, false);
+    expect(texture.setSampler).toHaveBeenLastCalledWith(g.nearest);
+    if (backend === 'webgpu')
+      expect(pass.setBindings.mock.lastCall![0].imageSampler).toBe(g.nearest);
+    else expect(pass.setBindings.mock.lastCall![0]).toBe(pass.setBindings.mock.calls[0][0]);
+  });
+
+it('clearImages releases a shared image uniform once across multiple textures', () => {
+  const uniform = { destroy: vi.fn() },
+    a = { width: 1, height: 1, destroy: vi.fn() },
+    b = { width: 1, height: 1, destroy: vi.fn() };
+  const g: any = Object.assign(Object.create(GpuRenderer.prototype), {
+    images: new Map([
+      [{}, { texture: a }],
+      [{}, { texture: b }],
+    ]),
+    styles: new Map([
+      [
+        'image:shared',
+        {
+          buffer: uniform,
+          images: new Map([
+            [a, {}],
+            [b, {}],
+          ]),
+        },
+      ],
+    ]),
+    stats: { liveTextureBytes: 8, liveTextures: 2 },
+  });
+  g.clearImages();
+  expect(uniform.destroy).toHaveBeenCalledOnce();
+  expect(a.destroy).toHaveBeenCalledOnce();
+  expect(b.destroy).toHaveBeenCalledOnce();
+  expect(g.styles.size).toBe(0);
+  expect(g.stats.liveTextures).toBe(0);
 });

@@ -911,10 +911,22 @@ export class GeometryChunkCache {
     if (this.notification !== null) clearTimeout(this.notification);
     this.notification = null;
     this.active?.controller.abort();
-    this.clear();
-    this.worker.dispose();
-    this.pinned.clear();
-    this.latest.clear();
-    this.selectionChanged();
+    try {
+      this.worker.dispose();
+    } finally {
+      try {
+        this.clear();
+      } finally {
+        for (const request of this.requests.values()) request.controller.abort();
+        for (const plan of this.plans.values()) plan.controller.abort();
+        this.requests.clear();
+        this.plans.clear();
+        this.entries.clear();
+        this.bytes = 0;
+        this.pinned.clear();
+        this.latest.clear();
+        this.selectionChanged();
+      }
+    }
   }
 }

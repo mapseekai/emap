@@ -79,8 +79,8 @@ export class LumaPainter implements EditPainter {
   framePresented = false;
   private requests: GeometryRequest[] = [];
   private context: (GeometryOwner & { bounds?: Rect; content?: string }) | null = null;
-  private content: string[] = [];
-  private paintedContent: string | null = null;
+  /** Presence marker; owner.content in the chunk cache owns content invalidation. */
+  private paintedContent: true | null = null;
   private paintedDimensions = '';
   frameComplete = true;
   frameRetained = false;
@@ -139,6 +139,7 @@ export class LumaPainter implements EditPainter {
       renderCommands: this.gpu.commandStats,
       presentation: { ...this.presentation },
       text: this.gpu.textStats,
+      memory: this.gpu.memoryStats,
     };
   }
   createLabelAtlas(): MsdfLabelAtlas {
@@ -156,10 +157,6 @@ export class LumaPainter implements EditPainter {
   setLayerContext(context: (GeometryOwner & { bounds?: Rect; content?: string }) | null): void {
     this.context = context;
     this.cache.contextFor(context);
-    if (context)
-      this.content.push(
-        JSON.stringify([context.sourceId, context.id, context.revision, context.content]),
-      );
   }
   setInteracting(value: boolean): void {
     this.chunks.setInteracting(value);
@@ -194,7 +191,6 @@ export class LumaPainter implements EditPainter {
     this.images.clear();
     this.commands = [];
     this.requests = [];
-    this.content = [];
     this.context = null;
     // Record an ordered frame before clearing the last complete GPU image.
     this.active = true;
@@ -205,8 +201,7 @@ export class LumaPainter implements EditPainter {
   finishFrame(): void {
     if (!this.active) return;
     const started = performance.now();
-    const content = JSON.stringify(this.content),
-      dimensions = [this.width, this.height, this.pixelRatio].join(':');
+    const dimensions = [this.width, this.height, this.pixelRatio].join(':');
     try {
       const pending = this.requests.some((request) => !this.chunks.complete(request));
       this.gpu.resize(this.width, this.height, this.pixelRatio);
@@ -226,7 +221,7 @@ export class LumaPainter implements EditPainter {
       this.frameComplete = !pending;
       this.framePresented = true;
       this.paintedCommands = this.commands;
-      this.paintedContent = content;
+      this.paintedContent = true;
       this.paintedDimensions = dimensions;
       this.chunks.didPresent(performance.now() - started);
       this.presentation.presented++;
@@ -324,17 +319,6 @@ export class LumaPainter implements EditPainter {
             revision: owner.revision,
           }
         : undefined;
-    this.content.push(
-      JSON.stringify([
-        'chunk-paint',
-        owner.id,
-        // Zoom-relative line width is not a content change; explicit width is
-        // already part of the parent style fingerprint.
-        [paint.color, paint.radius, paint.filled, paint.marker, paint.dash, paint.arrow],
-        icon ? this.chunks.identity(icon.asset.image as object) : null,
-      ]),
-    );
-
     const viewBounds = groundBounds(
       this.transform,
       this.width,
@@ -727,7 +711,6 @@ export class LumaPainter implements EditPainter {
   ): void {
     if (!this.active) return;
     this.images.add(image);
-    this.content.push(JSON.stringify(['image', this.chunks.identity(image as object), opacity]));
     this.commands.push(() =>
       this.gpu.drawImage(image, bounds, opacity, smoothing, clip, immutable),
     );
@@ -771,21 +754,34 @@ export class LumaPainter implements EditPainter {
   }
   dispose(): void {
     if (this.disposed) return;
-    this.finishFrame();
+    // Teardown must not render or depend on a successful final GPU submission.
     this.disposed = true;
-    this.cache.clear();
-    this.chunks.dispose();
-    this.colors.dispose();
-    this.gpu.dispose();
+    this.active = false;
+    this.commands = this.paintedCommands = [];
+    this.requests = [];
+    this.context = null;
+    this.drawnEntries.clear();
+    this.paintedContent = null;
+    const errors: unknown[] = [];
+    for (const cleanup of [
+      () => this.chunks.dispose(),
+      () => this.cache.clear(),
+      () => this.colors.dispose(),
+      () => this.gpu.dispose(),
+      () => this.decoration?.painter.clearIcons(),
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     if (this.decoration) {
-      this.decoration.painter.clearIcons();
       this.decoration.canvas.width = this.decoration.canvas.height = 0;
       this.decoration = null;
     }
     this.images.clear();
     this.lastImages.clear();
-    this.paintedCommands = [];
-    this.drawnEntries.clear();
-    this.paintedContent = null;
+    if (errors.length) throw new AggregateError(errors, 'Luma painter cleanup failed');
   }
 }

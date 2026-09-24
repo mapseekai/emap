@@ -121,6 +121,16 @@ export class MsdfTextRenderer {
     liveBufferBytes: 0,
     glyphInstances: 0,
   };
+  get memoryStats() {
+    return {
+      bufferBytes: this.disposed
+        ? 0
+        : this.stats.liveBufferBytes +
+          (this.quad?.byteLength ?? 0) +
+          this.uniforms.reduce((n, b) => n + b.byteLength, 0),
+      textureBytes: this.stats.liveTextureBytes,
+    };
+  }
   constructor(
     private readonly device: Device,
     private readonly backend: 'webgl' | 'webgpu',

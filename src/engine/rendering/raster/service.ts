@@ -765,42 +765,9 @@ export class RasterRenderService implements RasterContract {
         signal.throwIfAborted();
         rgba = colorizeRasterTile(source.metadata, plan, result, style);
       }
-      const uploadStarted = performance.now();
-      image = document.createElement('canvas');
-      image.width = plan.width;
-      image.height = plan.height;
-      const context = image.getContext('2d');
-      if (!context)
-        throw new RasterError('RASTER_CANVAS_UNAVAILABLE', 'Cannot create raster tile context.');
-      context.putImageData(new ImageData(rgba, plan.width, plan.height), 0, 0);
-      this.canvasUploadMs += performance.now() - uploadStarted;
+      image = this.uploadRasterTile(rgba, plan.width, plan.height);
     } else this.planEmpty++;
-    if (
-      this.disposed ||
-      signal.aborted ||
-      !this.wanted.has(task.key) ||
-      this.layers.get(task.layer.id)?.revision !== task.revision
-    ) {
-      if (image) {
-        image.width = 0;
-        image.height = 0;
-      }
-      return;
-    }
-    const tile: Tile = {
-      key: task.key,
-      layer: task.layer.id,
-      revision: task.revision,
-      crs: task.crs,
-      bounds: task.bounds,
-      image,
-      bytes: image ? image.width * image.height * 4 : 0,
-      span: task.span,
-    };
-    this.cache.set(task.key, tile);
-    this.bytes += tile.bytes;
-    this.publishTile(task.key);
-    this.trimCache();
+    this.commitLoadedTile(task, image, signal);
   }
   private publishTile(key: string): void {
     const tile = this.cache.get(key);

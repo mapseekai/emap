@@ -1,5 +1,4 @@
 import { cameraGLSL } from './camera-shaders';
-import type { ModelProps } from '@luma.gl/engine';
 
 const uniforms = `
 layout(std140) uniform emapUniforms {
@@ -26,26 +25,7 @@ export const emapModule = {
   name: 'emap',
   vs: uniforms + cameraGLSL,
   fs: uniforms,
-  uniformTypes: {
-    origin: 'vec4<f32>',
-    scale: 'vec2<f32>',
-    viewport: 'vec2<f32>',
-    color: 'vec4<f32>',
-    parameters: 'vec4<f32>',
-    rect: 'vec4<f32>',
-    vertices0: 'vec4<f32>',
-    vertices1: 'vec4<f32>',
-    vertices2: 'vec4<f32>',
-    vertices3: 'vec4<f32>',
-    vertices4: 'vec4<f32>',
-    vertices5: 'vec4<f32>',
-    arrow: 'vec2<f32>',
-    pixelRatio: 'f32',
-    lowScale: 'vec2<f32>',
-    camera: 'vec4<f32>',
-    uvRect: 'vec4<f32>',
-  },
-} satisfies NonNullable<ModelProps['modules']>[number];
+};
 const fragment = `#version 300 es
 precision highp float;
 out vec4 fragColor;

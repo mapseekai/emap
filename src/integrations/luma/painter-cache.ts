@@ -192,6 +192,7 @@ export class PainterGeometryCache {
     }
   }
   clear(scope: { sourceId?: string; layerId?: string } = {}): void {
+    const errors: unknown[] = [];
     for (const [id, entry] of this.entries)
       if (
         scope.layerId !== undefined
@@ -199,12 +200,18 @@ export class PainterGeometryCache {
           : scope.sourceId !== undefined
             ? entry.sourceId === scope.sourceId
             : true
-      )
-        this.drop(id, entry);
+      ) {
+        try {
+          this.drop(id, entry);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    if (errors.length) throw new AggregateError(errors, 'Immediate geometry cleanup failed');
   }
   private drop(id: string, entry: CachedGeometry): void {
-    if (entry.mesh) this.gpu.destroyMesh(entry.mesh);
     this.entries.delete(id);
     this.bytes -= entry.bytes;
+    if (entry.mesh) this.gpu.destroyMesh(entry.mesh);
   }
 }

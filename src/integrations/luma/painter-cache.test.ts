@@ -185,3 +185,25 @@ it('retains a displayed replay frame above the soft limit but rejects new alloca
   cache.clear();
   expect(cache.stats.bytes).toBe(0);
 });
+
+it('clears every immediate mesh and reference when one GPU destruction fails', () => {
+  let releases = 0;
+  const gpu: any = {
+    createMesh: (g: any) => ({ bytes: g.vertices.byteLength }),
+    destroyMesh: () => {
+      if (++releases === 1) throw new Error('destroy failed');
+    },
+  };
+  const cache = new PainterGeometryCache(gpu);
+  cache.begin();
+  cache.contextFor({ id: 'layer', sourceId: 'source', revision: 0 });
+  for (let i = 0; i < 2; i++)
+    cache.get({ references: [], values: [i] }, () => ({
+      kind: 'point',
+      count: 1,
+      vertices: new Float32Array(4),
+    }));
+  expect(() => cache.clear()).toThrow();
+  expect(releases).toBe(2);
+  expect(cache.stats).toEqual({ entries: 0, bytes: 0 });
+});

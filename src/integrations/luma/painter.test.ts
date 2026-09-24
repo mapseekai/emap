@@ -233,3 +233,20 @@ it('invalidates the retained image after a failed GPU submission', async () => {
   expect(Reflect.get(f.painter, 'paintedContent')).toBeNull();
   f.painter.dispose();
 });
+
+it('disposal discards a pending frame and always cleans independent owners', async () => {
+  const f = await fixture();
+  f.painter.clear();
+  f.painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0 });
+  f.painter.drawArcs(f.arcs, { width: 1 });
+  f.gpu.drawMesh.mockImplementation(() => {
+    throw new Error('must not render during disposal');
+  });
+  f.painter.dispose();
+  expect(f.gpu.drawMesh).not.toHaveBeenCalled();
+  expect(f.gpu.dispose).toHaveBeenCalledOnce();
+  expect(f.gpu.destroyMesh).toHaveBeenCalledOnce();
+  expect(Reflect.get(f.painter, 'disposed')).toBe(true);
+  f.painter.dispose();
+  expect(f.gpu.dispose).toHaveBeenCalledOnce();
+});

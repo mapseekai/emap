@@ -81,6 +81,16 @@ export class GpuTextRenderer {
     liveTextureBytes: 0,
     liveBufferBytes: 0,
   };
+  get memoryStats() {
+    return {
+      bufferBytes: this.disposed
+        ? 0
+        : this.stats.liveBufferBytes +
+          (this.quad?.byteLength ?? 0) +
+          (this.uniform?.byteLength ?? 0),
+      textureBytes: this.stats.liveTextureBytes,
+    };
+  }
   constructor(
     private device: Device,
     private backend: 'webgl' | 'webgpu',

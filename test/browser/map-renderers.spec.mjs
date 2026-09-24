@@ -270,3 +270,27 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: consecutive gesture
   expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.complete)).toBeGreaterThan(before.presentation.complete);
   await page.evaluate(()=>formalMap.dispose());
 });
+
+
+for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: changing styles does not retain historical uniforms after owners disappear`, async ({page}, info) => {
+  await runtime(page); await create(page, renderer); await settleRequests(page);
+  const result = await page.evaluate(async () => {
+    const map = formalMap, gpu = map.ctx.render._painter.gpu;
+    for (let i = 0; i < 300; i++) {
+      map.setPaintProperty('poi', 'circle-radius', 4 + i / 100);
+      map.render();
+    }
+    const afterChanges = gpu.memoryStats;
+    for (const id of ['poi', 'road', 'area']) { map.removeLayer(id); map.removeSource(id); }
+    map.render();
+    const afterRemoval = gpu.memoryStats;
+    await map.dispose();
+    return { afterChanges, afterRemoval, afterDispose: gpu.memoryStats, errors: renderErrors };
+  });
+  expect(result.afterChanges.styles).toBeLessThan(10);
+  expect(result.afterRemoval.styles).toBe(0);
+  expect(result.afterRemoval.styleUniformBytes).toBe(0);
+  expect(result.afterDispose.nominalKnownGpuBytes).toBe(0);
+  expect(result.errors).toEqual([]);
+  await info.attach('memory-lifecycle', {body: JSON.stringify(result, null, 2), contentType:'application/json'});
+});

@@ -81,6 +81,18 @@ const parameters: RenderPipelineParameters = {
   blendAlphaSrcFactor: 'one',
   blendAlphaDstFactor: 'one-minus-src-alpha',
 };
+/** Attempt every independent release before propagating cleanup failures. */
+function cleanupGpu(actions: Iterable<() => void>): void {
+  const errors: unknown[] = [];
+  for (const action of actions) {
+    try {
+      action();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'GPU resource cleanup failed');
+}
 /**
  * Portable luma v10 renderer shared by formal WebGL2/WebGPU maps and A/B examples.
  * Owns the selected device and all GPU resources, including shared geometry pages.
@@ -189,6 +201,53 @@ export class GpuRenderer {
   }
   get label(): string {
     return `luma.gl 10.0.0-alpha.1 / ${this.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'}`;
+  }
+  /** Known payloads only: excludes swapchain/driver allocations and CPU caches.
+   * Shared geometry pages are counted once, including slack. Attachment bytes
+   * use four bytes per depth24plus sample as a nominal estimate, not measured VRAM. */
+  get memoryStats() {
+    const geometryBufferBytes = this.stats.liveBufferBytes ?? 0;
+    const styleUniformBytes = (this.styles?.size ?? 0) * 240;
+    const dashTextureBytes = [...(this.dashes?.values() ?? [])].reduce(
+      (n, e) => n + e.texture.width * 4,
+      0,
+    );
+    const sharedBufferBytes = this.disposed
+      ? 0
+      : [this.quad, this.circleQuad, this.pathCorners, this.pathIndices].reduce(
+          (n, b) => n + (b?.byteLength ?? 0),
+          0,
+        );
+    const text = [this.textRenderer, this.msdfTextRenderer].map((r) => r?.memoryStats);
+    const textBufferBytes = text.reduce((n, s) => n + (s?.bufferBytes ?? 0), 0);
+    const textTextureBytes = text.reduce((n, s) => n + (s?.textureBytes ?? 0), 0);
+    const attachmentNominalBytes = [this.msaaTexture, this.pointDepthTexture].reduce(
+      (n, t) => n + (t ? t.width * t.height * t.samples * 4 : 0),
+      0,
+    );
+    const imageTextureBytes = this.stats.liveTextureBytes ?? 0;
+    return {
+      geometryBufferBytes,
+      styleUniformBytes,
+      dashTextureBytes,
+      sharedBufferBytes,
+      textBufferBytes,
+      textTextureBytes,
+      attachmentNominalBytes,
+      imageTextureBytes,
+      styles: this.styles?.size ?? 0,
+      dashTextures: this.dashes?.size ?? 0,
+      pipelines: this.pipelines?.size ?? 0,
+      nominalKnownGpuBytes:
+        geometryBufferBytes +
+        styleUniformBytes +
+        dashTextureBytes +
+        sharedBufferBytes +
+        textBufferBytes +
+        textTextureBytes +
+        attachmentNominalBytes +
+        imageTextureBytes,
+    };
   }
   get timestampSupported(): boolean {
     return this.device.features.has('timestamp-query');
@@ -311,8 +370,11 @@ export class GpuRenderer {
     try {
       this.initialize(device);
     } catch (error) {
-      this.release();
-      this.device?.destroy();
+      try {
+        cleanupGpu([() => this.release(), () => this.device?.destroy()]);
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'GPU initialization and cleanup failed');
+      }
       throw error;
     }
     canvas.addEventListener('webglcontextlost', this.onLost);
@@ -601,23 +663,31 @@ export class GpuRenderer {
     return mesh;
   }
   destroyMesh(mesh: GpuMesh): void {
-    if (this.circleQueue?.length) this.flushCircles();
     if (!this.meshes.delete(mesh)) return;
-    this.commandCache?.retire(mesh);
-    mesh.vertexArray?.destroy();
-    mesh.circleVertexArray?.destroy();
-    mesh.iconVertexArray?.destroy();
-    mesh.pathMsaaVertexArray?.destroy();
-    for (const vao of mesh.rangeVertexArrays?.values() ?? []) vao.destroy();
-    mesh.rangeVertexArrays?.clear();
-    if (mesh.pageSlice) {
-      const before = this.pages!.allocatedBytes;
-      this.pages!.release(mesh.pageSlice);
-      this.stats.liveBufferBytes += this.pages!.allocatedBytes - before;
-    } else {
-      mesh.buffer.destroy();
-      mesh.indices?.destroy();
-      this.stats.liveBufferBytes -= mesh.bytes;
+    const vaos = new Set([
+      mesh.vertexArray,
+      mesh.circleVertexArray,
+      mesh.iconVertexArray,
+      mesh.pathMsaaVertexArray,
+      ...(mesh.rangeVertexArrays?.values() ?? []),
+    ]);
+    const before = this.pages?.allocatedBytes ?? 0;
+    try {
+      cleanupGpu([
+        () => {
+          if (this.circleQueue?.length) this.flushCircles();
+        },
+        () => this.commandCache?.retire(mesh),
+        ...[...vaos].map((vao) => () => vao?.destroy()),
+        ...(mesh.pageSlice
+          ? [() => this.pages!.release(mesh.pageSlice!)]
+          : [() => mesh.buffer.destroy(), () => mesh.indices?.destroy()]),
+      ]);
+    } finally {
+      mesh.rangeVertexArrays?.clear();
+      this.stats.liveBufferBytes += mesh.pageSlice
+        ? (this.pages?.allocatedBytes ?? 0) - before
+        : -mesh.bytes;
     }
   }
   resize(width: number, height: number, pixelRatio: number): void {
@@ -729,6 +799,7 @@ export class GpuRenderer {
     let entry = this.styles.get(key);
     if (!entry) {
       const buffer = this.device.createBuffer({
+        id: `emap-${kind}-uniform-${this.frame}-${this.styles.size}`,
         byteLength: 240,
         usage: Buffer.UNIFORM | Buffer.COPY_DST,
       });
@@ -965,54 +1036,6 @@ export class GpuRenderer {
       }
     } finally {
       this.meshScopeStyles = previous;
-    }
-  }
-  /** Consecutive resident page slices share one draw. Culling/paint order is decided
-   * by the caller; gaps containing another or retired slice are never traversed. */
-  drawMeshBatch(meshes: readonly GpuMesh[], paint: MeshPaint): void {
-    for (let i = 0; i < meshes.length; ) {
-      const first = meshes[i];
-      if (!this.meshes.has(first)) {
-        i++;
-        continue;
-      }
-      let last = first,
-        j = i + 1,
-        logical = first.count;
-      while (
-        j < meshes.length &&
-        first.pageSlice &&
-        meshes[j].pageSlice?.page === first.pageSlice.page
-      ) {
-        const next = meshes[j];
-        const adjacent =
-          first.kind === 'fill'
-            ? next.firstIndex === (last.firstIndex ?? 0) + last.pageSlice!.storageCount
-            : next.firstInstance === (last.firstInstance ?? 0) + last.count;
-        if (!adjacent || !this.meshes.has(next)) break;
-        logical += next.count;
-        last = next;
-        j++;
-      }
-      if (j === i + 1 || !this.meshes.has(first)) this.drawMesh(first, paint);
-      else {
-        const span: GpuMesh = Object.create(first);
-        span.count =
-          first.kind === 'fill'
-            ? last.firstIndex! + last.count - first.firstIndex!
-            : last.firstInstance! + last.count - first.firstInstance!;
-        span.logicalCount = logical;
-        this.meshes.add(span);
-        try {
-          this.drawMesh(span, paint);
-        } finally {
-          // Lazy VAOs belong to the first real slice, not the ephemeral span.
-          first.vertexArray = span.vertexArray;
-          first.pathMsaaVertexArray = span.pathMsaaVertexArray;
-          this.meshes.delete(span);
-        }
-      }
-      i = j;
     }
   }
   drawMesh(
@@ -1375,7 +1398,7 @@ export class GpuRenderer {
     );
     let bindings = style.images.get(entry.texture);
     const sampler = smoothing ? this.linear : this.nearest;
-    if (!bindings || bindings.imageSampler !== sampler) {
+    if (!bindings || (this.backend === 'webgpu' && bindings.imageSampler !== sampler)) {
       bindings = {
         emapUniforms: style.buffer,
         imageTexture: entry.texture,
@@ -1444,15 +1467,27 @@ export class GpuRenderer {
   }
   end(): void {
     if (!this.pass) return;
-    this.flushCircles();
-    this.pass.end();
-    this.pass = null;
+    const pass = this.pass;
+    try {
+      this.flushCircles();
+      pass.end();
+    } finally {
+      this.pass = null;
+    }
     this.commandCache?.end();
     this.device.submit();
+    // Native replay marks every referenced style in style(). Unused command
+    // plans retire above; destroy uniforms only after the current pass submits.
     for (const [key, entry] of this.styles)
-      if (key.startsWith('icon:') && entry.frame < this.frame) {
-        entry.buffer.destroy();
+      if (entry.frame !== this.frame) {
         this.styles.delete(key);
+        entry.images.clear();
+        entry.buffer.destroy();
+      }
+    for (const [key, entry] of this.dashes)
+      if (entry.frame !== this.frame) {
+        this.dashes.delete(key);
+        entry.texture.destroy();
       }
     if (this.timedFrame && this.query) {
       const epoch = this.timingEpoch;
@@ -1487,89 +1522,100 @@ export class GpuRenderer {
     if (!entry) return;
     this.images.delete(image);
     this.destroyImage(entry);
-    for (const [key, style] of this.styles) {
+  }
+
+  /** All retirement paths share texture-to-binding cleanup. */
+  clearImages(): void {
+    const entries = [...this.images.values()];
+    this.images.clear();
+    cleanupGpu(entries.map((entry) => () => this.destroyImage(entry)));
+  }
+  private destroyImage(entry: ImageEntry): void {
+    const uniforms: Buffer[] = [];
+    for (const [key, style] of this.styles ?? []) {
       if (
         style.images.delete(entry.texture) &&
-        (key.startsWith('image:') || key.startsWith('icon:')) &&
-        !style.images.size
+        !style.images.size &&
+        (key.startsWith('image:') || key.startsWith('icon:'))
       ) {
-        style.buffer.destroy();
         this.styles.delete(key);
+        uniforms.push(style.buffer);
       }
+    }
+    try {
+      cleanupGpu([
+        ...uniforms.map((buffer) => () => buffer.destroy()),
+        () => entry.texture.destroy(),
+      ]);
+    } finally {
+      this.stats.liveTextureBytes -= entry.texture.width * entry.texture.height * 4;
+      this.stats.liveTextures--;
     }
   }
 
-  /** Drop source-owned images when the dataset changes, not on every pan. */
-  clearImages(): void {
-    for (const entry of this.images.values()) this.destroyImage(entry);
-    this.images.clear();
-    for (const style of this.styles.values()) style.images.clear();
-  }
-  private destroyImage(entry: ImageEntry): void {
-    // Dropped icon textures must not remain reachable from old bind-group maps.
-    for (const [key, style] of this.styles ?? []) {
-      if (key.startsWith('icon:') && style.images.delete(entry.texture) && !style.images.size) {
-        style.buffer.destroy();
-        this.styles.delete(key);
-      }
-    }
-    entry.texture.destroy();
-    this.stats.liveTextureBytes -= entry.texture.width * entry.texture.height * 4;
-    this.stats.liveTextures--;
-  }
   private release(): void {
-    this.commandCache?.clear();
     this.circleQueue.length = 0;
     this.queuedCircleGroup = null;
-    this.pass?.end();
+    const pass = this.pass;
     this.pass = null;
-    this.textRenderer?.dispose();
-    this.msdfTextRenderer?.dispose();
-    this.msdfTextRenderer = null;
-    this.textRenderer = null;
-    for (const mesh of this.meshes) this.destroyMesh(mesh);
-    this.pages?.dispose();
-    this.pages = undefined;
-    for (const entry of this.images.values()) this.destroyImage(entry);
-    for (const entry of this.dashes.values()) entry.texture.destroy();
-    this.images.clear();
-    this.dashes.clear();
-    for (const entry of this.pipelines.values()) {
-      entry.pipeline.destroy();
-      for (const shader of entry.shaders) shader.destroy();
+    try {
+      cleanupGpu([
+        () => this.commandCache?.clear(),
+        () => pass?.end(),
+        () => this.textRenderer?.dispose(),
+        () => this.msdfTextRenderer?.dispose(),
+        ...[...this.meshes].map((mesh) => () => this.destroyMesh(mesh)),
+        () => this.pages?.dispose(),
+        () => this.clearImages(),
+        ...[...this.dashes.values()].map((entry) => () => entry.texture.destroy()),
+        ...[...this.pipelines.values()].flatMap((entry) => [
+          () => entry.pipeline.destroy(),
+          ...entry.shaders.map((shader) => () => shader.destroy()),
+        ]),
+        // clearImages may already retire image uniforms; enumerate afterwards.
+        () => cleanupGpu([...this.styles.values()].map((style) => () => style.buffer.destroy())),
+        ...[
+          this.imageVertexArray,
+          this.msaaFramebuffer,
+          this.msaaTexture,
+          this.pointDepthTexture,
+          this.pointDepthVertexArray,
+          this.query,
+          this.pathCorners,
+          this.pathIndices,
+          this.quad,
+          this.circleQuad,
+          this.nearest,
+          this.linear,
+        ].map((resource) => () => resource?.destroy()),
+      ]);
+    } finally {
+      this.msdfTextRenderer = this.textRenderer = null;
+      this.pages = undefined;
+      this.images.clear();
+      this.dashes.clear();
+      this.pipelines.clear();
+      this.styles.clear();
+      this.imageVertexArray = this.pointDepthVertexArray = null;
+      this.msaaFramebuffer = null;
+      this.msaaTexture = this.pointDepthTexture = null;
+      this.pointGroup = null;
+      this.pointDepthDirty = false;
+      this.query = null;
     }
-    this.pipelines.clear();
-    for (const style of this.styles.values()) style.buffer.destroy();
-    this.styles.clear();
-    this.imageVertexArray?.destroy();
-    this.imageVertexArray = null;
-    this.msaaFramebuffer?.destroy();
-    this.msaaFramebuffer = null;
-    this.msaaTexture?.destroy();
-    this.msaaTexture = null;
-    this.pointDepthTexture?.destroy();
-    this.pointDepthTexture = null;
-    this.pointDepthVertexArray?.destroy();
-    this.pointDepthVertexArray = null;
-    this.pointGroup = null;
-    this.pointDepthDirty = false;
-    this.query?.destroy();
-    this.query = null;
-    this.pathCorners?.destroy();
-    this.pathIndices?.destroy();
-    this.quad?.destroy();
-    this.circleQuad?.destroy();
-    this.nearest?.destroy();
-    this.linear?.destroy();
   }
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.canvas.removeEventListener('webglcontextlost', this.onLost);
-    this.canvas.removeEventListener('webglcontextrestored', this.onRestored);
-    this.release();
     const context = this.backend === 'webgl' ? (this.device as WebGLDevice).gl : null;
-    this.device.destroy();
-    context?.getExtension('WEBGL_lose_context')?.loseContext();
+    cleanupGpu([
+      () => this.canvas.removeEventListener('webglcontextlost', this.onLost),
+      () => this.canvas.removeEventListener('webglcontextrestored', this.onRestored),
+      () => this.release(),
+      () => this.device.destroy(),
+      () => {
+        context?.getExtension('WEBGL_lose_context')?.loseContext();
+      },
+    ]);
   }
 }

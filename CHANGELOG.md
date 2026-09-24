@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Retire inactive GPU styles and dash textures after submission, including native bundle lifetimes;
+  unify image binding retirement and reuse WebGL image bindings across repeated draws.
+- Make luma teardown discard pending frames and finish independent resource cleanup after errors.
+  Expose known GPU memory categories without treating geometry counters as total VRAM.
+- Remove the unused batch drawing path and engine-only shader metadata; share raster tile upload/commit code.
+
 ### Changed
 
 - Retain conservative resident stroke envelopes and group uniform fill pages; compile
