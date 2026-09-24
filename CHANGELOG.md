@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Reuse resident fill storage for contained same-detail views and include command
+  preparation in progressive-frame pacing, without changing Worker concurrency,
+  source detail, layer order or cache budgets.
+
 - Yield GeoPackage scans by elapsed CPU time without nested timer delays; transfer
   the fully validated dataset in acknowledged row batches with packed signed arc
   references. Restore native editable shapes without one monolithic clone task,

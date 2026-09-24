@@ -56,6 +56,8 @@ export interface GeometryEntry {
   screenStats?: GeometryResult['screenStats'];
   error?: Error;
   requiredBytes?: number;
+  /** Exact-detail coverage of a derived fill; never reused across membership/LOD. */
+  coverage?: { bounds: NonNullable<GeometryInput['storageBounds']>; interval: number };
 }
 export interface GeometryRequest {
   input: GeometryInput;
@@ -168,6 +170,7 @@ export class GeometryChunkCache {
     maxMeshUploadMs: 0,
     maxUploadSliceMs: 0,
     uploadYields: 0,
+    coverageHits: 0,
     packMs: 0,
     batchAdmissionMs: 0,
     uploadCulledBytes: 0,
@@ -403,6 +406,27 @@ export class GeometryChunkCache {
         return full;
       }
     }
+    const coverage = old?.coverage,
+      requested = request.input.storageBounds;
+    if (
+      request.input.kind === 'fill' &&
+      !request.input.screen &&
+      requested &&
+      coverage &&
+      old?.state === 'ready' &&
+      this.entries.get(old.id) === old &&
+      coverage.interval === request.input.interval &&
+      sameJob(old.job, job) &&
+      coverage.bounds[0] <= requested[0] &&
+      coverage.bounds[1] <= requested[1] &&
+      coverage.bounds[2] >= requested[2] &&
+      coverage.bounds[3] >= requested[3]
+    ) {
+      old.used = ++this.clock;
+      this.counters.cacheHits++;
+      this.counters.coverageHits++;
+      return old;
+    }
     const prefix = JSON.stringify([
       family,
       request.input.interval,
@@ -430,6 +454,9 @@ export class GeometryChunkCache {
       fallback:
         old?.state === 'ready' && old.owner.content === request.owner.content ? old : undefined,
       owner: request.owner,
+      ...(request.input.kind === 'fill' && !request.input.screen && request.input.storageBounds
+        ? { coverage: { bounds: request.input.storageBounds, interval: request.input.interval } }
+        : {}),
       job,
       state: 'queued',
       meshes: [],

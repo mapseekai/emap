@@ -64,6 +64,7 @@ export class LumaPainter implements EditPainter {
   private height = 1;
   private pixelRatio = 1;
   private active = false;
+  private frameStarted = 0;
   private disposed = false;
   private colors: GpuColors;
   private cache: PainterGeometryCache;
@@ -185,6 +186,7 @@ export class LumaPainter implements EditPainter {
   clear(): void {
     if (this.disposed) return;
     this.finishFrame();
+    this.frameStarted = performance.now();
     this.colors.reset();
     this.cache.begin();
     this.chunks.begin(this.cache.stats.bytes);
@@ -200,7 +202,6 @@ export class LumaPainter implements EditPainter {
   }
   finishFrame(): void {
     if (!this.active) return;
-    const started = performance.now();
     const dimensions = [this.width, this.height, this.pixelRatio].join(':');
     try {
       const pending = this.requests.some((request) => !this.chunks.complete(request));
@@ -223,7 +224,7 @@ export class LumaPainter implements EditPainter {
       this.paintedCommands = this.commands;
       this.paintedContent = true;
       this.paintedDimensions = dimensions;
-      this.chunks.didPresent(performance.now() - started);
+      this.chunks.didPresent(performance.now() - this.frameStarted);
       this.presentation.presented++;
       if (pending) this.presentation.partial++;
       else this.presentation.complete++;

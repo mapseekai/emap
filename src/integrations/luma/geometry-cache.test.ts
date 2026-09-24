@@ -541,3 +541,49 @@ it('failed partial uploads release their buffers and never leave a ready entry o
   f.cache.dispose();
   expect(f.cache.stats.bytes).toBe(0);
 });
+
+it('reuses containing fill coverage only at identical membership and detail', async () => {
+  const f = fixture();
+  const vertices = [
+    [-10, -10],
+    [10, -10],
+    [10, 10],
+    [-10, 10],
+    [-10, -10],
+  ];
+  const input: GeometryInput = {
+    kind: 'fill',
+    interval: 0,
+    bounds: [-10, -10, 10, 10],
+    shapes: [[[0]]],
+    storageBounds: [-8, -8, 8, 8],
+    arcs: {
+      size: () => 1,
+      getArcIter() {
+        let i = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            if (i === vertices.length) return false;
+            [this.x, this.y] = vertices[i++];
+            return true;
+          },
+        };
+      },
+    } as unknown as GeometryInput['arcs'],
+  };
+  const a = f.frame(input);
+  await vi.waitFor(() => expect(f.cache.complete(a)).toBe(true));
+  const b = f.frame({ ...input, storageBounds: [-3, -3, 3, 3] });
+  await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(1);
+  expect(f.cache.stats.coverageHits).toBeGreaterThan(0);
+  const c = f.frame({ ...input, storageBounds: [-9, -9, 9, 9] });
+  await vi.waitFor(() => expect(f.cache.complete(c)).toBe(true));
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);
+  const d = f.frame({ ...input, interval: 0.5, storageBounds: [-2, -2, 2, 2] });
+  await vi.waitFor(() => expect(f.cache.complete(d)).toBe(true));
+  expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+  f.cache.dispose();
+});
