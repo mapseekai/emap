@@ -1,4 +1,4 @@
-import { restoreGeoPackageDataset, type GeoPackageTransfer } from './transfer';
+import { GeoPackageStreamReceiver, type GeoPackageStreamMessage } from './stream';
 import {
   assertNotAborted,
   geoPackageLimits,
@@ -35,8 +35,12 @@ export function importGeoPackageInWorker(
     const input = transferInput ? bytes : bytes.slice();
     const worker = new Worker(url, { name: 'emap-geopackage' });
     let finished = false;
+    let receiver: GeoPackageStreamReceiver | undefined = new GeoPackageStreamReceiver(
+      geoPackageLimits(options),
+    );
     const cleanup = () => {
       worker.terminate();
+      receiver = undefined;
       signal?.removeEventListener('abort', abort);
       worker.removeEventListener('message', message);
       worker.removeEventListener('error', error);
@@ -55,13 +59,14 @@ export function importGeoPackageInWorker(
       fail(new Error(event.message || 'GeoPackage Worker failed'));
     const messageError = () => fail(new Error('GeoPackage Worker response could not be decoded'));
     const message = (
-      event: MessageEvent<{
-        type: string;
-        dataset?: GeoPackageTransfer;
-        progress?: GeoPackageProgress;
-        message?: string;
-        name?: string;
-      }>,
+      event: MessageEvent<
+        | GeoPackageStreamMessage
+        | {
+            type: 'progress';
+            progress: GeoPackageProgress;
+          }
+        | { type: 'error'; message?: string; name?: string }
+      >,
     ) => {
       if (finished) return;
       try {
@@ -75,13 +80,14 @@ export function importGeoPackageInWorker(
           fail(problem);
           return;
         }
-        if (event.data.type !== 'result' || !event.data.dataset)
-          throw new Error('Invalid GeoPackage Worker response');
         assertNotAborted(signal);
-        const dataset = restoreGeoPackageDataset(event.data.dataset);
-        finished = true;
-        cleanup();
-        resolve(dataset);
+        const dataset = receiver!.accept(event.data);
+        assertNotAborted(signal);
+        if (dataset) {
+          finished = true;
+          cleanup();
+          resolve(dataset);
+        } else worker.postMessage({ type: 'ack', sequence: event.data.sequence });
       } catch (problem) {
         fail(problem);
       }

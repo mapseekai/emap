@@ -32,10 +32,12 @@ function declaredFamily(type: string): number {
   if (type.endsWith('POLYGON')) return 4;
   return 0;
 }
+const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_INTEGER = BigInt(Number.MIN_SAFE_INTEGER);
 function attribute(value: unknown, type: string): unknown {
   if (typeof value === 'bigint') {
     if (type === 'BOOLEAN' && (value === 0n || value === 1n)) return value === 1n;
-    return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
+    return value <= MAX_SAFE_INTEGER && value >= MIN_SAFE_INTEGER
       ? Number(value)
       : value.toString();
   }
@@ -78,6 +80,10 @@ export async function importGeoPackage(
   assertNotAborted(options.signal);
   const db = await openGeoPackageSqlite(bytes, options);
   let dataset: GeoPackageDataset;
+  // Message tasks yield to the browser without nested setTimeout's minimum delay.
+  // One channel belongs to this import and is closed on success/cancellation/error.
+  const channel = new MessageChannel();
+  let sliceStarted = performance.now();
   try {
     const tables = readFeatureTables(db, options, limits.maxLayers);
     if (!tables.length) throw new Error('GeoPackage contains no selected vector feature tables');
@@ -121,7 +127,13 @@ export async function importGeoPackage(
     const report = async (phase: 'scan' | 'decode', table: string, processed: number) => {
       assertNotAborted(options.signal);
       options.onProgress?.({ phase, table, rows: processed });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (performance.now() - sliceStarted >= 8) {
+        await new Promise<void>((resolve) => {
+          channel.port1.onmessage = () => resolve();
+          channel.port2.postMessage(null);
+        });
+        sliceStarted = performance.now();
+      }
       assertNotAborted(options.signal);
     };
     for (const table of plans) {
@@ -219,12 +231,17 @@ export async function importGeoPackage(
         const record: Record<string, unknown> = {};
         table.columns.forEach((column, index) => {
           if (index === geometryIndex) return;
-          Object.defineProperty(record, column.name, {
-            value: attribute(values[index], column.type),
-            enumerable: true,
-            writable: true,
-            configurable: true,
-          });
+          const value = attribute(values[index], column.type);
+          // Only __proto__ invokes an inherited setter on an ordinary record.
+          // Keep plain editable records and preserve the reserved field safely.
+          if (column.name === '__proto__')
+            Object.defineProperty(record, column.name, {
+              value,
+              enumerable: true,
+              writable: true,
+              configurable: true,
+            });
+          else record[column.name] = value;
         });
         const pointIds: number[] = [];
         const lines: PathShape = [];
@@ -343,6 +360,8 @@ export async function importGeoPackage(
       },
     };
   } finally {
+    channel.port1.close();
+    channel.port2.close();
     db.close();
   }
   assertNotAborted(options.signal);

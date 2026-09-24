@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- Yield GeoPackage scans by elapsed CPU time without nested timer delays; transfer
+  the fully validated dataset in acknowledged row batches with packed signed arc
+  references. Restore native editable shapes without one monolithic clone task,
+  preserve 64-bit integer/Boolean/BLOB fields and cancellation atomicity.
+
 ### Fixed
 
 - Retire inactive GPU styles and dash textures after submission, including native bundle lifetimes;

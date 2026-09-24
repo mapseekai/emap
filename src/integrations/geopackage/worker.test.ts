@@ -101,3 +101,28 @@ describe('GeoPackage worker ownership', () => {
     expect(MockWorker.instances[0].terminate).toHaveBeenCalledOnce();
   });
 });
+
+it('acknowledges staged data and discards it on cancellation before the final result', async () => {
+  vi.stubGlobal('Worker', MockWorker);
+  const controller = new AbortController();
+  const result = importGeoPackageInWorker(new Uint8Array(10), {
+    workerUrl: 'https://example.test/worker.js',
+    signal: controller.signal,
+  });
+  const worker = MockWorker.instances[0];
+  worker.dispatchEvent(
+    new MessageEvent('message', {
+      data: {
+        type: 'header',
+        sequence: 0,
+        layers: [{ name: 'p', geometry_type: 'point', rows: 1 }],
+        info: { geopackage: { tables: [] } },
+      },
+    }),
+  );
+  expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'ack', sequence: 0 });
+  controller.abort();
+  await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+  worker.dispatchEvent(new MessageEvent('message', { data: { type: 'result', sequence: 1 } }));
+  expect(worker.terminate).toHaveBeenCalledOnce();
+});
