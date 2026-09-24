@@ -69,6 +69,7 @@ export class GpuTextRenderer {
   private uniform!: Buffer;
   private pages = new Map<LabelAtlasPage, Page>();
   private batches: Batch[] = [];
+  private staging = new Float32Array(0);
   private key = '';
   private size = '';
   private disposed = false;
@@ -77,6 +78,9 @@ export class GpuTextRenderer {
   readonly stats = {
     drawCalls: 0,
     bufferUploads: 0,
+    bufferAllocations: 0,
+    reusedBatches: 0,
+    stagingBytes: 0,
     textureUploads: 0,
     liveTextureBytes: 0,
     liveBufferBytes: 0,
@@ -206,29 +210,39 @@ export class GpuTextRenderer {
   draw(pass: RenderPass, frame: LabelFrame, width: number, height: number): void {
     if (this.disposed) return;
     if (frame.key !== this.key) {
-      this.clearBatches();
-      const labels = frame.labels.filter((l): l is BitmapLabel => !('mode' in l.raster));
-      const used = new Set(labels.map((l) => l.raster.page));
-      for (const [source, page] of this.pages)
-        if (!used.has(source)) {
-          this.stats.liveTextureBytes -= page.texture.width * page.texture.height * 4;
-          page.texture.destroy();
-          this.pages.delete(source);
-        }
-      // Contiguous page runs preserve label and parent-layer compositing order.
-      const runs: BitmapLabel[][] = [];
-      for (const label of labels) {
-        const last = runs.at(-1);
-        if (last?.[0].raster.page === label.raster.page) last.push(label);
-        else runs.push([label]);
-      }
+      const reusable = this.batches;
+      this.batches = [];
+      let consumed = 0;
       try {
-        for (const labels of runs) this.batches.push(this.batch(labels));
+        const labels = frame.labels.filter((l): l is BitmapLabel => !('mode' in l.raster));
+        const used = new Set(labels.map((l) => l.raster.page));
+        for (const [source, page] of this.pages)
+          if (!used.has(source)) {
+            this.stats.liveTextureBytes -= page.texture.width * page.texture.height * 4;
+            page.texture.destroy();
+            this.pages.delete(source);
+          }
+        // Contiguous page runs preserve label and parent-layer compositing order.
+        const runs: BitmapLabel[][] = [];
+        for (const label of labels) {
+          const last = runs.at(-1);
+          if (last?.[0].raster.page === label.raster.page) last.push(label);
+          else runs.push([label]);
+        }
+        for (const labels of runs) {
+          const old = reusable[consumed],
+            batch = this.batch(labels, old);
+          consumed++;
+          this.batches.push(batch);
+          if (old && old !== batch) this.releaseBatches([old]);
+        }
         this.key = frame.key;
       } catch (error) {
-        this.clearBatches();
         this.key = '';
+        this.clearBatches();
         throw error;
+      } finally {
+        this.releaseBatches(reusable.slice(consumed));
       }
     }
     if (!this.batches.length) return;
@@ -245,74 +259,110 @@ export class GpuTextRenderer {
         this.stats.drawCalls++;
     }
   }
-  private batch(labels: readonly BitmapLabel[]): Batch {
+  private batch(labels: readonly BitmapLabel[], previous?: Batch): Batch {
     const source = labels[0].raster.page,
-      page = this.page(source),
-      data = new Float32Array(labels.length * 10);
+      page = this.page(source);
+    const length = labels.length * 10;
+    if (this.staging.length < length) this.staging = new Float32Array(length);
+    this.stats.stagingBytes = this.staging.byteLength;
+    const data = this.staging.subarray(0, length);
     for (let i = 0; i < labels.length; i++) {
       const l = labels[i],
         r = l.raster,
-        [x, y, w, h] = r.rect;
-      data.set(
-        [
-          l.x,
-          l.y,
-          r.width,
-          r.height,
-          Math.cos(l.angle),
-          Math.sin(l.angle),
-          x / source.canvas.width,
-          y / source.canvas.height,
-          (x + w) / source.canvas.width,
-          (y + h) / source.canvas.height,
-        ],
-        i * 10,
-      );
+        [x, y, w, h] = r.rect,
+        at = i * 10;
+      data[at] = l.x;
+      data[at + 1] = l.y;
+      data[at + 2] = r.width;
+      data[at + 3] = r.height;
+      data[at + 4] = Math.cos(l.angle);
+      data[at + 5] = Math.sin(l.angle);
+      data[at + 6] = x / source.canvas.width;
+      data[at + 7] = y / source.canvas.height;
+      data[at + 8] = (x + w) / source.canvas.width;
+      data[at + 9] = (y + h) / source.canvas.height;
     }
-    const buffer = this.device.createBuffer({
-      byteLength: data.byteLength,
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-    });
-    let vao: VertexArray | undefined;
+    const reuse = previous && previous.bytes >= data.byteLength ? previous : undefined;
+    const buffer =
+      reuse?.buffer ??
+      this.device.createBuffer({
+        id: 'emap-bitmap-label-instances',
+        byteLength: data.byteLength,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      });
+    let vao = reuse?.vao;
     try {
       buffer.write(data);
-      vao = this.device.createVertexArray({
-        shaderLayout: this.layout,
-        bufferLayout: this.buffers,
-      });
-      if (this.backend === 'webgpu') {
-        const a = vao.getBufferSlot('corners'),
-          b = vao.getBufferSlot('labels');
-        if (a === null || b === null) throw new Error('Missing text vertex-buffer slots.');
-        vao.setBuffer(a, this.quad);
-        vao.setBuffer(b, buffer);
-      } else {
-        vao.setBuffer(0, this.quad);
-        for (const location of [1, 2, 3]) vao.setBuffer(location, buffer);
+      if (!vao) {
+        vao = this.device.createVertexArray({
+          shaderLayout: this.layout,
+          bufferLayout: this.buffers,
+        });
+        if (this.backend === 'webgpu') {
+          const a = vao.getBufferSlot('corners'),
+            b = vao.getBufferSlot('labels');
+          if (a === null || b === null) throw new Error('Missing text vertex-buffer slots.');
+          vao.setBuffer(a, this.quad);
+          vao.setBuffer(b, buffer);
+        } else {
+          vao.setBuffer(0, this.quad);
+          for (const location of [1, 2, 3]) vao.setBuffer(location, buffer);
+        }
       }
-      const bindings: Bindings = {
-        textUniforms: this.uniform,
-        atlasTexture: page.texture,
-        ...(this.backend === 'webgpu' ? { atlasSampler: page.texture.sampler } : {}),
-      };
-      this.stats.liveBufferBytes += data.byteLength;
+      const bindings: Bindings =
+        reuse?.bindings.atlasTexture === page.texture
+          ? reuse.bindings
+          : {
+              textUniforms: this.uniform,
+              atlasTexture: page.texture,
+              ...(this.backend === 'webgpu' ? { atlasSampler: page.texture.sampler } : {}),
+            };
       this.stats.bufferUploads++;
+      if (reuse) {
+        this.stats.reusedBatches++;
+        reuse.bindings = bindings;
+        reuse.count = labels.length;
+        return reuse;
+      }
+      this.stats.bufferAllocations++;
+      this.stats.liveBufferBytes += data.byteLength;
       return { buffer, vao, bindings, count: labels.length, bytes: data.byteLength };
     } catch (error) {
-      vao?.destroy();
-      buffer.destroy();
+      if (!reuse) {
+        try {
+          vao?.destroy();
+        } finally {
+          buffer.destroy();
+        }
+      }
       throw error;
     }
   }
-  private clearBatches(): void {
-    for (const b of this.batches) {
-      b.vao.destroy();
-      b.buffer.destroy();
+  private releaseBatches(batches: readonly Batch[]): void {
+    const errors: unknown[] = [];
+    for (const b of batches) {
+      try {
+        b.vao.destroy();
+      } catch (error) {
+        errors.push(error);
+      }
+      try {
+        b.buffer.destroy();
+      } catch (error) {
+        errors.push(error);
+      }
       this.stats.liveBufferBytes -= b.bytes;
     }
+    if (errors.length) throw new AggregateError(errors, 'Bitmap label cleanup failed');
+  }
+  private clearBatches(): void {
+    const batches = this.batches;
     this.batches = [];
+    this.releaseBatches(batches);
   }
   clear(): void {
+    this.staging = new Float32Array(0);
+    this.stats.stagingBytes = 0;
     this.clearBatches();
     this.key = '';
     for (const page of this.pages.values()) page.texture.destroy();

@@ -1,0 +1,49 @@
+import {test,expect} from '@playwright/test';
+for(const renderer of ['webgl2','webgpu'])test(`${renderer}: bounded styles and allocation-free steady label navigation`,async({page,browser},info)=>{
+ test.setTimeout(120000);const errors=[],warnings=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ page.on('console',m=>{if(m.type()==='error')errors.push(m.text());else if(m.type()==='warning')warnings.push(m.text());});
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+ await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.evaluate(async(renderer)=>{
+  lumaBenchmark.dispose();document.body.replaceChildren();const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:600px;background:white';document.body.append(host);
+  window.auditErrors=[];window.auditMap=await emap.Emap.create({container:host,renderer,preset:'viewer'});auditMap.on('error',e=>auditErrors.push(String(e.error)));
+  const features=Array.from({length:120},(_,i)=>({type:'Feature',properties:{name:'P'+i},geometry:{type:'Point',coordinates:[i%15,Math.floor(i/15)]}}));
+  const source=new emap.TopologySource('audit');await source.setData({filename:'audit.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features}))});await auditMap.addSource('audit',source);
+  auditMap.addLayer({id:'points',source:'audit',type:'circle',paint:{'circle-color':'#165fc4','circle-radius':5}});auditMap.setExtent(new emap.Bounds(-1,-1,16,10));auditMap.render();
+  window.auditSnapshot=()=>{const p=auditMap.ctx.render._painter,g=p.gpu;return {styleEntries:g.styles.size,styleUniformBytes:[...g.styles.values()].reduce((n,s)=>n+s.buffer.byteLength,0),imageBindingEntries:[...g.styles.values()].reduce((n,s)=>n+s.images.size,0),dashEntries:g.dashes.size,reportedLiveBufferBytes:g.stats.liveBufferBytes,reportedLiveTextureBytes:g.stats.liveTextureBytes,pipelines:g.pipelines.size,text:{...g.textStats},device:g.deviceInfo,canvas:[g.canvas.width,g.canvas.height],msaa:g.msaaTexture?{width:g.msaaTexture.width,height:g.msaaTexture.height,samples:g.msaaTexture.props.samples}:null};};
+ },renderer);
+ await expect.poll(()=>page.evaluate(()=>auditMap.ctx.render._painter.frameComplete)).toBe(true);
+ await page.evaluate(()=>auditMap.ctx.render._painter.gpu.waitForIdle());
+ const before=await page.evaluate(()=>auditSnapshot());
+ await page.evaluate(async()=>{for(let i=0;i<300;i++){auditMap.setPaintProperty('points','circle-radius',6+i/100);auditMap.render();if(i%30===0)await new Promise(requestAnimationFrame);}await auditMap.ctx.render._painter.gpu.waitForIdle();});
+ const afterStyles=await page.evaluate(()=>auditSnapshot());
+ expect(afterStyles.styleEntries).toBeLessThanOrEqual(3);
+ await page.evaluate(()=>{auditMap.setLayerLabel('points',{field:'name',fontSize:16,maxLabels:120,haloWidth:1});auditMap.render();});
+ await expect.poll(()=>page.evaluate(async()=>{await auditMap.ctx.render._labels?.settled();auditMap.render();return auditMap.ctx.render._painter.stats.text.glyphInstances??0;}),{timeout:30000}).toBeGreaterThan(100);
+ await page.evaluate(()=>auditMap.ctx.render._painter.gpu.waitForIdle());
+ const pan=await page.evaluate(async()=>{
+  const p=auditMap.ctx.render._painter,g=p.gpu,device=g.device,createBuffer=device.createBuffer.bind(device),createVAO=device.createVertexArray.bind(device);let bufferCreations=0,bufferDestroy=0,vaoCreations=0,bytesAllocated=0;
+  device.createBuffer=function(props){const b=createBuffer(props);bufferCreations++;bytesAllocated+=b.byteLength;const destroy=b.destroy.bind(b);b.destroy=()=>{bufferDestroy++;destroy();};return b;};
+  device.createVertexArray=function(props){vaoCreations++;return createVAO(props);};
+  const before={...g.textStats};const r=auditMap.ctx.render;r.beginNavigation();
+  for(let i=0;i<20;i++){auditMap.ctx.view._viewport.transform.translate(1,0);r.updateNavigation();await new Promise(requestAnimationFrame);}
+  await g.waitForIdle();const after={...g.textStats};
+  device.createBuffer=createBuffer;device.createVertexArray=createVAO;
+  return {steps:20,before,after,bufferCreations,bufferDestroy,vaoCreations,bytesAllocated};
+ });
+ expect(pan.bufferCreations).toBe(0);expect(pan.vaoCreations).toBe(0);
+ expect(pan.after.textureUploads).toBe(pan.before.textureUploads);
+ expect(pan.after.reusedBatches-pan.before.reusedBatches).toBeGreaterThanOrEqual(20);
+ await page.screenshot({path:info.outputPath(renderer+'-audit-render.png'),clip:{x:0,y:0,width:800,height:600}});
+ await page.evaluate(()=>auditMap.ctx.render.endNavigation());
+ await page.evaluate(async()=>{await auditMap.ctx.render._labels?.settled();auditMap.render();});
+ const afterRemove=await page.evaluate(()=>{auditMap.removeLayer('points');auditMap.removeSource('audit');auditMap.render();return auditSnapshot();});
+ expect(afterRemove.styleEntries).toBe(0);
+ const afterDispose=await page.evaluate(async()=>{const g=auditMap.ctx.render._painter.gpu;await auditMap.dispose();return {styleEntries:g.styles.size,imageEntries:g.images.size,stats:{...g.stats}};});
+ await expect.poll(()=>page.workers().length).toBe(0);
+ const result={renderer,browser:browser.version(),before,afterStyles,pan,afterRemove,afterDispose,errors,warnings,mapErrors:await page.evaluate(()=>auditErrors)};
+ await info.attach('resource-performance',{body:JSON.stringify(result,null,2),contentType:'application/json'});
+ console.log('AUDIT '+renderer+' '+JSON.stringify(result));
+ expect(afterDispose.styleEntries).toBe(0);expect(result.mapErrors).toEqual([]);expect(errors).toEqual([]);
+});

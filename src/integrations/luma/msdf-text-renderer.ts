@@ -107,6 +107,7 @@ export class MsdfTextRenderer {
   private uniforms: Buffer[] = [];
   private pages = new Map<MsdfAtlasPage, Page>();
   private groups: Batch[][] = [];
+  private staging = new Float32Array(0);
   private key = '';
   private size = '';
   private disposed = false;
@@ -116,6 +117,9 @@ export class MsdfTextRenderer {
     mode: 'msdf',
     drawCalls: 0,
     bufferUploads: 0,
+    bufferAllocations: 0,
+    reusedBatches: 0,
+    stagingBytes: 0,
     textureUploads: 0,
     liveTextureBytes: 0,
     liveBufferBytes: 0,
@@ -261,54 +265,61 @@ export class MsdfTextRenderer {
     );
     const key = frame.key + ':' + epochs.join(',');
     if (key !== this.key) {
-      this.clearBatches();
-      // Native navigation can replay a previous placement while a new layout is
-      // filling the bounded atlas. Never sample a recycled UV as another letter.
-      const labels = candidates.filter((l) =>
-        l.raster.glyphs.every((g) => (g.generation ?? 0) === (g.page.generation ?? 0)),
-      );
-      const used = new Set(labels.flatMap((l) => l.raster.glyphs.map((g) => g.page)));
-      for (const [source, p] of this.pages)
-        if (!used.has(source)) {
-          this.stats.liveTextureBytes -= p.texture.width * p.texture.height * 4;
-          p.texture.destroy();
-          this.pages.delete(source);
-        }
-      let grid = new LabelCollisionGrid(),
-        group: MsdfLabel[] = [];
-      const groups: MsdfLabel[][] = [];
-      for (const label of labels) {
-        if (grid.collides(label.bounds)) {
-          groups.push(group);
-          group = [];
-          grid = new LabelCollisionGrid();
-        }
-        group.push(label);
-        grid.insert(label.bounds);
-      }
-      if (group.length) groups.push(group);
+      const reusable = this.groups.flat();
+      let consumed = 0;
+      this.groups = [];
+      this.stats.glyphInstances = 0;
       try {
+        // Recheck membership/collision and atlas generations even on camera-only
+        // frames. Only GPU storage is reused; stale placements are never retained.
+        const labels = candidates.filter((l) =>
+          l.raster.glyphs.every((g) => (g.generation ?? 0) === (g.page.generation ?? 0)),
+        );
+        const used = new Set(labels.flatMap((l) => l.raster.glyphs.map((g) => g.page)));
+        for (const [source, p] of this.pages)
+          if (!used.has(source)) {
+            this.stats.liveTextureBytes -= p.texture.width * p.texture.height * 4;
+            p.texture.destroy();
+            this.pages.delete(source);
+          }
+        let grid = new LabelCollisionGrid(),
+          group: MsdfLabel[] = [];
+        const groups: MsdfLabel[][] = [];
+        for (const label of labels) {
+          if (grid.collides(label.bounds)) {
+            groups.push(group);
+            group = [];
+            grid = new LabelCollisionGrid();
+          }
+          group.push(label);
+          grid.insert(label.bounds);
+        }
+        if (group.length) groups.push(group);
         for (const labels of groups) {
           const runs = new Map<MsdfAtlasPage, Instance[]>();
-          // This group has disjoint label bounds; page batching cannot change compositing.
           for (const label of labels)
             for (const glyph of label.raster.glyphs) {
               let run = runs.get(glyph.page);
-              if (!run) {
-                run = [];
-                runs.set(glyph.page, run);
-              }
+              if (!run) runs.set(glyph.page, (run = []));
               run.push({ label, glyph });
             }
           const batches: Batch[] = [];
           this.groups.push(batches);
-          for (const run of runs.values()) batches.push(this.batch(run));
+          for (const run of runs.values()) {
+            const old = reusable[consumed];
+            const batch = this.batch(run, old);
+            consumed++;
+            batches.push(batch);
+            if (old && old !== batch) this.releaseBatches([old]);
+          }
         }
         this.key = key;
-      } catch (e) {
-        this.clearBatches();
+      } catch (error) {
         this.key = '';
-        throw e;
+        this.clearBatches();
+        throw error;
+      } finally {
+        this.releaseBatches(reusable.slice(consumed));
       }
     }
     const size = `${width}:${height}:${dpr}`;
@@ -328,86 +339,130 @@ export class MsdfTextRenderer {
             this.stats.drawCalls++;
         }
   }
-  private batch(instances: readonly Instance[]): Batch {
+  private batch(instances: readonly Instance[], previous?: Batch): Batch {
     const source = instances[0].glyph.page,
-      page = this.page(source),
-      data = new Float32Array(instances.length * 22);
-    instances.forEach(({ label: l, glyph: g }, i) => {
+      page = this.page(source);
+    const length = instances.length * 22;
+    if (this.staging.length < length) this.staging = new Float32Array(length);
+    this.stats.stagingBytes = this.staging.byteLength;
+    const data = this.staging.subarray(0, length);
+    let last: MsdfLabel | undefined,
+      c = 1,
+      sine = 0;
+    for (let i = 0; i < instances.length; i++) {
+      const { label: l, glyph: g } = instances[i];
+      if (l !== last) {
+        c = Math.cos(l.angle);
+        sine = Math.sin(l.angle);
+        last = l;
+      }
       const [x, y, w, h] = g.plane,
         [u, v, uw, vh] = g.rect,
-        c = Math.cos(l.angle),
-        s = Math.sin(l.angle),
         r = l.raster;
-      data.set(
-        [
-          l.x + c * x - s * y,
-          l.y + s * x + c * y,
-          w,
-          h,
-          c,
-          s,
-          u / source.width,
-          v / source.height,
-          (u + uw) / source.width,
-          (v + vh) / source.height,
-          ...r.color,
-          ...r.haloColor,
-          g.rangeCss,
-          r.haloWidth,
-          r.shear,
-          0,
-        ],
-        i * 22,
-      );
-    });
-    const buffer = this.device.createBuffer({
-      byteLength: data.byteLength,
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-    });
-    let vao: VertexArray | undefined;
-    try {
-      buffer.write(data);
-      vao = this.device.createVertexArray({
-        shaderLayout: this.layout,
-        bufferLayout: this.buffers,
+      const at = i * 22;
+      data[at] = l.x + c * x - sine * y;
+      data[at + 1] = l.y + sine * x + c * y;
+      data[at + 2] = w;
+      data[at + 3] = h;
+      data[at + 4] = c;
+      data[at + 5] = sine;
+      data[at + 6] = u / source.width;
+      data[at + 7] = v / source.height;
+      data[at + 8] = (u + uw) / source.width;
+      data[at + 9] = (v + vh) / source.height;
+      data.set(r.color, at + 10);
+      data.set(r.haloColor, at + 14);
+      data[at + 18] = g.rangeCss;
+      data[at + 19] = r.haloWidth;
+      data[at + 20] = r.shear;
+      data[at + 21] = 0;
+    }
+    const reuse = previous && previous.bytes >= data.byteLength ? previous : undefined;
+    const buffer =
+      reuse?.buffer ??
+      this.device.createBuffer({
+        id: 'emap-msdf-instances',
+        byteLength: data.byteLength,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
       });
-      if (this.backend === 'webgpu') {
-        const a = vao.getBufferSlot('corners'),
-          b = vao.getBufferSlot('glyphs');
-        if (a === null || b === null) throw new Error('Missing MSDF buffer slots.');
-        vao.setBuffer(a, this.quad);
-        vao.setBuffer(b, buffer);
-      } else {
-        vao.setBuffer(0, this.quad);
-        for (const location of [1, 2, 3, 4, 5, 6]) vao.setBuffer(location, buffer);
+    let vao = reuse?.vao;
+    try {
+      // Both adapters consume writes synchronously. One staging allocation can
+      // serve every run without being retained in Buffer initialization props.
+      buffer.write(data);
+      if (!vao) {
+        vao = this.device.createVertexArray({
+          shaderLayout: this.layout,
+          bufferLayout: this.buffers,
+        });
+        if (this.backend === 'webgpu') {
+          const a = vao.getBufferSlot('corners'),
+            b = vao.getBufferSlot('glyphs');
+          if (a === null || b === null) throw new Error('Missing MSDF buffer slots.');
+          vao.setBuffer(a, this.quad);
+          vao.setBuffer(b, buffer);
+        } else {
+          vao.setBuffer(0, this.quad);
+          for (const location of [1, 2, 3, 4, 5, 6]) vao.setBuffer(location, buffer);
+        }
       }
       const bind = (u: Buffer): Bindings => ({
         textUniforms: u,
         atlasTexture: page.texture,
         ...(this.backend === 'webgpu' ? { atlasSampler: page.texture.sampler } : {}),
       });
-      const bindings: [Bindings, Bindings] = [bind(this.uniforms[0]), bind(this.uniforms[1])];
+      const bindings: [Bindings, Bindings] =
+        reuse?.bindings[0].atlasTexture === page.texture
+          ? reuse.bindings
+          : [bind(this.uniforms[0]), bind(this.uniforms[1])];
       this.stats.bufferUploads++;
-      this.stats.liveBufferBytes += data.byteLength;
       this.stats.glyphInstances += instances.length;
+      if (reuse) {
+        this.stats.reusedBatches++;
+        reuse.bindings = bindings;
+        reuse.count = instances.length;
+        return reuse;
+      }
+      this.stats.bufferAllocations++;
+      this.stats.liveBufferBytes += data.byteLength;
       return { buffer, vao, bindings, count: instances.length, bytes: data.byteLength };
-    } catch (e) {
-      vao?.destroy();
-      buffer.destroy();
-      throw e;
+    } catch (error) {
+      if (!reuse) {
+        try {
+          vao?.destroy();
+        } finally {
+          buffer.destroy();
+        }
+      }
+      throw error;
     }
   }
-  private clearBatches(): void {
-    for (const group of this.groups)
-      for (const b of group) {
+  private releaseBatches(batches: readonly Batch[]): void {
+    const errors: unknown[] = [];
+    for (const b of batches) {
+      try {
         b.vao.destroy();
-        b.buffer.destroy();
-        this.stats.liveBufferBytes -= b.bytes;
+      } catch (error) {
+        errors.push(error);
       }
+      try {
+        b.buffer.destroy();
+      } catch (error) {
+        errors.push(error);
+      }
+      this.stats.liveBufferBytes -= b.bytes;
+    }
+    if (errors.length) throw new AggregateError(errors, 'MSDF batch cleanup failed');
+  }
+  private clearBatches(): void {
+    const batches = this.groups.flat();
     this.groups = [];
     this.stats.glyphInstances = 0;
+    this.releaseBatches(batches);
   }
   clear(): void {
+    this.staging = new Float32Array(0);
+    this.stats.stagingBytes = 0;
     this.clearBatches();
     this.key = '';
     for (const p of this.pages.values()) p.texture.destroy();

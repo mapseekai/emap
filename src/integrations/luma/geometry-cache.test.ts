@@ -473,3 +473,71 @@ it("keeps parent requests out of each other's batch and dispatches their first j
   f.cache.dispose();
   expect(f.cache.stats.bytes).toBe(0);
 });
+
+function threeUploadMeshes() {
+  return {
+    screenSpace: false,
+    geometries: Array.from({ length: 3 }, () => ({
+      kind: 'point' as const,
+      vertices: new Float32Array(65536 * 4),
+      count: 65536,
+    })),
+  };
+}
+it('yields within one multi-mesh result without publishing a partial entry', async () => {
+  const f = fixture(16 * 1024 ** 2);
+  f.transport.build.mockResolvedValueOnce(threeUploadMeshes());
+  let observed: boolean | undefined;
+  const create = f.gpu.createMesh.getMockImplementation()!;
+  f.gpu.createMesh.mockImplementation((g) => {
+    if (f.gpu.createMesh.mock.calls.length === 1)
+      setTimeout(() => {
+        observed = f.cache.complete(request);
+      }, 0);
+    return create(g);
+  });
+  const request = f.frame({ ...f.input, ids: new Uint32Array([0]) });
+  await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+  expect(observed).toBe(false);
+  expect(f.cache.stats.uploadYields).toBeGreaterThan(0);
+  expect(f.cache.stats.peakResultBytes).toBe(3 * 1024 ** 2);
+  expect(f.cache.stats.pendingUploadBytes).toBe(0);
+  expect(f.cache.drawable(request)[0].meshes).toHaveLength(3);
+  f.cache.dispose();
+  expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(3);
+});
+it('source retirement during a result upload cancels the remaining meshes and rolls back its reservation', async () => {
+  const f = fixture(16 * 1024 ** 2);
+  f.transport.build.mockResolvedValueOnce(threeUploadMeshes());
+  const create = f.gpu.createMesh.getMockImplementation()!;
+  f.gpu.createMesh.mockImplementation((g) => {
+    if (f.gpu.createMesh.mock.calls.length === 1)
+      setTimeout(() => f.cache.clear({ sourceId: 's' }), 0);
+    return create(g);
+  });
+  f.frame({ ...f.input, ids: new Uint32Array([0]) });
+  await vi.waitFor(() => expect(f.gpu.destroyMesh).toHaveBeenCalled());
+  expect(f.gpu.createMesh.mock.calls.length).toBeLessThan(3);
+  expect(f.gpu.destroyMesh.mock.calls.length).toBe(f.gpu.createMesh.mock.calls.length);
+  expect(f.cache.stats.bytes).toBe(0);
+  expect(f.cache.stats.pendingUploadBytes).toBe(0);
+  expect(f.report).not.toHaveBeenCalled();
+  f.cache.dispose();
+});
+it('failed partial uploads release their buffers and never leave a ready entry or charged payload', async () => {
+  const f = fixture(16 * 1024 ** 2);
+  f.transport.build.mockResolvedValueOnce(threeUploadMeshes());
+  const create = f.gpu.createMesh.getMockImplementation()!;
+  f.gpu.createMesh.mockImplementation((g) => {
+    if (f.gpu.createMesh.mock.calls.length === 3) throw new Error('upload failed');
+    return create(g);
+  });
+  const request = f.frame({ ...f.input, ids: new Uint32Array([0]) });
+  await vi.waitFor(() => expect(f.cache.failed(request)).toBe(true));
+  expect(f.cache.drawable(request)).toHaveLength(0);
+  expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(2);
+  expect(f.cache.stats.pendingUploadBytes).toBe(0);
+  expect(f.cache.stats.bytes).toBe(8); // source member and point component metadata only
+  f.cache.dispose();
+  expect(f.cache.stats.bytes).toBe(0);
+});

@@ -162,6 +162,12 @@ export class GeometryChunkCache {
     errors: 0,
     peakBytes: 0,
     maxMeshBytes: 0,
+    peakResultBytes: 0,
+    pendingUploadBytes: 0,
+    uploadCpuMs: 0,
+    maxMeshUploadMs: 0,
+    maxUploadSliceMs: 0,
+    uploadYields: 0,
     packMs: 0,
     batchAdmissionMs: 0,
     uploadCulledBytes: 0,
@@ -639,27 +645,43 @@ export class GeometryChunkCache {
     this.counters.errors++;
     this.options.report(entry.error);
   }
-  private acceptResult(
+  private async acceptResult(
     request: GeometryRequest,
     entry: GeometryEntry,
     result: GeometryResult,
-  ): void {
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
+    const buffers = new Set<ArrayBufferLike>();
+    for (const g of result.geometries)
+      for (const a of [
+        g.vertices,
+        g.indices,
+        g.pathRanges?.bounds,
+        g.pathRanges?.segments,
+        g.pathRanges?.uncullable,
+        g.fillRanges?.bounds,
+      ])
+        if (a) buffers.add(a.buffer);
+    const resultBytes = [...buffers].reduce((n, b) => n + b.byteLength, 0);
+    this.counters.peakResultBytes = Math.max(this.counters.peakResultBytes, resultBytes);
     const fillRanges = result.geometries.map((g) =>
       g.fillRanges ? new FillRangeIndex(g.fillRanges, g.count) : undefined,
     );
     const ranges = result.geometries.map((g) =>
       g.pathRanges ? new PathRangeIndex(g.pathRanges, g.count) : undefined,
     );
+    const payload = result.geometries.reduce(
+      (n, g) =>
+        n +
+        (this.gpu.meshByteSize?.(g) ??
+          g.vertices.byteLength + Math.ceil((g.indices?.byteLength ?? 0) / 4) * 4),
+      0,
+    );
     const cost =
+      payload +
       ranges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
-      fillRanges.reduce((n, ranges) => n + (ranges?.bytes ?? 0), 0) +
-      result.geometries.reduce(
-        (n, g) =>
-          n +
-          (this.gpu.meshByteSize?.(g) ??
-            g.vertices.byteLength + Math.ceil((g.indices?.byteLength ?? 0) / 4) * 4),
-        0,
-      );
+      fillRanges.reduce((n, r) => n + (r?.bytes ?? 0), 0);
     this.trim(cost);
     if (this.bytes + this.externalBytes + cost > this.limit * 2) {
       entry.requiredBytes = cost;
@@ -667,29 +689,83 @@ export class GeometryChunkCache {
         'Visible GPU geometry exceeds the bounded working-set limit; zoom in or hide layers. Source data was not simplified or truncated.',
       );
     }
+    // Reserve the whole result before yielding: immediate draws must not spend
+    // this capacity. Partial buffers belong to the building entry for cancellation,
+    // but drawable() exposes only fully committed entries (or their old fallback).
+    entry.bytes += cost;
+    this.bytes += cost;
+    this.counters.pendingUploadBytes = payload;
+    this.counters.peakBytes = Math.max(this.counters.peakBytes, this.bytes);
     const meshes: GpuMesh[] = [];
+    entry.meshes = meshes;
+    let slice = performance.now(),
+      sliceBytes = 0;
     try {
-      for (const geometry of result.geometries) {
-        // Pages own byte ranges, not geometry identity. Source revisions,
-        // LOD and screen bases still guard entries and ordered draw runs.
-        // Sharing retired storage across those versions avoids fragmentation.
+      for (let i = 0; i < result.geometries.length; i++) {
+        signal.throwIfAborted();
+        if (this.disposed || this.entries.get(entry.id) !== entry)
+          throw new DOMException('Geometry upload retired', 'AbortError');
+        const started = performance.now(),
+          geometry = result.geometries[i];
         const mesh = this.gpu.createMesh(
           geometry,
           JSON.stringify([request.owner.sourceId, request.owner.id]),
         );
-        if (!mesh) continue;
-        meshes.push(mesh);
-
-        this.counters.maxMeshBytes = Math.max(this.counters.maxMeshBytes, mesh.bytes);
+        const elapsed = performance.now() - started;
+        this.counters.uploadCpuMs += elapsed;
+        this.counters.maxMeshUploadMs = Math.max(this.counters.maxMeshUploadMs, elapsed);
+        if (!mesh && geometry.count)
+          throw new Error('GPU became unavailable during geometry upload');
+        if (mesh) {
+          meshes.push(mesh);
+          sliceBytes += mesh.bytes;
+          this.counters.pendingUploadBytes = Math.max(
+            0,
+            this.counters.pendingUploadBytes - mesh.bytes,
+          );
+          this.counters.maxMeshBytes = Math.max(this.counters.maxMeshBytes, mesh.bytes);
+        }
+        if (
+          i + 1 < result.geometries.length &&
+          (sliceBytes >= 2 * 1024 ** 2 || performance.now() - slice >= 4)
+        ) {
+          this.counters.maxUploadSliceMs = Math.max(
+            this.counters.maxUploadSliceMs,
+            performance.now() - slice,
+          );
+          this.counters.uploadYields++;
+          await geometryYield(signal);
+          slice = performance.now();
+          sliceBytes = 0;
+        }
       }
+      signal.throwIfAborted();
+      this.counters.maxUploadSliceMs = Math.max(
+        this.counters.maxUploadSliceMs,
+        performance.now() - slice,
+      );
     } catch (error) {
-      for (const mesh of meshes) this.gpu.destroyMesh(mesh);
+      if (this.entries.get(entry.id) === entry) {
+        entry.meshes = [];
+        entry.bytes -= cost;
+        this.bytes -= cost;
+        const failures: unknown[] = [error];
+        for (const mesh of meshes) {
+          try {
+            this.gpu.destroyMesh(mesh);
+          } catch (cleanupError) {
+            failures.push(cleanupError);
+          }
+        }
+        if (failures.length > 1)
+          throw new AggregateError(failures, 'Geometry upload rollback failed');
+      }
       throw error;
+    } finally {
+      this.counters.pendingUploadBytes = 0;
     }
-    entry.meshes = meshes;
     entry.ranges = ranges;
     entry.fillRanges = fillRanges;
-    entry.bytes += cost;
     entry.screenSpace = result.screenSpace;
     entry.screenView = result.screenSpace ? request.input.screen?.view : undefined;
     entry.fallback = undefined;
@@ -697,8 +773,6 @@ export class GeometryChunkCache {
     entry.screenStats = result.screenStats;
     entry.state = 'ready';
     entry.requiredBytes = undefined;
-    this.bytes += cost;
-    this.counters.peakBytes = Math.max(this.counters.peakBytes, this.bytes);
     this.counters.builds++;
     this.counters.uploadCulledBytes += result.uploadCulledBytes ?? 0;
     this.counters.directFeatures += result.directFeatures ?? 0;
@@ -797,8 +871,9 @@ export class GeometryChunkCache {
               const item = results[i];
               if (!item || item.error !== undefined || !item.result)
                 throw new Error(item?.error ?? 'Invalid geometry batch result');
-              this.acceptResult(request, entry, item.result);
+              await this.acceptResult(request, entry, item.result, controller.signal);
             } catch (error) {
+              if (controller.signal.aborted) throw error;
               this.preparationError(request, entry, error);
             }
             if (i + 1 < tasks.length && performance.now() - uploadSlice >= 4) {
@@ -868,7 +943,7 @@ export class GeometryChunkCache {
   private drop(entry: GeometryEntry): void {
     this.residencyVersion++;
     if (this.active?.entries.has(entry)) this.active.controller.abort();
-    for (const mesh of entry.meshes) this.gpu.destroyMesh(mesh);
+    const meshes = entry.meshes;
     entry.meshes = [];
     entry.ranges = [];
     entry.fillRanges = [];
@@ -878,6 +953,15 @@ export class GeometryChunkCache {
     this.bytes -= entry.bytes;
     entry.bytes = 0;
     this.entries.delete(entry.id);
+    const errors: unknown[] = [];
+    for (const mesh of meshes) {
+      try {
+        this.gpu.destroyMesh(mesh);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Geometry entry cleanup failed');
   }
   clear(scope: { sourceId?: string; layerId?: string } = {}): void {
     this.settledRequests = [];
@@ -894,7 +978,15 @@ export class GeometryChunkCache {
         r.controller.abort();
         this.requests.delete(id);
       }
-    for (const e of this.entries.values()) if (matches(e.owner)) this.drop(e);
+    const errors: unknown[] = [];
+    for (const e of this.entries.values())
+      if (matches(e.owner)) {
+        try {
+          this.drop(e);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
     const retained = new Set([...this.requests.values()].map((r) => r.plan));
     for (const [key, plan] of this.plans)
       if (!retained.has(plan)) {
@@ -902,6 +994,7 @@ export class GeometryChunkCache {
         this.plans.delete(key);
       }
     this.worker.retainSources?.(new Set([...this.requests.values()].map((r) => r.owner.sourceId)));
+    if (errors.length) throw new AggregateError(errors, 'Geometry cache cleanup failed');
   }
   dispose(): void {
     if (this.disposed) return;

@@ -10,7 +10,11 @@ function setup() {
   const device: any = {
     createShader: () => object(),
     createRenderPipeline: () => object(),
-    createBuffer: () => ({ ...object(), write: vi.fn() }),
+    createBuffer: (props: any) => ({
+      ...object(),
+      byteLength: props.byteLength ?? props.data?.byteLength ?? 0,
+      write: vi.fn(),
+    }),
     createTexture: () => ({
       ...object(),
       width: 1024,
@@ -110,4 +114,40 @@ it('does not sample recycled atlas glyphs when a previous navigation frame is re
   renderer.draw(f.pass, { key: 'new', labels: [f.label] }, 100, 100, 1);
   expect(renderer.stats.glyphInstances).toBe(1);
   renderer.dispose();
+});
+
+for (const backend of ['webgl', 'webgpu'] as const)
+  it(`${backend}: navigation rewrites existing glyph buffers without reallocating buffers or VAOs`, () => {
+    const f = setup(),
+      r = new MsdfTextRenderer(f.device, backend);
+    r.draw(f.pass, { key: 'first', labels: [f.label] }, 200, 200, 1);
+    const allocated = f.resources.length,
+      bytes = r.stats.liveBufferBytes;
+    for (let i = 0; i < 20; i++)
+      r.draw(f.pass, { key: 'pan-' + i, labels: [{ ...f.label, x: 40 + i }] }, 200, 200, 1);
+    expect(f.resources.length).toBe(allocated);
+    expect(r.stats.liveBufferBytes).toBe(bytes);
+    expect(r.stats.bufferAllocations).toBe(1);
+    expect(r.stats.reusedBatches).toBe(20);
+    expect(r.stats.textureUploads).toBe(1);
+    r.dispose();
+    expect(r.stats.stagingBytes).toBe(0);
+    expect(f.resources.every((resource) => resource.destroy.mock.calls.length === 1)).toBe(true);
+  });
+
+it('grows a glyph buffer only when necessary and releases unused batches after membership shrinks', () => {
+  const f = setup(),
+    r = new MsdfTextRenderer(f.device, 'webgl');
+  r.draw(f.pass, { key: 'one', labels: [f.label] }, 200, 200, 1);
+  const second = { ...f.label, x: 100, bounds: [80, 20, 120, 60] };
+  r.draw(f.pass, { key: 'two', labels: [f.label, second] }, 200, 200, 1);
+  const allocated = f.resources.length;
+  r.draw(f.pass, { key: 'back', labels: [f.label] }, 200, 200, 1);
+  expect(f.resources.length).toBe(allocated);
+  expect(r.stats.glyphInstances).toBe(1);
+  expect(r.stats.bufferAllocations).toBe(2);
+  r.draw(f.pass, { key: 'none', labels: [] }, 200, 200, 1);
+  expect(r.stats.liveBufferBytes).toBe(0);
+  r.dispose();
+  expect(f.resources.every((resource) => resource.destroy.mock.calls.length === 1)).toBe(true);
 });

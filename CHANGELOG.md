@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Reuse glyph/bitmap label buffer capacity, VAOs and bounded CPU staging across navigation;
+  retain current collision, ordering and atlas-generation checks.
+- Yield within multi-mesh geometry uploads, reserve their full working set before yielding,
+  roll back cancelled/failed partial uploads and expose upload-slice diagnostics.
+
 - Retain conservative resident stroke envelopes and group uniform fill pages; compile
   adjacent partial draw ranges without crossing invisible or retired geometry.
   Validate ranges against their original slices, retain owned WebGL range VAOs,
