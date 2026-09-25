@@ -234,14 +234,14 @@ for (const renderer of ['webgl2','webgpu']) test(`${renderer}: odd uint16 fill u
 });
 
 
-for (const renderer of ['webgl2', 'webgpu']) for (const kind of ['fill', 'path']) {
+for (const renderer of ['webgl2', 'webgpu']) for (const kind of ['fill', 'path', 'polygon']) {
  test(`${renderer}: ${kind} membership handoff never blanks or doubles existing pixels while a replacement is held`, async ({page}) => {
   test.setTimeout(90000); await boot(page,renderer,true);
   await page.evaluate(async kind => {
    const features=[1.05,1.1,1.15].map((x,id)=>feature({type:'Polygon',coordinates:[square(x,1.1,.035)]},{id}));
    const source=await addProgressSource('handoff',[...features,largeLine()]);
    const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
-   progressMap.addLayer({id:'handoff',source:'handoff','source-layer':layer.name,type:kind==='fill'?'fill':'line',paint:kind==='fill'?{'fill-color':'#0000ff','fill-opacity':.5,'line-width':0}:{'line-color':'#0000ff80','line-width':6}});
+   progressMap.addLayer({id:'handoff',source:'handoff','source-layer':layer.name,type:kind==='path'?'line':'fill',paint:kind!=='path'?{'fill-color':'#0000ff','fill-opacity':.5,'line-width':kind==='polygon'?6:0,'line-color':'#00aa0080'}:{'line-color':'#0000ff80','line-width':6}});
    const c=progressMap.ctx.render._painter.chunks;
    window.handoffSelection=[0,1];window.handoffRequest=c.request.bind(c);
    // Model successive viewport candidate selections without altering source data.
@@ -257,7 +257,7 @@ for (const renderer of ['webgl2', 'webgpu']) for (const kind of ['fill', 'path']
    progressMap.setExtent(new emap.Bounds(.8,.8,1.4,1.4));progressMap.render();
   },kind);
   await settled(page);
-  const at=kind==='fill'?[1.1175,1.1175]:[1.1175,1.1];
+  const at=kind!=='path'?[1.1175,1.1175]:[1.1175,1.1];
   const before=await pixels(page,'pixel',at);
   expect(before[2]).toBe(255);expect(before[0]).toBeGreaterThan(120);expect(before[0]).toBeLessThan(135);
   const count=await page.evaluate(()=>[...progressMap.ctx.render._painter.chunks.requests.values()][0].entries.length);
@@ -284,3 +284,145 @@ for (const renderer of ['webgl2', 'webgpu']) for (const kind of ['fill', 'path']
   await dispose(page);
  });
 }
+
+
+for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: polygon fill and outline become visible together`, async ({page}) => {
+  test.setTimeout(90000);
+  await boot(page, renderer, true);
+  await page.evaluate(async () => {
+    const cache=progressMap.ctx.render._painter.chunks;
+    const next=cache.nextQueued.bind(cache);
+    // Deterministically prepare fill first; hold only the subsequent stroke.
+    cache.nextQueued=()=>{
+      for(const request of cache.current()) if(request.input.kind==='fill') {
+        const entry=cache.queued(request); if(entry) return {request,entry};
+      }
+      return next();
+    };
+    const wait=new Promise(resolve=>{window.releasePolygonStroke=resolve;});
+    const build=cache.worker.build.bind(cache.worker),batch=cache.worker.buildBatch.bind(cache.worker);
+    const hold=async packets=>{if(packets.some(p=>p.kind==='path')) {window.polygonStrokeHeld=true;await wait;}};
+    cache.worker.build=async(p,signal)=>{await hold([p]);return build(p,signal);};
+    cache.worker.buildBatch=async(p,signal)=>{await hold(p);return batch(p,signal);};
+    const source=await addProgressSource('paired',[feature({type:'Polygon',coordinates:[square(-2,-2,4),square(-.5,-.5,1)]}),largeLine()]);
+    const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+    progressMap.addLayer({id:'paired',source:'paired','source-layer':layer.name,type:'fill',paint:{'fill-color':'#22bb66','fill-opacity':.6,'line-color':'#2255cc','line-width':6}});
+    progressMap.setExtent(new emap.Bounds(-4,-4,4,4));progressMap.render();
+  });
+  await expect.poll(()=>page.evaluate(()=>window.polygonStrokeHeld===true)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._painter.stats.presentation.partial)).toBeGreaterThan(0);
+  expect(await pixels(page,'pixel',[1,1])).toEqual([255,255,255,255]);
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.frameComplete)).toBe(false);
+  await page.evaluate(()=>releasePolygonStroke());await settled(page);
+  const filled=await pixels(page,'pixel',[1,1]);expect(filled[1]).toBeGreaterThan(filled[0]);
+  const edge=await pixels(page,'pixel',[2,0]);expect(edge[2]).toBeGreaterThan(edge[0]);
+  expect(await pixels(page,'pixel',[0,0])).toEqual([255,255,255,255]);
+  const final=await pixels(page),before=await page.evaluate(()=>progressMap.ctx.render._painter.stats.uploads);
+  // Complete output must match the existing primitive path exactly.
+  await page.evaluate(()=>{progressMap.ctx.render._painter.drawPolygon=undefined;progressMap.render();});await settled(page);
+  expect(await pixels(page)).toEqual(final);
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.stats.uploads)).toBe(before);
+  await dispose(page);
+});
+
+
+for (const renderer of ['webgl2','webgpu']) test(`${renderer}: complete polygon regions progress while an unrelated fill is held`,async({page})=>{
+ await boot(page,renderer,true);
+ await page.evaluate(async()=>{
+  const cache=progressMap.ctx.render._painter.chunks;cache.batchJobs=1;
+  const wait=new Promise(resolve=>{window.releaseRightPolygon=resolve;});
+  const build=cache.worker.build.bind(cache.worker);
+  cache.worker.build=async(packet,signal)=>{
+   if(packet.kind==='fill' && packet.featureIds?.includes(1)) {window.rightPolygonHeld=true;await wait;}
+   return build(packet,signal);
+  };
+  const source=await addProgressSource('regions',[
+   feature({type:'Polygon',coordinates:[square(-3,-2,2)]}),
+   feature({type:'Polygon',coordinates:[square(3,-2,2)]}),largeLine()]);
+  const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+  progressMap.addLayer({id:'regions',source:'regions','source-layer':layer.name,type:'fill',paint:{'fill-color':'#22bb66','fill-opacity':.6,'line-color':'#2255cc','line-width':6}});
+  await addProgressSource('independent',[feature({type:'LineString',coordinates:[[-3,2],[5,2]]})]);
+  progressMap.addLayer({id:'independent',source:'independent',type:'line',paint:{'line-color':'#ff0000','line-width':6}});
+  progressMap.setExtent(new emap.Bounds(-4,-3,6,3));progressMap.render();
+ });
+ await expect.poll(()=>page.evaluate(()=>window.rightPolygonHeld===true)).toBe(true);
+ await expect.poll(async()=>(await pixels(page,'pixel',[-2,-1]))[0]).toBeLessThan(200);
+ const leftEdge=await pixels(page,'pixel',[-3,-1]);expect(leftEdge[2]).toBeGreaterThan(leftEdge[0]);
+ expect(await pixels(page,'pixel',[4,-1])).toEqual([255,255,255,255]);
+ expect(await pixels(page,'pixel',[5,-1])).toEqual([255,255,255,255]);
+ expect(await pixels(page,'pixel',[0,2])).toEqual([255,0,0,255]);
+ expect(await page.evaluate(()=>progressMap.ctx.render._painter.frameComplete)).toBe(false);
+ await page.evaluate(()=>releaseRightPolygon());await settled(page);
+ expect((await pixels(page,'pixel',[4,-1]))[0]).toBeLessThan(200);
+ await page.evaluate(()=>{progressMap.setPaintProperty('regions','line-width',0);progressMap.render();});await settled(page);
+ expect(await page.evaluate(()=>progressMap.ctx.render._painter.polygons.size)).toBe(0);
+ await page.evaluate(()=>{progressMap.setPaintProperty('regions','line-width',6);progressMap.setPaintProperty('regions','fill-opacity',0);progressMap.render();});await settled(page);
+ expect(await pixels(page,'pixel',[4,-1])).toEqual([255,255,255,255]);
+ const outline=await pixels(page,'pixel',[5,-1]);expect(outline[2]).toBeGreaterThan(outline[0]);
+ expect(await pixels(page,'pixel',[0,2])).toEqual([255,0,0,255]);
+ await dispose(page);
+});
+
+
+for (const renderer of ['webgl2','webgpu']) for (const lineColor of ['#2255cc','#2255cc80'])
+ test(`${renderer}: shared polygon edges do not block their ready neighbor (${lineColor})`, async({page})=>{
+  await boot(page,renderer,true);
+  await page.evaluate(async lineColor=>{
+   const cache=progressMap.ctx.render._painter.chunks,next=cache.nextQueued.bind(cache);
+   cache.nextQueued=()=>{
+    for(const kind of ['path','fill']) for(const request of cache.current()) {
+     if(request.input.kind!==kind || (kind==='fill' && !request.input.ids?.includes(0)))continue;
+     const entry=cache.queued(request);if(entry)return {request,entry};
+    }
+    return next();
+   };
+   cache.batchJobs=1;
+   const wait=new Promise(resolve=>{window.releaseSharedFill=resolve;});
+   const build=cache.worker.build.bind(cache.worker);
+   cache.worker.build=async(packet,signal)=>{
+    if(packet.kind==='fill' && packet.featureIds?.includes(1)){window.sharedFillHeld=true;await wait;}
+    return build(packet,signal);
+   };
+   const source=await addProgressSource('shared',[
+    feature({type:'Polygon',coordinates:[square(1.05,1.1,.035)]},{id:0,color:'#22bb66'}),
+    feature({type:'Polygon',coordinates:[square(1.085,1.1,.035)]},{id:1,color:'#ddbb22'}),largeLine()]);
+   const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+   progressMap.addLayer({id:'shared',source:'shared','source-layer':layer.name,type:'fill',paint:{
+    'fill-color':['get','color'],
+    'fill-opacity':.6,'line-color':lineColor,'line-width':6,
+   }});
+   progressMap.setExtent(new emap.Bounds(.98,1,1.25,1.24));progressMap.render();
+  },lineColor);
+  await expect.poll(()=>page.evaluate(()=>window.sharedFillHeld===true)).toBe(true);
+  await expect.poll(async()=>(await pixels(page,'pixel',[1.0675,1.1175]))[0]).toBeLessThan(200);
+  const edge=await pixels(page,'pixel',[1.05,1.1175]);expect(edge[2]).toBeGreaterThan(edge[0]);
+  expect(await pixels(page,'pixel',[1.1025,1.1175])).toEqual([255,255,255,255]);
+  expect(await pixels(page,'pixel',[1.12,1.1175])).toEqual([255,255,255,255]);
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.frameComplete)).toBe(false);
+  await page.evaluate(()=>releaseSharedFill());await settled(page);
+  const final=await pixels(page),uploads=await page.evaluate(()=>progressMap.ctx.render._painter.stats.uploads);
+  await page.evaluate(()=>{progressMap.ctx.render._painter.drawPolygon=undefined;progressMap.render();});await settled(page);
+  expect(await pixels(page)).toEqual(final);
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.stats.uploads)).toBe(uploads);
+  await dispose(page);
+ });
+
+
+for (const renderer of ['webgl2','webgpu']) test(`${renderer}: retained source chunks match exact viewport selection pixels after pan and zoom`, async ({page}) => {
+ test.setTimeout(120000); await boot(page, renderer, true);
+ await page.evaluate(async () => {
+  const features=[];
+  for(let y=0;y<100;y++)for(let x=0;x<100;x++)features.push(feature({type:'Polygon',coordinates:[square(x,y,.95),square(x+.2,y+.2,.2)]}));
+  const source=await addProgressSource('retained',[...features,largeLine()]);
+  const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+  progressMap.addLayer({id:'land',source:'retained','source-layer':layer.name,type:'fill',paint:{'fill-color':'#22bb66','fill-opacity':.55,'line-color':'#2255cc80','line-width':2}});
+  progressMap.setExtent(new emap.Bounds(5,5,25,25)); progressMap.render();
+ }); await settled(page);
+ for (const bounds of [[5,5,25,25],[10,10,15,15],[10.3,10.2,15.3,15.2]]) {
+  await page.evaluate(bounds=>{const p=progressMap.ctx.render._painter;p.retainedVectorChunks=true;progressMap.setExtent(new emap.Bounds(...bounds));progressMap.render();},bounds);await settled(page);
+  const retained=await pixels(page);
+  await page.evaluate(()=>{const p=progressMap.ctx.render._painter;p.retainedVectorChunks=false;progressMap.render();});await settled(page);
+  expect(await pixels(page)).toEqual(retained);
+ }
+ await dispose(page);
+});

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Cache bounded source/style membership for large solid vector layers; pan selects
+  chunk bounds and only retests boundary arcs. Cache dense/null spatial queries and
+  preserve compatible in-flight boundary jobs without resetting the geometry Worker.
+- Keep conservative bounded stroke ranges for fragmented views and specialize
+  compact affine stroke projection without changing source coordinates or MSAA.
+
 - Reduce view geometry preparation overhead: snapshot native arc metadata per partition,
   skip structurally degenerate display fills, preserve exact Earcut indices for convex
   triangles/quads. Preserve the existing timer-based cooperative yielding.
@@ -24,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve 64-bit integer/Boolean/BLOB fields and cancellation atomicity.
 
 ### Fixed
+
+- Reuse full interior fill chunks across camera storage windows to avoid duplicate
+  geometry exhausting the working set during GeoPackage pan handoffs. Report queued,
+  building, failed and budget-blocked entries independently; a failed chunk no longer
+  starves independent later work. Existing geometry and index budgets remain unchanged.
+
+- Present polygon fills and their optional outlines as one composite command on
+  WebGL2/WebGPU. Couple dependent geometry chunks, retain compatible complete pairs
+  during navigation, and keep independent regions progressive without changing
+  shared-edge rendering, paint order, or standalone line layers.
 
 - Keep resident vector geometry visible while camera-dependent chunk membership or
   display LOD changes. Commit overlapping replacements atomically, preserve paint

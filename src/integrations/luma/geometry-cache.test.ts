@@ -1,3 +1,4 @@
+import { arcVisibilityFilter } from '../../domain/geo/arc-visibility';
 import { describe, expect, it, vi } from 'vitest';
 import { GeometryChunkCache } from './geometry-cache';
 import { buildGeometryPacket } from '../../engine/rendering/luma/geometry-packet';
@@ -901,6 +902,204 @@ it('does not treat equal-valued source bounds from another dataset as LOD contin
     const next = f.frame({ ...input, arcs: { ...input.arcs! }, bounds: [...input.bounds] });
     expect(next.fallback).toBeUndefined();
     expect(f.cache.drawable(next)).toHaveLength(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reuses source membership and full interior fill chunks across camera storage windows', async () => {
+  const f = fixture(4096),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  try {
+    const first = f.frame({ ...input, viewBounds: [1, 1, 2, 2], storageBounds: [1, 1, 2, 2] });
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const shown = f.cache.drawable(first),
+      builds = f.cache.stats.builds;
+    expect(shown).toHaveLength(1);
+    expect(shown[0].coverage).toBeUndefined();
+    for (const x of [0.9, 1, 0.8]) {
+      const next = f.frame({
+        ...input,
+        viewBounds: [x, 1, x + 1, 2],
+        storageBounds: [x, 1, x + 1, 2],
+      });
+      await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+      expect(f.cache.drawable(next)).toEqual(shown);
+    }
+    expect(f.cache.stats.builds).toBe(builds);
+    expect(f.cache.stats.selectionBuilds).toBe(1);
+    expect(f.cache.stats.selectionHits).toBe(3);
+    expect(f.cache.stats.budgetBytes).toBe(4096);
+    f.cache.clear({ sourceId: 's' });
+    expect(f.cache.stats.selectionCacheBytes).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('does not reuse stable source membership after in-place ID edits or source revision changes', async () => {
+  const f = fixture(),
+    ids = Uint32Array.of(0, 1),
+    input = { ...handoffInput('fill'), sourceSelection: true, ids };
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    ids[0] = 2;
+    const second = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(second)).toBe(true));
+    expect(f.cache.drawable(second).flatMap((e) => [...e.job.members])).toEqual([2, 1]);
+    expect(f.cache.stats.selectionBuilds).toBe(2);
+    const third = f.frame(input, 1);
+    await vi.waitFor(() => expect(f.cache.complete(third)).toBe(true));
+    expect(f.cache.stats.selectionBuilds).toBe(3);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reports queued work behind a failure and still completes independent members', async () => {
+  const f = fixture();
+  let release!: () => void;
+  f.transport.build.mockRejectedValueOnce(new Error('isolated decode failure'));
+  f.transport.build.mockImplementationOnce(async (packet) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    const r = f.frame();
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(f.cache.stats.failedEntries).toBe(1);
+    expect(f.cache.stats.pending).toBeGreaterThan(0);
+    expect(f.cache.stats.building).toBe(1);
+    release();
+    await vi.waitFor(() => expect(f.cache.stats.builds).toBe(2));
+    expect(f.cache.complete(r)).toBe(false);
+    expect(f.cache.stats.failedRequests).toBe(1);
+    expect(f.cache.stats.queued).toBe(0);
+    expect(f.report).toHaveBeenCalledOnce();
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('caches the interior arc selection and only tests boundary chunks during navigation', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('path'), sourceSelection: true };
+  const small = vi.fn(() => false),
+    intersects = vi.fn((id: number, b: number[]) => (id === 3 ? b[0] <= 0.12 : b[0] <= 1.32));
+  Object.assign(input.arcs!, { arcIsSmaller: small, arcIntersectsBBox: intersects });
+  try {
+    const first = f.frame({
+      ...input,
+      viewBounds: [0, 0, 3, 3],
+      filter: arcVisibilityFilter(input.arcs!, 0.1, [0, 0, 3, 3]),
+    });
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    small.mockClear();
+    intersects.mockClear();
+    const second = f.frame({
+      ...input,
+      viewBounds: [-0.1, -0.1, 3, 3],
+      filter: arcVisibilityFilter(input.arcs!, 0.1, [-0.1, -0.1, 3, 3]),
+    });
+    await vi.waitFor(() => expect(f.cache.complete(second)).toBe(true));
+    expect(small).not.toHaveBeenCalled();
+    expect(intersects).not.toHaveBeenCalled();
+    expect(f.cache.stats.selectionHits).toBe(1);
+    const third = f.frame({
+      ...input,
+      viewBounds: [1, 1, 3, 3],
+      filter: arcVisibilityFilter(input.arcs!, 0.1, [1, 1, 3, 3]),
+    });
+    await vi.waitFor(() => expect(f.cache.complete(third)).toBe(true));
+    expect(f.cache.drawable(third).flatMap((e) => [...e.job.members])).toEqual([0, 1, 2]);
+    expect(f.cache.stats.selectionBuilds).toBe(1);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('isolates concurrent stable selections with the same paint but different draw slots', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  try {
+    f.cache.begin();
+    const a = f.cache.request(
+      { ...input, ids: Uint32Array.of(0) },
+      { id: 'p', sourceId: 's', revision: 0 },
+    );
+    const b = f.cache.request(
+      { ...input, ids: Uint32Array.of(1) },
+      { id: 'p', sourceId: 's', revision: 0 },
+    );
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(a) && f.cache.complete(b)).toBe(true));
+    expect(f.cache.drawable(a).flatMap((e) => [...e.job.members])).toEqual([0]);
+    expect(f.cache.drawable(b).flatMap((e) => [...e.job.members])).toEqual([1]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('finishes a bounded compatible boundary refinement instead of restarting the geometry Worker', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('path'), sourceSelection: true };
+  const xs = [1.1, 1.2, 1.3, 0.1];
+  Object.assign(input.arcs!, {
+    arcIntersectsBBox: (id: number, b: number[]) => xs[id] >= b[0] && xs[id] <= b[2],
+  });
+  const releases: (() => void)[] = [];
+  f.transport.build.mockImplementation(async (packet, signal?: AbortSignal) => {
+    await new Promise<void>((resolve, reject) => {
+      releases.push(resolve);
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    f.frame({
+      ...input,
+      viewBounds: [1, 1, 1.25, 1.3],
+      filter: arcVisibilityFilter(input.arcs!, 0, [1, 1, 1.25, 1.3]),
+    });
+    await vi.waitFor(() => expect(releases.length).toBe(1));
+    const next = f.frame({
+      ...input,
+      viewBounds: [1.15, 1, 1.4, 1.3],
+      filter: arcVisibilityFilter(input.arcs!, 0, [1.15, 1, 1.4, 1.3]),
+    });
+    await vi.waitFor(() => expect(next.entries).not.toBeNull());
+    expect(f.cache.stats.cancellations).toBe(0);
+    releases[0]();
+    await vi.waitFor(() => expect(releases.length).toBe(2));
+    releases[1]();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next).flatMap((e) => [...e.job.members])).toEqual([1, 2]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    for (const release of releases) release();
+    f.cache.dispose();
+  }
+});
+
+it('bounds empty completed membership cache entries across many detail keys', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('path'), sourceSelection: true, ids: new Uint32Array(0) };
+  try {
+    for (let detail = 0; detail < 140; detail++) {
+      const r = f.frame({ ...input, filter: arcVisibilityFilter(input.arcs!, detail, null) });
+      await vi.waitFor(() => expect(f.cache.complete(r)).toBe(true), {
+        interval: 1,
+        timeout: 1000,
+      });
+    }
+    expect(Reflect.get(f.cache, 'selections').size).toBeLessThanOrEqual(128);
+    expect(f.cache.stats.selectionCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
   } finally {
     f.cache.dispose();
   }

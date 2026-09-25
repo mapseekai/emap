@@ -1,7 +1,7 @@
 import type { PointIconImages } from '../rendering/icons/images';
 import { pointLodForPainter } from '../rendering/point-lod';
 import type { Viewport } from '../../domain/geo/viewport';
-import type { CorePainter } from '../rendering/painter';
+import type { CorePainter, PolygonDrawOptions } from '../rendering/painter';
 import type { MutableTopologySource } from '../../domain/source/source';
 import type {
   ArcCollection,
@@ -35,6 +35,21 @@ export interface LayerRendererContext {
     ml: MapshaperLayer,
     bounds: readonly number[],
   ): Uint32Array | null;
+}
+
+/** Direction-sensitive dashes/arrows retain their original candidate path. */
+function retainsVectorChunks(
+  ctx: LayerRendererContext,
+  layer: LayerSpecification,
+  arcs: ArcCollection | undefined | null,
+): boolean {
+  return (
+    layer.type !== 'circle' &&
+    !!ctx.painter.retainedVectorChunks &&
+    (arcs?.getPointCount?.() ?? 0) >= 100_000 &&
+    !layer.paint?.['line-dasharray']?.length &&
+    (layer.paint?.['line-dashstyle'] === undefined || layer.paint['line-dashstyle'] === 'solid')
+  );
 }
 
 const sourceDatasetIds = new WeakMap<MapshaperDataset, number>();
@@ -154,6 +169,7 @@ export function renderLayers(
       sourceId: layer.source,
       revision: dataset?.editVersion ?? 0,
       bounds: stableSourceBounds(source, dataset),
+      sourceSelection: retainsVectorChunks(ctx, layer, arcs),
       content: JSON.stringify([
         layer.paint,
         layer.filter,
@@ -354,7 +370,9 @@ function renderLineLayer(
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
     const viewportFilter = ctx.viewport.getArcFilter(arcs);
-    let candidates = getCandidates(ctx, layer.source, ml);
+    let candidates = retainsVectorChunks(ctx, layer, arcs)
+      ? null
+      : getCandidates(ctx, layer.source, ml);
     if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
     const resolution = visibleStyleBuckets(
       ctx.styleResolver && dataset
@@ -429,7 +447,10 @@ function renderFillLayer(
   const cullParts = ctx.viewport.getMapScale() > 1.1;
   // At full extent the fill deliberately bypasses part culling. Keep that
   // behavior, including polygons whose boundary encloses the whole viewport.
-  let candidates = cullParts ? getCandidates(ctx, layer.source, ml) : null;
+  let candidates =
+    cullParts && !retainsVectorChunks(ctx, layer, arcs)
+      ? getCandidates(ctx, layer.source, ml)
+      : null;
   if (featureMask) candidates = applyMaskToCandidates(candidates, featureMask);
   const resolution = visibleStyleBuckets(
     ctx.styleResolver && dataset
@@ -444,27 +465,30 @@ function renderFillLayer(
     candidates,
     ml.shapes!.length,
   );
-  ctx.painter.drawPolygonFill(
-    ml.shapes!,
-    arcs,
-    fillColor,
-    cullParts ? viewportFilter : undefined,
-    fillOpacity,
-    {
-      viewBBox: cullParts ? ctx.viewport.getViewBounds() : null,
-      ...(candidates && !resolution ? { shapeIndices: candidates } : {}),
-      ...(resolution
-        ? {
-            styleBuckets: {
-              buckets: resolution.buckets,
-              colors: resolution.styles,
-            },
-          }
-        : {}),
-    },
-  );
   const style = resolveStrokeStyle(layer.paint, lineScale);
-  if ((style.width ?? 0) > 0) {
+  const polygon: PolygonDrawOptions = {
+    fill: { color: fillColor, opacity: fillOpacity },
+    stroke: (style.width ?? 0) > 0 ? style : undefined,
+    fillFilter: cullParts ? viewportFilter : undefined,
+    strokeFilter: viewportFilter,
+    geometryRevision,
+    viewBBox: cullParts ? ctx.viewport.getViewBounds() : null,
+    ...(candidates ? { shapeIndices: candidates } : {}),
+    ...(resolution
+      ? { styleBuckets: { buckets: resolution.buckets, colors: resolution.styles } }
+      : {}),
+  };
+  if (ctx.painter.drawPolygon) {
+    ctx.painter.drawPolygon(ml.shapes!, arcs, polygon);
+    return;
+  }
+  // Canvas2D and third-party primitive painters keep the existing synchronous path.
+  ctx.painter.drawPolygonFill(ml.shapes!, arcs, fillColor, polygon.fillFilter, fillOpacity, {
+    viewBBox: polygon.viewBBox,
+    ...(candidates && !resolution ? { shapeIndices: candidates } : {}),
+    ...(resolution ? { styleBuckets: polygon.styleBuckets } : {}),
+  });
+  if (polygon.stroke) {
     drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision, candidates);
   }
 }

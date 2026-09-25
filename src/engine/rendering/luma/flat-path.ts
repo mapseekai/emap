@@ -9,7 +9,12 @@ import {
 } from './screen-paths';
 /** Already validated flat paths. Keep exactly the legacy neighbor padding,
  * closed-path flags, cumulative dash distances and conservative range bounds. */
-export function flatPathGeometry(xy: Float64Array, offsets: Uint32Array): GeometryBuffer {
+export function flatPathGeometry(
+  xy: Float64Array,
+  offsets: Uint32Array,
+  trackMembers = false,
+): GeometryBuffer {
+  const members: number[] = [];
   let capacity = 0;
   for (let r = 0; r + 1 < offsets.length; r++) {
     const n = offsets[r + 1] - offsets[r];
@@ -44,6 +49,7 @@ export function flatPathGeometry(xy: Float64Array, offsets: Uint32Array): Geomet
       b = offsets[r + 1],
       n = b - a;
     if (n < 2) continue;
+    if (trackMembers) members.push(r, first, n - 1);
     const closed = n > 2 && xy[a * 2] === xy[(b - 1) * 2] && xy[a * 2 + 1] === xy[(b - 1) * 2 + 1];
     put(closed ? b - 2 : a, 0, 4);
     let distance = 0;
@@ -97,6 +103,7 @@ export function flatPathGeometry(xy: Float64Array, offsets: Uint32Array): Geomet
     count,
     segmentCount: total,
     pathRanges: { blockSize, bounds, segments },
+    ...(trackMembers ? { memberRanges: Uint32Array.from(members) } : {}),
   };
 }
 export function flatPointGeometry(xy: Float64Array): GeometryBuffer {
@@ -120,6 +127,7 @@ export function flatScreenPathGeometry(
   xy: Float64Array,
   offsets: Uint32Array,
   r: ScreenPathRequest,
+  trackMembers = false,
 ): { geometry: GeometryBuffer; screenSpace: boolean; screenStats: ScreenPathStats } {
   validateScreenPathRequest(r);
   if (r.perspective || r.smallArcs || r.cull)
@@ -133,6 +141,7 @@ export function flatScreenPathGeometry(
   const positions = new Float64Array(xy.length + (offsets.length - 1) * 2),
     starts = new Uint32Array(offsets.length),
     stats = emptyScreenPathStats();
+  const members: number[] = [];
   let n = 0,
     path = 0;
   for (let j = 0; j + 1 < offsets.length; j++) {
@@ -141,6 +150,7 @@ export function flatScreenPathGeometry(
     if (offsets[j] === offsets[j + 1]) continue;
     const first = n;
     starts[path++] = n / 2;
+    if (trackMembers) members.push(j);
     let lastX = NaN,
       lastY = NaN;
     for (let i = offsets[j]; i < offsets[j + 1]; i++) {
@@ -152,7 +162,7 @@ export function flatScreenPathGeometry(
           (x * 2 < -2147483648 || x * 2 > 2147483647 || y * 2 < -2147483648 || y * 2 > 2147483647))
       )
         return {
-          geometry: flatPathGeometry(xy, offsets),
+          geometry: flatPathGeometry(xy, offsets, trackMembers),
           screenSpace: false,
           screenStats: { ...emptyScreenPathStats(), rawFallbackChunks: 1 },
         };
@@ -176,7 +186,14 @@ export function flatScreenPathGeometry(
     }
   }
   starts[path] = n / 2;
-  const geometry = flatPathGeometry(positions.subarray(0, n), starts.subarray(0, path + 1));
+  const geometry = flatPathGeometry(
+    positions.subarray(0, n),
+    starts.subarray(0, path + 1),
+    trackMembers,
+  );
+  if (geometry.memberRanges)
+    for (let i = 0; i < geometry.memberRanges.length; i += 3)
+      geometry.memberRanges[i] = members[geometry.memberRanges[i]];
   stats.outputVertices = n / 2;
   stats.outputSegments = geometry.segmentCount ?? 0;
   return { geometry, screenSpace: true, screenStats: stats };

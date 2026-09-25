@@ -54,6 +54,8 @@ function packCompactStrokes(
   });
   const parts = separated ? [make(exact, true), make(valid - exact, false)] : [make(valid, xyOnly)];
   const cursors = [0, 0];
+  const members = [[], []] as number[][];
+  let memberAt = 0;
   let data = parts[0].vertices;
   const xy = (i: number, axis: number) =>
     src[i * PATH_STRIDE + axis] + src[i * PATH_STRIDE + axis + 2];
@@ -112,6 +114,21 @@ function packCompactStrokes(
     const target = parts[which];
     data = target.vertices;
     const stride = target.compactStrokeXY ? COMPACT_STROKE_XY_STRIDE : COMPACT_STROKE_STRIDE;
+    if (g.memberRanges) {
+      const ranges = g.memberRanges;
+      while (memberAt + 3 < ranges.length && ranges[memberAt + 1] + ranges[memberAt + 2] <= i)
+        memberAt += 3;
+      if (
+        memberAt >= ranges.length ||
+        i < ranges[memberAt + 1] ||
+        i >= ranges[memberAt + 1] + ranges[memberAt + 2]
+      )
+        throw new Error('Missing valid path member range');
+      const owner = ranges[memberAt],
+        list = members[which];
+      if (list.length && list[list.length - 3] === owner) list[list.length - 1]++;
+      else list.push(owner, cursors[which], 1);
+    }
     const at = cursors[which]++ * stride,
       dimensions = target.compactStrokeXY ? 2 : 4;
     for (let axis = 0; axis < dimensions; axis++) {
@@ -122,6 +139,8 @@ function packCompactStrokes(
     join(i + 1, i + 2, i + 3, true, (flags & 2) !== 0, at + dimensions * 2 + 4);
   }
   if (parts.some((p) => p.vertices.some((value) => !Number.isFinite(value)))) return [g];
+  if (g.memberRanges)
+    for (let i = 0; i < parts.length; i++) parts[i].memberRanges = Uint32Array.from(members[i]);
   return parts;
 }
 

@@ -9,6 +9,9 @@ export interface GeometryBuffer {
   segmentCount?: number;
   /** Conservative source-space bounds of immutable contiguous path instance ranges. */
   pathRanges?: PathRangeData;
+  /** Local packet member, first instance and count; only Worker path meshes.
+   * Keeps shared polygon boundaries independently selectable during cold frames. */
+  memberRanges?: Uint32Array;
   /** Immutable source-space bounds of indexed triangle ranges. */
   fillRanges?: FillRangeData;
   vertices: Float32Array;

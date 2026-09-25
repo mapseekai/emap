@@ -2,6 +2,9 @@
 // Copyright (c) vis.gl contributors. Adapted from the envelope in path-shaders.ts.
 // The same MSAA segment/join envelope as path-shaders.ts, with immutable affine
 // joins computed once in the geometry Worker. Padding instances are not submitted.
+// compactStrokeCompatible rejects every active perspective/bearing camera. The
+// affine specialization therefore preserves raw hi/lo arithmetic while removing
+// camera-plane clipping branches from every vertex of these large stroke batches.
 export const compactStrokeVS = `#version 300 es
 in vec2 corners;
 in vec4 startPosition;
@@ -15,7 +18,7 @@ void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
  float width = max(emap.parameters.x * 0.5, 1e-12);
- vec2 delta = projectDifference(endPosition, startPosition) / width;
+ vec2 delta = rawDifference(endPosition, startPosition) / width;
  float len = length(delta);
  vec2 dir = len > 0.0 ? delta / len : vec2(0.0);
  vec2 normal = vec2(-dir.y, dir.x);
@@ -33,8 +36,7 @@ void main() {
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = len;
  vec4 curr = end ? endPosition : startPosition;
- vec4 other = end ? startPosition : endPosition;
- gl_Position = clipPosition(projectSegmentPosition(curr, other) + offset * width);
+ gl_Position = clipPosition(rawDifference(curr, emap.origin) + offset * width);
 }
 `;
 export const compactStrokeWGSL = `
@@ -46,7 +48,7 @@ struct CompactOut {
  @location(2) endPosition:vec4<f32>, @location(3) startJoin:vec4<f32>, @location(4) endJoin:vec4<f32>)->CompactOut {
  let end=corners.x>0.0; let side=corners.y; let joint=select(0.0,1.0,side==0.0);
  let width=max(emap.parameters.x*0.5,1e-12);
- let delta=projectDifference(endPosition,startPosition)/width;let len=length(delta);
+ let delta=rawDifference(endPosition,startPosition)/width;let len=length(delta);
  var dir=vec2<f32>(0.0);if(len>0.0){dir=delta/len;}
  let normal=vec2<f32>(-dir.y,dir.x);let join=select(startJoin,endJoin,end);
  var offset:vec2<f32>;
@@ -58,8 +60,8 @@ struct CompactOut {
  }
  let fromStart=offset+select(vec2<f32>(0.0),delta,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- let curr=select(startPosition,endPosition,end);let other=select(endPosition,startPosition,end);
- return CompactOut(clipPosition(projectSegmentPosition(curr,other)+offset*width),offset,local,len);
+ let curr=select(startPosition,endPosition,end);
+ return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len);
 }
 @fragment fn fragmentMain(p:CompactOut)->@location(0) vec4<f32> {
  if((p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0){discard;}

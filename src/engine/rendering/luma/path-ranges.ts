@@ -129,8 +129,39 @@ export class PathRangeIndex {
         previous.count = end - previous.firstInstance;
       else ranges.push({ firstInstance, count: end - firstInstance });
     }
-    // Fragmented selections keep false positives instead of creating thousands of draw calls.
-    if (ranges.length > 24 || segments > this.total * 0.8)
+    // Keep the largest offscreen gaps instead of abandoning all culling when a
+    // selection is fragmented. Merging introduces only conservative false positives,
+    // keeps instance order and caps submission overhead at eight draws per mesh.
+    if (ranges.length > 8) {
+      const cuts = new Set(
+        ranges
+          .slice(1)
+          .map((r, i) => ({
+            at: i + 1,
+            gap: r.firstInstance - ranges[i].firstInstance - ranges[i].count,
+          }))
+          .sort((a, b) => b.gap - a.gap)
+          .slice(0, 7)
+          .map((g) => g.at),
+      );
+      const merged: PathDrawRange[] = [];
+      for (let i = 0; i < ranges.length; i++) {
+        const r = ranges[i],
+          old = merged.at(-1);
+        if (!old || cuts.has(i)) merged.push({ ...r });
+        else old.count = r.firstInstance + r.count - old.firstInstance;
+      }
+      ranges.splice(0, ranges.length, ...merged);
+      segments = 0;
+      for (const r of ranges)
+        for (
+          let block = r.firstInstance / this.data.blockSize;
+          block < Math.ceil((r.firstInstance + r.count) / this.data.blockSize);
+          block++
+        )
+          segments += this.data.segments[block];
+    }
+    if (ranges.length === 1 && ranges[0].firstInstance === 0 && ranges[0].count === this.count)
       return (this.selected = { ranges: null, segments: this.total, rejected: 0 });
     return (this.selected = { ranges, segments, rejected: this.total - segments });
   }

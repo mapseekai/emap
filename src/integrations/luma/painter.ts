@@ -1,3 +1,5 @@
+import { selectPathMembers } from '../../engine/rendering/luma/path-members';
+import { PolygonPresentation, type PolygonChannel } from './polygon-presentation';
 import type { MeshDraw } from './mesh-command-cache';
 import { compactStrokeCompatible } from '../../engine/rendering/luma/compact-stroke';
 import { screenPathFrame } from '../../engine/rendering/luma/screen-path-frame';
@@ -30,6 +32,7 @@ import type {
   EditPainter,
   ArrowDotPathOptions,
   PolygonFillOptions,
+  PolygonDrawOptions,
   DrawOverlayState,
   MeasurementOverlayState,
 } from '../../engine/rendering/painter';
@@ -59,6 +62,7 @@ interface Options {
  * filter/style resolution, source order and editing; this adapter owns GPU resources only.
  */
 export class LumaPainter implements EditPainter {
+  readonly retainedVectorChunks = true;
   private transform = new AffineTransform();
   private width = 1;
   private height = 1;
@@ -79,6 +83,14 @@ export class LumaPainter implements EditPainter {
   private presentation = { presented: 0, partial: 0, complete: 0, replays: 0 };
   framePresented = false;
   private requests: GeometryRequest[] = [];
+  private polygonScope: { channels: PolygonChannel[]; order: number } | null = null;
+  private polygons = new Map<
+    string,
+    { signature: string; sourceId: string; layerId: string; presentation: PolygonPresentation }
+  >();
+  private polygonKeys = new Set<string>();
+  private polygonSlots = new Map<string, number>();
+  private polygonFrames: PolygonPresentation[] = [];
   private context: (GeometryOwner & { bounds?: Rect; content?: string }) | null = null;
   /** Presence marker; owner.content in the chunk cache owns content invalidation. */
   private paintedContent: true | null = null;
@@ -163,6 +175,7 @@ export class LumaPainter implements EditPainter {
     this.chunks.setInteracting(value);
   }
   clearGeometryCache(scope: { sourceId?: string; layerId?: string } = {}): void {
+    this.forgetPolygons(scope);
     this.cache.clear(scope);
     this.chunks.clear(scope);
     this.paintedContent = null;
@@ -193,6 +206,10 @@ export class LumaPainter implements EditPainter {
     this.images.clear();
     this.commands = [];
     this.requests = [];
+    this.polygonScope = null;
+    this.polygonKeys.clear();
+    this.polygonSlots.clear();
+    this.polygonFrames = [];
     this.context = null;
     // Record an ordered frame before clearing the last complete GPU image.
     this.active = true;
@@ -219,14 +236,14 @@ export class LumaPainter implements EditPainter {
         this.gpu.end();
       }
       this.chunks.pin(this.drawnEntries);
-      this.frameComplete = !pending;
+      this.frameComplete = !pending && this.polygonFrames.every((polygon) => polygon.complete);
       this.framePresented = true;
       this.paintedCommands = this.commands;
       this.paintedContent = true;
       this.paintedDimensions = dimensions;
       this.chunks.didPresent(performance.now() - this.frameStarted);
       this.presentation.presented++;
-      if (pending) this.presentation.partial++;
+      if (!this.frameComplete) this.presentation.partial++;
       else this.presentation.complete++;
     } catch (error) {
       this.paintedContent = null;
@@ -238,6 +255,11 @@ export class LumaPainter implements EditPainter {
       this.active = false;
       this.commands = [];
       this.requests = [];
+      for (const [key, polygon] of this.polygons)
+        if (!this.polygonKeys.has(key)) {
+          polygon.presentation.dispose();
+          this.polygons.delete(key);
+        }
       this.cache.finish();
       this.chunks.finish();
       for (const image of this.lastImages) if (!this.images.has(image)) this.gpu.forgetImage(image);
@@ -329,6 +351,7 @@ export class LumaPainter implements EditPainter {
     const request = this.chunks.request(
       {
         ...input,
+        sourceSelection: owner.sourceSelection,
         ordered: !!icon || input.ordered,
         compactStroke:
           !!screen &&
@@ -359,7 +382,10 @@ export class LumaPainter implements EditPainter {
     );
     this.requests.push(request);
     if (icon) this.images.add(icon.asset.image);
-    this.commands.push(() => {
+    const drawEntries = (
+      entries: readonly GeometryEntry[],
+      members?: ReadonlyMap<GeometryEntry, ReadonlySet<number> | undefined>,
+    ) => {
       let batch: MeshDraw[] = [],
         batchPaint: MeshPaint | undefined,
         basis = '';
@@ -373,7 +399,7 @@ export class LumaPainter implements EditPainter {
         }
         batch = [];
       };
-      for (const entry of this.chunks.drawable(request)) {
+      for (const entry of entries) {
         const nextBasis = entry.screenSpace ? (entry.screenView?.join(':') ?? 'screen') : 'source';
         if (nextBasis !== basis) {
           flush();
@@ -419,12 +445,36 @@ export class LumaPainter implements EditPainter {
                 ? undefined
                 : index?.selectBounds(strokeBounds!);
             const fill = entry.fillRanges[i]?.select(this.transform, this.width, this.height);
-            batch.push({ mesh, ranges: range?.ranges, indexRanges: fill?.ranges });
+            const owners = members?.get(entry);
+            const selected =
+              owners && entry.memberRanges?.[i]
+                ? selectPathMembers(
+                    entry.memberRanges[i]!,
+                    entry.job.members,
+                    owners,
+                    range?.ranges,
+                  )
+                : range?.ranges;
+            batch.push({ mesh, ranges: selected, indexRanges: fill?.ranges });
           }
         }
       }
       flush();
-    });
+    };
+    if (this.polygonScope) {
+      const order = this.polygonScope.order;
+      this.polygonScope.channels.push({
+        key: JSON.stringify([order, request.input.kind, request.owner.content]),
+        order,
+        request,
+        draw: (entries, members) => {
+          // Empty (offscreen/degenerate) meshes still participate in readiness.
+          for (const entry of entries) this.drawnEntries.add(entry);
+          drawEntries(entries, members);
+        },
+      });
+    }
+    this.commands.push(() => drawEntries(this.chunks.drawable(request)));
     return true;
   }
   private draw(entry: CachedGeometry, paint: MeshPaint): void {
@@ -675,6 +725,111 @@ export class LumaPainter implements EditPainter {
         : {}),
     };
   }
+  private forgetPolygons(scope: { sourceId?: string; layerId?: string } = {}): void {
+    for (const [key, polygon] of this.polygons) {
+      if (
+        scope.layerId !== undefined
+          ? polygon.layerId !== scope.layerId
+          : scope.sourceId !== undefined && polygon.sourceId !== scope.sourceId
+      )
+        continue;
+      polygon.presentation.dispose();
+      this.polygons.delete(key);
+    }
+  }
+  drawPolygon(shapes: Shapes, arcs: ArcCollection, options: PolygonDrawOptions): void {
+    if (!this.active) return;
+    const paired =
+      !!options.fill && (options.fill.opacity ?? 1) > 0 && (options.stroke?.width ?? 0) > 0;
+    const start = this.commands.length;
+    const previousScope = this.polygonScope;
+    const scope = paired ? { channels: [] as PolygonChannel[], order: 0 } : null;
+    this.polygonScope = scope;
+    try {
+      if (options.fill)
+        this.drawPolygonFill(
+          shapes,
+          arcs,
+          options.fill.color,
+          options.fillFilter,
+          options.fill.opacity,
+          options,
+        );
+      const style = options.stroke;
+      if (style && (style.width ?? 0) > 0) {
+        if (scope) scope.order = Number.MAX_SAFE_INTEGER;
+        if (style.dashType === 'arrow-dot') {
+          this.drawArcs(arcs, style, options.strokeFilter, undefined, {
+            shapes: shapes as readonly (PathShape | null | undefined)[],
+            shapeIndices: options.shapeIndices,
+            cacheKey: JSON.stringify([this.context?.sourceId, this.context?.id]),
+            geometryRevision: options.geometryRevision ?? 0,
+          });
+        } else
+          this.drawOutlinePaths(
+            shapes,
+            style,
+            arcs,
+            options.strokeFilter,
+            options.shapeIndices,
+            options.geometryRevision,
+          );
+      }
+    } finally {
+      this.polygonScope = previousScope;
+    }
+    if (!scope?.channels.length) return;
+    const commands = this.commands.splice(start);
+    if (scope.channels.length !== commands.length || !this.context) {
+      // A custom non-cacheable filter can mix immediate and chunked primitives.
+      // Keep that uncommon combination atomic without changing its geometry.
+      this.commands.push(() => {
+        if (scope.channels.every((channel) => this.chunks.complete(channel.request)))
+          for (const command of commands) command();
+      });
+      return;
+    }
+    const owner = this.context;
+    const family = JSON.stringify([owner.sourceId, owner.id, this.chunks.identity(shapes)]);
+    const slot = this.polygonSlots.get(family) ?? 0;
+    this.polygonSlots.set(family, slot + 1);
+    const key = family + ':' + slot;
+    const signature = JSON.stringify([
+      owner.revision,
+      owner.content,
+      this.chunks.identity(owner.bounds ?? arcs),
+      arcs.size(),
+      options.fill,
+      options.styleBuckets?.colors,
+      options.stroke?.color,
+      options.stroke?.dashType,
+      options.stroke?.arrowSpacing,
+      options.stroke?.arrowSize,
+    ]);
+    let polygon = this.polygons.get(key);
+    if (polygon?.signature !== signature) {
+      polygon?.presentation.dispose();
+      polygon = {
+        signature,
+        sourceId: owner.sourceId,
+        layerId: owner.id,
+        presentation: new PolygonPresentation(shapes, {
+          ready: (entry) =>
+            this.chunks.isResident(entry) &&
+            (!entry.meshes.some((mesh) => mesh.compactStroke) ||
+              compactStrokeCompatible(this.transform, entry.screenView)),
+          complete: (request) => this.chunks.complete(request),
+          invalidate: this.options.invalidate,
+          report: this.options.report,
+        }),
+      };
+      this.polygons.set(key, polygon);
+    }
+    this.polygonKeys.add(key);
+    this.polygonFrames.push(polygon.presentation);
+    polygon.presentation.update(scope.channels);
+    this.commands.push(() => polygon!.presentation.draw());
+  }
   drawPolygonFill(
     shapes: Shapes,
     arcs: ArcCollection,
@@ -684,7 +839,8 @@ export class LumaPainter implements EditPainter {
     options: PolygonFillOptions = {},
   ): void {
     if (!this.active || opacity <= 0) return;
-    const paintBucket = (ids: Uint32Array | undefined, fill: string) => {
+    const paintBucket = (ids: Uint32Array | undefined, fill: string, order = 0) => {
+      if (this.polygonScope) this.polygonScope.order = order;
       if (ids?.length === 0) return;
       const chunkColor = [...this.colors.resolve(fill, 'muted')] as MeshPaint['color'];
       chunkColor[3] *= Math.max(0, Math.min(1, opacity));
@@ -711,7 +867,7 @@ export class LumaPainter implements EditPainter {
     };
     if (options.styleBuckets)
       options.styleBuckets.buckets.forEach((ids, i) =>
-        paintBucket(ids, options.styleBuckets!.colors[i]),
+        paintBucket(ids, options.styleBuckets!.colors[i], i),
       );
     else paintBucket(options.shapeIndices, color);
   }
@@ -787,6 +943,11 @@ export class LumaPainter implements EditPainter {
     this.active = false;
     this.commands = this.paintedCommands = [];
     this.requests = [];
+    this.polygonScope = null;
+    this.forgetPolygons();
+    this.polygonFrames = [];
+    this.polygonKeys.clear();
+    this.polygonSlots.clear();
     this.context = null;
     this.drawnEntries.clear();
     this.paintedContent = null;

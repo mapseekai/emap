@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { FeatureQuery } from './feature-query';
 import { AffineTransform } from '../../domain/geo/transform';
 
@@ -346,4 +346,31 @@ describe('FeatureQuery editVersion cache invalidation (regression)', () => {
     });
     expect(a).toBe(b); // same cache key
   });
+});
+
+it('caches dense null candidate results and invalidates them when bounds change', () => {
+  const fq = makeFeatureQuery();
+  const layer = {
+    geometry_type: 'point' as const,
+    shapes: Array.from({ length: 10_000 }, () => [[0, 0]]),
+  };
+  const source = {
+    getLayers: () => [layer],
+    getArcs: () => undefined,
+    getDataset: () => undefined,
+  };
+  setPrivate(fq, '_sources', new Map([['s', source]]));
+  const search = vi.fn(() => Array.from({ length: 3000 }, (_, i) => i));
+  const index = {
+    bounds: [0, 0, 100, 100],
+    shapeCount: 10000,
+    index: { search },
+    renderQuery: undefined,
+  };
+  setPrivate(fq, '_getOrBuildIndex', () => index);
+  expect(fq.getRenderCandidates('s', layer, [0, 0, 10, 10])).toBeNull();
+  expect(fq.getRenderCandidates('s', layer, [0, 0, 10, 10])).toBeNull();
+  expect(search).toHaveBeenCalledTimes(1);
+  expect(fq.getRenderCandidates('s', layer, [1, 0, 11, 10])).toBeNull();
+  expect(search).toHaveBeenCalledTimes(2);
 });

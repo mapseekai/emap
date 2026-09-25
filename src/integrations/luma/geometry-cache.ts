@@ -10,7 +10,7 @@ import {
   type GeometryBatchItem,
 } from '../../engine/rendering/luma/geometry-batch';
 import { FillRangeIndex } from '../../engine/rendering/luma/fill-ranges';
-import { arcVisibilityKey } from '../../domain/geo/arc-visibility';
+import { arcVisibilityKey, arcVisibilityFilter } from '../../domain/geo/arc-visibility';
 import {
   geometryYield,
   partitionGeometry,
@@ -31,6 +31,17 @@ export interface GeometryOwner {
   sourceId: string;
   revision: number;
   content?: string;
+  sourceSelection?: boolean;
+}
+interface StableSelection {
+  ready: boolean;
+  plan: Plan;
+  owner: GeometryOwner;
+  input: GeometryInput;
+  promise: Promise<GeometryJob[]>;
+  bytes: number;
+  used: number;
+  controller: AbortController;
 }
 interface Plan {
   key: string;
@@ -56,6 +67,7 @@ export interface GeometryEntry {
   screenSpace: boolean;
   screenView?: readonly [number, number, number, number];
   fillRanges: (FillRangeIndex | undefined)[];
+  memberRanges?: (Uint32Array | undefined)[];
   fallback?: GeometryEntry;
   bytes: number;
   used: number;
@@ -66,6 +78,9 @@ export interface GeometryEntry {
   coverage?: { bounds: NonNullable<GeometryInput['storageBounds']>; interval: number };
 }
 export interface GeometryRequest {
+  /** Stable ordinal within a source/paint family; distinct same-colour draws stay isolated. */
+  slot?: number;
+  selectionKey?: string;
   input: GeometryInput;
   owner: GeometryOwner;
   plan: Plan;
@@ -94,6 +109,9 @@ interface Options {
   /** Internal test/host transport seam, not a second source dataset. */
   transport?: GeometryTransport;
 }
+function containsBounds(a: readonly number[], b: readonly number[]): boolean {
+  return a[0] <= b[0] && a[1] <= b[1] && a[2] >= b[2] && a[3] >= b[3];
+}
 function sameArray(a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined): boolean {
   if (a === b) return true;
   if (!a || !b || a.length !== b.length) return false;
@@ -118,6 +136,8 @@ export class GeometryChunkCache {
   private requests = new Map<string, GeometryRequest>();
   private plans = new Map<string, Plan>();
   private entries = new Map<string, GeometryEntry>();
+  private selections = new Map<string, StableSelection>();
+  private jobHashes = new WeakMap<GeometryJob, number>();
   private identities = new WeakMap<object, number>();
   private serial = 0;
   private frame = 0;
@@ -180,6 +200,8 @@ export class GeometryChunkCache {
     maxUploadSliceMs: 0,
     uploadYields: 0,
     coverageHits: 0,
+    selectionBuilds: 0,
+    selectionHits: 0,
     packMs: 0,
     batchAdmissionMs: 0,
     uploadCulledBytes: 0,
@@ -195,18 +217,16 @@ export class GeometryChunkCache {
     this.limit = options.cacheBytes ?? 256 * 1024 ** 2;
   }
   get stats() {
-    const pending = [...this.requests.values()].reduce(
-      (n, r) =>
-        n +
-        (this.failed(r)
-          ? 0
-          : r.entries
-            ? r.entries.filter((e) => e.state === 'queued' || e.state === 'building').length
-            : r.error
-              ? 0
-              : 1),
-      0,
-    );
+    const requests = this.current(),
+      entries = this.wanted();
+    const queued = [...entries].filter((e) => e.state === 'queued').length;
+    const building = [...entries].filter((e) => e.state === 'building').length;
+    const failedEntries = [...entries].filter((e) => e.state === 'error').length;
+    const blockedEntries = [...entries].filter(
+      (e) => e.state === 'error' && e.requiredBytes !== undefined,
+    ).length;
+    const planningRequests = requests.filter((r) => !r.entries && !r.error).length;
+    const pending = planningRequests + queued + building;
     return {
       ...this.counters,
       ...this.worker.stats,
@@ -218,6 +238,13 @@ export class GeometryChunkCache {
       workingSetOverBudgetBytes: Math.max(0, this.bytes + this.externalBytes - this.limit),
       partitionBytes: [...this.plans.values()].reduce((n, p) => n + p.count * 4 + p.boundsBytes, 0),
       pending,
+      queued,
+      building,
+      failedEntries,
+      blockedEntries,
+      planningRequests,
+      failedRequests: requests.filter((r) => this.failed(r)).length,
+      selectionCacheBytes: [...this.selections.values()].reduce((n, s) => n + s.bytes, 0),
       paused: false,
       interacting: this.interacting,
       triangulation: this.worker.triangulation ? { ...this.worker.triangulation } : null,
@@ -261,6 +288,7 @@ export class GeometryChunkCache {
       owner.revision,
       owner.content,
       input.kind,
+      input.sourceSelection,
       this.identity(input.arcs),
       this.identity(input.shapes),
       input.arcs?.size(),
@@ -307,7 +335,14 @@ export class GeometryChunkCache {
       return previous;
     }
     previous?.controller.abort();
-    const snapshot = { ...input, ids: input.ids?.slice(), components: input.components?.slice() },
+    const snapshot = {
+        ...input,
+        ids:
+          input.sourceSelection && sameArray(previous?.input.ids, input.ids)
+            ? previous?.input.ids
+            : input.ids?.slice(),
+        components: input.components?.slice(),
+      },
       controller = new AbortController();
     const planKey = JSON.stringify([
       owner.sourceId,
@@ -351,6 +386,8 @@ export class GeometryChunkCache {
       this.counters.partitionHits++;
     }
     const request: GeometryRequest = {
+      slot,
+      selectionKey: this.selectionKey(snapshot, owner, plan, slot),
       input: snapshot,
       owner: { ...owner },
       plan,
@@ -381,7 +418,7 @@ export class GeometryChunkCache {
     void (async () => {
       const partition = await plan.promise;
       controller.signal.throwIfAborted();
-      const jobs = await selectGeometryJobs(snapshot, partition, controller.signal);
+      const jobs = await this.selectJobs(request, partition);
       controller.signal.throwIfAborted();
       if (
         request.fallback?.length &&
@@ -435,13 +472,195 @@ export class GeometryChunkCache {
     });
     return request;
   }
+  private selectionKey(
+    input: GeometryInput,
+    owner: GeometryOwner,
+    plan: Plan,
+    slot: number,
+  ): string | undefined {
+    const visibility = input.arcs && arcVisibilityKey(input.arcs, input.filter);
+    if (
+      !input.sourceSelection ||
+      input.ordered ||
+      (input.kind !== 'fill' && input.kind !== 'path') ||
+      (input.filter && !visibility)
+    )
+      return undefined;
+    return JSON.stringify([
+      plan.key,
+      owner.id,
+      owner.content,
+      input.forward,
+      visibility?.[0],
+      slot,
+    ]);
+  }
+  /** Reuse immutable source/style membership; camera changes only select chunk boxes.
+   * Arbitrary filters, ordered icons and callers with view-dependent IDs stay exact. */
+  private async selectJobs(
+    request: GeometryRequest,
+    partition: GeometryPartition,
+  ): Promise<GeometryJob[]> {
+    const input = request.input;
+    const visibility = input.arcs && arcVisibilityKey(input.arcs, input.filter);
+    if (
+      !input.sourceSelection ||
+      input.ordered ||
+      !partition.bounds ||
+      (input.kind !== 'fill' && input.kind !== 'path') ||
+      (input.filter && !visibility)
+    )
+      return selectGeometryJobs(input, partition, request.controller.signal);
+    const key = request.selectionKey!;
+    let selection = this.selections.get(key);
+    if (selection && !sameArray(selection.input.ids, input.ids)) {
+      selection.controller.abort();
+      this.selections.delete(key);
+      selection = undefined;
+    }
+    if (!selection) {
+      const controller = new AbortController();
+      const stable = {
+        ...input,
+        viewBounds: undefined,
+        filter: visibility ? arcVisibilityFilter(input.arcs!, visibility[0], null) : undefined,
+      };
+      selection = {
+        ready: false,
+        plan: request.plan,
+        owner: request.owner,
+        input: stable,
+        controller,
+        used: ++this.clock,
+        bytes: 0,
+        promise: Promise.resolve([]),
+      };
+      const retained = selection;
+      retained.promise = (async () => {
+        const jobs = await selectGeometryJobs(stable, partition, controller.signal);
+        const bounds = new Map<number, [number, number, number, number]>();
+        for (let i = 0; i < partition.chunks; i++) {
+          const chunk = input.kind === 'path' && partition.batchIds ? partition.batchIds[i] : i;
+          const b = partition.bounds!,
+            at = i * 4;
+          const old = bounds.get(chunk);
+          if (old) {
+            old[0] = Math.min(old[0], b[at]);
+            old[1] = Math.min(old[1], b[at + 1]);
+            old[2] = Math.max(old[2], b[at + 2]);
+            old[3] = Math.max(old[3], b[at + 3]);
+          } else bounds.set(chunk, [b[at], b[at + 1], b[at + 2], b[at + 3]]);
+        }
+        for (const job of jobs) job.bounds = bounds.get(job.chunk);
+        retained.bytes =
+          (stable.ids?.byteLength ?? 0) +
+          (stable.components?.byteLength ?? 0) +
+          jobs.reduce((n, j) => n + j.members.byteLength + (j.components?.byteLength ?? 0) + 32, 0);
+        retained.ready = true;
+        this.counters.selectionBuilds++;
+        this.trimSelections();
+        return jobs;
+      })();
+      void retained.promise.catch(() => {});
+      this.selections.set(key, selection);
+    } else {
+      selection.used = ++this.clock;
+      this.counters.selectionHits++;
+    }
+    const jobs = await selection.promise;
+    request.controller.signal.throwIfAborted();
+    const view = input.viewBounds;
+    const visible = view
+      ? jobs.filter(
+          (j) =>
+            !j.bounds ||
+            !(
+              j.bounds[0] > view[2] ||
+              j.bounds[1] > view[3] ||
+              j.bounds[2] < view[0] ||
+              j.bounds[3] < view[1]
+            ),
+        )
+      : jobs;
+    // Interior chunks already satisfy the exact viewport predicate. Only boundary
+    // chunks need the cheap arc test; keep offscreen path storage bounded without
+    // rescanning every source shape/ring on each navigation refresh.
+    if (input.kind !== 'path' || !visibility || visibility.length !== 5) return visible;
+    const bbox = visibility.slice(1);
+    const result: GeometryJob[] = [];
+    let slice = performance.now();
+    for (const job of visible) {
+      if (job.bounds && containsBounds(bbox, job.bounds)) {
+        result.push(job);
+        continue;
+      }
+      const members: number[] = [];
+      for (let i = 0; i < job.members.length; i++) {
+        const signed = job.members[i],
+          id = signed < 0 ? ~signed : signed;
+        if (input.filter!(id)) members.push(signed);
+        if ((i & 2047) === 0 && performance.now() - slice >= 4) {
+          await geometryYield(request.controller.signal);
+          slice = performance.now();
+        }
+      }
+      if (members.length === job.members.length) result.push(job);
+      else if (members.length) result.push({ ...job, members: Int32Array.from(members) });
+    }
+    return result;
+  }
+
+  private trimSelections(): void {
+    const token = (owner: GeometryOwner) =>
+      JSON.stringify([owner.sourceId, owner.id, owner.revision, owner.content]);
+    const owners = new Set(
+      (this.collecting ? [...this.requests.values()] : this.current()).map((r) => token(r.owner)),
+    );
+    const activeKeys = new Set(
+      (this.collecting ? [...this.requests.values()] : this.current()).map((r) => r.selectionKey),
+    );
+    for (const [key, selection] of this.selections) {
+      if (
+        !this.plans.has(selection.plan.key) ||
+        !owners.has(token(selection.owner)) ||
+        (!selection.ready && !activeKeys.has(key))
+      ) {
+        selection.controller.abort();
+        this.selections.delete(key);
+      }
+    }
+    const indexBytes = [...this.plans.values()].reduce(
+      (n, p) => n + p.count * 4 + p.boundsBytes,
+      0,
+    );
+    const limit = Math.min(
+      64 * 1024 ** 2,
+      Math.max(0, (this.options.partitionCacheBytes ?? 128 * 1024 ** 2) - indexBytes),
+    );
+    let bytes = [...this.selections.values()].reduce((n, s) => n + s.bytes, 0);
+    for (const [key, s] of [...this.selections].sort((a, b) => a[1].used - b[1].used)) {
+      if (bytes <= limit && this.selections.size <= 128) break;
+      // Evict completed membership only; current requests already own their selected jobs.
+      if (!s.ready) continue;
+      bytes -= s.bytes;
+      this.selections.delete(key);
+    }
+  }
   private entry(job: GeometryJob, request: GeometryRequest): GeometryEntry {
+    const storage = request.input.storageBounds;
+    const fullChunk = job.bounds && storage && containsBounds(storage, job.bounds);
+    const storageBounds = fullChunk ? undefined : storage;
+    let jobHash = this.jobHashes.get(job);
+    if (jobHash === undefined) {
+      jobHash = hashJob(job);
+      if (request.input.sourceSelection) this.jobHashes.set(job, jobHash);
+    }
     const base = JSON.stringify([
       request.owner.id,
       request.plan.key,
       request.input.kind,
       job.chunk,
-      hashJob(job),
+      jobHash,
       request.input.compactStroke,
     ]);
     let family = base,
@@ -453,7 +672,7 @@ export class GeometryChunkCache {
     }
     // A resident full-coverage mesh already contains this smaller view. Reuse
     // it rather than uploading a clipped duplicate solely because the camera moved.
-    if (request.input.kind === 'fill' && request.input.storageBounds) {
+    if (request.input.kind === 'fill') {
       const full = this.entries.get(
         JSON.stringify([family, request.input.interval, request.input.screen, undefined]),
       );
@@ -464,7 +683,15 @@ export class GeometryChunkCache {
       }
     }
     const coverage = old?.coverage,
-      requested = request.input.storageBounds;
+      requested =
+        job.bounds && storage
+          ? ([
+              Math.max(storage[0], job.bounds[0]),
+              Math.max(storage[1], job.bounds[1]),
+              Math.min(storage[2], job.bounds[2]),
+              Math.min(storage[3], job.bounds[3]),
+            ] as const)
+          : storage;
     if (
       request.input.kind === 'fill' &&
       !request.input.screen &&
@@ -488,7 +715,7 @@ export class GeometryChunkCache {
       family,
       request.input.interval,
       request.input.screen,
-      request.input.storageBounds,
+      storageBounds,
     ]);
     let id = prefix,
       n = 0,
@@ -512,8 +739,8 @@ export class GeometryChunkCache {
       fallback:
         old?.state === 'ready' && old.owner.content === request.owner.content ? old : undefined,
       owner: request.owner,
-      ...(request.input.kind === 'fill' && !request.input.screen && request.input.storageBounds
-        ? { coverage: { bounds: request.input.storageBounds, interval: request.input.interval } }
+      ...(request.input.kind === 'fill' && !request.input.screen && storageBounds
+        ? { coverage: { bounds: storageBounds, interval: request.input.interval } }
         : {}),
       job,
       state: 'queued',
@@ -574,6 +801,10 @@ export class GeometryChunkCache {
     }
     return result;
   }
+  /** A presentation reference must still own a resident, fully uploaded entry. */
+  isResident(entry: GeometryEntry): boolean {
+    return entry.state === 'ready' && this.entries.get(entry.id) === entry;
+  }
   pin(entries: Iterable<GeometryEntry>): void {
     this.trimCandidates = null;
     this.trimCursor = 0;
@@ -609,8 +840,20 @@ export class GeometryChunkCache {
           !wanted.has(entry) &&
           !current.some(
             (r) =>
+              r.owner.sourceId === entry.owner.sourceId &&
+              r.owner.id === entry.owner.id &&
+              r.owner.revision === entry.owner.revision &&
               r.owner.content === entry.owner.content &&
-              r.entries?.some((e) => e.family === entry.family),
+              r.entries?.some(
+                (e) =>
+                  e.family === entry.family ||
+                  // A bounded boundary-chunk refinement can finish while the same
+                  // source chunk is still selected. Do not terminate the Worker
+                  // (and its tessellation cache) for each small camera movement.
+                  (r.input.sourceSelection &&
+                    r.plan.key === entry.partition &&
+                    e.job.chunk === entry.job.chunk),
+              ),
           ),
       )
     ) {
@@ -649,6 +892,7 @@ export class GeometryChunkCache {
       }
     }
     this.trimPlans();
+    this.trimSelections();
     const owners = new Set(
       [...this.requests.values()].map((r) => JSON.stringify([r.owner.sourceId, r.owner.id])),
     );
@@ -733,7 +977,11 @@ export class GeometryChunkCache {
     if (request.error || !request.entries) return undefined;
     while (request.cursor < request.entries.length) {
       const entry = request.entries[request.cursor];
-      if (entry.state === 'error') return undefined;
+      // A failed member must not starve independent chunks behind it.
+      if (entry.state === 'error') {
+        request.cursor++;
+        continue;
+      }
       if (entry.state === 'queued') return entry;
       if (entry.state === 'building') return undefined;
       request.cursor++;
@@ -782,6 +1030,7 @@ export class GeometryChunkCache {
         g.pathRanges?.segments,
         g.pathRanges?.uncullable,
         g.fillRanges?.bounds,
+        g.memberRanges,
       ])
         if (a) buffers.add(a.buffer);
     const resultBytes = [...buffers].reduce((n, b) => n + b.byteLength, 0);
@@ -802,7 +1051,8 @@ export class GeometryChunkCache {
     const cost =
       payload +
       ranges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
-      fillRanges.reduce((n, r) => n + (r?.bytes ?? 0), 0);
+      fillRanges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
+      result.geometries.reduce((n, g) => n + (g.memberRanges?.byteLength ?? 0), 0);
     this.trim(cost);
     if (this.bytes + this.externalBytes + cost > this.limit * 2) {
       entry.requiredBytes = cost;
@@ -887,6 +1137,7 @@ export class GeometryChunkCache {
     }
     entry.ranges = ranges;
     entry.fillRanges = fillRanges;
+    entry.memberRanges = result.geometries.map((g) => g.memberRanges);
     entry.screenSpace = result.screenSpace;
     entry.screenView = result.screenSpace ? request.input.screen?.view : undefined;
     entry.fallback = undefined;
@@ -956,7 +1207,13 @@ export class GeometryChunkCache {
             const packing = performance.now();
             let packet: GeometryPacket;
             try {
-              packet = await packGeometryJob(request.input, entry.job, controller.signal);
+              packet = await packGeometryJob(
+                request.input.kind === 'fill'
+                  ? { ...request.input, storageBounds: entry.coverage?.bounds }
+                  : request.input,
+                entry.job,
+                controller.signal,
+              );
               if (packet.kind === 'fill') {
                 packet.sourceId = request.owner.sourceId;
                 packet.cacheKey = JSON.stringify([
@@ -1081,6 +1338,7 @@ export class GeometryChunkCache {
     entry.meshes = [];
     entry.ranges = [];
     entry.fillRanges = [];
+    entry.memberRanges = undefined;
     entry.fallback = undefined;
     this.pinned.delete(entry);
     if (this.latest.get(entry.family) === entry) this.latest.delete(entry.family);
@@ -1127,6 +1385,7 @@ export class GeometryChunkCache {
         plan.controller.abort();
         this.plans.delete(key);
       }
+    this.trimSelections();
     this.worker.retainSources?.(new Set([...this.requests.values()].map((r) => r.owner.sourceId)));
     if (errors.length) throw new AggregateError(errors, 'Geometry cache cleanup failed');
   }
@@ -1148,6 +1407,8 @@ export class GeometryChunkCache {
         for (const plan of this.plans.values()) plan.controller.abort();
         this.requests.clear();
         this.plans.clear();
+        for (const selection of this.selections.values()) selection.controller.abort();
+        this.selections.clear();
         this.entries.clear();
         this.bytes = 0;
         this.pinned.clear();

@@ -27,7 +27,7 @@ type IndexedLayer = {
   index: FlatbushIndex;
   shapeCount: number;
   bounds: number[];
-  renderQuery?: { bounds: readonly number[]; ids: Uint32Array };
+  renderQuery?: { bounds: readonly number[]; ids: Uint32Array | null };
 } | null;
 
 const RENDER_INDEX_MIN_SHAPES = 10_000;
@@ -166,10 +166,14 @@ export class FeatureQuery {
     if (!indexed) return null;
     const cached = indexed.renderQuery;
     if (cached && cached.bounds.every((value, i) => value === bounds[i])) return cached.ids;
+    const remember = (ids: Uint32Array | null) => {
+      indexed.renderQuery = { bounds: bounds.slice(), ids };
+      return ids;
+    };
     const [xmin, ymin, xmax, ymax] = bounds;
     const extent = indexed.bounds;
     if (xmax < extent[0] || xmin > extent[2] || ymax < extent[1] || ymin > extent[3])
-      return EMPTY_RENDER_CANDIDATES;
+      return remember(EMPTY_RENDER_CANDIDATES);
     const width = extent[2] - extent[0],
       height = extent[3] - extent[1];
     const xFraction =
@@ -178,13 +182,12 @@ export class FeatureQuery {
       height > 0 ? (Math.min(ymax, extent[3]) - Math.max(ymin, extent[1])) / height : 1;
     // A cheap coverage estimate avoids even searching near full extent. Skewed
     // distributions still use the actual candidate-count guard below.
-    if (xFraction * yFraction >= RENDER_INDEX_MAX_FRACTION) return null;
+    if (xFraction * yFraction >= RENDER_INDEX_MAX_FRACTION) return remember(null);
     const ids: number[] = indexed.index.search(xmin, ymin, xmax, ymax);
     // Avoid the expensive sort/materialization when drawing most of the layer anyway.
-    if (ids.length >= indexed.shapeCount * RENDER_INDEX_MAX_FRACTION) return null;
+    if (ids.length >= indexed.shapeCount * RENDER_INDEX_MAX_FRACTION) return remember(null);
     const candidates = Uint32Array.from(ids.sort((a, b) => a - b));
-    indexed.renderQuery = { bounds: bounds.slice(), ids: candidates };
-    return candidates;
+    return remember(candidates);
   }
 
   /**

@@ -12,6 +12,8 @@ import type { ScreenPathRequest } from './screen-paths';
 
 export interface GeometryInput {
   kind: 'point' | 'path' | 'fill' | 'arrow';
+  /** Trusted source/style membership supplied by the formal layer renderer. */
+  sourceSelection?: boolean;
   arcs?: ArcCollection;
   shapes?: Shapes;
   ids?: Uint32Array | Int32Array;
@@ -34,6 +36,8 @@ export interface GeometryPartition {
   batchIds?: Uint32Array;
 }
 export interface GeometryJob {
+  /** Conservative bounds of a stable source chunk, independent of the viewport. */
+  bounds?: Rect;
   chunk: number;
   members: Int32Array;
   components?: Uint32Array;
@@ -238,6 +242,7 @@ export async function selectGeometryJobs(
     if (input.kind === 'point') group.components.push(component);
   };
   const count = input.ids?.length ?? input.shapes?.length ?? input.arcs!.size();
+  let visitedArcs = 0;
   for (let k = 0; k < count; k++) {
     if ((k & 2047) === 0 && performance.now() - slice >= 4) {
       await geometryYield(signal);
@@ -245,7 +250,14 @@ export async function selectGeometryJobs(
     }
     const id = input.ids?.[k] ?? k;
     if (input.kind === 'path' && input.shapes) {
-      for (const part of (input.shapes[id] ?? []) as PathShape) for (const arc of part) add(arc);
+      for (const part of (input.shapes[id] ?? []) as PathShape)
+        for (const arc of part) {
+          add(arc);
+          if ((++visitedArcs & 2047) === 0 && performance.now() - slice >= 4) {
+            await geometryYield(signal);
+            slice = performance.now();
+          }
+        }
     } else add(id, input.components?.[k]);
   }
   if (input.ordered)

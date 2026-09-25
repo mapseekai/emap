@@ -1,3 +1,4 @@
+import { slicePathMembers } from './path-members';
 import { spatialStrokeGeometry } from './stroke-ranges';
 import {
   compactStrokeParts,
@@ -65,6 +66,9 @@ function* geometryMeshes(geometry: GeometryBuffer): Generator<GeometryBuffer> {
           ? { compactStroke: true, compactStrokeXY: geometry.compactStrokeXY }
           : {}),
         count,
+        ...(geometry.memberRanges
+          ? { memberRanges: slicePathMembers(geometry.memberRanges, first, count) }
+          : {}),
         vertices: vertices.subarray(
           first * stride,
           (first + count + (geometry.kind === 'path' && !geometry.compactStroke ? 3 : 0)) * stride,
@@ -200,7 +204,7 @@ export function buildGeometryPacket(
       !packet.screen.smallArcs &&
       !packet.screen.cull
     ) {
-      const prepared = flatScreenPathGeometry(coordinates, offsets, packet.screen);
+      const prepared = flatScreenPathGeometry(coordinates, offsets, packet.screen, true);
       geometry = prepared.geometry;
       screenSpace = prepared.screenSpace;
       screenStats = prepared.screenStats;
@@ -222,8 +226,8 @@ export function buildGeometryPacket(
       );
       screenStats = filtered.stats;
       screenSpace = !filtered.fallback;
-      geometry = screenSpace ? filtered.geometry : flatPathGeometry(coordinates, offsets);
-    } else geometry = flatPathGeometry(coordinates, offsets);
+      geometry = screenSpace ? filtered.geometry : flatPathGeometry(coordinates, offsets, true);
+    } else geometry = flatPathGeometry(coordinates, offsets, true);
   } else if (packet.kind === 'arrow') geometry = lineGeometry(readPaths());
   else if (packet.kind === 'point') geometry = flatPointGeometry(coordinates);
   else if (packet.kind === 'fill') {

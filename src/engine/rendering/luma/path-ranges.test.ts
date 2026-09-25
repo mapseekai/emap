@@ -89,3 +89,38 @@ describe('full-detail path range culling', () => {
     expect(g.vertices.byteLength).toBe(paths.reduce((n, p) => n + (p.length + 2) * 7 * 4, 0));
   });
 });
+
+it('bounds fragmented range submission without reverting to all offscreen instances', () => {
+  const data = {
+    blockSize: 1,
+    segments: new Uint32Array(200).fill(1),
+    bounds: new Float64Array(800),
+  };
+  for (let i = 0; i < 200; i++)
+    data.bounds.set(i % 4 === 0 ? [0, 0, 1, 1] : [100, 100, 101, 101], i * 4);
+  const selected = new PathRangeIndex(data, 200).selectBounds([0, 0, 2, 2]);
+  expect(selected.ranges).not.toBeNull();
+  expect(selected.ranges!.length).toBeLessThanOrEqual(8);
+  for (let i = 0; i < 200; i += 4)
+    expect(
+      selected.ranges!.some((r) => r.firstInstance <= i && r.firstInstance + r.count > i),
+    ).toBe(true);
+  expect(selected.segments).toBeLessThan(200);
+  for (let i = 1; i < selected.ranges!.length; i++)
+    expect(selected.ranges![i].firstInstance).toBeGreaterThan(
+      selected.ranges![i - 1].firstInstance + selected.ranges![i - 1].count,
+    );
+});
+
+it('retains a cheap contiguous crop even when more than eighty percent is visible', () => {
+  const data = {
+    blockSize: 1,
+    segments: new Uint32Array(100).fill(1),
+    bounds: new Float64Array(400),
+  };
+  for (let i = 0; i < 100; i++)
+    data.bounds.set(i < 90 ? [0, 0, 1, 1] : [100, 100, 101, 101], i * 4);
+  const result = new PathRangeIndex(data, 100).selectBounds([0, 0, 2, 2]);
+  expect(result.ranges).toEqual([{ firstInstance: 0, count: 90 }]);
+  expect(result.rejected).toBe(10);
+});

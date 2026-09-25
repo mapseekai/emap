@@ -74,6 +74,15 @@ export interface PolygonFillOptions {
   styleBuckets?: FillStyleBuckets;
 }
 
+/** One polygon with independently optional fill and boundary styling. */
+export interface PolygonDrawOptions extends PolygonFillOptions {
+  fill?: { color: string; opacity?: number };
+  stroke?: StrokeStyle;
+  fillFilter?: (id: number) => boolean;
+  strokeFilter?: (id: number) => boolean;
+  geometryRevision?: number;
+}
+
 export interface ArrowDotPathOptions {
   shapes: readonly (PathShape | null | undefined)[];
   /** Optional feature indices to render without materializing sparse shape arrays. */
@@ -88,6 +97,8 @@ export interface ArrowDotPathOptions {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
+  /** @internal Large vector draws use stable source chunks and GPU viewport clipping. */
+  readonly retainedVectorChunks?: boolean;
   /** @internal Optional lifecycle for GPU painters; existing synchronous painters remain valid. */
   readonly backend?: import('../map/renderer').RendererBackend;
   finishFrame?(): void;
@@ -106,6 +117,8 @@ export interface CorePainter {
       revision: number;
       bounds?: readonly [number, number, number, number];
       content?: string;
+      /** IDs are a source/style selection, not a camera-dependent candidate list. */
+      sourceSelection?: boolean;
     } | null,
   ): void;
   createLabelAtlas?(): import('./labels/text-types').LabelAtlasProvider;
@@ -170,6 +183,12 @@ export interface CorePainter {
     shapeIndices?: Uint32Array,
     /** One original component per shapeIndices entry (MultiPoint LOD). */
     componentIndices?: Uint32Array,
+  ): void;
+  /** @internal Composite polygon presentation; primitive-only painters remain compatible. */
+  drawPolygon?(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
+    options: PolygonDrawOptions,
   ): void;
   drawPolygonFill(
     shapes: readonly (FeatureShape | null | undefined)[],

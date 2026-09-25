@@ -949,3 +949,112 @@ describe('GPU outline candidate preparation', () => {
     );
   });
 });
+
+describe('composite polygon painter dispatch', () => {
+  for (const width of [0, 2])
+    it(`passes one polygon with optional outline width=${width}`, () => {
+      const arcs = { size: () => 1 },
+        shapes = [[[0]]],
+        filter = () => true,
+        candidates = Uint32Array.from([0]);
+      const painter = { drawPolygon: vi.fn(), drawPolygonFill: vi.fn(), drawArcs: vi.fn() };
+      const getLayerArcIds = vi.fn();
+      renderLayers(
+        {
+          layers: [
+            {
+              id: 'area',
+              source: 's',
+              type: 'fill',
+              paint: {
+                'fill-color': '#abcdef',
+                'fill-opacity': 0.5,
+                'line-color': '#123456',
+                'line-width': width,
+              },
+            },
+          ],
+          sources: new Map([
+            [
+              's',
+              {
+                getArcs: () => arcs,
+                getDisplayArcs: () => null,
+                getDataset: () => ({ editVersion: 2 }),
+              } as any,
+            ],
+          ]),
+          viewport: {
+            getArcFilter: () => filter,
+            getViewBounds: () => [0, 0, 1, 1],
+            getMapScale: () => 2,
+          } as any,
+          painter: painter as any,
+          resolveSourceLayer: () => ({ geometry_type: 'polygon', shapes }) as any,
+          getLayerArcIds,
+          getRenderCandidates: () => candidates,
+        },
+        1,
+        1,
+      );
+      expect(painter.drawPolygon).toHaveBeenCalledOnce();
+      const [actualShapes, actualArcs, options] = painter.drawPolygon.mock.calls[0];
+      expect(actualShapes).toBe(shapes);
+      expect(actualArcs).toBe(arcs);
+      expect(options.fill).toEqual({ color: '#abcdef', opacity: 0.5 });
+      expect(options.shapeIndices).toBe(candidates);
+      expect(options.fillFilter).toBe(filter);
+      expect(options.strokeFilter).toBe(filter);
+      expect(options.geometryRevision).toBe(2);
+      if (width) expect(options.stroke).toMatchObject({ width, color: '#123456' });
+      else expect(options.stroke).toBeUndefined();
+      expect(painter.drawPolygonFill).not.toHaveBeenCalled();
+      expect(painter.drawArcs).not.toHaveBeenCalled();
+      expect(getLayerArcIds).not.toHaveBeenCalled();
+    });
+});
+
+it('uses retained source membership for large solid polygons but keeps arrow candidate selection', () => {
+  const arcs = { size: () => 1, getPointCount: () => 100001 },
+    shapes = [[[0]]],
+    candidates = Uint32Array.of(0);
+  const painter = { retainedVectorChunks: true, drawPolygon: vi.fn(), setLayerContext: vi.fn() };
+  const layer = {
+    id: 'area',
+    source: 's',
+    type: 'fill',
+    paint: { 'line-width': 1, 'line-dashstyle': 'solid' },
+  };
+  const query = vi.fn(() => candidates);
+  const context = {
+    layers: [layer],
+    sources: new Map([
+      [
+        's',
+        { getArcs: () => arcs, getDisplayArcs: () => null, getDataset: () => ({ editVersion: 0 }) },
+      ],
+    ]),
+    viewport: {
+      getArcFilter: () => () => true,
+      getViewBounds: () => [0, 0, 1, 1],
+      getMapScale: () => 4,
+    },
+    painter,
+    resolveSourceLayer: () => ({ geometry_type: 'polygon', shapes }),
+    getRenderCandidates: query,
+    getLayerArcIds: vi.fn(),
+  };
+  renderLayers(context as unknown as LayerRendererContext, 1, 1);
+  expect(query).not.toHaveBeenCalled();
+  expect(painter.setLayerContext).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sourceSelection: true }),
+  );
+  expect(painter.drawPolygon.mock.calls[0][2].shapeIndices).toBeUndefined();
+  layer.paint['line-dashstyle'] = 'arrow-dot';
+  renderLayers(context as unknown as LayerRendererContext, 1, 1);
+  expect(query).toHaveBeenCalledOnce();
+  expect(painter.setLayerContext).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sourceSelection: false }),
+  );
+  expect(painter.drawPolygon.mock.calls[1][2].shapeIndices).toBe(candidates);
+});
