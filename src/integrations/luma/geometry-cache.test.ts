@@ -587,3 +587,321 @@ it('reuses containing fill coverage only at identical membership and detail', as
   expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
   f.cache.dispose();
 });
+
+/** Three overlapping selections in one stable spatial chunk, plus a new chunk. */
+function handoffInput(kind: 'point' | 'path' | 'fill'): GeometryInput {
+  const points = [
+    [1.1, 1.1],
+    [1.2, 1.1],
+    [1.3, 1.1],
+    [0.1, 0.1],
+  ];
+  const rings = points.map(([x, y]) => [
+    [x, y],
+    [x + 0.02, y],
+    [x + 0.02, y + 0.02],
+    [x, y + 0.02],
+    [x, y],
+  ]);
+  const arcs = {
+    size: () => rings.length,
+    getArcIter(id: number) {
+      const ring = rings[id < 0 ? ~id : id];
+      let at = 0;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (at === ring.length) return false;
+          [this.x, this.y] = ring[at++];
+          return true;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  return {
+    kind,
+    bounds: [0, 0, 16, 16],
+    interval: 0,
+    ...(kind === 'point' ? { shapes: points.map((p) => [p]) } : { arcs }),
+    ...(kind === 'fill' ? { shapes: rings.map((_, i) => [[i]]) } : {}),
+  };
+}
+
+it.each([
+  'point',
+  'path',
+  'fill',
+] as const)('retains the displayed %s chunk across changed camera membership until its replacement is ready', async (kind) => {
+  const f = fixture(),
+    input = handoffInput(kind);
+  const old = f.frame({ ...input, ids: Uint32Array.of(0, 1) });
+  await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+  const displayed = f.cache.drawable(old);
+  expect(displayed).toHaveLength(1);
+  f.cache.pin(displayed);
+  let release!: () => void;
+  f.transport.build.mockImplementationOnce(async (packet) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return buildGeometryPacket(packet);
+  });
+  const next = f.frame({ ...input, ids: Uint32Array.of(1, 2), viewBounds: [0, 0, 2, 2] });
+  try {
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(next.entries?.[0].job.members).toEqual(Int32Array.of(1, 2));
+    expect(f.cache.complete(next)).toBe(false);
+    expect(f.cache.drawable(next)).toEqual(displayed);
+    expect(f.gpu.destroyMesh).not.toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).toEqual(next.entries);
+    expect(f.cache.drawable(next)).toHaveLength(1);
+    expect(f.cache.drawable(next)).not.toContain(displayed[0]);
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('presents an independent new chunk while retaining a pending overlapping chunk without double drawing', async () => {
+  const f = fixture(),
+    input = handoffInput('fill');
+  const old = f.frame({ ...input, ids: Uint32Array.of(0, 1) });
+  await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+  const displayed = f.cache.drawable(old);
+  f.cache.pin(displayed);
+  let release!: () => void,
+    calls = 0;
+  f.transport.build.mockImplementation(async (packet) => {
+    if (++calls === 2)
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    return buildGeometryPacket(packet);
+  });
+  const next = f.frame({ ...input, ids: Uint32Array.of(1, 2, 3) });
+  try {
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    const shown = f.cache.drawable(next);
+    expect(shown).toHaveLength(2);
+    expect(shown[0].job.members).toEqual(Int32Array.of(3));
+    expect(shown[1]).toBe(displayed[0]);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    const members = f.cache.drawable(next).flatMap((e) => [...e.job.members]);
+    expect(members).toEqual([3, 1, 2]);
+    expect(new Set(members).size).toBe(members.length);
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('does not inherit camera fallback across changed content even when the preceding selection key was unchanged', async () => {
+  const f = fixture(),
+    input = handoffInput('fill');
+  const frame = (content: string, ids: number[]) => {
+    f.cache.begin();
+    const r = f.cache.request(
+      { ...input, ids: Uint32Array.from(ids) },
+      { id: 'p', sourceId: 's', revision: 0, content },
+    );
+    f.cache.finish();
+    return r;
+  };
+  try {
+    const first = frame('red', [0, 1]);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const changed = frame('blue', [0, 1]);
+    expect(changed).not.toBe(first);
+    await vi.waitFor(() => expect(f.cache.complete(changed)).toBe(true));
+    // A second content change must not accidentally match the obsolete owner.
+    const next = frame('red', [1, 2]);
+    expect(next.fallback?.length ?? 0).toBe(0);
+    expect(f.cache.drawable(next)).toHaveLength(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('keeps the same paint slot when an earlier visible expression bucket disappears', async () => {
+  const f = fixture(),
+    input = handoffInput('fill');
+  const owner = { id: 'p', sourceId: 's', revision: 0 };
+  const frame = (red: boolean) => {
+    f.cache.begin();
+    if (red) f.cache.request({ ...input, ids: Uint32Array.of(0) }, { ...owner, content: 'red' });
+    const blue = f.cache.request(
+      { ...input, ids: Uint32Array.of(1, 2) },
+      { ...owner, content: 'blue' },
+    );
+    f.cache.finish();
+    return blue;
+  };
+  try {
+    const first = frame(true);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const next = frame(false);
+    expect(next).toBe(first);
+    expect(f.cache.complete(next)).toBe(true);
+    expect(f.cache.drawable(next).flatMap((e) => [...e.job.members])).toEqual([1, 2]);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('carries the displayed chunk through repeated superseded camera requests, then releases it after handoff', async () => {
+  const f = fixture(160),
+    input = handoffInput('point');
+  const first = f.frame({ ...input, ids: Uint32Array.of(0, 1) });
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const displayed = f.cache.drawable(first);
+  // Do not pin: a replacement upload must also protect unpresented fallback.
+  const releases: (() => void)[] = [];
+  f.transport.build.mockImplementation(async (packet, signal?: AbortSignal) => {
+    await new Promise<void>((resolve, reject) => {
+      releases.push(resolve);
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    const second = f.frame({ ...input, ids: Uint32Array.of(1, 2) });
+    await vi.waitFor(() => expect(releases).toHaveLength(1));
+    expect(f.cache.drawable(second)).toEqual(displayed);
+    const third = f.frame({ ...input, ids: Uint32Array.of(0, 2) });
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    // This would evict the old chunk without protecting the presentation set.
+    f.cache.admitExternal(145);
+    expect(f.cache.drawable(third)).toEqual(displayed);
+    expect(f.gpu.destroyMesh).not.toHaveBeenCalled();
+    releases[1]();
+    await vi.waitFor(() => expect(f.cache.complete(third)).toBe(true));
+    f.frame({ ...input, ids: Uint32Array.of(0, 2) });
+    expect(third.fallback).toBeUndefined();
+    f.cache.admitExternal(145);
+    expect(f.cache.drawable(third)).toEqual(third.entries);
+    expect(f.gpu.destroyMesh).toHaveBeenCalled();
+    expect(f.cache.stats.budgetBytes).toBe(160);
+  } finally {
+    for (const release of releases) release();
+    f.cache.dispose();
+  }
+});
+
+it('keeps ordered repeated-chunk runs atomic while their replacement is incomplete', async () => {
+  const f = fixture(),
+    input = {
+      ...handoffInput('point'),
+      ordered: true,
+      shapes: Array.from({ length: 4097 }, () => [[1, 1]]),
+    };
+  const first = f.frame({ ...input, ids: Uint32Array.of(0, 4096, 1) });
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const displayed = f.cache.drawable(first);
+  let release!: () => void;
+  f.transport.build.mockImplementationOnce(async (packet) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    const next = f.frame({
+      ...input,
+      ids: Uint32Array.of(1, 4096, 2),
+      components: Uint32Array.of(0, 0, 0),
+    });
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(f.cache.drawable(next)).toEqual(displayed);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).toEqual(next.entries);
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'fill',
+  'path',
+] as const)('retains %s coverage through an LOD partition split without alpha overlap', async (kind) => {
+  const f = fixture();
+  const arcs = (coarse: boolean) =>
+    ({
+      size: () => 2,
+      getArcIter(id: number) {
+        const x = id === 0 ? 1.99 : 2.02,
+          width = id === 0 && coarse ? 0.008 : 0.02;
+        const ring = [
+          [x, 1.1],
+          [x + width, 1.1],
+          [x + width, 1.12],
+          [x, 1.12],
+          [x, 1.1],
+        ];
+        let i = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            if (i === ring.length) return false;
+            [this.x, this.y] = ring[i++];
+            return true;
+          },
+        };
+      },
+    }) as GeometryInput['arcs'];
+  const input: GeometryInput = {
+    kind,
+    interval: 0,
+    bounds: [0, 0, 16, 16],
+    arcs: arcs(false),
+    ...(kind === 'fill' ? { shapes: [[[0]], [[1]]] } : {}),
+  };
+  const first = f.frame(input);
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const displayed = f.cache.drawable(first);
+  expect(displayed).toHaveLength(1);
+  let calls = 0,
+    release!: () => void;
+  f.transport.build.mockImplementation(async (packet) => {
+    if (++calls === 2)
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    const next = f.frame({ ...input, arcs: arcs(true) });
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(next.entries).toHaveLength(2);
+    expect(next.entries![0].state).toBe('ready');
+    expect(f.cache.drawable(next)).toEqual(displayed);
+    expect(f.cache.complete(next)).toBe(false);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).toEqual(next.entries);
+    expect(f.cache.drawable(next).flatMap((e) => [...e.job.members])).toEqual([0, 1]);
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('does not treat equal-valued source bounds from another dataset as LOD continuity', async () => {
+  const f = fixture(),
+    input = handoffInput('fill');
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const next = f.frame({ ...input, arcs: { ...input.arcs! }, bounds: [...input.bounds] });
+    expect(next.fallback).toBeUndefined();
+    expect(f.cache.drawable(next)).toHaveLength(0);
+  } finally {
+    f.cache.dispose();
+  }
+});

@@ -1,4 +1,8 @@
 import {
+  planGeometryHandoff,
+  type GeometryHandoffGroup,
+} from '../../engine/rendering/luma/geometry-handoff';
+import {
   GEOMETRY_BATCH_JOBS,
   GEOMETRY_BATCH_BYTES,
   geometryBatchBytes,
@@ -42,6 +46,8 @@ interface Plan {
 export interface GeometryEntry {
   id: string;
   family: string;
+  /** Chunk numbers are meaningful only inside this exact partition. */
+  partition: string;
   owner: GeometryOwner;
   job: GeometryJob;
   state: 'queued' | 'building' | 'ready' | 'error';
@@ -67,6 +73,9 @@ export interface GeometryRequest {
   key: string;
   entries: GeometryEntry[] | null;
   fallback?: GeometryEntry[];
+  /** Same-partition presentation, independent of viewport-dependent membership hashes. */
+  fallbackChunks?: Map<number, GeometryEntry[]>;
+  fallbackGroups?: GeometryHandoffGroup[];
   error?: Error;
   frame: number;
   /** Monotone cursor through this immutable selection; no repeated prefix scans. */
@@ -250,6 +259,7 @@ export class GeometryChunkCache {
       owner.sourceId,
       owner.id,
       owner.revision,
+      owner.content,
       input.kind,
       this.identity(input.arcs),
       this.identity(input.shapes),
@@ -268,7 +278,9 @@ export class GeometryChunkCache {
   }
   request(input: GeometryInput, owner: GeometryOwner): GeometryRequest {
     this.selectionChanged();
-    const ownerId = JSON.stringify([owner.sourceId, owner.id]),
+    // Empty expression buckets may disappear as the viewport moves. Number slots
+    // within each paint/content family, not across all colours in the layer.
+    const ownerId = JSON.stringify([owner.sourceId, owner.id, owner.content, input.kind]),
       slot = this.slots.get(ownerId) ?? 0;
     this.slots.set(ownerId, slot + 1);
     const id = ownerId + ':' + slot,
@@ -349,9 +361,16 @@ export class GeometryChunkCache {
         previous &&
         previous.owner.revision === owner.revision &&
         previous.owner.content === owner.content &&
-        previous.input.arcs === input.arcs &&
         previous.input.shapes === input.shapes &&
         previous.input.kind === input.kind &&
+        (previous.plan.key === planKey ||
+          // stableSourceBounds retains this array per source/dataset/revision.
+          // Reference equality, unchanged topology IDs and the revision/content
+          // guards distinguish a DisplayArcs LOD switch from source replacement.
+          (previous.input.bounds === input.bounds &&
+            previous.input.ordered === input.ordered &&
+            previous.input.arcs?.size() === input.arcs?.size())) &&
+        previous.input.forward === input.forward &&
         previous.input.compactStroke === input.compactStroke
           ? this.drawable(previous)
           : undefined,
@@ -364,7 +383,45 @@ export class GeometryChunkCache {
       controller.signal.throwIfAborted();
       const jobs = await selectGeometryJobs(snapshot, partition, controller.signal);
       controller.signal.throwIfAborted();
+      if (
+        request.fallback?.length &&
+        !snapshot.ordered &&
+        request.fallback.some((entry) => entry.partition !== plan.key)
+      ) {
+        request.fallbackGroups = await planGeometryHandoff(
+          jobs,
+          request.fallback.map((entry) => entry.job),
+          partition,
+          snapshot.kind === 'path',
+          controller.signal,
+        );
+        const used = new Map<number, number>();
+        const retained: GeometryEntry[] = [];
+        for (const group of request.fallbackGroups) {
+          group.previous = group.previous.map((index) => {
+            let next = used.get(index);
+            if (next === undefined) {
+              used.set(index, (next = retained.length));
+              retained.push(request.fallback![index]);
+            }
+            return next;
+          });
+        }
+        request.fallback = retained;
+      }
+      controller.signal.throwIfAborted();
       request.entries = jobs.map((job) => this.entry(job, request));
+      if (request.fallback && !snapshot.ordered && !request.fallbackGroups) {
+        const selected = new Set(jobs.map((job) => job.chunk));
+        request.fallback = request.fallback.filter((entry) => selected.has(entry.job.chunk));
+        request.fallbackChunks = new Map();
+        for (const entry of request.fallback) {
+          const chunk = entry.job.chunk;
+          const entries = request.fallbackChunks.get(chunk);
+          if (entries) entries.push(entry);
+          else request.fallbackChunks.set(chunk, [entry]);
+        }
+      }
       this.selectionChanged();
       this.cancelObsolete();
       this.schedule();
@@ -451,6 +508,7 @@ export class GeometryChunkCache {
     const entry: GeometryEntry = {
       id,
       family,
+      partition: request.plan.key,
       fallback:
         old?.state === 'ready' && old.owner.content === request.owner.content ? old : undefined,
       owner: request.owner,
@@ -471,21 +529,50 @@ export class GeometryChunkCache {
     this.bytes += entry.bytes;
     return entry;
   }
-  /** Draw a chunk once: either its current mesh OR an exactly compatible old
-   * screen mesh. Never blend two versions and multiply semi-transparent alpha. */
+  /** A membership change is not a presentation commit. Keep each stable spatial
+   * chunk's previous image until its replacement can draw, never both versions.
+   * Other chunks (including newly visible coverage) can progress independently. */
   drawable(request: GeometryRequest): GeometryEntry[] {
-    const selected = request.entries
-      ? request.entries.map((e) => {
-          if (e.state === 'ready') return e;
-          const latest = this.latest.get(e.family);
-          return latest?.state === 'ready' && latest.owner.content === request.owner.content
-            ? latest
-            : e.fallback;
-        })
-      : (request.fallback ?? []);
-    return selected.filter(
-      (e): e is GeometryEntry => !!e && e.state === 'ready' && this.entries.get(e.id) === e,
-    );
+    const resident = (
+      entry: GeometryEntry | undefined,
+    ): entry is GeometryEntry & { state: 'ready' } =>
+      !!entry && entry.state === 'ready' && this.entries.get(entry.id) === entry;
+    if (!request.entries) return (request.fallback ?? []).filter(resident);
+    const selected = request.entries.map((entry) => {
+      if (resident(entry)) return entry;
+      const latest = this.latest.get(entry.family);
+      if (resident(latest) && latest.owner.content === request.owner.content) return latest;
+      const fallback = entry.fallback;
+      return resident(fallback) && fallback.owner.content === request.owner.content
+        ? fallback
+        : undefined;
+    });
+    // Ordered icon batches may revisit one spatial chunk. Mixing old and new
+    // runs would duplicate members or change their order: commit the run together.
+    if (request.input.ordered) {
+      const fallback = request.fallback?.filter(resident);
+      if (fallback?.length && selected.some((entry) => !entry)) return fallback;
+      return selected.filter(resident);
+    }
+    const result: GeometryEntry[] = [];
+    if (request.fallbackGroups) {
+      for (const group of request.fallbackGroups) {
+        const ready = group.targets.every((index) => !!selected[index]);
+        const previous = group.previous.map((index) => request.fallback?.[index]).filter(resident);
+        if (!ready && previous.length) result.push(...previous);
+        else for (const index of group.targets) if (selected[index]) result.push(selected[index]!);
+      }
+      return result;
+    }
+    for (let i = 0; i < selected.length; i++) {
+      const entry = selected[i];
+      if (entry) result.push(entry);
+      else {
+        const fallback = request.fallbackChunks?.get(request.entries[i].job.chunk);
+        if (fallback) for (const old of fallback) if (resident(old)) result.push(old);
+      }
+    }
+    return result;
   }
   pin(entries: Iterable<GeometryEntry>): void {
     this.trimCandidates = null;
@@ -554,6 +641,13 @@ export class GeometryChunkCache {
         request.controller.abort();
         this.requests.delete(id);
       }
+    for (const request of current) {
+      if (request.fallback && this.complete(request)) {
+        request.fallback = undefined;
+        request.fallbackChunks = undefined;
+        request.fallbackGroups = undefined;
+      }
+    }
     this.trimPlans();
     const owners = new Set(
       [...this.requests.values()].map((r) => JSON.stringify([r.owner.sourceId, r.owner.id])),
@@ -952,8 +1046,21 @@ export class GeometryChunkCache {
               .flatMap((r) => r.entries ?? []),
           ))
         : this.wanted();
+      // A ready fallback can be needed before it has reached the next GPU frame.
+      // Protect it even when a pending upload triggers eviction between frames.
+      const presenting = new Set(
+        (this.collecting ? [...this.requests.values()] : this.current()).flatMap((r) =>
+          this.drawable(r),
+        ),
+      );
       this.trimCandidates = [...this.entries.values()]
-        .filter((e) => !wanted.has(e) && !this.pinned.has(e) && !this.active?.entries.has(e))
+        .filter(
+          (e) =>
+            !wanted.has(e) &&
+            !presenting.has(e) &&
+            !this.pinned.has(e) &&
+            !this.active?.entries.has(e),
+        )
         .sort((a, b) => a.used - b.used);
       this.trimCursor = 0;
     }

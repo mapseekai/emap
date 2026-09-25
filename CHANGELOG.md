@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep resident vector geometry visible while camera-dependent chunk membership or
+  display LOD changes. Commit overlapping replacements atomically, preserve paint
+  bucket identity and ordered icons, and protect handoff resources within the
+  existing cache budgets. Filtering and source edits still invalidate old content.
+
 - Reject geometry results when cancellation or disposal occurs after a Worker reply
   but before the awaiting caller receives it, including single and batched jobs.
 

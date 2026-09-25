@@ -342,7 +342,20 @@ export class LumaPainter implements EditPainter {
         storageBounds: input.kind === 'fill' ? fillStorageBounds(viewBounds, bounds) : undefined,
         interval: input.arcs?.getRetainedInterval?.() ?? 0,
       },
-      owner,
+      {
+        ...owner,
+        content: JSON.stringify([
+          owner.content,
+          paint.color,
+          paint.radius,
+          paint.filled,
+          paint.marker,
+          // Stroke widths/dashes scale together at extreme camera zoom levels.
+          paint.dash?.map((length) => Number((length / (paint.width || 1)).toPrecision(12))),
+          paint.arrow,
+          icon && { ...icon, asset: this.chunks.identity(icon.asset.image) },
+        ]),
+      },
     );
     this.requests.push(request);
     if (icon) this.images.add(icon.asset.image);

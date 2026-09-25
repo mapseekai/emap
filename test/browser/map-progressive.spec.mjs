@@ -232,3 +232,55 @@ for (const renderer of ['webgl2','webgpu']) test(`${renderer}: odd uint16 fill u
  await page.evaluate(()=>drawIndexProbe(32,true));expect(await pixels(page)).toEqual(reference);
  await dispose(page);
 });
+
+
+for (const renderer of ['webgl2', 'webgpu']) for (const kind of ['fill', 'path']) {
+ test(`${renderer}: ${kind} membership handoff never blanks or doubles existing pixels while a replacement is held`, async ({page}) => {
+  test.setTimeout(90000); await boot(page,renderer,true);
+  await page.evaluate(async kind => {
+   const features=[1.05,1.1,1.15].map((x,id)=>feature({type:'Polygon',coordinates:[square(x,1.1,.035)]},{id}));
+   const source=await addProgressSource('handoff',[...features,largeLine()]);
+   const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+   progressMap.addLayer({id:'handoff',source:'handoff','source-layer':layer.name,type:kind==='fill'?'fill':'line',paint:kind==='fill'?{'fill-color':'#0000ff','fill-opacity':.5,'line-width':0}:{'line-color':'#0000ff80','line-width':6}});
+   const c=progressMap.ctx.render._painter.chunks;
+   window.handoffSelection=[0,1];window.handoffRequest=c.request.bind(c);
+   // Model successive viewport candidate selections without altering source data.
+   c.request=(input,owner)=>handoffRequest(owner.id==='handoff'?{...input,ids:Uint32Array.from(handoffSelection)}:input,owner);
+   window.holdHandoff=()=>{
+    const worker=c.worker,build=worker.build.bind(worker),batch=worker.buildBatch.bind(worker);
+    window.releaseHandoff=undefined;
+    for(const [method,run] of [['build',build],['buildBatch',batch]])worker[method]=(packet,signal)=>new Promise((resolve,reject)=>{
+     window.releaseHandoff=()=>{worker.build=build;worker.buildBatch=batch;run(packet,signal).then(resolve,reject);};
+     signal?.addEventListener('abort',()=>reject(signal.reason),{once:true});
+    });
+   };
+   progressMap.setExtent(new emap.Bounds(.8,.8,1.4,1.4));progressMap.render();
+  },kind);
+  await settled(page);
+  const at=kind==='fill'?[1.1175,1.1175]:[1.1175,1.1];
+  const before=await pixels(page,'pixel',at);
+  expect(before[2]).toBe(255);expect(before[0]).toBeGreaterThan(120);expect(before[0]).toBeLessThan(135);
+  const count=await page.evaluate(()=>[...progressMap.ctx.render._painter.chunks.requests.values()][0].entries.length);
+  expect(count).toBe(1);
+  await page.evaluate(()=>{
+   holdHandoff();handoffSelection=[1,2];
+   const t=progressMap.ctx.view._viewport.transform;t.translate(6,3);t.scale(1.02,400,300);progressMap.render();
+  });
+  await expect.poll(()=>page.evaluate(()=>typeof releaseHandoff==='function')).toBe(true);
+  await page.evaluate(()=>progressMap.render());
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.frameComplete)).toBe(false);
+  expect(await pixels(page,'pixel',at)).toEqual(before);
+  // Camera-only replay must retain the same incomplete handoff too.
+  await page.evaluate(()=>{const p=progressMap.ctx.render._painter;const t=progressMap.getTransform();t.translate(3,2);Object.assign(progressMap.ctx.view._viewport.transform,t);p.renderNavigation(t);});
+  expect(await pixels(page,'pixel',at)).toEqual(before);
+  await page.evaluate(()=>releaseHandoff());await settled(page);
+  expect(await pixels(page,'pixel',at)).toEqual(before);
+  // A filter change is not navigation: it must not keep the old selected member.
+  await page.evaluate(()=>{progressMap.ctx.render._painter.chunks.request=handoffRequest;holdHandoff();progressMap.setFilter('handoff',['==',['get','id'],2]);progressMap.render();});
+  await expect.poll(()=>page.evaluate(()=>typeof releaseHandoff==='function')).toBe(true);
+  expect(await pixels(page,'pixel',at)).toEqual([255,255,255,255]);
+  await page.evaluate(()=>releaseHandoff());await settled(page);
+  expect(await pixels(page,'pixel',at)).toEqual([255,255,255,255]);
+  await dispose(page);
+ });
+}
