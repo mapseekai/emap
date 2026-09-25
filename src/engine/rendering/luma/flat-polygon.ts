@@ -182,5 +182,31 @@ export function flatSingleRingIndices(xy: Float64Array): number[] | null {
     const j = i + 2 < xy.length ? i + 2 : 0;
     area += (xy[i] - ox) * (xy[j + 1] - oy) - (xy[j] - ox) * (xy[i + 1] - oy);
   }
-  return area !== 0 && Number.isFinite(area) ? earcut(xy, [], 2) : null;
+  if (area === 0 || !Number.isFinite(area)) return null;
+  const count = xy.length / 2;
+  const closed = xy[0] === xy[xy.length - 2] && xy[1] === xy[xy.length - 1];
+  const n = count - Number(closed);
+  if (n === 3 || n === 4) {
+    // Match Earcut's exact winding, starting node and ear order. This only
+    // bypasses its linked-list allocation for strictly convex triangles/quads;
+    // concavity, degeneracy and ambiguous arithmetic keep the general path.
+    let winding = 0;
+    for (let i = 0, j = xy.length - 2; i < xy.length; j = i, i += 2)
+      winding += (xy[j] - xy[i]) * (xy[i + 1] + xy[j + 1]);
+    const forward = winding > 0;
+    const a = closed ? (forward ? 0 : n) : forward ? n - 1 : 0;
+    const b = forward ? (closed ? 1 : 0) : n - 1;
+    const c = forward ? (closed ? 2 : 1) : n - 2;
+    const d = forward ? (closed ? 3 : 2) : n - 3;
+    const convex = (i: number, j: number, k: number) => {
+      const turn =
+        (xy[j * 2 + 1] - xy[i * 2 + 1]) * (xy[k * 2] - xy[j * 2]) -
+        (xy[j * 2] - xy[i * 2]) * (xy[k * 2 + 1] - xy[j * 2 + 1]);
+      return Number.isFinite(turn) && turn < 0;
+    };
+    if (n === 3 && convex(c, a, b) && convex(a, b, c) && convex(b, c, a)) return [c, a, b];
+    if (n === 4 && convex(d, a, b) && convex(a, b, c) && convex(b, c, d) && convex(c, d, a))
+      return [d, a, b, b, c, d];
+  }
+  return earcut(xy, [], 2);
 }

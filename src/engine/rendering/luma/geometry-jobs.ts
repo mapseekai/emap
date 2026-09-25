@@ -3,6 +3,7 @@ import { normalizePointShape } from '../../../domain/source/layer-utils';
 import {
   absArcId,
   type ArcCollection,
+  type ArcVertexData,
   type PathShape,
 } from '../../../shared/types/mapshaper-types';
 import type { Rect } from '../../../integrations/luma/types';
@@ -48,6 +49,7 @@ export async function geometryYield(signal: AbortSignal): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   signal.throwIfAborted();
 }
+
 function box(): [number, number, number, number] {
   return [Infinity, Infinity, -Infinity, -Infinity];
 }
@@ -58,9 +60,13 @@ function point(b: number[], x: number, y: number): void {
   b[2] = Math.max(b[2], x);
   b[3] = Math.max(b[3], y);
 }
-function arcBox(arcs: ArcCollection, id: number, target: number[]): number {
-  const data = arcs.getVertexData?.(),
-    absolute = absArcId(id);
+function arcBox(
+  arcs: ArcCollection,
+  id: number,
+  target: number[],
+  data: ArcVertexData | undefined,
+): number {
+  const absolute = absArcId(id);
   if (data?.bb) {
     point(target, data.bb[absolute * 4], data.bb[absolute * 4 + 1]);
     point(target, data.bb[absolute * 4 + 2], data.bb[absolute * 4 + 3]);
@@ -74,8 +80,13 @@ function arcBox(arcs: ArcCollection, id: number, target: number[]): number {
   }
   return count;
 }
-function geometryBounds(input: GeometryInput, id: number, target: number[]): number {
-  if (input.kind === 'path') return arcBox(input.arcs!, id, target);
+function geometryBounds(
+  input: GeometryInput,
+  id: number,
+  target: number[],
+  data: ArcVertexData | undefined,
+): number {
+  if (input.kind === 'path') return arcBox(input.arcs!, id, target, data);
   const shape = input.shapes![id];
   let cost = 0;
   if (shape && input.kind === 'point')
@@ -85,7 +96,7 @@ function geometryBounds(input: GeometryInput, id: number, target: number[]): num
     }
   else if (shape)
     for (const part of shape as PathShape)
-      for (const arc of part) cost += arcBox(input.arcs!, arc, target);
+      for (const arc of part) cost += arcBox(input.arcs!, arc, target, data);
   return cost;
 }
 /** Bins and chunk boundaries are derived from ALL source IDs, not the current view.
@@ -97,6 +108,7 @@ export async function partitionGeometry(
   signal: AbortSignal,
 ): Promise<GeometryPartition> {
   const count = input.kind === 'path' ? input.arcs!.size() : input.shapes!.length;
+  const data = input.arcs?.getVertexData?.();
   if (count * 4 > 128 * 1024 ** 2)
     throw new RangeError('Spatial partition metadata exceeds the bounded index limit.');
   let slice = performance.now();
@@ -119,8 +131,10 @@ export async function partitionGeometry(
   for (let id = 0; id < count; id++) {
     if ((id & 2047) === 0 && performance.now() - slice >= 4) await checkpoint();
     const b = box();
-    const cost = geometryBounds(input, id, b);
-    if (!b.every(Number.isFinite)) continue;
+    const cost = geometryBounds(input, id, b, data);
+    // Fewer than three native vertices cannot form any fill triangle. Keep
+    // source features intact; omit only this render-only degenerate job member.
+    if (!b.every(Number.isFinite) || (input.kind === 'fill' && cost < 3)) continue;
     const x = Math.max(
       0,
       Math.min(15, Math.floor((((b[0] + b[2]) * 0.5 - x0) / (x1 - x0 || 1)) * 16)),
@@ -153,7 +167,7 @@ export async function partitionGeometry(
         tight = box();
       }
       if ((size & 2047) === 0 && performance.now() - slice >= 4) await checkpoint();
-      geometryBounds(input, id, tight);
+      geometryBounds(input, id, tight, data);
       membership[id] = chunk;
       size++;
       vertices += costs[id];
@@ -404,7 +418,8 @@ export async function packGeometryJob(
       paths = 0,
       visited = 0,
       members = 0;
-    for (const id of job.members) {
+    for (let k = 0; k < job.members.length; k++) {
+      const id = job.members[k];
       const rings = input.kind === 'path' ? null : ((input.shapes![id] ?? []) as PathShape);
       for (let ring = 0; ring < (rings ? rings.length : 1); ring++) {
         paths++;

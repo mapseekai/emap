@@ -37,11 +37,17 @@ export class GeometryWorker {
   constructor(private readonly url: URL) {}
   async build(packet: GeometryPacket, signal: AbortSignal): Promise<GeometryResult> {
     const response = await this.send({ packet }, signal);
+    // A reply may arrive before the awaiting continuation runs.
+    signal.throwIfAborted();
+    if (this.disposed) throw new DOMException('Geometry Worker disposed', 'AbortError');
     return response.result!;
   }
   async buildBatch(packets: GeometryPacket[], signal: AbortSignal): Promise<GeometryBatchItem[]> {
     validateGeometryBatch(packets);
     const response = await this.send({ packets }, signal);
+    // A reply may arrive before the awaiting continuation runs.
+    signal.throwIfAborted();
+    if (this.disposed) throw new DOMException('Geometry Worker disposed', 'AbortError');
     return response.results!;
   }
   private send(

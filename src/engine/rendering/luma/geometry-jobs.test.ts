@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   partitionGeometry,
   selectGeometryJobs,
@@ -274,4 +274,41 @@ it('keeps exact counting for large raw bounds instead of speculatively allocatin
   const packet = await packGeometryJob(input, { chunk: 0, members: new Int32Array([0]) }, signal());
   expect(reads).toBe(count * 2);
   expect(packet.coordinates.buffer.byteLength).toBe(16);
+});
+
+it('reads one native vertex-data view per partition, not one per arc per pass', async () => {
+  const getVertexData = vi.fn(() => ({
+    xx: new Float64Array([1, 2, 10, 11, 1, 2]),
+    yy: new Float64Array([1, 1, 1, 1, 10, 10]),
+    nn: new Uint32Array([2, 2, 2]),
+    ii: new Uint32Array([0, 2, 4]),
+    bb: new Float64Array([1, 1, 2, 1, 10, 1, 11, 1, 1, 10, 2, 10]),
+  }));
+  const input = fixture();
+  input.arcs!.getVertexData = getVertexData as ArcCollection['getVertexData'];
+  const partition = await partitionGeometry(input, signal());
+  expect(getVertexData).toHaveBeenCalledTimes(1);
+  expect(partition.membership.length).toBe(3);
+});
+
+it('does not send structurally degenerate fills to the worker and preserves nonclosed triangles', async () => {
+  const input = fixture();
+  const data = {
+    xx: Float64Array.from([0, 0, 10, 11, 10]),
+    yy: Float64Array.from([0, 0, 0, 0, 1]),
+    nn: new Uint32Array([2, 3]),
+    ii: new Uint32Array([0, 2]),
+    bb: Float64Array.from([0, 0, 0, 0, 10, 0, 11, 1]),
+  };
+  const filled: GeometryInput = {
+    ...input,
+    kind: 'fill',
+    shapes: [[[0]], [[1]]],
+    arcs: { size: () => 2, getVertexData: () => data } as unknown as ArcCollection,
+  };
+  const plan = await partitionGeometry(filled, signal()),
+    jobs = await selectGeometryJobs(filled, plan, signal());
+  expect(plan.membership[0]).toBe(EMPTY_COMPONENT);
+  expect(jobs.flatMap((j) => [...j.members])).toEqual([1]);
+  expect(filled.shapes).toEqual([[[0]], [[1]]]);
 });

@@ -1,5 +1,8 @@
 # GeoPackage 导入与 GPU 视图准备优化
 
+> 本文保留前两批的测量。后续 4× 和回全图的处理与测量边界见
+> [几何准备优化](geopackage-zoom-performance.md)。
+
 ## 基线与范围
 
 基线 `a68a9bd8`。使用完整 `brandenburg.gpkg`（1,048,797,184 字节、20 个表、

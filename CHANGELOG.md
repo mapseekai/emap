@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Reduce view geometry preparation overhead: snapshot native arc metadata per partition,
+  skip structurally degenerate display fills, preserve exact Earcut indices for convex
+  triangles/quads. Preserve the existing timer-based cooperative yielding.
+  Keep the existing single Worker and resource budgets; no source features are removed.
+
 - Reuse resident fill storage for contained same-detail views and include command
   preparation in progressive-frame pacing, without changing Worker concurrency,
   source detail, layer order or cache budgets.
@@ -19,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve 64-bit integer/Boolean/BLOB fields and cancellation atomicity.
 
 ### Fixed
+
+- Reject geometry results when cancellation or disposal occurs after a Worker reply
+  but before the awaiting caller receives it, including single and batched jobs.
 
 - Retire inactive GPU styles and dash textures after submission, including native bundle lifetimes;
   unify image binding retirement and reuse WebGL image bindings across repeated draws.

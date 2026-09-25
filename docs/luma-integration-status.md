@@ -27,6 +27,9 @@ Emap.create 支持 renderer: canvas2d / webgl2 / webgpu，默认 webgl2。
 Brandenburg 的五百万要素已完成后续三后端专项测试，具体路线、修复及仍存在的延迟见
 [真实大文件验收](brandenburg-stress-test.md)；不能外推为所有机器与数据均无资源限制。
 
+[GeoPackage 4× 与回全图优化](geopackage-zoom-performance.md) 减少显示几何准备开销，
+保留单 Worker、默认精度和既有预算。完整旧视图仍可能因淘汰而需要重建。
+
 ## 保留的实验链路
 
 - [2.5D 相机](luma-25d.md) 与 [2.5D 性能](luma-25d-performance.md)：pitch/bearing 尚未进入正式 View API。

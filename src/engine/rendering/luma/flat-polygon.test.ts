@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { polygonGeometry, type Point } from './geometry';
-import { flatPolygonGeometry } from './flat-polygon';
+import earcut from 'earcut';
+import { flatPolygonGeometry, flatSingleRingIndices } from './flat-polygon';
 import { buildGeometryPacket, splitGeometry } from './geometry-packet';
 function check(rings: Point[][]) {
   const offsets = new Uint32Array(rings.length + 1);
@@ -90,4 +91,34 @@ it('large simple-ring batches match the reference while avoiding per-feature mes
   const result = buildGeometryPacket(packet);
   expect(result.directFeatures).toBe(300);
   expect(result.geometries).toEqual(splitGeometry(polygonGeometry(rings.map((r) => [r]))));
+});
+
+it('keeps exact Earcut indices for short rings across closure, winding, concavity and precision extremes', () => {
+  let seed = 7123;
+  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+  const reference = (xy: Float64Array) => {
+    let area = 0;
+    for (let i = 0; i < xy.length; i += 2) {
+      const j = i + 2 < xy.length ? i + 2 : 0;
+      area += (xy[i] - xy[0]) * (xy[j + 1] - xy[1]) - (xy[j] - xy[0]) * (xy[i + 1] - xy[1]);
+    }
+    return area !== 0 && Number.isFinite(area) ? earcut(xy, [], 2) : null;
+  };
+  for (let i = 0; i < 1000; i++) {
+    const n = i % 2 ? 3 : 4,
+      scale = 10 ** ((i % 15) - 7),
+      origin = i % 3 ? 0 : 1e7;
+    const points = Array.from({ length: n }, () => [
+      origin + (random() - 0.5) * scale,
+      -origin + (random() - 0.5) * scale,
+    ]);
+    if (i % 5 === 0) points[1] = points[0].slice();
+    for (const reverse of [false, true])
+      for (const closed of [false, true]) {
+        const ring = reverse ? points.slice().reverse() : points.slice();
+        if (closed) ring.push(ring[0]);
+        const xy = Float64Array.from(ring.flat());
+        expect(flatSingleRingIndices(xy)).toEqual(reference(xy));
+      }
+  }
 });

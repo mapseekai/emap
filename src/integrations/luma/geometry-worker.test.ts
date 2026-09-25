@@ -169,3 +169,38 @@ it('cancels a whole native batch, ignores a late reply and rejects a mismatched 
   expect(FakeWorker.instances[1].terminated).toBe(true);
   client.dispose();
 });
+
+it.each([
+  ['single', 'abort'],
+  ['single', 'dispose'],
+  ['batch', 'abort'],
+  ['batch', 'dispose'],
+] as const)('rejects late %s delivery after %s even when the Worker reply has arrived', async (kind, mode) => {
+  vi.stubGlobal('Worker', FakeWorker);
+  const client = new GeometryWorker(new URL('http://example.test/worker.js'));
+  const controller = new AbortController();
+  const task =
+    kind === 'single'
+      ? client.build(packet(), controller.signal)
+      : client.buildBatch([packet(), packet()], controller.signal);
+  const worker = FakeWorker.instances[0];
+  const value = { geometries: [], screenSpace: false };
+  worker.dispatchEvent(
+    new MessageEvent('message', {
+      data: {
+        id: 1,
+        ...(kind === 'single'
+          ? { result: value }
+          : { results: [{ result: value }, { result: value }] }),
+      },
+    }),
+  );
+  if (mode === 'abort') controller.abort();
+  else client.dispose();
+  try {
+    await expect(task).rejects.toMatchObject({ name: 'AbortError' });
+    expect(client.stats.inputBytes).toBe(0);
+  } finally {
+    client.dispose();
+  }
+});
