@@ -122,3 +122,70 @@ it('keeps exact Earcut indices for short rings across closure, winding, concavit
       }
   }
 });
+
+it('preserves hundreds of holes, shuffled ring order and nested islands with accelerated triangulation', () => {
+  const holes = Array.from({ length: 400 }, (_, i) =>
+    rect(2 + (i % 20) * 4, 2 + Math.floor(i / 20) * 4, 1),
+  );
+  const island = rect(2.25, 2.25, 0.5),
+    innerHole = rect(2.375, 2.375, 0.25);
+  const rings = [
+    ...holes.slice(200).reverse(),
+    innerHole,
+    rect(0, 0, 100).reverse(),
+    island,
+    ...holes.slice(0, 200),
+  ];
+  const offsets = new Uint32Array(rings.length + 1);
+  let count = 0;
+  for (const [i, ring] of rings.entries()) {
+    offsets[i] = count;
+    count += ring.length;
+  }
+  offsets[rings.length] = count;
+  const coordinates = Float64Array.from(rings.flatMap((r) => r.flat()));
+  const input = coordinates.slice();
+  const result = flatPolygonGeometry(coordinates, offsets);
+  const vertices = result.vertices,
+    indices = result.indices!;
+  const cross = (a: number, b: number, x: number, y: number) => {
+    const ax = vertices[a * 4] + vertices[a * 4 + 2],
+      ay = vertices[a * 4 + 1] + vertices[a * 4 + 3];
+    const bx = vertices[b * 4] + vertices[b * 4 + 2],
+      by = vertices[b * 4 + 1] + vertices[b * 4 + 3];
+    return (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+  };
+  let area = 0;
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = indices[i],
+      b = indices[i + 1],
+      c = indices[i + 2];
+    expect(Math.max(a, b, c)).toBeLessThan(vertices.length / 4);
+    area +=
+      Math.abs(
+        cross(
+          a,
+          b,
+          vertices[c * 4] + vertices[c * 4 + 2],
+          vertices[c * 4 + 1] + vertices[c * 4 + 3],
+        ),
+      ) / 2;
+  }
+  expect(area).toBeCloseTo(10000 - 400 + 0.25 - 0.0625, 10);
+  const covered = (x: number, y: number) => {
+    for (let i = 0; i < indices.length; i += 3) {
+      const a = cross(indices[i], indices[i + 1], x, y),
+        b = cross(indices[i + 1], indices[i + 2], x, y),
+        c = cross(indices[i + 2], indices[i], x, y);
+      if ((a >= 0 && b >= 0 && c >= 0) || (a <= 0 && b <= 0 && c <= 0)) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < 400; i++)
+    expect(covered(2.5 + (i % 20) * 4, 2.5 + Math.floor(i / 20) * 4)).toBe(false);
+  expect(covered(2.3, 2.3)).toBe(true);
+  expect(covered(1, 1)).toBe(true);
+  expect(covered(101, 101)).toBe(false);
+  expect(coordinates).toEqual(input);
+  expect(flatPolygonGeometry(coordinates, offsets)).toEqual(result);
+});

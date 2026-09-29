@@ -45,6 +45,23 @@ export class LabelAtlas {
     this.pinned.clear();
   }
   get(text: string, options: LabelOptions, pixelRatio: number): LabelRaster | null {
+    const key = JSON.stringify([
+      text,
+      options.fontStyle ?? 'normal',
+      options.fontWeight ?? 'normal',
+      options.fontSize ?? 14,
+      options.fontFamily ?? 'sans-serif',
+      options.haloWidth ?? 1.5,
+      options.color ?? '#243447',
+      options.haloColor ?? '#ffffff',
+      Math.min(3, Math.max(1, pixelRatio)),
+    ]);
+    const cached = this.entries.get(key);
+    if (cached) {
+      cached.page.used = ++this.clock;
+      this.pinned.add(cached.page);
+      return cached;
+    }
     const measured = this.measure(text, options, pixelRatio);
     if (!measured) return null;
     const {
@@ -59,20 +76,6 @@ export class LabelAtlas {
       pixelWidth: w,
       pixelHeight: h,
     } = measured;
-    const key = JSON.stringify([
-      text,
-      font,
-      halo,
-      options.color ?? '#243447',
-      options.haloColor ?? '#ffffff',
-      ratio,
-    ]);
-    const cached = this.entries.get(key);
-    if (cached) {
-      cached.page.used = ++this.clock;
-      this.pinned.add(cached.page);
-      return cached;
-    }
     let page = this.pages.find((p) => this.fits(p, w, h));
     if (!page && this.pages.length < MAX_PAGES) {
       const canvas = this.document.createElement('canvas');

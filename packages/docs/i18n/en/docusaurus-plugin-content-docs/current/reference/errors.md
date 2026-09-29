@@ -93,7 +93,7 @@ Successful results carry `value`; failed results carry `error`. `OK` is the valu
 | `MapOptions.workerThreshold` | `number` | `50000` | `'auto'` vertex threshold. |
 | `MapOptions.workerUrl` | `string` | `'emap-worker.js'` | Worker bundle URL. |
 | `MapOptions.workerPoolSize` | `number` | `1` | Worker-pool slots. |
-| `MapshaperWorkerPoolOptions.jobTimeoutMs` | `number` | `120000` ms | Request timeout, finite non-negative. |
+| `MapshaperWorkerPoolOptions.jobTimeoutMs` | `number` | `120000` ms | Request timeout, integer from `1` to `2147483647`. |
 
 Workers correlate responses by request `id`, message `type`, and slot `epoch`; late responses are ignored. `workerUrl` must use the page bundle's release.
 

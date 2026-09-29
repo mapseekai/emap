@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
-  streamGeoPackageDataset,
+  geoPackageChunks,
   GeoPackageStreamReceiver,
   GEOPACKAGE_TRANSFER_ROWS,
   type GeoPackageStreamMessage,
 } from './stream';
 import { DEFAULT_GEOPACKAGE_LIMITS, type GeoPackageDataset } from './types';
 import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
+
+async function streamGeoPackageDataset(
+  dataset: GeoPackageDataset,
+  send: (message: GeoPackageStreamMessage, transfers: Transferable[]) => Promise<void>,
+): Promise<void> {
+  for await (const part of geoPackageChunks(dataset)) await send(part.message, part.transfers);
+}
 
 function fixture(count = GEOPACKAGE_TRANSFER_ROWS + 2): GeoPackageDataset {
   const adapter = getDefaultMapshaperAdapter();
@@ -80,7 +87,7 @@ describe('bounded GeoPackage transfer', () => {
           release = resolve;
         });
     });
-    await Promise.resolve();
+    for (let i = 0; i < 4; i++) await Promise.resolve();
     expect(messages.map((m) => m.type)).toEqual(['header']);
     release();
     await promise;

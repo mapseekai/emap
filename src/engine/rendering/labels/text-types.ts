@@ -8,6 +8,8 @@ export interface MsdfAtlasPage {
   version: number;
   /** Increments only when old UV allocations are recycled, not on append. */
   generation?: number;
+  /** Bounded append history; consumers keep their own uploaded version. */
+  updates?: readonly { version: number; rect: readonly [number, number, number, number] }[];
 }
 export interface MsdfGlyphQuad {
   page: MsdfAtlasPage;
@@ -52,5 +54,7 @@ export interface LabelAtlasProvider {
   ): { width: number; height: number } | null;
   get(text: string, options: LabelOptions, dpr: number): TextRaster | null;
   clear(): void;
+  /** Physical asynchronous cleanup; may reject until disposal is retried. */
+  readonly closed?: Promise<void>;
   dispose(): void;
 }

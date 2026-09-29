@@ -34,6 +34,22 @@ const ARROW_DOT_BATCH_SEGMENT_LIMIT = 12_000;
 const VERTEX_DOT_BATCH_LIMIT = 100;
 const ARROW_DOT_CACHE_ENTRY_LIMIT = 64;
 const ARROW_DOT_CACHE_BYTE_LIMIT = 32 * 1024 * 1024;
+// Small polygons often collapse to points at full extent. Retain their exact
+// Canvas commands in bounded typed arrays; larger paths keep immediate drawing.
+const FILL_PATH_CACHE_BYTES = 32 * 1024 * 1024;
+type LayerContext = Parameters<NonNullable<EditPainter['setLayerContext']>>[0];
+interface FillPathCache {
+  sourceId: string;
+  revision: number;
+  shapes: readonly (FeatureShape | null | undefined)[];
+  arcs: ArcCollection;
+  view: string;
+  interval: number | undefined;
+  /** 0 immediate, 1 move-only fill, 2 empty fill, 3 fully culled. */
+  states: Uint8Array;
+  points: Int32Array;
+  bytes: number;
+}
 const DEFAULT_ARROW_DOT_SPACING = 32;
 const DEFAULT_ARROW_DOT_SIZE = 6;
 const MIN_ARROW_DOT_VALUE = 0.1;
@@ -256,6 +272,11 @@ function partPassesArcFilter(part: readonly number[], filter?: (i: number) => bo
 
 export class CanvasPainter implements EditPainter {
   private _ctx: CanvasRenderingContext2D;
+  private _layerContext: LayerContext = null;
+  private _fillPathCaches = new Map<string, FillPathCache>();
+  private _fillPathBytes = 0;
+  private _fillPathTransform = '';
+  private _seenLayers = new Set<string>();
   private _icons: CanvasPointIcons | null = null;
   /** @internal */
   drawPointIcons(
@@ -326,11 +347,92 @@ export class CanvasPainter implements EditPainter {
   }
 
   setTransform(transform: AffineTransform): void {
+    const key = [transform.mx, transform.my, transform.bx, transform.by].join(',');
+    if (key !== this._fillPathTransform) this.clearGeometryCache();
+    this._fillPathTransform = key;
     this._transform = transform;
   }
 
   setPixelRatio(ratio: number): void {
+    if (ratio !== this._pixelRatio) this.clearGeometryCache();
     this._pixelRatio = ratio;
+  }
+
+  setLayerContext(context: LayerContext): void {
+    this._layerContext = context;
+    if (context) this._seenLayers.add(context.id);
+  }
+
+  clearGeometryCache(scope?: { sourceId?: string; layerId?: string }): void {
+    for (const [id, cache] of this._fillPathCaches) {
+      if (scope?.sourceId && scope.sourceId !== cache.sourceId) continue;
+      if (scope?.layerId && scope.layerId !== id) continue;
+      this._fillPathBytes -= cache.bytes;
+      this._fillPathCaches.delete(id);
+    }
+  }
+
+  finishFrame(): void {
+    for (const id of this._fillPathCaches.keys()) {
+      if (!this._seenLayers.has(id)) this.clearGeometryCache({ layerId: id });
+    }
+  }
+
+  dispose(): void {
+    this.clearGeometryCache();
+    this.clearIcons();
+    this._arrowDotCache.clear();
+    this._arrowDotCacheBytes = 0;
+    this._pathArcCache = new WeakMap();
+    this._arcVisitMarks = new Uint32Array(0);
+    this._layerContext = null;
+    this._seenLayers.clear();
+  }
+
+  private _fillPathCache(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
+    viewBBox: readonly number[] | null,
+    filter: ((i: number) => boolean) | undefined,
+  ): FillPathCache | undefined {
+    const layer = this._layerContext;
+    // Unversioned overlays and arbitrary dynamic filters keep immediate paths.
+    // Bounds-based part culling is reproducible from the view key below.
+    if (!layer || (filter && (!viewBBox || !arcs.getSimpleShapeBbox))) return;
+    const { mx, my, bx, by } = this._transform;
+    const view = [mx, my, bx, by, this._pixelRatio, ...(viewBBox ?? [])].join(',');
+    const interval = arcs.getRetainedInterval?.();
+    let cache = this._fillPathCaches.get(layer.id);
+    if (
+      cache &&
+      (cache.sourceId !== layer.sourceId ||
+        cache.revision !== layer.revision ||
+        cache.shapes !== shapes ||
+        cache.arcs !== arcs ||
+        cache.view !== view ||
+        cache.interval !== interval)
+    ) {
+      this.clearGeometryCache({ layerId: layer.id });
+      cache = undefined;
+    }
+    if (!cache) {
+      const stateBytes = shapes.length * 9;
+      if (this._fillPathBytes + stateBytes > FILL_PATH_CACHE_BYTES) return;
+      cache = {
+        sourceId: layer.sourceId,
+        revision: layer.revision,
+        shapes,
+        arcs,
+        view,
+        interval,
+        states: new Uint8Array(shapes.length),
+        points: new Int32Array(shapes.length * 2),
+        bytes: stateBytes,
+      };
+      this._fillPathBytes += stateBytes;
+      this._fillPathCaches.set(layer.id, cache);
+    }
+    return cache;
   }
 
   drawPaths(
@@ -515,7 +617,11 @@ export class CanvasPainter implements EditPainter {
     ctx.setLineDash(dash.map((length) => length * this._pixelRatio));
   }
 
-  private _traceSnapped(iter: ArcIterator, ctx: CanvasRenderingContext2D): number {
+  private _traceSnapped(
+    iter: ArcIterator,
+    ctx: Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo'>,
+    point?: Int32Array,
+  ): number {
     const mx = this._transform.mx * this._pixelRatio;
     const my = this._transform.my * this._pixelRatio;
     const bx = this._transform.bx * this._pixelRatio;
@@ -523,11 +629,17 @@ export class CanvasPainter implements EditPainter {
 
     let x: number, y: number, xp: number, yp: number;
     let count = 0;
-    if (!iter.hasNext()) return count;
+    // Mapshaper reuses iterators. An empty LOD arc can retain the previous
+    // arc's x/y: distinguish it from a real point before drawing tiny strokes.
+    if (!iter.hasNext()) return -1;
 
     x = ((iter.x * mx + bx) * 2) | 0;
     y = ((iter.y * my + by) * 2) | 0;
     ctx.moveTo(x / 2, y / 2);
+    if (point) {
+      point[0] = x;
+      point[1] = y;
+    }
 
     while (iter.hasNext()) {
       xp = x;
@@ -1042,11 +1154,24 @@ export class CanvasPainter implements EditPainter {
   ): void {
     const ctx = this._ctx;
     const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
+    const cache = this._fillPathCache(shapes, arcs, viewBBox, filter);
     const bbox = [0, 0, 0, 0];
+    const point = cache ? new Int32Array(2) : undefined;
     const indexCount = indices ? indices.length : shapes.length;
     for (let k = 0; k < indexCount; k++) {
-      const shape = shapes[indices ? indices[k] : k];
+      const id = indices ? indices[k] : k;
+      const state = cache?.states[id] ?? 0;
+      if (state) {
+        if (state === 3) continue;
+        ctx.beginPath();
+        if (state === 1) ctx.moveTo(cache!.points[id * 2] / 2, cache!.points[id * 2 + 1] / 2);
+        ctx.fill('evenodd');
+        continue;
+      }
+      const shape = shapes[id];
       if (!shape) continue;
+      let segments = 0;
+      let moves = 0;
       let hasVisiblePart = false;
       for (const part of shape as PathShape) {
         const visible =
@@ -1056,8 +1181,16 @@ export class CanvasPainter implements EditPainter {
         if (!visible) continue;
         if (!hasVisiblePart) ctx.beginPath();
         hasVisiblePart = true;
-        this._traceSnapped(arcs.getShapeIter!(part), ctx);
+        const count = this._traceSnapped(arcs.getShapeIter!(part), ctx, point);
+        segments += Math.max(0, count);
+        if (count >= 0) moves++;
       }
+      if (cache && segments === 0 && moves <= 1) {
+        cache.states[id] = !hasVisiblePart ? 3 : moves ? 1 : 2;
+        if (moves) cache.points.set(point!, id * 2);
+      }
+      // Keep even move-only fills in the original order. Dropping these calls
+      // changes native Canvas batching and dense translucent edge coverage.
       if (hasVisiblePart) ctx.fill('evenodd');
     }
   }
@@ -1294,11 +1427,13 @@ export class CanvasPainter implements EditPainter {
   }
 
   clear(): void {
+    this._seenLayers.clear();
     this._computedStyle = undefined;
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   }
 
   resize(width: number, height: number): void {
+    this.clearGeometryCache();
     const pr = this._pixelRatio;
     this._canvas.width = width * pr;
     this._canvas.height = height * pr;

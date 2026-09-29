@@ -1,6 +1,6 @@
 import mapshaper from 'mapshaper';
 import { describe, expect, it, vi } from 'vitest';
-import { getDefaultMapshaperAdapter } from './adapter';
+import { getDefaultMapshaperAdapter, parseMapshaperCrs } from './adapter';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -471,5 +471,100 @@ describe('mapshaper feature-split primitives', () => {
     expect(
       adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points,
     ).toEqual(before);
+  });
+});
+
+describe('cooperative reprojection', () => {
+  const mercator = '+proj=merc +a=6378137 +b=6378137 +units=m';
+  const geographic = '+proj=longlat +datum=WGS84';
+  function input(): MapshaperDataset {
+    const path = Array.from({ length: 100_001 }, (_, i) => [i * 10, i * 5]);
+    const arcs = adapter.createArcCollection(
+      [
+        path,
+        [
+          [Infinity, 0],
+          [0, 0],
+        ],
+        [[1, 2]],
+      ].map((points) => ({
+        xx: new Float64Array(points.map((p) => p[0])),
+        yy: new Float64Array(points.map((p) => p[1])),
+      })),
+    );
+    return {
+      info: { crs: parseMapshaperCrs(mercator), crs_string: 'EPSG:3857' },
+      arcs,
+      layers: [
+        {
+          geometry_type: 'polyline',
+          shapes: [[[0]], [[1]], [[2]]],
+          fields: [{ name: 'empty', type: 'string' }],
+          data: adapter.createDataTable([{ nested: { tags: [1, 2] } }, {}, {}]),
+        },
+        {
+          geometry_type: 'point',
+          shapes: [
+            [
+              [100, 200],
+              [Infinity, 0],
+            ],
+            [[Infinity, 0]],
+          ],
+          data: adapter.createDataTable([{}, {}]),
+        },
+      ],
+    };
+  }
+  it('matches native projection including invalid arcs/points, fields and independent records', async () => {
+    const dataset = input();
+    const working = adapter.copyDataset(dataset);
+    working.info = { ...working.info };
+    const expected = await adapter.runOnDataset(`-proj ${geographic}`, working);
+    let ticks = 0;
+    const actual = await adapter.prepareReprojectDataset!(dataset, geographic, () => {
+      ticks++;
+    });
+    expect(ticks).toBeGreaterThan(2);
+    expect(actual!.arcs!.getVertexData!().xx).toEqual(expected.arcs!.getVertexData!().xx);
+    expect(actual!.arcs!.getVertexData!().yy).toEqual(expected.arcs!.getVertexData!().yy);
+    expect([...actual!.arcs!.getVertexData!().nn]).toEqual([...expected.arcs!.getVertexData!().nn]);
+    expect(actual!.layers.map((l) => l.shapes)).toEqual(expected.layers.map((l) => l.shapes));
+    expect(actual!.layers[0].data!.getFields!()).toContain('empty');
+    const record = actual!.layers[0].data!.getRecords!()[0];
+    (record.nested as { tags: number[] }).tags = [3];
+    expect(dataset.layers[0].data!.getRecords!()[0]).toEqual({ nested: { tags: [1, 2] } });
+    expect(dataset.info!.crs_string).toBe('EPSG:3857');
+    expect(dataset.arcs!.getVertexData!().xx[100_000]).toBe(1_000_000);
+  });
+  it('stops at a yield when invalidated and leaves the source untouched', async () => {
+    const dataset = input();
+    let checks = 0;
+    await expect(
+      adapter.prepareReprojectDataset!(dataset, geographic, () => {
+        if (++checks === 2) throw new Error('stale');
+      }),
+    ).rejects.toThrow('stale');
+    expect(dataset.arcs!.getVertexData!().xx[100_000]).toBe(1_000_000);
+    expect(dataset.layers[0].shapes).toEqual([[[0]], [[1]], [[2]]]);
+  });
+  it('retains the native path for geographic input requiring clipping', async () => {
+    const dataset = input();
+    dataset.info!.crs = parseMapshaperCrs(geographic);
+    expect(await adapter.prepareReprojectDataset!(dataset, mercator, () => {})).toBeNull();
+  });
+  it('projects full source geometry even when display simplification is active', async () => {
+    const dataset = input();
+    const arcs = dataset.arcs!;
+    const thresholds = new Float64Array(arcs.getVertexData!().xx.length).fill(1);
+    thresholds[0] = thresholds[100_000] = Infinity;
+    arcs.setThresholds!(thresholds);
+    arcs.setRetainedInterval!(2);
+    dataset.info!.crs = parseMapshaperCrs('+proj=utm +zone=20 +ellps=GRS80 +units=m');
+    const result = await adapter.prepareReprojectDataset!(dataset, geographic, () => {});
+    expect(result!.arcs!.getVertexData!().nn[0]).toBe(100_001);
+    expect(result!.arcs!.getRetainedInterval!()).toBe(0);
+    expect(arcs.getRetainedInterval!()).toBe(2);
+    expect(arcs.getVertexData!().zz).toBe(thresholds);
   });
 });

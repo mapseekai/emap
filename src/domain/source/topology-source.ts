@@ -600,10 +600,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
       this._dataset = dataset;
       // Initialize LOD wrapper for large datasets
-      if (this._dataset?.arcs) {
-        this._displayArcs = new DisplayArcs(this._dataset.arcs);
-      }
-      this._displayArcsRevision = this._dataset?.editVersion;
+      this.refreshDisplayArcs();
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
       this._data = undefined;
 
@@ -731,18 +728,51 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     targetCrs: string,
     targetCrsMetadata?: string,
   ): Promise<MapshaperDataset> {
+    const currentDataset = this._dataset;
+    const editVersion = dataset.editVersion;
+    const attributeVersion = dataset.attributeVersion;
+    const loadVersion = this._loadVersion;
+    const owner = this._managedCrs;
+    const assertCurrent = () => {
+      if (
+        this._dataset !== currentDataset ||
+        dataset.editVersion !== editVersion ||
+        dataset.attributeVersion !== attributeVersion ||
+        this._loadVersion !== loadVersion ||
+        this._managedCrs !== owner
+      ) {
+        throw new Error(`TopologySource "${this.id}" changed during reprojection`);
+      }
+    };
     const resolvedTargetCrs = await resolveProjectCrs(targetCrs);
     const metadataCrs = targetCrsMetadata ?? normalizeProjectCrsMetadata(targetCrs);
-    const working = this._adapter.copyDataset(dataset);
-    working.arcs?.setRetainedInterval?.(0);
     // GeoParquet carries a serializable CRS label in `crs_string`, while
     // Mapshaper's `-proj` reads the source CRS from this runtime object.
     // Imported Shapefiles already have `info.crs` or `info.prj`; only fill
     // the missing operational representation here.
-    if (!working.info?.crs && working.info?.crs_string) {
-      working.info.crs = parseMapshaperCrs(await resolveProjectCrs(working.info.crs_string));
+    let input = dataset;
+    if (!dataset.info?.crs && dataset.info?.crs_string) {
+      input = {
+        ...dataset,
+        info: {
+          ...dataset.info,
+          crs: parseMapshaperCrs(await resolveProjectCrs(dataset.info.crs_string)),
+        },
+      };
     }
-    const result = await this._adapter.runOnDataset(`-proj ${resolvedTargetCrs}`, working);
+    assertCurrent();
+    let result = await this._adapter.prepareReprojectDataset?.(
+      input,
+      resolvedTargetCrs,
+      assertCurrent,
+    );
+    if (!result) {
+      const working = this._adapter.copyDataset(input);
+      working.info = { ...working.info };
+      working.arcs?.setRetainedInterval?.(0);
+      result = await this._adapter.runOnDataset(`-proj ${resolvedTargetCrs}`, working);
+    }
+    assertCurrent();
     if (result.info) {
       delete result.info.crs_string;
       delete result.info.prj;
@@ -856,17 +886,27 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
-   * Eagerly re-initialize DisplayArcs from the current dataset arcs. Use
-   * for one-shot mutations where the caller wants the new LOD copy ready
-   * immediately (project, dataset-replace). Per-frame in-place edits
-   * should prefer {@link markDisplayArcsDirty}.
+   * Replace DisplayArcs and start preparing LOD from the current dataset.
+   * Original arcs remain usable until preparation publishes a display event.
+   * Per-frame in-place edits should prefer {@link markDisplayArcsDirty}.
    * @internal
    */
   refreshDisplayArcs(): void {
+    this._displayArcs?.dispose();
+    this._displayArcs = null;
     if (this._dataset?.arcs) {
-      this._displayArcs = new DisplayArcs(this._dataset.arcs);
-      this._displayArcsRevision = this._dataset.editVersion;
+      const display = new DisplayArcs(
+        this._dataset.arcs,
+        () => {
+          if (this._displayArcs === display) this.fire('display');
+        },
+        (error) => {
+          if (this._displayArcs === display) this.fire('error', { error });
+        },
+      );
+      this._displayArcs = display;
     }
+    this._displayArcsRevision = this._dataset?.editVersion;
   }
 
   /**
@@ -888,11 +928,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._displayArcs?.getArcs() === dataset.arcs &&
       this._displayArcsRevision === dataset.editVersion;
     this._dataset = dataset;
-    if (dataset.arcs) {
-      if (!keepDisplay) this._displayArcs = new DisplayArcs(dataset.arcs);
-    } else {
-      this._displayArcs = null;
-    }
+    if (!keepDisplay) this.refreshDisplayArcs();
     this._displayArcsRevision = dataset.editVersion;
     // Re-capture the simplification floor: mapshaper's `-simplify` writes
     // a non-zero `retainedInterval` here; other ops typically leave it at 0.

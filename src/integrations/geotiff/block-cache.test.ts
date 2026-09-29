@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { RasterBlockCache } from './block-cache';
 
 describe('bounded decoded TIFF block cache', () => {
+  it('reports only bounded resident spatial keys and forgets evicted blocks', () => {
+    const cache = new RasterBlockCache(256);
+    for (let x = 0; x < 200; x++) cache.set(`2:${x}:3:0`, new ArrayBuffer(1));
+    expect(cache.getFootprintKeys()).toHaveLength(128);
+    expect(cache.getFootprintKeys()[0]).toBe('2:72:3');
+    cache.get('2:0:3:0');
+    expect(cache.getFootprintKeys().at(-1)).toBe('2:0:3');
+    cache.set('2:0:3:1', new ArrayBuffer(1));
+    expect(cache.getFootprintKeys().filter((key) => key === '2:0:3')).toHaveLength(1);
+    cache.setLimit(1);
+    expect(cache.getFootprintKeys()).toEqual(['2:0:3']);
+    cache.dispose();
+    expect(cache.getFootprintKeys()).toEqual([]);
+  });
   it('uses byte-bounded LRU rather than an unbounded promise cache', () => {
     const cache = new RasterBlockCache(12);
     const a = new ArrayBuffer(4),

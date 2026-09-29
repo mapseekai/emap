@@ -63,7 +63,13 @@ export function geoTIFFPlugin(options: GeoTIFFPluginOptions = {}): Plugin.Object
         lifetime.addEventListener('abort', abort, { once: true });
         config.signal?.addEventListener('abort', abort, { once: true });
         try {
-          const openOptions = { ...options, ...config, signal: controller.signal };
+          const openOptions = {
+            workerRuntime:
+              options.workerUrl || config.workerUrl ? undefined : ctx.get('options')?.workerRuntime,
+            ...options,
+            ...config,
+            signal: controller.signal,
+          };
           const source =
             'getFile' in input
               ? await openGeoTIFFHandle(input, openOptions)

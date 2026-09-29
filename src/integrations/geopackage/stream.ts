@@ -24,13 +24,10 @@ export type GeoPackageStreamMessage =
     }
   | { type: 'result'; sequence: number; arcs?: GeoPackageTransfer['arcs'] };
 
-/** Consumes a worker-owned, fully validated dataset only after topology is complete.
- * Coordinates transfer; attribute blobs are cloned so shared mixed-family records
- * cannot be detached by an earlier batch. No input bytes or partial dataset escape. */
-export async function streamGeoPackageDataset(
+/** Pull validated native chunks; buffers in transfers can be moved without a copy. */
+export async function* geoPackageChunks(
   dataset: GeoPackageDataset,
-  send: (message: GeoPackageStreamMessage, transfers: Transferable[]) => Promise<void>,
-): Promise<void> {
+): AsyncGenerator<{ message: GeoPackageStreamMessage; transfers: Transferable[] }> {
   let sequence = 0;
   const layers = dataset.layers.map((layer) => ({
     name: layer.name,
@@ -38,10 +35,15 @@ export async function streamGeoPackageDataset(
     fields: layer.fields,
     rows: layer.shapes?.length ?? 0,
   }));
-  await send(
-    { type: 'header', sequence: sequence++, layers, info: { ...dataset.info, crs: undefined } },
-    [],
-  );
+  yield {
+    message: {
+      type: 'header',
+      sequence: sequence++,
+      layers,
+      info: { ...dataset.info, crs: undefined },
+    },
+    transfers: [],
+  };
   const adapter = getDefaultMapshaperAdapter();
   for (let index = 0; index < dataset.layers.length; index++) {
     const layer = dataset.layers[index],
@@ -67,7 +69,10 @@ export async function streamGeoPackageDataset(
       ]
         .filter((v) => v !== undefined)
         .map((v) => v!.buffer as ArrayBuffer);
-      await send({ type: 'batch', sequence: sequence++, layer: index, offset, value }, transfers);
+      yield {
+        message: { type: 'batch', sequence: sequence++, layer: index, offset, value },
+        transfers,
+      };
     }
     // The sender exclusively owns this dataset. Release completed layers instead
     // of retaining both complete worker and UI copies until the last table arrives.
@@ -76,10 +81,12 @@ export async function streamGeoPackageDataset(
   }
   const data = dataset.arcs?.getVertexData?.();
   const arcs = data ? { nn: data.nn, xx: data.xx, yy: data.yy } : undefined;
-  await send(
-    { type: 'result', sequence, arcs },
-    arcs ? ([...new Set([arcs.nn.buffer, arcs.xx.buffer, arcs.yy.buffer])] as ArrayBuffer[]) : [],
-  );
+  yield {
+    message: { type: 'result', sequence, arcs },
+    transfers: arcs
+      ? ([...new Set([arcs.nn.buffer, arcs.xx.buffer, arcs.yy.buffer])] as ArrayBuffer[])
+      : [],
+  };
 }
 
 /** Staged native storage remains private until every table and arc buffer arrives. */

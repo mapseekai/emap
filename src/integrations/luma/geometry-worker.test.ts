@@ -1,20 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { output } from '@mapseekai/tasklane/host';
 import { GeometryWorker } from './geometry-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
 import type { GeometryPacket } from '../../engine/rendering/luma/geometry-jobs';
-class FakeWorker extends EventTarget {
-  static instances: FakeWorker[] = [];
-  sent: any[] = [];
-  terminated = false;
-  constructor() {
-    super();
-    FakeWorker.instances.push(this);
-  }
-  postMessage(message: unknown, transfer: unknown) {
-    this.sent.push({ message, transfer });
-  }
-  terminate() {
-    this.terminated = true;
-  }
+const clients: GeometryWorker[] = [];
+function client() {
+  const value = new GeometryWorker(new URL('http://example.test/worker.js'));
+  clients.push(value);
+  return value;
 }
 function packet(): GeometryPacket {
   return {
@@ -24,183 +17,128 @@ function packet(): GeometryPacket {
     features: Uint32Array.from([0, 1]),
   };
 }
-afterEach(() => {
+const geometry = { geometries: [], screenSpace: false };
+beforeEach(() => {
+  TasklaneTestWorker.instances = [];
+  TasklaneTestWorker.handlers = {};
+  vi.stubGlobal('Worker', TasklaneTestWorker);
+});
+afterEach(async () => {
+  for (const value of clients.splice(0)) value.dispose();
+  await flushTasks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
-  FakeWorker.instances = [];
 });
-describe('bounded geometry Worker lifecycle', () => {
-  it('creates lazily, transfers owned packet buffers, and reuses one Worker', async () => {
-    vi.stubGlobal('Worker', FakeWorker);
-    const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-    expect(FakeWorker.instances).toHaveLength(0);
+it('creates lazily, transfers packet ownership and reuses its Session', async () => {
+  const value = client();
+  expect(TasklaneTestWorker.instances).toHaveLength(0);
+  for (let i = 0; i < 2; i++) {
     const input = packet(),
-      task = client.build(input, new AbortController().signal),
-      worker = FakeWorker.instances[0];
-    expect(worker.sent[0].transfer).toEqual([
-      input.coordinates.buffer,
-      input.offsets.buffer,
-      input.features.buffer,
-    ]);
-    worker.dispatchEvent(
-      new MessageEvent('message', {
-        data: { id: 1, result: { geometries: [], screenSpace: false }, elapsedMs: 4 },
-      }),
-    );
-    await task;
-    const second = client.build(packet(), new AbortController().signal);
-    expect(FakeWorker.instances).toHaveLength(1);
-    worker.dispatchEvent(
-      new MessageEvent('message', {
-        data: { id: 2, result: { geometries: [], screenSpace: false }, elapsedMs: 2 },
-      }),
-    );
-    await second;
-    expect(client.stats.jobs).toBe(2);
-    expect(client.stats.workerMs).toBe(6);
-    expect(client.stats.inputBytes).toBe(0);
-    client.dispose();
-    expect(worker.terminated).toBe(true);
-    expect(client.stats.workers).toBe(0);
-  });
-  it('terminates computation on abort and ignores late results', async () => {
-    vi.stubGlobal('Worker', FakeWorker);
-    const client = new GeometryWorker(new URL('http://example.test/worker.js')),
-      abort = new AbortController();
-    const result = client.build(packet(), abort.signal);
-    abort.abort();
-    await expect(result).rejects.toThrow('cancelled');
-    const worker = FakeWorker.instances[0];
-    expect(worker.terminated).toBe(true);
-    worker.dispatchEvent(
-      new MessageEvent('message', {
-        data: { id: 1, result: { geometries: [], screenSpace: false } },
-      }),
-    );
-    expect(client.stats.jobs).toBe(0);
-    client.dispose();
-  });
-  it('reports decode failure and times out a stuck Worker without leaving listeners or reservations', async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('Worker', FakeWorker);
-    const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-    const first = client.build(packet(), new AbortController().signal);
-    FakeWorker.instances[0].dispatchEvent(new Event('messageerror'));
-    await expect(first).rejects.toThrow('decoded');
-    const second = client.build(packet(), new AbortController().signal),
-      rejection = expect(second).rejects.toThrow('timed out');
-    vi.advanceTimersByTime(120000);
-    await rejection;
-    expect(client.stats.inputBytes).toBe(0);
-    expect(client.stats.workers).toBe(0);
-    client.dispose();
-  });
-  it('rejects queued work on disposal and refuses subsequent jobs', async () => {
-    vi.stubGlobal('Worker', FakeWorker);
-    const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-    const result = client.build(packet(), new AbortController().signal);
-    client.dispose();
-    await expect(result).rejects.toThrow('disposed');
-    await expect(client.build(packet(), new AbortController().signal)).rejects.toThrow('disposed');
-  });
+      work = value.build(input, new AbortController().signal);
+    await flushTasks();
+    const worker = TasklaneTestWorker.instances[0];
+    expect(input.coordinates.byteLength).toBe(0);
+    expect(worker.requests[i].payload.packet.coordinates).toEqual(Float64Array.from([1, 2]));
+    worker.pending[i].resolve(output({ result: geometry, cache: { bytes: 16, entries: 1 } }));
+    await work;
+  }
+  expect(TasklaneTestWorker.instances).toHaveLength(1);
+  expect(value.stats.jobs).toBe(2);
+  expect(value.stats.inputBytes).toBe(0);
 });
-
-it('coalesces bounded packets into one transfer while retaining logical job/error identities', async () => {
-  vi.stubGlobal('Worker', FakeWorker);
-  const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-  const inputs = [packet(), packet()],
-    task = client.buildBatch(inputs, new AbortController().signal);
-  const worker = FakeWorker.instances[0];
-  expect(worker.sent[0].message.packets).toEqual(inputs);
-  expect(worker.sent[0].transfer).toHaveLength(6);
-  worker.dispatchEvent(
-    new MessageEvent('message', {
-      data: {
-        id: 1,
-        results: [{ result: { geometries: [], screenSpace: false } }, { error: 'invalid ring' }],
-        elapsedMs: 3,
-      },
+it('retains source identities and per-item batch errors', async () => {
+  const value = client();
+  value.retainSources(new Set(['a']));
+  const work = value.buildBatch([packet(), packet()], new AbortController().signal);
+  await flushTasks();
+  const worker = TasklaneTestWorker.instances[0];
+  expect(worker.requests[0].payload.retainSources).toEqual(['a']);
+  worker.pending[0].resolve(
+    output({
+      results: [{ result: geometry }, { error: 'invalid ring' }],
+      cache: { bytes: 0, entries: 0 },
     }),
   );
-  expect(await task).toHaveLength(2);
-  expect(client.stats.messages).toBe(1);
-  expect(client.stats.jobs).toBe(1);
-  expect(client.stats.inputBytes).toBe(0);
-  expect(worker.terminated).toBe(false);
-  client.dispose();
+  expect(await work).toEqual([{ result: geometry }, { error: 'invalid ring' }]);
+  expect(value.stats.jobs).toBe(1);
+  expect(value.stats.batchedJobs).toBe(2);
 });
-it('rejects oversized batches before detaching input or starting a Worker', async () => {
-  vi.stubGlobal('Worker', FakeWorker);
-  const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-  const a = packet();
-  a.coordinates = new Float64Array(300000);
-  await expect(client.buildBatch([a, packet()], new AbortController().signal)).rejects.toThrow(
+it('hard-cancels a running task and gets a new generation on retry', async () => {
+  const value = client(),
+    controller = new AbortController();
+  const work = value.build(packet(), controller.signal);
+  const rejected = expect(work).rejects.toMatchObject({ name: 'AbortError' });
+  await flushTasks();
+  const old = TasklaneTestWorker.instances[0];
+  controller.abort();
+  await rejected;
+  expect(old.terminate).toHaveBeenCalledOnce();
+  const next = value.build(packet(), new AbortController().signal);
+  await flushTasks();
+  old.pending[0].resolve(output({ result: geometry }));
+  TasklaneTestWorker.instances.at(-1)!.pending[0].resolve(output({ result: geometry }));
+  await next;
+  expect(value.stats.jobs).toBe(1);
+});
+it.each(['single', 'batch'])('rejects late %s delivery after cancellation', async (kind) => {
+  const value = client(),
+    controller = new AbortController();
+  const work =
+    kind === 'single'
+      ? value.build(packet(), controller.signal)
+      : value.buildBatch([packet(), packet()], controller.signal);
+  const rejected = expect(work).rejects.toMatchObject({ name: 'AbortError' });
+  await flushTasks();
+  TasklaneTestWorker.instances[0].pending[0].resolve(
+    output(
+      kind === 'single'
+        ? { result: geometry }
+        : { results: [{ result: geometry }, { result: geometry }] },
+    ),
+  );
+  controller.abort();
+  await rejected;
+});
+it('rejects oversized batches before transfer and validates result identities', async () => {
+  const value = client(),
+    input = packet();
+  input.coordinates = new Float64Array(300000);
+  await expect(value.buildBatch([input, packet()], new AbortController().signal)).rejects.toThrow(
     'batch',
   );
-  await expect(
-    client.buildBatch(Array.from({ length: 9 }, packet), new AbortController().signal),
-  ).rejects.toThrow('batch');
-  expect(a.coordinates.byteLength).toBe(2400000);
-  expect(FakeWorker.instances).toHaveLength(0);
-  client.dispose();
+  expect(input.coordinates.byteLength).toBeGreaterThan(0);
+  expect(TasklaneTestWorker.instances).toHaveLength(0);
+  const work = value.buildBatch([packet(), packet()], new AbortController().signal),
+    rejected = expect(work).rejects.toThrow('Invalid geometry');
+  await flushTasks();
+  TasklaneTestWorker.instances[0].pending[0].resolve(output({ results: [{ result: geometry }] }));
+  await rejected;
 });
-
-it('cancels a whole native batch, ignores a late reply and rejects a mismatched response', async () => {
-  vi.stubGlobal('Worker', FakeWorker);
-  const client = new GeometryWorker(new URL('http://example.test/worker.js')),
-    controller = new AbortController();
-  const task = client.buildBatch([packet(), packet()], controller.signal);
-  const first = FakeWorker.instances[0];
-  controller.abort();
-  await expect(task).rejects.toThrow('cancelled');
-  first.dispatchEvent(
-    new MessageEvent('message', {
-      data: { id: 1, results: [{ result: { geometries: [], screenSpace: false } }] },
-    }),
-  );
-  expect(first.terminated).toBe(true);
-  expect(client.stats.jobs).toBe(0);
-  expect(client.stats.inputBytes).toBe(0);
-  const second = client.buildBatch([packet(), packet()], new AbortController().signal);
-  FakeWorker.instances[1].dispatchEvent(
-    new MessageEvent('message', { data: { id: 2, results: [] } }),
-  );
-  await expect(second).rejects.toThrow('Invalid');
-  expect(FakeWorker.instances[1].terminated).toBe(true);
-  client.dispose();
+it('reports Worker failure, disposes pending work and refuses subsequent builds', async () => {
+  const value = client(),
+    work = value.build(packet(), new AbortController().signal),
+    rejected = expect(work).rejects.toThrow('decode failure');
+  await flushTasks();
+  TasklaneTestWorker.instances[0].crash('decode failure');
+  await rejected;
+  const next = value.build(packet(), new AbortController().signal),
+    disposed = expect(next).rejects.toMatchObject({ name: 'AbortError' });
+  value.dispose();
+  await disposed;
+  await expect(value.build(packet(), new AbortController().signal)).rejects.toThrow('disposed');
 });
-
-it.each([
-  ['single', 'abort'],
-  ['single', 'dispose'],
-  ['batch', 'abort'],
-  ['batch', 'dispose'],
-] as const)('rejects late %s delivery after %s even when the Worker reply has arrived', async (kind, mode) => {
-  vi.stubGlobal('Worker', FakeWorker);
-  const client = new GeometryWorker(new URL('http://example.test/worker.js'));
-  const controller = new AbortController();
-  const task =
-    kind === 'single'
-      ? client.build(packet(), controller.signal)
-      : client.buildBatch([packet(), packet()], controller.signal);
-  const worker = FakeWorker.instances[0];
-  const value = { geometries: [], screenSpace: false };
-  worker.dispatchEvent(
-    new MessageEvent('message', {
-      data: {
-        id: 1,
-        ...(kind === 'single'
-          ? { result: value }
-          : { results: [{ result: value }, { result: value }] }),
-      },
-    }),
-  );
-  if (mode === 'abort') controller.abort();
-  else client.dispose();
-  try {
-    await expect(task).rejects.toMatchObject({ name: 'AbortError' });
-    expect(client.stats.inputBytes).toBe(0);
-  } finally {
-    client.dispose();
-  }
+it('releases removed-source caches without requiring another geometry build', async () => {
+  const value = client();
+  const build = value.build(packet(), new AbortController().signal);
+  await flushTasks();
+  const worker = TasklaneTestWorker.instances[0];
+  worker.pending[0].resolve(output({ result: geometry, cache: { bytes: 64, entries: 1 } }));
+  await build;
+  value.retainSources(new Set(['remaining']));
+  await flushTasks();
+  expect(worker.requests[1].payload).toEqual({ retainSources: ['remaining'] });
+  worker.pending[1].resolve(output({ cache: { bytes: 0, entries: 0 } }));
+  await flushTasks();
+  expect(value.triangulation.bytes).toBe(0);
+  expect(value.stats.jobs).toBe(1);
 });

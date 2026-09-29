@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '@mapseekai/tasklane';
 // Public type/option surface for `Emap`. Extracted from `map.ts` so the
 // orchestrator class file can stay focused on behaviour. Re-exported from
 // `./map` to preserve every existing `from '@/map/map'` import path.
@@ -44,6 +45,8 @@ export interface SplitFeatureOptions {
   snapThreshold?: number;
 }
 export interface MapOptions {
+  /** Borrowed tasklane runtime; the application remains responsible for disposal. */
+  workerRuntime?: WorkerRuntime;
   /** Main-map backend. Defaults to webgl2; unavailable GPU backends reject creation without silent fallback. */
   renderer?: import('./renderer').RendererBackend;
   /** Optional MSDF worker URL for GPU labels; publish its sibling msdf/ assets too. */

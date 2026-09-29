@@ -1,4 +1,6 @@
-export const GEOTIFF_WORKER_PROTOCOL_VERSION = 12;
+export const GEOTIFF_WORKER_PROTOCOL_VERSION = 13;
+/** Reader state and compressed pages stay reserved independently of decoded blocks. */
+export const GEOTIFF_READER_BYTES = 128 * 1024 ** 2;
 
 import type {
   RasterMetadata,
@@ -22,17 +24,18 @@ export type GeoTIFFWorkerOpen = {
   maxMetadataBytes?: number;
   statistics?: readonly RasterBandStatistics[];
 };
-export type GeoTIFFWorkerCommand =
+export type GeoTIFFWorkerCommand = { cacheCapacityBytes?: number } & (
   | GeoTIFFWorkerOpen
   | { type: 'configure'; cacheBytes: number }
   | { type: 'read'; request: RasterReadRequest }
   | { type: 'texture'; request: RasterReadRequest }
   | { type: 'render'; request: RasterRenderRequest }
-  | { type: 'render-batch'; requests: readonly RasterRenderRequest[] };
+  | { type: 'render-batch'; requests: readonly RasterRenderRequest[] }
+);
 export type GeoTIFFWorkerRequest =
   | (GeoTIFFWorkerCommand & { id: number })
   | { id: number; type: 'cancel' };
-export type GeoTIFFWorkerResponse =
+export type GeoTIFFWorkerResponse = { sessionId?: string } & (
   | {
       id: number;
       type: 'metadata';
@@ -65,4 +68,5 @@ export type GeoTIFFWorkerResponse =
       nativeDeflateStatus?: RasterNativeDeflateStatus;
     }
   | { id: number; type: 'configured' }
-  | { id: number; type: 'error'; code?: string; name: string; message: string };
+  | { id: number; type: 'error'; code?: string; name: string; message: string }
+);

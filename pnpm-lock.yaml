@@ -15,6 +15,7 @@ overrides:
   qs: 6.16.0
 
 patchedDependencies:
+  '@luma.gl/webgl@10.0.0-alpha.1': 741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de
   apache-arrow@17.0.0: f4a2f3a4aa360f366808f6ed229209c19761b8d49412347605ff3d36e7a5e7ab
   msdfgen-wasm@1.0.0: dcf454d9cf6ccaf7b1ec82d09313aa2288826890627c29d8eb2353519030a554
 
@@ -30,10 +31,13 @@ importers:
         version: 10.0.0-alpha.1
       '@luma.gl/webgl':
         specifier: 10.0.0-alpha.1
-        version: 10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)
+        version: 10.0.0-alpha.1(patch_hash=741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de)(@luma.gl/core@10.0.0-alpha.1)
       '@luma.gl/webgpu':
         specifier: 10.0.0-alpha.1
         version: 10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)(@luma.gl/shadertools@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1))
+      '@mapseekai/tasklane':
+        specifier: 0.2.0-beta.2
+        version: 0.2.0-beta.2
       '@ngageoint/geopackage':
         specifier: 4.2.9
         version: 4.2.9(@types/node@24.13.1)(geotiff@3.0.5)(supports-color@8.1.1)
@@ -47,8 +51,8 @@ importers:
         specifier: 4.0.0-rc.10
         version: 4.0.0-rc.10
       earcut:
-        specifier: 3.0.2
-        version: 3.0.2
+        specifier: 3.2.3
+        version: 3.2.3
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -110,9 +114,6 @@ importers:
       '@rollup/plugin-terser':
         specifier: ^1.0.0
         version: 1.0.0(rollup@4.57.1)
-      '@types/earcut':
-        specifier: 3.0.0
-        version: 3.0.0
       '@webgpu/types':
         specifier: 0.1.72
         version: 0.1.72
@@ -2166,6 +2167,10 @@ packages:
   '@maplibre/vt-pbf@4.3.2':
     resolution: {integrity: sha512-j6p0AdjvAR19Z3XaCysle7A4ZSo08tYOzxD0Y9NQylwPAkwJJeYub5b2eVucdeDh7erhv69DahoLOevDRERRUw==}
 
+  '@mapseekai/tasklane@0.2.0-beta.2':
+    resolution: {integrity: sha512-Yku9yluatBC2m3eXUWMN3iU74+jFqfXePLqxrFSOJDELqg5xue/24OxOfaBPQaoT1k1Jh3SuWUouEvv8MsA4aA==}
+    engines: {node: '>=22'}
+
   '@math.gl/core@4.1.0':
     resolution: {integrity: sha512-FrdHBCVG3QdrworwrUSzXIaK+/9OCRLscxI2OUy6sLOHyHgBMyfnEGs99/m3KNvs+95BsnQLWklVfpKfQzfwKA==}
 
@@ -2756,9 +2761,6 @@ packages:
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
-
-  '@types/earcut@3.0.0':
-    resolution: {integrity: sha512-k/9fOUGO39yd2sCjrbAJvGDEQvRwRnQIZlBz43roGwUZo5SHAmyVvSFyaVVZkicRVCaDXPKlbxrUcBuJoSWunQ==}
 
   '@types/estree-jsx@1.0.5':
     resolution: {integrity: sha512-52CcUVNFyfb1A2ALocQw/Dd1BQFNmSdkuC3BkZ6iqhdMfQz7JWOFRuJFloOzjk+6WijU56m9oKXFAXc7o3Towg==}
@@ -3929,9 +3931,6 @@ packages:
 
   duplexer@0.1.2:
     resolution: {integrity: sha512-jtD6YG370ZCIi/9GTaJKQxWTZD045+4R4hTk/x1UyoqadyJ9x9CgSi1RlVDQF8U2sxLLSnFkCaMihqljHIWgMg==}
-
-  earcut@3.0.2:
-    resolution: {integrity: sha512-X7hshQbLyMJ/3RPhyObLARM2sNxxmRALLKx1+NVFFnQ9gKzmCrxm9+uLIAdBcvc8FNLpctqlQ2V6AE92Ol9UDQ==}
 
   earcut@3.2.3:
     resolution: {integrity: sha512-vnS4AVwp1KHAF13i1vp1/2D5evWy3k5u/iW/B81QVsUZtV8cv2tU0b2VNFlqvh4kYwrFMDdjPCfAmfyJW9y14Q==}
@@ -10305,7 +10304,7 @@ snapshots:
       '@math.gl/core': 4.1.0
       '@math.gl/types': 4.1.0
 
-  '@luma.gl/webgl@10.0.0-alpha.1(@luma.gl/core@10.0.0-alpha.1)':
+  '@luma.gl/webgl@10.0.0-alpha.1(patch_hash=741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de)(@luma.gl/core@10.0.0-alpha.1)':
     dependencies:
       '@luma.gl/core': 10.0.0-alpha.1
       '@math.gl/types': 4.1.0
@@ -10354,6 +10353,8 @@ snapshots:
       '@mapbox/point-geometry': 1.1.0
       '@types/geojson': 7946.0.16
       pbf: 5.1.2
+
+  '@mapseekai/tasklane@0.2.0-beta.2': {}
 
   '@math.gl/core@4.1.0':
     dependencies:
@@ -11052,8 +11053,6 @@ snapshots:
       '@types/ms': 2.1.0
 
   '@types/deep-eql@4.0.2': {}
-
-  '@types/earcut@3.0.0': {}
 
   '@types/estree-jsx@1.0.5':
     dependencies:
@@ -12340,8 +12339,6 @@ snapshots:
       gopd: 1.2.0
 
   duplexer@0.1.2: {}
-
-  earcut@3.0.2: {}
 
   earcut@3.2.3: {}
 

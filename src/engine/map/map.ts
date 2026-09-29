@@ -1,3 +1,4 @@
+import { settleDisposals } from '../../shared/settle-disposals';
 import { resolveRenderer } from './renderer';
 import type { RendererBackend } from './renderer';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from './symbol';
@@ -88,9 +89,13 @@ export class Emap extends EventDispatcher {
   readonly ready: Promise<this>;
   private _closed = false;
   private _disposal?: Promise<void>;
+  private _disposalFailed = false;
+  private _retryResourceDisposal?: () => Promise<void>;
+  private readonly _ownsWorkerRuntime: boolean;
 
   constructor(options: EmapOptions = {}) {
     super();
+    this._ownsWorkerRuntime = !options.workerRuntime;
     this.ctx = new Context();
     const ctx = this.ctx;
     const config = Object.freeze({
@@ -178,11 +183,56 @@ export class Emap extends EventDispatcher {
     this._closed = true;
     const events = !!this.ctx.get('mapEvents') ? this.ctx.mapEvents : undefined;
     if (!!this.ctx.get('document')) this.ctx.document._removed = true;
-    this._disposal = this.ctx.fiber.dispose();
-    void this._disposal.catch((error) => events?.fire('error', { error }));
+    // Cordis owns teardown ordering. Keep asynchronous owners reachable for retry
+    // after their providers have been unmounted, without disposing borrowed runtimes.
+    const resources: Array<{
+      dispose?: () => void | Promise<void>;
+      readonly closed?: Promise<void>;
+    }> = [this.ctx.get('render'), this.ctx.get('execution'), this.ctx.get('raster')]
+      .filter((value): value is NonNullable<typeof value> => value !== undefined)
+      .filter((value) => 'closed' in value);
+    const ownedRuntime = this._ownsWorkerRuntime
+      ? this.ctx.get('options')?.workerRuntime
+      : undefined;
+    const observe = (promise: Promise<void>) => {
+      void promise.then(
+        () => {
+          this._retryResourceDisposal = undefined;
+        },
+        (error) => {
+          this._disposalFailed = true;
+          events?.fire('error', { error });
+        },
+      );
+      return promise;
+    };
+    this._retryResourceDisposal = () =>
+      observe(
+        settleDisposals([
+          ...resources.map(async (resource) => {
+            await resource.dispose?.();
+            await resource.closed;
+          }),
+          ownedRuntime?.dispose(),
+        ]),
+      );
+    this._disposal = observe(
+      this.ctx.fiber
+        .dispose()
+        .then(() =>
+          settleDisposals([
+            ...resources.map((resource) => resource.closed),
+            ownedRuntime?.dispose(),
+          ]),
+        ),
+    );
   }
   async dispose(): Promise<void> {
     this.remove();
+    if (this._disposalFailed && this._retryResourceDisposal) {
+      this._disposalFailed = false;
+      this._disposal = this._retryResourceDisposal();
+    }
     await this._disposal;
   }
   get layers(): LayerRegistry {

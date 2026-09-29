@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '@mapseekai/tasklane';
 import { selectPathMembers } from '../../engine/rendering/luma/path-members';
 import { PolygonPresentation, type PolygonChannel } from './polygon-presentation';
 import type { MeshDraw } from './mesh-command-cache';
@@ -54,6 +55,7 @@ interface Options {
   invalidate: () => void;
   report: (error: Error) => void;
   signal?: AbortSignal;
+  workerRuntime?: WorkerRuntime;
   msdfWorkerUrl?: string | URL;
   geometryWorkerUrl?: string | URL;
   screenPathFiltering?: boolean;
@@ -108,6 +110,7 @@ export class LumaPainter implements EditPainter {
       this.chunks.admitExternal(incoming),
     );
     this.chunks = new GeometryChunkCache(gpu, {
+      workerRuntime: options.workerRuntime,
       externalBytes: () =>
         this.cache.byteSize +
         Math.max(this.gpu.pageSlackBytes ?? 0, this.gpu.pageReservationBytes ?? 0),
@@ -162,6 +165,7 @@ export class LumaPainter implements EditPainter {
         ? new URL(String(url), this.canvas.ownerDocument.baseURI)
         : new URL('emap-msdf-worker.js', import.meta.url),
       this.canvas.ownerDocument,
+      this.options.workerRuntime,
     );
   }
   clearLabels(): void {
@@ -936,8 +940,14 @@ export class LumaPainter implements EditPainter {
   drawMeasurementOverlay(state: MeasurementOverlayState): void {
     this.decorate((p) => p.drawMeasurementOverlay(state));
   }
+  get closed(): Promise<void> {
+    return this.chunks.closed;
+  }
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      this.chunks.dispose();
+      return;
+    }
     // Teardown must not render or depend on a successful final GPU submission.
     this.disposed = true;
     this.active = false;

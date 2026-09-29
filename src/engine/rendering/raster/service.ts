@@ -1,3 +1,4 @@
+import { settleDisposals } from '../../../shared/settle-disposals';
 import { RasterPresentationQueue } from './presentation';
 import { awaitWithSignal } from '../../../shared/await-with-signal';
 import { Bounds } from '../../../domain/geo/bounds';
@@ -1095,7 +1096,7 @@ export class RasterRenderService implements RasterContract {
     for (const [key, controller] of this.active) if (JSON.parse(key)[0] === id) controller.abort();
     this.queue = this.queue.filter((task) => task.layer.id !== id);
     try {
-      layer.source.dispose();
+      this.closeSource(layer.source);
     } finally {
       this.invalidate();
     }
@@ -1283,8 +1284,45 @@ export class RasterRenderService implements RasterContract {
       },
     };
   }
+  private readonly closingSources = new Set<RasterSource>();
+  private readonly sourceCleanupErrors = new Map<RasterSource, unknown>();
+  get closed(): Promise<void> {
+    return settleDisposals(
+      [...this.closingSources].map((source) =>
+        this.sourceCleanupErrors.has(source)
+          ? Promise.reject(this.sourceCleanupErrors.get(source))
+          : source.settled,
+      ),
+    );
+  }
+  private closeSource(source: RasterSource): void {
+    this.closingSources.add(source);
+    this.sourceCleanupErrors.delete(source);
+    try {
+      source.dispose();
+    } catch (error) {
+      this.sourceCleanupErrors.set(source, error);
+      throw error;
+    }
+    if (!source.settled) {
+      this.closingSources.delete(source);
+      return;
+    }
+    void source.settled.then(() => this.closingSources.delete(source)).catch(() => {});
+  }
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      const errors: unknown[] = [];
+      for (const source of this.closingSources) {
+        try {
+          this.closeSource(source);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length) throw new AggregateError(errors, 'Unable to close some raster sources');
+      return;
+    }
     this.disposed = true;
     for (const release of this.layerPasses.values()) release();
     this.layerPasses.clear();
@@ -1303,13 +1341,18 @@ export class RasterRenderService implements RasterContract {
     this.gestures.clear();
     if (this.settleTimer !== null) clearTimeout(this.settleTimer);
     this.settleTimer = null;
-    const sources = [...this.layers.values()].map((layer) => layer.source);
+    const sources = [
+      ...new Set([
+        ...this.closingSources,
+        ...[...this.layers.values()].map((layer) => layer.source),
+      ]),
+    ];
     this.layers.clear();
     // Run every teardown even when an external provider has a faulty dispose().
     const failures: unknown[] = [];
     for (const source of sources) {
       try {
-        source.dispose();
+        this.closeSource(source);
       } catch (error) {
         failures.push(error);
       }

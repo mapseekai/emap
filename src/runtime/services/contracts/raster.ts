@@ -135,6 +135,8 @@ export interface RasterCacheStats {
 }
 /** Raster sources are independent of editable vector/topology sources. */
 export interface RasterContract {
+  readonly closed?: Promise<void>;
+  dispose?(): void;
   /** Takes ownership of the source until removal or plugin unload. */
   addSource(id: string, source: RasterSource, style?: RasterStyle): void;
   remove(id: string): void;

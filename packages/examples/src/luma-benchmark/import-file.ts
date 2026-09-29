@@ -1,3 +1,7 @@
+import benchmarkWorkerUrl from './import-worker?worker&url';
+import { browserWorker, type WorkerRuntime, type RuntimeScope, type WorkerSession } from '@mapseekai/tasklane';
+import { standaloneRuntime, taskValue, IMPORT_BYTES } from '../../../../src/integrations/tasklane/runtime';
+import { decodeWorkerData } from '../../../../src/integrations/mapshaper/binary';
 import { groundBounds } from '../../../../src/domain/geo/perspective-transform';
 import type { ScreenPathRequest, ScreenPathPacket } from '../../../../src/engine/rendering/luma/screen-paths';
 import type { PointLodRequest, PointLodPacket } from '../../../../src/engine/rendering/luma/point-lod-source';
@@ -40,80 +44,48 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
   triangulationStats: Record<string, number> = {};
   private index: InstanceType<typeof Flatbush> | null = null;
   private bounds: Rect = [0, 0, 1, 1];
-  private serial = 0;
   private closed = false;
-  private pending = new Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
-  >();
-  private imported!: {
-    resolve: (dataset: MapshaperDataset) => void;
-    reject: (reason: unknown) => void;
-  };
-  constructor(
-    private file: File,
-    private worker: Worker,
-    private progress: (message: string) => void,
-  ) {
-    worker.onerror = (error) => this.close(new Error(error.message));
-    worker.onmessage = (event: MessageEvent<Response>) => {
-      const data = event.data;
-      if (data.type === 'progress')
-        this.progress(
-          `流式导入 ${file.name}：${(((data.bytes ?? 0) / file.size) * 100).toFixed(1)}% · ${(data.features ?? 0).toLocaleString()} 要素`,
-        );
-      else if (data.type === 'stage') this.progress(data.message ?? '构建显示缓存');
-      else if (data.id !== undefined) {
-        const request = this.pending.get(data.id);
-        this.pending.delete(data.id);
-        this.workerBuildMs += data.buildMs ?? 0;
-        if(data.triangulationStats)this.triangulationStats=data.triangulationStats;
-        if (data.type === 'error') request?.reject(new Error(data.message));
-        else request?.resolve(data.result);
-      } else if (data.type === 'error') this.imported.reject(new Error(data.message));
-      else if (data.type === 'result') {
-        try {
-          const layers: MapshaperLayer[] = (data.layers ?? []).map(({ records, ...layer }) => ({
-            ...layer,
-            ...(records ? { data: getDefaultMapshaperAdapter().createDataTable(records) } : {}),
-          }));
-          this.imported.resolve({
-            layers,
-            info: data.info,
-            ...(data.arcs ? { arcs: restoreTransferredArcs(data.arcs) } : {}),
-          });
-        } catch (error) {
-          this.imported.reject(error);
-        }
-      }
-    };
+  private readonly runtime: WorkerRuntime;
+  private readonly scope: RuntimeScope;
+  private readonly session: WorkerSession;
+  constructor(private file: File, private progress: (message: string) => void) {
+    this.runtime = standaloneRuntime('benchmark', browserWorker(benchmarkWorkerUrl, { type: 'module', name: 'emap-benchmark-data-lod' }), 1, IMPORT_BYTES);
+    this.scope = this.runtime.createScope('benchmark');
+    this.session = this.scope.session('benchmark');
   }
-  open(): Promise<MapshaperDataset> {
-    return new Promise((resolve, reject) => {
-      this.imported = { resolve, reject };
-      this.worker.postMessage({
-        file: this.file,
-        vendorUrl: new URL(`${import.meta.env.BASE_URL}vendor/mapshaper-vendor.js`, location.href)
-          .href,
-      });
-    });
+  async open(): Promise<MapshaperDataset> {
+    const data = await this.request('import', { file: this.file, vendorUrl: new URL(`${import.meta.env.BASE_URL}vendor/mapshaper-vendor.js`, location.href).href }) as Response;
+    const layers: MapshaperLayer[] = (data.layers ?? []).map(({ records, ...layer }) => ({ ...layer, ...(records ? { data: getDefaultMapshaperAdapter().createDataTable(records) } : {}) }));
+    return { layers, info: data.info, ...(data.arcs ? { arcs: restoreTransferredArcs(data.arcs) } : {}) };
   }
   setBounds(bounds: Rect): void {
     this.bounds = bounds;
   }
-  private request(type: string, args: Record<string, unknown> = {}): Promise<unknown> {
-    if (this.closed) return Promise.reject(new DOMException('Worker closed', 'AbortError'));
-    const id = ++this.serial;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ type, id, ...args });
+  private async request(type: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> {
+    if (this.closed) throw new DOMException('Worker closed', 'AbortError');
+    const handle = this.session.enqueue('benchmark', {
+      budget: { inputBytes: IMPORT_BYTES, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
+      blobLimits: { inputBytes: type === 'import' ? this.file.size : 0, outputBytes: 0 },
+      signal, cancellation: 'cooperative',
+      onProgress: (value) => {
+        const data = value as Response;
+        if (data.type === 'progress') this.progress(`流式导入 ${this.file.name}：${(((data.bytes ?? 0) / this.file.size) * 100).toFixed(1)}% · ${(data.features ?? 0).toLocaleString()} 要素`);
+        else this.progress(data.message ?? '构建显示缓存');
+      },
+      prepare: () => ({ payload: { type, ...args } }),
+    });
+    return taskValue(handle, async (bytes: Uint8Array) => {
+      const data = await decodeWorkerData<Response>(bytes);
+      this.workerBuildMs += data.buildMs ?? 0;
+      if (data.triangulationStats) this.triangulationStats = data.triangulationStats;
+      return type === 'import' ? data : data.result;
     });
   }
   async initialize(signal: AbortSignal, progress?: (message: string) => void): Promise<void> {
     signal.throwIfAborted();
     if (progress) this.progress = progress;
     this.chunks.length = 0;
-    const chunks = (await this.request('initialize', { bounds: this.bounds })) as Omit<
+    const chunks = (await this.request('initialize', { bounds: this.bounds }, signal)) as Omit<
       SpatialChunk,
       'ids'
     >[];
@@ -142,7 +114,7 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
   }
   async patch(patch: CoordinatePatch, signal?: AbortSignal): Promise<SpatialChunk[]> {
     signal?.throwIfAborted();
-    const changed = (await this.request('patch', { patch })) as Omit<SpatialChunk, 'ids'>[];
+    const changed = (await this.request('patch', { patch }, signal)) as Omit<SpatialChunk, 'ids'>[];
     for (const update of changed) Object.assign(this.chunks[update.id], update);
     if (this.chunks.length) {
       this.index = new Flatbush(this.chunks.length);
@@ -157,13 +129,11 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
     this.index = null;
     this.chunks.length = 0;
   }
-  close(reason: unknown = new DOMException('Scene disposed', 'AbortError')): void {
+  close(_reason: unknown = new DOMException('Scene disposed', 'AbortError')): void {
     if (this.closed) return;
     this.closed = true;
-    this.worker.terminate();
-    this.imported?.reject(reason);
-    for (const task of this.pending.values()) task.reject(reason);
-    this.pending.clear();
+    void this.scope.dispose();
+    void this.runtime.dispose();
     this.dispose();
   }
 }
@@ -173,14 +143,7 @@ export async function importBenchmarkFile(
   progress: (message: string) => void,
 ) {
   signal.throwIfAborted();
-  const source = new BenchmarkFileWorker(
-    file,
-    new Worker(new URL('./import-worker.ts', import.meta.url), {
-      type: 'module',
-      name: 'emap-benchmark-data-lod',
-    }),
-    progress,
-  );
+  const source = new BenchmarkFileWorker(file, progress);
   const abort = () => source.close(signal.reason);
   signal.addEventListener('abort', abort, { once: true });
   try {

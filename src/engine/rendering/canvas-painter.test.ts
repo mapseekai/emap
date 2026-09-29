@@ -1172,6 +1172,156 @@ describe('polygon fills isolate independent features', () => {
   });
 });
 
+describe('bounded collapsed polygon replay', () => {
+  function cachedHarness() {
+    const commands: unknown[][] = [];
+    const { painter } = createCanvasPainterHarness({
+      globalAlpha: 1,
+      beginPath: () => commands.push(['begin']),
+      moveTo: (x: number, y: number) => commands.push(['move', x, y]),
+      lineTo: (x: number, y: number) => commands.push(['line', x, y]),
+      fill: (rule: string) => commands.push(['fill', rule]),
+      clearRect: vi.fn(),
+    });
+    const { arcs } = harness();
+    const trace = vi.spyOn(arcs, 'getShapeIter');
+    let interval = 0;
+    arcs.getRetainedInterval = () => interval;
+    arcs.getSimpleShapeBbox = (_part, bbox) => {
+      bbox.splice(0, 4, 0, 0, 30, 30);
+      return bbox;
+    };
+    const layer = { id: 'fill', sourceId: 'source', revision: 0 };
+    const shapes = [[[0]], [[1]]];
+    const camera = new AffineTransform();
+    camera.mx = camera.my = 0.00001;
+    painter.setTransform(camera);
+    const draw = () => {
+      painter.setLayerContext(layer);
+      painter.drawPolygonFill(shapes, arcs, '#333', undefined, 0.5, {
+        viewBBox: [-10, -10, 100, 100],
+      });
+    };
+    return {
+      painter,
+      arcs,
+      trace,
+      layer,
+      shapes,
+      camera,
+      commands,
+      draw,
+      setInterval: (n: number) => {
+        interval = n;
+      },
+    };
+  }
+
+  it('replays the exact moves and per-feature fills without visiting collapsed geometry again', () => {
+    const { draw, trace, commands } = cachedHarness();
+    draw();
+    const first = commands.splice(0);
+    draw();
+    expect(trace).toHaveBeenCalledTimes(2);
+    expect(commands).toEqual(first);
+    expect(commands.filter((c) => c[0] === 'fill')).toEqual([
+      ['fill', 'evenodd'],
+      ['fill', 'evenodd'],
+    ]);
+  });
+
+  it('does not retain or discard paths that still contain edges', () => {
+    const h = cachedHarness();
+    h.camera.mx = h.camera.my = 1;
+    h.painter.setTransform(h.camera);
+    h.draw();
+    const first = h.commands.splice(0);
+    h.draw();
+    expect(h.trace).toHaveBeenCalledTimes(4);
+    expect(h.commands).toEqual(first);
+  });
+
+  it('preserves every move and fill for multipart point-only contours', () => {
+    const h = cachedHarness();
+    h.shapes[0] = [[0], [2]];
+    h.draw();
+    const first = h.commands.splice(0);
+    h.draw();
+    expect(h.trace).toHaveBeenCalledTimes(5);
+    expect(h.commands).toEqual(first);
+  });
+
+  it('invalidates on mutable cameras, DPR, resize, revisions, LOD and live edits', () => {
+    const h = cachedHarness();
+    h.draw();
+    const changes = [
+      () => {
+        h.camera.bx++;
+        h.painter.setTransform(h.camera);
+      },
+      () => h.painter.setPixelRatio(2),
+      () => h.painter.resize(200, 200),
+      () => h.layer.revision++,
+      () => h.setInterval(1),
+      () => h.painter.clearGeometryCache({ sourceId: 'source' }),
+    ];
+    for (const change of changes) {
+      const before = h.trace.mock.calls.length;
+      change();
+      h.draw();
+      h.draw();
+      expect(h.trace).toHaveBeenCalledTimes(before + 2);
+    }
+    h.painter.clear();
+    h.painter.setLayerContext(null);
+    h.painter.finishFrame();
+    const before = h.trace.mock.calls.length;
+    h.draw();
+    expect(h.trace).toHaveBeenCalledTimes(before + 2);
+    h.painter.dispose();
+    expect(Reflect.get(h.painter, '_fillPathBytes')).toBe(0);
+  });
+
+  it('keeps the typed-array budget bounded and draws uncached layers when it is full', () => {
+    const h = cachedHarness();
+    const shapes = new Array(Math.floor((32 * 1024 ** 2) / 9));
+    shapes[0] = [[0]];
+    const draw = () =>
+      h.painter.drawPolygonFill(shapes, h.arcs, '#333', undefined, 1, {
+        shapeIndices: Uint32Array.of(0),
+      });
+    h.painter.setLayerContext(h.layer);
+    draw();
+    draw();
+    expect(h.trace).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(h.painter, '_fillPathBytes')).toBe(shapes.length * 9);
+    h.layer.id = 'second';
+    h.draw();
+    h.draw();
+    expect(h.trace).toHaveBeenCalledTimes(5);
+    expect(Reflect.get(h.painter, '_fillPathBytes')).toBeLessThanOrEqual(32 * 1024 ** 2);
+    h.painter.clearGeometryCache();
+    expect(Reflect.get(h.painter, '_fillPathBytes')).toBe(0);
+  });
+});
+
+it('does not connect an empty LOD arc to stale coordinates from its shared iterator', () => {
+  const moveTo = vi.fn(),
+    lineTo = vi.fn();
+  const { painter } = createCanvasPainterHarness({
+    moveTo,
+    lineTo,
+    beginPath: vi.fn(),
+    stroke: vi.fn(),
+    setLineDash: vi.fn(),
+  });
+  const iter = { x: 17, y: 19, hasNext: () => false };
+  const arcs = { size: () => 1, getArcIter: () => iter } as unknown as ArcCollection;
+  painter.drawArcs(arcs, { color: '#333', width: 1 });
+  expect(moveTo).not.toHaveBeenCalled();
+  expect(lineTo).not.toHaveBeenCalled();
+});
+
 describe('classified path arc cache', () => {
   it('does not revisit shapes on a warm draw, retains direction, and invalidates on revision', () => {
     const visited: number[] = [];

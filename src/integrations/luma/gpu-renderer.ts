@@ -93,6 +93,10 @@ function cleanupGpu(actions: Iterable<() => void>): void {
   }
   if (errors.length) throw new AggregateError(errors, 'GPU resource cleanup failed');
 }
+/** Device.destroy() does not release its canvas observers/attachments in luma v10. */
+function destroyDevice(device: Device): void {
+  cleanupGpu([() => device.canvasContext?.destroy(), () => device.destroy()]);
+}
 /**
  * Portable luma v10 renderer shared by formal WebGL2/WebGPU maps and A/B examples.
  * Owns the selected device and all GPU resources, including shared geometry pages.
@@ -258,60 +262,107 @@ export class GpuRenderer {
     report: (error: Error) => void,
     backend: 'webgl' | 'webgpu' = 'webgl',
   ): Promise<GpuRenderer> {
-    let device: Device | undefined;
-    if (backend === 'webgpu') {
-      canvas.dataset.gpuStage = 'loading-adapter';
-      const { webgpuAdapter } = await import('@luma.gl/webgpu');
-      canvas.dataset.gpuStage = 'requesting-device';
-      if (!webgpuAdapter.isSupported())
-        throw new Error(
-          'WebGPU is unavailable on this browser / secure context. Select WebGL2 explicitly.',
-        );
-      device = await webgpuAdapter.create({
-        createCanvasContext: {
-          canvas,
-          autoResize: false,
-          useDevicePixels: false,
-          alphaMode: 'premultiplied',
-        },
-        powerPreference: 'high-performance',
-        featureLevel: 'core',
-        optionalFeatures: ['timestamp-query'],
-        onError: report,
-      });
-    }
+    const device =
+      backend === 'webgpu' ? await this.requestWebgpuDevice(canvas, report) : undefined;
     canvas.dataset.gpuStage = 'creating-pipelines';
     const renderer = new GpuRenderer(canvas, invalidate, report, device);
     canvas.dataset.gpuStage = 'compiling-shaders';
     try {
-      // Request all compiler logs together, then flush the device command stream.
-      // Serial getCompilationInfo awaits can stall until another native GPU operation
-      // while the page module is still awaiting initialization (observed in Chrome 153).
-      const checks = [...renderer.pipelines.values()].flatMap((entry) =>
-        entry.shaders.map((shader) => shader.getCompilationInfo()),
-      );
-      if (renderer.backend === 'webgpu') renderer.device.submit();
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const logs = await Promise.race([
-          Promise.all(checks),
-          new Promise<never>((_, reject) => {
-            timeout = setTimeout(
-              () => reject(new Error('GPU shader initialization timed out.')),
-              30000,
-            );
-          }),
-        ]);
-        const errors = logs.flat().filter((message) => message.type === 'error');
-        if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
+      await renderer.checkShaders();
+      if (renderer.device.isLost) throw new Error('GPU device lost during initialization.');
+      renderer.watchDeviceLoss();
       canvas.dataset.gpuStage = 'ready';
       return renderer;
     } catch (error) {
       renderer.dispose();
       throw error;
+    }
+  }
+  private static async requestWebgpuDevice(
+    canvas: HTMLCanvasElement,
+    report: (error: Error) => void,
+  ): Promise<Device> {
+    canvas.dataset.gpuStage = 'loading-adapter';
+    const { webgpuAdapter } = await import('@luma.gl/webgpu');
+    canvas.dataset.gpuStage = 'requesting-device';
+    if (!webgpuAdapter.isSupported())
+      throw new Error(
+        'WebGPU is unavailable on this browser / secure context. Select WebGL2 explicitly.',
+      );
+    return webgpuAdapter.create({
+      createCanvasContext: {
+        canvas,
+        autoResize: false,
+        useDevicePixels: false,
+        alphaMode: 'premultiplied',
+      },
+      powerPreference: 'high-performance',
+      featureLevel: 'core',
+      optionalFeatures: ['timestamp-query'],
+      onError: report,
+    });
+  }
+  private async checkShaders(): Promise<void> {
+    // Request all compiler logs together, then flush the device command stream.
+    // Serial getCompilationInfo awaits can stall until another native GPU operation
+    // while the page module is still awaiting initialization (observed in Chrome 153).
+    const checks = [...this.pipelines.values()].flatMap((entry) =>
+      entry.shaders.map((shader) => shader.getCompilationInfo()),
+    );
+    if (this.backend === 'webgpu') this.device.submit();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const logs = await Promise.race([
+        Promise.all(checks),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('GPU shader initialization timed out.')),
+            30000,
+          );
+        }),
+      ]);
+      const errors = logs.flat().filter((message) => message.type === 'error');
+      if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+  private watchDeviceLoss(): void {
+    if (this.backend !== 'webgpu') return;
+    const owned = this.device;
+    void owned.lost.then(() => {
+      if (!this.disposed && !this.lost && this.device === owned) void this.recoverWebgpu();
+    });
+  }
+  private async recoverWebgpu(): Promise<void> {
+    this.lost = true;
+    this.canvas.dataset.gpuStage = 'recovering';
+    try {
+      cleanupGpu([() => this.release(), () => destroyDevice(this.device)]);
+      const device = await GpuRenderer.requestWebgpuDevice(this.canvas, this.report);
+      if (this.disposed) {
+        destroyDevice(device);
+        return;
+      }
+      this.initialize(device);
+      await this.checkShaders();
+      if (this.disposed) return;
+      if (device.isLost) throw new Error('Replacement WebGPU device was lost during recovery.');
+      this.resize(this.width, this.height, this.pixelRatio);
+      this.watchDeviceLoss();
+      this.lost = false;
+      this.canvas.dataset.gpuStage = 'ready';
+      this.invalidate();
+    } catch (error) {
+      if (this.disposed) return;
+      this.lost = true;
+      this.canvas.dataset.gpuStage = 'recovery-failed';
+      try {
+        cleanupGpu([() => this.release(), () => destroyDevice(this.device)]);
+      } catch (cleanupError) {
+        error = new AggregateError([error, cleanupError], 'WebGPU recovery cleanup failed');
+      }
+      this.report(error instanceof Error ? error : new Error(String(error)));
     }
   }
   private quad!: Buffer;
@@ -373,7 +424,12 @@ export class GpuRenderer {
       this.initialize(device);
     } catch (error) {
       try {
-        cleanupGpu([() => this.release(), () => this.device?.destroy()]);
+        cleanupGpu([
+          () => this.release(),
+          () => {
+            if (this.device) destroyDevice(this.device);
+          },
+        ]);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'GPU initialization and cleanup failed');
       }
@@ -388,16 +444,21 @@ export class GpuRenderer {
   private onLost = (event: Event): void => {
     event.preventDefault();
     this.lost = true;
+    // Lost-context deletes are no-ops. After restoration WebKit rejects the old handles.
+    try {
+      cleanupGpu([() => this.release(), () => destroyDevice(this.device)]);
+    } catch (error) {
+      this.report(error instanceof Error ? error : new Error(String(error)));
+    }
     this.report(
       new Error('WebGL context lost; emap will rebuild GPU resources after restoration.'),
     );
   };
   private onRestored = (): void => {
-    if (this.disposed) return;
-    this.release();
-    this.device.destroy();
+    if (this.disposed || !this.lost) return;
     try {
       this.initialize();
+      this.resize(this.width, this.height, this.pixelRatio);
       this.lost = false;
       this.invalidate();
     } catch (error) {
@@ -408,6 +469,8 @@ export class GpuRenderer {
     this.device =
       device ??
       new WebGLDevice({
+        // Reattach the restored handle without accumulating native context listeners.
+        _handle: (this.device as WebGLDevice | undefined)?.gl,
         createCanvasContext: { canvas: this.canvas, autoResize: false, useDevicePixels: false },
         webgl: {
           alpha: true,
@@ -468,19 +531,6 @@ export class GpuRenderer {
       'icon',
     ] as const) {
       this.pipelineEntry(kind);
-    }
-    if (this.backend === 'webgpu') {
-      const owned = this.device;
-      void owned.lost.then((info) => {
-        if (!this.disposed && this.device === owned) {
-          this.lost = true;
-          this.report(
-            new Error(
-              `WebGPU device lost: ${info.message}. Reload this page; no silent backend fallback.`,
-            ),
-          );
-        }
-      });
     }
   }
   /** Production variants are warmed during initialization; diagnostic variants
@@ -718,6 +768,7 @@ export class GpuRenderer {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
     this.pixelRatio = pixelRatio;
+    if (this.disposed || this.device.isLost) return;
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
     const w = Math.max(1, Math.round(width * pixelRatio)),
@@ -1546,7 +1597,7 @@ export class GpuRenderer {
           /* Unavailable/disjoint queries are not reported as zero GPU time. */
         })
         .finally(() => {
-          this.queryBusy = false;
+          if (epoch === this.timingEpoch) this.queryBusy = false;
         });
     }
     for (const [image, entry] of this.images)
@@ -1635,6 +1686,9 @@ export class GpuRenderer {
     } finally {
       this.msdfTextRenderer = this.textRenderer = null;
       this.pages = undefined;
+      this.commandCache = undefined;
+      this.timingEpoch++;
+      this.queryBusy = this.timedFrame = false;
       this.images.clear();
       this.dashes.clear();
       this.pipelines.clear();
@@ -1655,7 +1709,7 @@ export class GpuRenderer {
       () => this.canvas.removeEventListener('webglcontextlost', this.onLost),
       () => this.canvas.removeEventListener('webglcontextrestored', this.onRestored),
       () => this.release(),
-      () => this.device.destroy(),
+      () => destroyDevice(this.device),
       () => {
         context?.getExtension('WEBGL_lose_context')?.loseContext();
       },

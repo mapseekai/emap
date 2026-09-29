@@ -174,3 +174,14 @@ it('transferring assembled output does not detach source coordinates or Worker f
   expect(buildGeometryPacket(packet, cache).geometries[0].count).toBe(6);
   expect(cache.stats.hits).toBe(1);
 });
+
+it('reports a finite per-packet preparation cost without retaining timing objects', () => {
+  const result = buildGeometryPacket({
+    kind: 'point',
+    coordinates: Float64Array.from([1, 2]),
+    offsets: Uint32Array.from([0, 1]),
+    features: Uint32Array.from([0, 1]),
+  });
+  expect(Number.isFinite(result.preparationMs)).toBe(true);
+  expect(result.preparationMs).toBeGreaterThanOrEqual(0);
+});

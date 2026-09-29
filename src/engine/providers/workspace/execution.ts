@@ -26,14 +26,19 @@ export class ExecutionServiceImpl {
       this._workerPool =
         options.workerPool ??
         new MapshaperWorkerPool({
+          workerRuntime: options.workerRuntime,
           workerUrl: options.workerUrl ?? 'emap-worker.js',
           poolSize: options.workerPoolSize,
         });
     }
   }
-  dispose(): void {
+  get closed(): Promise<void> {
+    return this._workerPool?.closed ?? Promise.resolve();
+  }
+  async dispose(): Promise<void> {
     this._workerPool?.cancelAll();
     this._workerPool?.destroy();
+    await this._workerPool?.closed;
     this._workerPool = null;
   }
 }

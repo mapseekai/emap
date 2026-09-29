@@ -1,131 +1,141 @@
+import type { TaskHandle, WorkerSession, SessionGroup } from '@mapseekai/tasklane';
+import { packetByteLength } from '@mapseekai/tasklane';
+import {
+  taskValue,
+  workerError,
+  isWorkerRuntimeError,
+  reportWorkerCleanupFailure,
+  MIB,
+} from '../tasklane/runtime';
 import { RasterError } from '../../domain/raster/policy';
-import type {
-  GeoTIFFWorkerCommand,
-  GeoTIFFWorkerRequest,
-  GeoTIFFWorkerResponse,
-} from './worker-protocol';
+import type { GeoTIFFWorkerCommand, GeoTIFFWorkerResponse } from './worker-protocol';
 
-interface Pending {
-  id: number;
-  resolve?: (message: GeoTIFFWorkerResponse) => void;
-  reject?: (error: unknown) => void;
-  removeSignal: () => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-/** Exactly one physical job per worker. Cancellation releases callers immediately,
- * but the slot remains occupied until its acknowledgment (or hard timeout).
- * Otherwise rapid zooms can enqueue an unbounded tail of stale CPU work.
- */
+/** Domain admission waits for tasklane's physical settlement, including cancellation. */
 export class RasterWorkerClient {
-  private active?: Pending;
+  private readonly active = new Set<TaskHandle<unknown>>();
+  private direct?: TaskHandle<unknown>;
   private closed = false;
-  private nextId = 0;
+  private disposalError?: unknown;
+  private closing: Promise<void> = Promise.resolve();
   constructor(
-    private readonly worker: Worker,
+    private readonly session: WorkerSession,
     private idle?: () => void,
     private fatal?: (error: unknown) => void,
-  ) {
-    worker.onmessage = ({ data }: MessageEvent<GeoTIFFWorkerResponse>) => {
-      const pending = this.active;
-      if (!pending || data.id !== pending.id) return;
-      this.active = undefined;
-      clearTimeout(pending.timer);
-      pending.removeSignal();
-      if (data.type === 'error') {
-        const error = new Error(data.message) as Error & { code?: string };
-        error.name = data.name;
-        error.code = data.code;
-        pending.reject?.(error);
-      } else pending.resolve?.(data);
-      pending.resolve = undefined;
-      pending.reject = undefined;
-      this.idle?.();
-    };
-    worker.onerror = (event) =>
-      this.fail(
-        new RasterError(
-          'RASTER_WORKER_FAILED',
-          event.message || 'Cannot load GeoTIFF Worker. Check workerUrl and CSP.',
-        ),
-      );
-    worker.onmessageerror = () =>
-      this.fail(new RasterError('RASTER_WORKER_FAILED', 'Invalid GeoTIFF Worker message.'));
-  }
+    private started?: () => void,
+  ) {}
+  /** Direct Session calls remain serialized; groups own their physical admission. */
   get busy(): boolean {
-    return this.active !== undefined;
+    return this.direct !== undefined;
   }
-  call(
+  get pendingCount(): number {
+    return this.active.size;
+  }
+  get queuedCount(): number {
+    return [...this.active].filter((task) => task.state === 'queued').length;
+  }
+  get runningCount(): number {
+    return [...this.active].filter((task) =>
+      ['starting', 'preparing', 'running', 'cancelling'].includes(task.state),
+    ).length;
+  }
+  async call(
     message: GeoTIFFWorkerCommand,
     signal?: AbortSignal,
     transfer: Transferable[] = [],
+    options?: {
+      group?: () => SessionGroup;
+      keys?: string[];
+      settled?: () => void;
+      cacheCapacityBytes?: () => number;
+    },
   ): Promise<GeoTIFFWorkerResponse> {
-    signal?.throwIfAborted();
-    if (this.closed)
-      return Promise.reject(new RasterError('SOURCE_CLOSED', 'Raster Worker is closed.'));
-    if (this.active)
-      return Promise.reject(
-        new RasterError('RASTER_WORKER_BUSY', 'Only one physical job per Worker is allowed.'),
-      );
-    return new Promise((resolve, reject) => {
-      const id = ++this.nextId;
-      const abort = () => {
-        const pending = this.active;
-        if (!pending || pending.id !== id) return;
-        const reason = signal?.reason ?? new DOMException('Cancelled', 'AbortError');
-        pending.removeSignal();
-        const fail = pending.reject;
-        pending.resolve = undefined;
-        pending.reject = undefined;
-        fail?.(reason);
-        try {
-          this.worker.postMessage({ id, type: 'cancel' } satisfies GeoTIFFWorkerRequest);
-        } catch (error) {
-          this.fail(error);
-        }
-      };
-      const removeSignal = () => {
-        signal?.removeEventListener('abort', abort);
-        signal = undefined;
-      };
-      const timer = setTimeout(
-        () =>
-          this.fail(
-            new RasterError(
-              'RASTER_WORKER_TIMEOUT',
-              'Raster Worker exceeded the bounded request timeout.',
-            ),
-          ),
-        60000,
-      );
-      this.active = { id, resolve, reject, removeSignal, timer };
-      signal?.addEventListener('abort', abort, { once: true });
-      try {
-        this.worker.postMessage({ ...message, id }, transfer);
-      } catch (error) {
-        this.fail(error);
+    let handle: TaskHandle<unknown> | undefined;
+    const release = () => {
+      if (!this.closed) {
+        options?.settled?.();
+        this.idle?.();
       }
-    });
-  }
-  private fail(error: unknown): void {
-    if (this.closed) return;
-    const callback = this.fatal;
-    this.dispose(error);
-    callback?.(error);
-  }
-  dispose(error: unknown = new DOMException('Raster source disposed', 'AbortError')): void {
-    if (this.closed) return;
-    this.closed = true;
-    this.worker.terminate();
-    if (this.active) {
-      clearTimeout(this.active.timer);
-      this.active.removeSignal();
-      this.active.reject?.(error);
-      this.active = undefined;
+    };
+    try {
+      signal?.throwIfAborted();
+      if (this.closed) throw new RasterError('SOURCE_CLOSED', 'Raster Worker is closed.');
+      if (!options?.group && this.direct)
+        throw new RasterError('RASTER_WORKER_BUSY', 'Only one direct job per Worker is allowed.');
+      const fileBytes =
+        message.type === 'open' ? message.file.size + (message.overviewFile?.size ?? 0) : 0;
+      handle = (options?.group?.() ?? this.session).enqueue('raster', {
+        ...(options?.keys ? { affinity: { keys: options.keys } } : {}),
+        budget: {
+          // Reserve the hint's metadata too; its actual value is read only at
+          // admission, after any pressure/resize maintenance ahead of this job.
+          inputBytes: packetByteLength(
+            options?.cacheCapacityBytes
+              ? { ...message, cacheCapacityBytes: Number.MAX_SAFE_INTEGER }
+              : message,
+          ),
+          scratchBytes: 256 * MIB,
+          outputBytes: 65 * MIB,
+        },
+        blobLimits: { inputBytes: fileBytes, outputBytes: 0 },
+        signal,
+        cancellation: 'cooperative',
+        executionTimeoutMs: 60_000,
+        priority: 'interactive',
+        prepare: () => {
+          // Observe after synchronous prepare/postMessage, before browser replies.
+          // Queued work must not inflate the source's execution peak.
+          queueMicrotask(() => {
+            if (!this.closed) this.started?.();
+          });
+          const payload = options?.cacheCapacityBytes
+            ? { ...message, cacheCapacityBytes: options.cacheCapacityBytes() }
+            : message;
+          return { payload, transfer };
+        },
+      });
+      this.active.add(handle);
+      if (!options?.group) this.direct = handle;
+      void handle.settled.then(() => {
+        this.active.delete(handle!);
+        if (this.direct === handle) this.direct = undefined;
+        release();
+      });
+      return await taskValue<GeoTIFFWorkerResponse>(handle);
+    } catch (error) {
+      let failure = this.disposalError ?? workerError(error);
+      const fatalFailure =
+        isWorkerRuntimeError(error) &&
+        [
+          'EXECUTION_TIMEOUT',
+          'STARTUP_TIMEOUT',
+          'WORKER_FAILED',
+          'PROTOCOL_ERROR',
+          'SESSION_LOST',
+        ].includes(error.code);
+      if (fatalFailure)
+        failure = new RasterError(
+          error.code.includes('TIMEOUT') ? 'RASTER_WORKER_TIMEOUT' : 'RASTER_WORKER_FAILED',
+          error.message,
+        );
+      if (this.session.state === 'lost' || (options?.group && fatalFailure)) {
+        const callback = this.fatal;
+        this.dispose();
+        callback?.(failure);
+      }
+      if (!handle) release();
+      throw failure;
     }
-    this.worker.onmessage = null;
-    this.worker.onerror = null;
-    this.worker.onmessageerror = null;
+  }
+  dispose(_error?: unknown): void {
+    this.closed = true;
+    this.disposalError ??= _error;
+    this.closing = this.session.dispose();
+    void this.closing.catch(reportWorkerCleanupFailure);
     this.idle = undefined;
     this.fatal = undefined;
+    this.started = undefined;
+  }
+  get settled(): Promise<void> {
+    return this.closing;
   }
 }

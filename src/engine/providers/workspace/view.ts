@@ -151,7 +151,7 @@ export class ViewServiceImpl {
       scaleFromZoom: (z) => this._projection.getScale(z),
       getViewportSize: () => ({ width: this._viewport.width, height: this._viewport.height }),
       fire: (type, event) => this.deps.events.fire(type, event),
-      requestRender: () => this.deps.signals.requestRender(),
+      requestRender: () => this.deps.signals.requestRender('nav'),
       cancelZoomAnimation: () => this._viewport.cancelZoomAnimation(),
     });
   }

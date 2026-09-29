@@ -152,7 +152,7 @@ for(const backend of ['webgl','webgpu'])test(`${backend}: DPR 2 keeps each attac
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:2});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try {
-    await page.goto(`http://127.0.0.1:4193/mapseekai/emap/examples/luma-25d/?gpu=${backend}`);await ready(page,'luma25d');
+    await page.goto(new URL(`/mapseekai/emap/examples/luma-25d/?gpu=${backend}`,info.project.use.baseURL).href);await ready(page,'luma25d');
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});await ready(page,'luma25d');
     await page.evaluate(()=>{for(const l of luma25d.layers)luma25d.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2});});
     await settle(page,'luma25d');await eachLabelPainted(page,'luma25d');

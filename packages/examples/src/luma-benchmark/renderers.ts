@@ -24,6 +24,8 @@ import type { MeshPaint } from '../../../../src/integrations/luma/types';
 import { AffineTransform } from '../../../../src/domain/geo/transform';
 import { Bounds } from '../../../../src/domain/geo/bounds';
 import type { Scene } from './scene';
+import { registerPerformanceSource } from '../performance-monitor';
+import { gpuMetrics } from '../performance-render-source';
 export type Backend = 'canvas' | 'luma';
 export type PassMode = 'all' | 'fill' | 'stroke' | 'points';
 const LINE_COLOR='#0f766e', FILL_COLOR='#d97706';
@@ -199,6 +201,7 @@ export class BenchmarkRenderers {
  private pendingTransform:AffineTransform|null=null;
  private interacting=false;
  private disposed=false;
+ private stopMonitoring=()=>{};
  private pinned:Set<number>|null=null;
  buildMs=0;
  uploadSubmitMs=0;
@@ -230,6 +233,10 @@ export class BenchmarkRenderers {
   this.initializationMs={canvas:performance.now()-start,luma:gpu?gpuMs:null};
   this.navigation=new FastNavPreview(glCanvas.parentElement!,invalidate);
   canvas.dataset.renderer='canvas2d';glCanvas.dataset.renderer=gpu?`luma-${gpu.backend==='webgpu'?'webgpu':'webgl2'}`:'unavailable';
+  this.stopMonitoring=registerPerformanceSource(()=>this.disposed?null:{
+   ...(this.canvas.hidden&&this.gpu?gpuMetrics(this.gpu):{backend:'Canvas2D'}),
+   pending:this.lodStats.pending,labels:this.labelManager?.stats.placed,
+  },canvas.ownerDocument);
  }
  resize(width:number,height:number,dpr:number):void {
   if(this.disposed||this.dimensions.every((v,i)=>v===[width,height,dpr][i]))return;
@@ -517,5 +524,5 @@ export class BenchmarkRenderers {
   for(const key of Object.keys(this.lodStats) as (keyof typeof this.lodStats)[])if(key!=='geometryMode')this.lodStats[key]=0;
   this.cpu.clear();this.gpu?.clearImages();if(this.gpu?.begin(new AffineTransform()))this.gpu.end();
  }
- dispose():void {if(this.disposed)return;this.clear();this.disposed=true;this.navigation.dispose();this.gpu?.dispose();this.canvas.width=this.canvas.height=this.glCanvas.width=this.glCanvas.height=0;}
+ dispose():void {if(this.disposed)return;this.stopMonitoring();this.clear();this.disposed=true;this.navigation.dispose();this.gpu?.dispose();this.canvas.width=this.canvas.height=this.glCanvas.width=this.glCanvas.height=0;}
 }

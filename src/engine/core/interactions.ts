@@ -83,7 +83,9 @@ export class MouseWheel extends EventDispatcher {
 
   private _onTick(evt: any) {
     const tickInterval = evt.time - this._eventTime;
-    let multiplier = evt.tickTime / 25;
+    // A slow geometry frame must not become one large catch-up zoom. Preserve
+    // normal frame pacing, but discard time beyond one nominal wheel tick.
+    let multiplier = Math.min(evt.tickTime, 25) / 25;
     let fadeFactor = 0;
 
     if (tickInterval > this._fadeDelay) {

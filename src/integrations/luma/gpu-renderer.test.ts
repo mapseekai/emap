@@ -1060,3 +1060,107 @@ it('warms production pipelines but compiles diagnostic reference variants only w
   expect(device.createRenderPipeline).toHaveBeenCalledTimes(14);
   g.dispose();
 });
+
+it('rebuilds a lost WebGPU device once, invalidates meshes, and discards a replacement after disposal', async () => {
+  const makeDevice = () => {
+    let lose!: (info: { message: string }) => void;
+    const resource = (props: any) => ({
+      ...props,
+      destroy: vi.fn(),
+      getCompilationInfo: async () => [],
+    });
+    const device: any = {
+      type: 'webgpu',
+      preferredColorFormat: 'bgra8unorm',
+      isLost: false,
+      lost: new Promise((resolve) => {
+        lose = resolve;
+      }),
+      submit: vi.fn(),
+      createBuffer: vi.fn(resource),
+      createSampler: vi.fn(resource),
+      createShader: vi.fn(resource),
+      createRenderPipeline: vi.fn(resource),
+      destroy: vi.fn(),
+    };
+    return {
+      device,
+      lose: () => {
+        device.isLost = true;
+        lose({ message: 'test loss' });
+      },
+    };
+  };
+  const a = makeDevice(),
+    b = makeDevice(),
+    c = makeDevice();
+  const canvas: any = { dataset: {}, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const report = vi.fn(),
+    invalidate = vi.fn();
+  let release!: (device: any) => void;
+  const request = vi
+    .spyOn(GpuRenderer as any, 'requestWebgpuDevice')
+    .mockResolvedValueOnce(a.device)
+    .mockResolvedValueOnce(b.device)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+  const resize = vi.spyOn(GpuRenderer.prototype, 'resize').mockImplementation(() => {});
+  let renderer: GpuRenderer | undefined;
+  try {
+    renderer = await GpuRenderer.create(canvas, invalidate, report, 'webgpu');
+    a.lose();
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalledOnce());
+    expect((renderer as any).device).toBe(b.device);
+    expect((renderer as any).lost).toBe(false);
+    expect(a.device.destroy).toHaveBeenCalledOnce();
+    expect(
+      a.device.createBuffer.mock.results.every((r: any) => r.value.destroy.mock.calls.length === 1),
+    ).toBe(true);
+    b.lose();
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    renderer.dispose();
+    release(c.device);
+    await vi.waitFor(() => expect(c.device.destroy).toHaveBeenCalledOnce());
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(report).not.toHaveBeenCalled();
+  } finally {
+    renderer?.dispose();
+    request.mockRestore();
+    resize.mockRestore();
+  }
+});
+
+it('reports a failed replacement once without retrying or presenting partial GPU state', async () => {
+  const report = vi.fn(),
+    invalidate = vi.fn(),
+    release = vi.fn();
+  const renderer: any = Object.create(GpuRenderer.prototype);
+  Object.assign(renderer, {
+    canvas: { dataset: {} },
+    disposed: false,
+    lost: false,
+    report,
+    invalidate,
+    release,
+    device: { destroy: vi.fn() },
+  });
+  const request = vi
+    .spyOn(GpuRenderer as any, 'requestWebgpuDevice')
+    .mockRejectedValue(new Error('adapter unavailable'));
+  try {
+    await renderer.recoverWebgpu();
+    expect(renderer.lost).toBe(true);
+    expect(renderer.canvas.dataset.gpuStage).toBe('recovery-failed');
+    expect(request).toHaveBeenCalledOnce();
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ message: 'adapter unavailable' }),
+    );
+    expect(invalidate).not.toHaveBeenCalled();
+  } finally {
+    request.mockRestore();
+  }
+});

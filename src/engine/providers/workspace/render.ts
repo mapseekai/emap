@@ -1,3 +1,4 @@
+import { settleDisposals } from '../../../shared/settle-disposals';
 import { awaitWithSignal } from '../../../shared/await-with-signal';
 import { PointIconImages } from '../../rendering/icons/images';
 import { BoundLabelManager, type LabelBinding } from '../../rendering/labels/manager';
@@ -532,8 +533,7 @@ export class CanvasRenderService {
       });
     }
     if (!bindings.length) {
-      this._labels?.dispose();
-      this._labels = null;
+      this._retireLabels();
       this._painter.clearLabels?.();
       return;
     }
@@ -650,8 +650,33 @@ export class CanvasRenderService {
     else if (options.sourceId !== undefined) cache.clearSource(options.sourceId);
     else cache.clear();
   }
+  get closed(): Promise<void> {
+    return settleDisposals([
+      this._labels?.closed,
+      this._painter?.closed,
+      this._overlayPainter?.closed,
+      ...[...this._retiredLabels].map((labels) => labels.closed),
+    ]);
+  }
+  private readonly _retiredLabels = new Set<BoundLabelManager>();
+  private _retireLabels(): void {
+    const labels = this._labels;
+    if (!labels) return;
+    this._retiredLabels.add(labels);
+    this._labels = null;
+    labels.dispose();
+    void labels.closed
+      .then(() => this._retiredLabels.delete(labels))
+      .catch((error) => this.deps.events.fire('error', { error }));
+  }
   dispose(): void {
-    if (this._disposed) return;
+    if (this._disposed) {
+      this._labels?.dispose();
+      for (const labels of this._retiredLabels) labels.dispose();
+      this._painter?.dispose?.();
+      this._overlayPainter?.dispose?.();
+      return;
+    }
     this._disposed = true;
     this._cancelNavigationRefresh();
     this._liveVertexState = null;
@@ -661,7 +686,7 @@ export class CanvasRenderService {
     this._icons = null;
     this._painter?.clearIcons?.();
     this._labels?.dispose();
-    this._labels = null;
+    for (const labels of this._retiredLabels) labels.dispose();
     if (this._rafId !== 0) cancelAnimationFrame(this._rafId);
     this._rafId = 0;
     this._pendingRender = 0;

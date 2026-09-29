@@ -1,3 +1,10 @@
+import {
+  browserWorker,
+  type WorkerRuntime,
+  type RuntimeScope,
+  type WorkerSession,
+} from '@mapseekai/tasklane';
+import { standaloneRuntime, reportWorkerCleanupFailure, RESOURCE_BYTES } from '../tasklane/runtime';
 import { validateRasterTextureRead } from '../../domain/raster/texture';
 import {
   RasterError,
@@ -21,7 +28,7 @@ import type {
 import { validateRasterRender } from '../../engine/rendering/raster/warp';
 import { validateRasterStyle } from '../../engine/rendering/raster/tile';
 import type { GeoTIFFOpenOptions } from './reader';
-import { GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
+import { GEOTIFF_READER_BYTES, GEOTIFF_WORKER_PROTOCOL_VERSION } from './worker-protocol';
 import type {
   GeoTIFFWorkerCommand,
   GeoTIFFWorkerResponse,
@@ -29,10 +36,10 @@ import type {
 } from './worker-protocol';
 import { RasterWorkerClient } from './worker-client';
 import {
-  acquireParallelWorker,
+  acquireRasterPrimary,
+  acquireRasterReplica,
   acquireRasterBlockCache,
   rasterWorkerCount,
-  type RasterBlockCacheLease,
 } from './worker-capacity';
 
 const MIB = 1024 ** 2;
@@ -188,6 +195,11 @@ function affinitySlotIndex(
 }
 
 export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
+  /** Tiled-reader routing. Cache-aware uses idle replicas and their bounded resident footprint.
+   * Row-striped levels always stay on the primary. Default: spatial. */
+  readonly workerScheduling?: 'spatial' | 'cache-aware';
+  /** Borrowed runtime containing a geotiff pool. Its configured asset URL takes precedence. */
+  readonly workerRuntime?: WorkerRuntime;
   /** Self-contained classic Worker asset. All pool replicas use this same URL. */
   readonly workerUrl?: string | URL;
   /** 1–4 independent decoding/rendering workers; default 2 (1 on <=2 logical cores). */
@@ -197,10 +209,11 @@ export interface OpenGeoTIFFOptions extends GeoTIFFOpenOptions {
   readonly blockCacheBytes?: number;
 }
 interface Slot {
+  // Direct calls use this Session. Group calls are tracked on the primary client;
+  // response.sessionId identifies the physical reader for cache gauges.
   client: RasterWorkerClient;
   ready: boolean;
-  bytes: number;
-  release?: () => void;
+  session: WorkerSession;
   cacheBytes: number;
   cacheEntries: number;
   cachePeakBytes: number;
@@ -239,11 +252,15 @@ interface Job {
 class WorkerRasterSource implements RasterSource {
   metadata!: RasterMetadata;
   private readonly slots: Slot[] = [];
+  private readonly retiringSlots = new Set<Slot>();
   private queue: Job[] = [];
   private readonly pending = new Set<Job>();
   private readonly lifetime = new AbortController();
   private closed = false;
+  private cleanupResources?: () => Promise<void>;
+  private closing?: Promise<void>;
   private reservedBytes = 0;
+  private coldGroups = 0;
   private acceptedTasks = 0;
   private dispatchedTasks = 0;
   private decodeBudgetBlocks = 0;
@@ -285,16 +302,30 @@ class WorkerRasterSource implements RasterSource {
   private transferMs = 0;
   private queuedMeshBytes = 0;
   private target = 1;
-  private cacheLease?: RasterBlockCacheLease;
+  private startingReplica = false;
   private openCommand?: GeoTIFFWorkerOpen;
+  private readonly runtime: WorkerRuntime;
+  private readonly scope: RuntimeScope;
   constructor(
-    private readonly url: string | URL,
+    url: string | URL,
     private readonly requested: number,
-  ) {}
+    private readonly borrowed?: WorkerRuntime,
+    private readonly scheduling: 'spatial' | 'cache-aware' = 'spatial',
+  ) {
+    let serial = 0;
+    this.runtime =
+      borrowed ??
+      standaloneRuntime(
+        'geotiff',
+        () => browserWorker(url, { type: 'classic', name: `emap-geotiff-${serial++}` })(),
+        requested,
+        RESOURCE_BYTES.geotiff,
+      );
+    this.scope = this.runtime.createScope('raster-source');
+  }
   async open(file: File, options: OpenGeoTIFFOptions): Promise<void> {
     const initialCacheBytes = Math.floor(SOURCE_BLOCK_CACHE_BYTES / this.requested),
-      cacheLease = acquireRasterBlockCache(initialCacheBytes);
-    this.cacheLease = cacheLease;
+      cacheLease = acquireRasterBlockCache(this.scope, this.runtime, initialCacheBytes);
     this.openCommand = {
       type: 'open',
       file,
@@ -304,7 +335,10 @@ class WorkerRasterSource implements RasterSource {
       cacheBytes: initialCacheBytes,
       pageLimit: Math.floor(16 / this.requested),
     };
-    const primary = this.createSlot(undefined, initialCacheBytes);
+    const session = await acquireRasterPrimary(this.scope, this.runtime, options.signal);
+    options.signal?.throwIfAborted();
+    this.lifetime.signal.throwIfAborted();
+    const primary = this.createSlot(session, initialCacheBytes);
     const result = await primary.client.call(this.openCommand, options.signal);
     if (result.type === 'metadata' && result.protocolVersion !== GEOTIFF_WORKER_PROTOCOL_VERSION)
       throw new RasterError(
@@ -355,19 +389,11 @@ class WorkerRasterSource implements RasterSource {
     if (this.target > 1) this.startReplica();
     this.lifetime.signal.throwIfAborted();
   }
-  private createSlot(release?: () => void, cacheLimitBytes = 0): Slot {
-    let worker: Worker;
-    try {
-      worker = new Worker(this.url, { type: 'classic', name: `emap-geotiff-${this.slots.length}` });
-    } catch (error) {
-      release?.();
-      throw error;
-    }
+  private createSlot(session: WorkerSession, cacheLimitBytes = 0): Slot {
     const slot: Slot = {
       client: undefined as unknown as RasterWorkerClient,
       ready: false,
-      bytes: 0,
-      release,
+      session,
       cacheBytes: 0,
       cacheEntries: 0,
       cachePeakBytes: 0,
@@ -375,13 +401,15 @@ class WorkerRasterSource implements RasterSource {
       cacheLimitBytes,
     };
     slot.client = new RasterWorkerClient(
-      worker,
-      () => {
-        this.reservedBytes -= slot.bytes;
-        slot.bytes = 0;
-        this.pump();
-      },
+      session,
+      () => this.pump(),
       (error) => this.fail(error),
+      () => {
+        this.peakWorkers = Math.max(
+          this.peakWorkers,
+          this.slots.reduce((sum, value) => sum + (value.ready ? value.client.runningCount : 0), 0),
+        );
+      },
     );
     this.slots.push(slot);
     return slot;
@@ -395,26 +423,38 @@ class WorkerRasterSource implements RasterSource {
     if (this.nativeDeflateEligible) this.nativeDeflateDisabledReason = null;
     else if (status.disabledReason) this.nativeDeflateDisabledReason = status.disabledReason;
   }
-  private startReplica(): boolean {
-    if (this.slots.length >= this.target || !this.openCommand) return false;
-    const release = acquireParallelWorker();
-    if (!release) return false;
-    let slot: Slot;
-    try {
-      slot = this.createSlot(release, this.openCommand.cacheBytes ?? 0);
-    } catch (error) {
-      this.fail(error);
-      return false;
+  private pruneReplicas(): void {
+    for (let i = this.slots.length - 1; i > 0; i--) {
+      const slot = this.slots[i];
+      if (!slot.session.reclaimed) continue;
+      this.slots.splice(i, 1);
+      slot.ready = false;
+      this.retiringSlots.add(slot);
+      slot.client.dispose();
+      void slot.client.settled
+        .then(() => {
+          this.retiringSlots.delete(slot);
+        })
+        .catch(reportWorkerCleanupFailure);
     }
+  }
+  private startReplica(): boolean {
+    this.pruneReplicas();
+    if (this.startingReplica || this.slots.length >= this.target || !this.openCommand) return false;
+    this.startingReplica = true;
     const command = {
       ...this.openCommand,
       statistics: this.metadata.statistics,
       maxMetadataBytes: Math.floor((32 * 1024 ** 2) / this.target),
     };
-    void slot.client
-      .call(command, this.lifetime.signal)
-      .then((result) => {
-        if (this.closed) return;
+    void (async () => {
+      let ready = false;
+      try {
+        const session = await acquireRasterReplica(this.scope, this.lifetime.signal, this.runtime);
+        if (!session || this.closed || session.reclaimed) return;
+        const slot = this.createSlot(session, command.cacheBytes ?? 0);
+        const result = await slot.client.call(command, this.lifetime.signal);
+        if (this.closed || session.reclaimed) return;
         if (
           result.type !== 'metadata' ||
           result.protocolVersion !== GEOTIFF_WORKER_PROTOCOL_VERSION ||
@@ -427,9 +467,14 @@ class WorkerRasterSource implements RasterSource {
             'Raster metadata changed while opening a parallel reader.',
           );
         slot.ready = true;
-        this.pump();
-      })
-      .catch((error) => this.fail(error));
+        ready = true;
+      } catch (error) {
+        if (!this.closed) this.fail(error);
+      } finally {
+        this.startingReplica = false;
+        if (ready) this.pump();
+      }
+    })();
     return true;
   }
   private levelStats(level: number): MutableLevelStats {
@@ -474,7 +519,10 @@ class WorkerRasterSource implements RasterSource {
     signal?.throwIfAborted();
     if (this.closed)
       return Promise.reject(new RasterError('SOURCE_CLOSED', 'Raster source has been disposed.'));
-    if (this.queue.length + this.slots.filter((slot) => slot.client.busy).length >= 16)
+    if (
+      this.queue.length + this.slots.reduce((sum, slot) => sum + slot.client.pendingCount, 0) >=
+      16
+    )
       return Promise.reject(
         new RasterError('RASTER_QUEUE_BUDGET', 'Too many pending raster requests.'),
       );
@@ -517,6 +565,13 @@ class WorkerRasterSource implements RasterSource {
       const primary = this.slots[0];
       return primary?.ready && !primary.client.busy ? primary : undefined;
     }
+    if (isTiledLevel(level) && this.scheduling === 'cache-aware') {
+      // Re-evaluate cold overflow after current decodes populate the cache.
+      // This also lets newly opened replicas join the first batch. Warm waits
+      // do not consume these permits or block cold work on an idle reader.
+      if (this.coldGroups >= this.slots.filter((slot) => slot.ready).length) return undefined;
+      return this.slots[0]?.ready ? this.slots[0] : undefined;
+    }
     if (!isTiledLevel(level)) return this.slots.find((slot) => slot.ready && !slot.client.busy);
     const ownerIndex = affinitySlotIndex(level, job.command, this.slots.length);
     const owner = ownerIndex === null ? undefined : this.slots[ownerIndex];
@@ -524,6 +579,7 @@ class WorkerRasterSource implements RasterSource {
   }
   private pump(): void {
     if (this.closed || !this.metadata) return;
+    this.pruneReplicas();
     while (this.queue.length) {
       if (this.slots.length < this.target) this.startReplica();
       let index = -1;
@@ -548,7 +604,6 @@ class WorkerRasterSource implements RasterSource {
         (sum, request) => sum + request.warp.points.byteLength,
         0,
       );
-      slot.bytes = job.bytes;
       this.reservedBytes += job.bytes;
       this.dispatchedTasks++;
       const transfer: Transferable[] = renderRequests.map(
@@ -558,13 +613,62 @@ class WorkerRasterSource implements RasterSource {
       const renderLevel = commandLevel(job.command);
       if (renderLevel !== null && renderRequests.length)
         this.levelStats(renderLevel).submitted += renderRequests.length;
-      const result = slot.client.call(job.command, job.signal, transfer);
-      this.peakWorkers = Math.max(
-        this.peakWorkers,
-        this.slots.filter((value) => value.ready && value.client.busy).length,
-      );
+      const level = this.metadata.levels.find((item) => item.id === renderLevel);
+      const grouped = this.scheduling === 'cache-aware' && level && isTiledLevel(level);
+      const keys: string[] = [];
+      const footprint = grouped ? sourceBlockFootprint(level, job.command) : null;
+      if (footprint) {
+        for (let y = footprint.minY; y <= footprint.maxY && keys.length < 128; y++)
+          for (let x = footprint.minX; x <= footprint.maxX && keys.length < 128; x++)
+            keys.push(`${level!.id}:${x}:${y}`);
+      }
+      let members = this.slots.filter((member) => member.ready && member.session.state === 'bound');
+      let best = 0;
+      if (grouped && keys.length) {
+        const resources =
+          this.runtime.diagnostics().pools.find((pool) => pool.name === 'geotiff')?.resources ?? [];
+        const scores = members.map((member) => {
+          const resident = new Set(
+            resources
+              .filter((resource) => resource.session === member.session.id)
+              .flatMap((resource) => resource.keys),
+          );
+          return keys.reduce((hits, key) => hits + Number(resident.has(key)), 0);
+        });
+        best = Math.max(0, ...scores);
+        // Native groups prefer any idle reader. Restrict warm requests to the
+        // best resident set to avoid decoding again on an idle, cold replica.
+        if (best) members = members.filter((_, index) => scores[index] === best);
+      }
+      const cold = grouped && !best;
+      if (cold) this.coldGroups++;
+      const result = slot.client.call(job.command, job.signal, transfer, {
+        cacheCapacityBytes: () => {
+          const diagnostics = this.runtime.diagnostics();
+          return diagnostics.memoryPressure === 'normal'
+            ? Math.max(
+                0,
+                (diagnostics.pools.find((pool) => pool.name === 'geotiff')?.cacheBytesPerWorker ??
+                  0) - GEOTIFF_READER_BYTES,
+              )
+            : 0;
+        },
+        ...(grouped
+          ? {
+              group: () => this.scope.sessionGroup(members.map((member) => member.session)),
+              keys,
+            }
+          : {}),
+        settled: () => {
+          this.reservedBytes -= job.bytes;
+          if (cold) this.coldGroups--;
+        },
+      });
       void result.then(
         (response) => {
+          const executedSlot = response.sessionId
+            ? this.slots.find((member) => member.session.id === response.sessionId)
+            : slot;
           this.pending.delete(job);
           if (
             response.type === 'rendered' ||
@@ -573,8 +677,8 @@ class WorkerRasterSource implements RasterSource {
             response.type === 'texture'
           )
             this.recordNativeDeflateStatus(response.nativeDeflateStatus);
-          if (response.type === 'result' || response.type === 'texture')
-            recordSlotCacheMemory(slot, response.result.diagnostics);
+          if (executedSlot && (response.type === 'result' || response.type === 'texture'))
+            recordSlotCacheMemory(executedSlot, response.result.diagnostics);
           if (response.type === 'rendered' || response.type === 'rendered-batch') {
             const rendered = response.type === 'rendered' ? [response.result] : response.results;
             this.renderedTiles += rendered.length;
@@ -618,7 +722,7 @@ class WorkerRasterSource implements RasterSource {
               this.pageCacheMisses += d.pageCacheMisses;
               this.blockCacheHits += d.blockCacheHits;
               this.blockCacheMisses += d.blockCacheMisses;
-              recordSlotCacheMemory(slot, d);
+              if (executedSlot) recordSlotCacheMemory(executedSlot, d);
               this.blockCacheEvictions += d.blockCacheEvictions;
               this.blockCacheEvictedBytes += d.blockCacheEvictedBytes;
               this.blockCacheAdmittedBytes += d.blockCacheAdmittedBytes;
@@ -789,11 +893,16 @@ class WorkerRasterSource implements RasterSource {
     return results;
   }
   getProcessingStats(): RasterProcessingStats {
+    const slots = this.slots.filter((slot) => !slot.session.reclaimed);
     return {
-      workers: this.slots.length,
-      busyWorkers: this.slots.filter((slot) => slot.ready && slot.client.busy).length,
+      workers: slots.length,
+      busyWorkers: slots.reduce(
+        (sum, slot) => sum + (slot.ready ? slot.client.runningCount : 0),
+        0,
+      ),
       peakWorkers: this.peakWorkers,
-      queuedTasks: this.queue.length,
+      queuedTasks:
+        this.queue.length + slots.reduce((sum, slot) => sum + slot.client.queuedCount, 0),
       reservedBytes: this.reservedBytes,
       acceptedTasks: this.acceptedTasks,
       dispatchedTasks: this.dispatchedTasks,
@@ -816,11 +925,11 @@ class WorkerRasterSource implements RasterSource {
       blockCacheEvictions: this.blockCacheEvictions,
       blockCacheEvictedBytes: this.blockCacheEvictedBytes,
       blockCacheAdmittedBytes: this.blockCacheAdmittedBytes,
-      blockCacheBytes: this.slots.reduce((sum, slot) => sum + slot.cacheBytes, 0),
-      blockCachePeakBytes: this.slots.reduce((sum, slot) => sum + slot.cachePeakBytes, 0),
-      blockCacheEntries: this.slots.reduce((sum, slot) => sum + slot.cacheEntries, 0),
-      blockCachePeakEntries: this.slots.reduce((sum, slot) => sum + slot.cachePeakEntries, 0),
-      blockCacheLimitBytes: this.slots.reduce((sum, slot) => sum + slot.cacheLimitBytes, 0),
+      blockCacheBytes: slots.reduce((sum, slot) => sum + slot.cacheBytes, 0),
+      blockCachePeakBytes: slots.reduce((sum, slot) => sum + slot.cachePeakBytes, 0),
+      blockCacheEntries: slots.reduce((sum, slot) => sum + slot.cacheEntries, 0),
+      blockCachePeakEntries: slots.reduce((sum, slot) => sum + slot.cachePeakEntries, 0),
+      blockCacheLimitBytes: slots.reduce((sum, slot) => sum + slot.cacheLimitBytes, 0),
       blockCacheOversizeSkips: this.blockCacheOversizeSkips,
       // Block identity diagnostics are temporarily disabled to avoid retaining
       // per-block keys and cloning them across Worker boundaries.
@@ -865,15 +974,28 @@ class WorkerRasterSource implements RasterSource {
       ...(overviewFile ? { overviewFile } : {}),
     };
   }
+  private lastSettlement: Promise<void> = Promise.resolve();
+  private closeResources(): Promise<void> {
+    if (this.closing) return this.closing;
+    if (!this.cleanupResources) return Promise.resolve();
+    this.closing = this.cleanupResources().finally(() => {
+      this.closing = undefined;
+    });
+    this.lastSettlement = this.closing;
+    return this.closing;
+  }
+  get settled(): Promise<void> {
+    return this.closing ?? this.lastSettlement;
+  }
   private fail(error: unknown): void {
-    if (this.closed) return;
+    if (this.closed) {
+      void this.closeResources().catch(reportWorkerCleanupFailure);
+      return;
+    }
     this.closed = true;
     this.lifetime.abort(error);
-    for (const slot of this.slots) {
-      slot.client.dispose(error);
-      slot.release?.();
-    }
-    this.slots.length = 0;
+    const slots = [...new Set([...this.slots.splice(0), ...this.retiringSlots])];
+    for (const slot of slots) slot.client.dispose(error);
     for (const job of this.queue) {
       job.cleanup();
       job.reject(error);
@@ -881,9 +1003,19 @@ class WorkerRasterSource implements RasterSource {
     this.queue = [];
     this.pending.clear();
     this.reservedBytes = 0;
+    this.coldGroups = 0;
     this.queuedMeshBytes = 0;
-    this.cacheLease?.release();
-    this.cacheLease = undefined;
+    this.cleanupResources = async () => {
+      for (const slot of slots) slot.client.dispose(error);
+      await Promise.all([
+        this.scope.dispose(),
+        ...slots.map((slot) => slot.client.settled),
+        this.borrowed ? undefined : this.runtime.dispose(),
+      ]);
+      this.retiringSlots.clear();
+      this.cleanupResources = undefined;
+    };
+    void this.closeResources().catch(reportWorkerCleanupFailure);
     this.openCommand = undefined;
   }
   dispose(): void {
@@ -907,12 +1039,18 @@ export async function openGeoTIFF(
   const count = rasterWorkerCount(options.workerCount);
   const url =
     options.workerUrl ?? new URL(/* @vite-ignore */ './emap-geotiff-worker.js', import.meta.url);
-  const source = new WorkerRasterSource(url, count);
+  const source = new WorkerRasterSource(
+    url,
+    count,
+    options.workerRuntime,
+    options.workerScheduling,
+  );
   try {
     await source.open(file, options);
     return source;
   } catch (error) {
     source.dispose();
+    await source.settled.catch(reportWorkerCleanupFailure);
     throw error;
   }
 }

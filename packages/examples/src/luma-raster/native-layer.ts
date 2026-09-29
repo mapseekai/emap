@@ -29,6 +29,8 @@ import {
   type NumericRasterTexture,
 } from '../../../../src/integrations/luma/raster-renderer';
 
+import { registerPerformanceSource } from '../performance-monitor';
+
 interface ReadJob {
   readonly batch: NativeRasterBatch;
   readonly controller: AbortController;
@@ -62,6 +64,9 @@ export class NativeRasterLayer {
   private scheduled = 0;
   private paused = false;
   private disposed = false;
+  private recovering = false;
+  private readonly recovery = new AbortController();
+  private readonly stopMonitoring: () => void;
   private failed = false;
   private viewStarted = 0;
   private first = false;
@@ -106,15 +111,64 @@ export class NativeRasterLayer {
   };
   constructor(
     readonly source: RasterSource,
-    readonly gpu: NumericRasterRenderer,
+    public gpu: NumericRasterRenderer,
     private invalidate: () => void,
     private report: (e: Error) => void,
     private pipeline: 'core' | 'packed' | 'legacy' = 'core',
-  ) {}
+  ) {
+    this.stopMonitoring = registerPerformanceSource(
+      () => ({
+        backend: `${this.gpu.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} 栅格`,
+        frames: this.gpu.stats.frames,
+        drawCalls: this.gpu.stats.drawCalls,
+        uploadedBytes: this.gpu.stats.uploadedBytes,
+        gpuBytes: this.gpu.stats.liveTextureBytes,
+        pending: this.stats.pending,
+      }),
+      gpu.canvas.ownerDocument,
+    );
+    this.watchDevice();
+  }
+  private watchDevice(): void {
+    const gpu = this.gpu;
+    void gpu.lost.then(() => {
+      if (!this.disposed && !this.recovering && this.gpu === gpu) void this.recoverDevice();
+    });
+  }
+  private async recoverDevice(): Promise<void> {
+    this.recovering = true;
+    cancelAnimationFrame(this.scheduled);
+    this.scheduled = 0;
+    for (const job of this.active) job.controller.abort();
+    this.uploads = [];
+    this.cache.clear();
+    this.copiedHalos.clear();
+    this.patches = [];
+    this.published.clear();
+    this.stats.visible = this.stats.coveragePatches = 0;
+    this.stats.pending = this.wanted.length;
+    this.queueStats();
+    try {
+      const next = await this.gpu.recreate(this.recovery.signal);
+      if (this.disposed) {
+        next.dispose();
+        return;
+      }
+      this.gpu = next;
+      this.signature = '';
+      this.recovering = false;
+      this.watchDevice();
+      this.invalidate();
+    } catch (error) {
+      this.recovering = false;
+      if (!this.disposed) this.fail(error);
+    }
+  }
 
   update(view: AffineTransform, width: number, height: number, dpr: number): void {
     const signature = [view.mx, view.my, view.bx, view.by, width, height, dpr, ...cameraUniforms(view)].join(':');
-    if (this.disposed || signature === this.signature) return;
+    if (this.disposed || this.recovering || !this.gpu.available || signature === this.signature)
+      return;
     const started = performance.now(),
       plan = planNativeRasterTiles(this.source.metadata, view, width, height, dpr);
     const nextBytes = plan.tiles.reduce(
@@ -176,10 +230,10 @@ export class NativeRasterLayer {
     if (!value) this.schedule();
   }
   private schedule(): void {
-    if (this.scheduled || this.disposed) return;
+    if (this.scheduled || this.disposed || this.recovering || !this.gpu.available) return;
     this.scheduled = requestAnimationFrame(() => {
       this.scheduled = 0;
-      if (this.paused) return; // Neither large packing loops nor uploads compete with gestures.
+      if (this.paused || this.recovering || !this.gpu.available) return; // Neither large packing loops nor uploads compete with gestures.
       this.flush();
       this.pump();
     });
@@ -242,7 +296,10 @@ export class NativeRasterLayer {
   private pump(): void {
     // At most two 8-MiB batch reads plus two completed batches. Even slow uploads
     // cannot accumulate an unbounded queue of transferred original samples.
-    if (this.paused || this.disposed || this.uploads.length >= 2) return;
+    if (
+      this.paused || this.disposed || this.recovering || !this.gpu.available ||
+      this.uploads.length >= 2
+    ) return;
     while (this.active.size < 2) {
       const reserved = new Set<string>();
       for (const job of this.active) for (const tile of job.batch.tiles) reserved.add(tile.key);
@@ -347,7 +404,7 @@ export class NativeRasterLayer {
     );
   }
   private publish(): void {
-    if (this.disposed || this.failed) return;
+    if (this.disposed || this.failed || this.recovering || !this.gpu.available) return;
     try {
       for (const tile of this.wanted) {
         const target = this.cache.get(tile.key);
@@ -421,6 +478,7 @@ export class NativeRasterLayer {
     dpr: number,
     style: RasterStyle,
   ): void {
+    if (this.disposed || this.recovering || !this.gpu.available) return;
     const coverage = new Map<string, RasterWindow[]>();
     for (const patch of this.patches) {
       const regions = coverage.get(patch.key) ?? [];
@@ -435,6 +493,8 @@ export class NativeRasterLayer {
   get ready() {
     return (
       !this.disposed &&
+      !this.recovering &&
+      this.gpu.available &&
       !this.failed &&
       !this.stats.pending &&
       !this.uploads.length &&
@@ -449,7 +509,9 @@ export class NativeRasterLayer {
   }
   dispose(): void {
     if (this.disposed) return;
+    this.stopMonitoring();
     this.disposed = true;
+    this.recovery.abort(new DOMException('Raster layer disposed', 'AbortError'));
     cancelAnimationFrame(this.scheduled);
     this.scheduled = 0;
     for (const job of this.active) job.controller.abort();

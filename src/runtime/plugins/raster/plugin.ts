@@ -27,7 +27,10 @@ export function rasterPlugin(options: RasterRenderOptions = {}): Plugin.Object {
           },
           options,
         );
-        yield () => raster.dispose();
+        yield async () => {
+          raster.dispose();
+          await raster.closed;
+        };
         const events = ctx.mapEvents;
         const listeners: Record<string, () => void> = {
           interactionstart: () => raster.beginNavigation('pointer'),

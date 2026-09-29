@@ -62,6 +62,12 @@ export class NumericRasterRenderer {
   private tiles = new Set<NumericRasterTexture>();
   private regionUniforms = new Map<NumericRasterTexture, RegionUniform[]>();
   private disposed = false;
+  readonly lost: Promise<void>;
+  private resolveLost = () => {};
+  private onLost = (event: Event): void => {
+    event.preventDefault();
+    this.resolveLost();
+  };
   private packingScratch: Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | null = null;
   readonly stats = {
     haloCopies: 0,
@@ -86,7 +92,49 @@ export class NumericRasterRenderer {
     readonly canvas: HTMLCanvasElement,
     private device: Device,
     readonly backend: 'webgl' | 'webgpu',
-  ) {}
+    private readonly report: (error: Error) => void,
+  ) {
+    this.lost =
+      backend === 'webgpu'
+        ? device.lost.then(() => {})
+        : new Promise((resolve) => {
+            this.resolveLost = resolve;
+            canvas.addEventListener('webglcontextlost', this.onLost);
+          });
+  }
+  get available(): boolean {
+    return !this.disposed && !this.device.isLost;
+  }
+  /** The owner discards old textures and reloads visible blocks from its open source. */
+  async recreate(signal: AbortSignal): Promise<NumericRasterRenderer> {
+    const gl = this.backend === 'webgl' ? (this.device as WebGLDevice).gl : undefined;
+    await new Promise<void>((resolve, reject) => {
+      const finish = (error?: unknown) => {
+        this.canvas.removeEventListener('webglcontextrestored', restored);
+        signal.removeEventListener('abort', aborted);
+        if (error) reject(error);
+        else resolve();
+      };
+      const restored = () => finish();
+      const aborted = () => finish(signal.reason);
+      if (gl) this.canvas.addEventListener('webglcontextrestored', restored, { once: true });
+      signal.addEventListener('abort', aborted, { once: true });
+      try {
+        this.dispose();
+        signal.throwIfAborted();
+        if (!gl) finish();
+      } catch (error) {
+        finish(error);
+      }
+    });
+    signal.throwIfAborted();
+    const next = await NumericRasterRenderer.create(this.canvas, this.backend, this.report, gl);
+    if (signal.aborted) {
+      next.dispose();
+      signal.throwIfAborted();
+    }
+    return next;
+  }
   get deviceInfo() {
     return { ...this.device.info };
   }
@@ -94,6 +142,7 @@ export class NumericRasterRenderer {
     canvas: HTMLCanvasElement,
     backend: 'webgl' | 'webgpu',
     report: (e: Error) => void,
+    gl?: WebGL2RenderingContext,
   ): Promise<NumericRasterRenderer> {
     let device: Device;
     if (backend === 'webgpu') {
@@ -111,6 +160,7 @@ export class NumericRasterRenderer {
       });
     } else
       device = new WebGLDevice({
+        _handle: gl,
         createCanvasContext: { canvas, autoResize: false, useDevicePixels: false },
         webgl: {
           alpha: true,
@@ -122,7 +172,7 @@ export class NumericRasterRenderer {
         },
         onError: report,
       });
-    const renderer = new NumericRasterRenderer(canvas, device, backend);
+    const renderer = new NumericRasterRenderer(canvas, device, backend, report);
     try {
       if (!device.isTextureFormatSupported('rgba16uint'))
         throw new Error('The device does not support rgba16uint textures.');
@@ -205,10 +255,7 @@ export class NumericRasterRenderer {
       } finally {
         clearTimeout(timer);
       }
-      void device.lost.then((info) => {
-        if (!renderer.disposed)
-          report(new Error(`栅格 GPU 设备丢失：${info.message}。请重新加载页面。`));
-      });
+      if (device.isLost) throw new Error('Raster GPU device lost during initialization.');
       return renderer;
     } catch (error) {
       renderer.dispose();
@@ -694,6 +741,7 @@ export class NumericRasterRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.canvas.removeEventListener('webglcontextlost', this.onLost);
     this.packingScratch = null;
     this.stats.packingScratchBytes = 0;
     for (const e of this.tiles) this.release(e);
@@ -701,6 +749,7 @@ export class NumericRasterRenderer {
     this.quad?.destroy();
     this.pipeline?.destroy();
     for (const s of this.shaders) s.destroy();
+    this.device.canvasContext?.destroy();
     this.device.destroy();
   }
 }

@@ -1,4 +1,5 @@
 import { installExampleRendererToolbar } from './renderer-choice';
+import { monitorExampleMap } from './performance-render-source';
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 import * as Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
@@ -157,6 +158,7 @@ export async function installExampleMapUi(map: Emap, runtime: ExampleUiRuntime =
     if (!header)
         throw new Error('Example pages must provide a #header banner');
     mapsWithExampleUi.add(map);
+    monitorExampleMap(map, root);
     const shell = installExampleRendererToolbar(root)!;
     shell.querySelector('.emap-example-context-tools')?.remove();
     const tools = root.createElement('div');

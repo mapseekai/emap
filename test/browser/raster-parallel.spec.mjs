@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installTasklaneProbe } from './fixtures/tasklane-probe.mjs';
 const route='/mapseekai/emap/examples/geotiff-viewer/';
 async function idle(page){
   const pending=()=>page.evaluate(()=>{
@@ -12,6 +13,7 @@ async function idle(page){
   await expect.poll(pending).toBe(0);
 }
 async function installProbe(page){
+  await installTasklaneProbe(page);
   await page.addInitScript(()=>{
     Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>8});
     const NativeWorker=Worker;
@@ -23,18 +25,22 @@ async function installProbe(page){
       constructor(...args){
         super(...args);
         this.addEventListener('message',({data})=>{
-          if(this.renders.delete(data.id))events.active--;
-          if(data.type==='result')events.rawResults++;
-          if(data.type==='rendered'){
+          if(data.tag!=='@mapseekai/tasklane')return;
+          if(['result','error','cancelled'].includes(data.type)&&this.renders.delete(data.id))events.active--;
+          if(data.type!=='result')return;
+          const response=EmapTasklaneProbe.decodePacket(data.value);
+          if(response.type==='result')events.rawResults++;
+          if(response.type==='rendered'){
             events.rendered++;
             if(!events.renderWorkers.includes(this.identity))events.renderWorkers.push(this.identity);
-            const result=data.result;
+            const result=response.result;
             if(!(result.rgba instanceof Uint8ClampedArray)||result.rgba.byteLength!==result.width*result.height*4||'data' in result)events.invalidResults++;
           }
         });
       }
       postMessage(message,...args){
-        if(message.type==='render'){this.renders.add(message.id);events.active++;events.peak=Math.max(events.peak,events.active);}
+        const request=message.type==='request'&&message.task==='raster'?EmapTasklaneProbe.decodePacket(message.payload):null;
+        if(request?.type==='render'){this.renders.add(message.id);events.active++;events.peak=Math.max(events.peak,events.active);}
         super.postMessage(message,...args);
       }
     };

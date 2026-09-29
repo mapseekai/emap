@@ -1,47 +1,25 @@
+import { packetByteLength, type WorkerRuntime, type WorkerSession } from '@mapseekai/tasklane';
+import {
+  SessionOwner,
+  taskValue,
+  workerError,
+  reportWorkerCleanupFailure,
+  MIB,
+} from '../tasklane/runtime';
 import type {
   ShapeRequest,
   ShapedText,
   GlyphRequest,
   GeneratedGlyph,
-  MsdfRequest,
-  MsdfResponse,
   WorkerStats,
 } from './protocol';
 
-/** One worker per active label manager. There is no module-global font/heap ownership. */
+/** Session affinity preserves font handles and WASM heap ownership. */
 export class MsdfClient {
-  private worker: Worker | null = null;
-  private serial = 0;
-  private pending = new Map<
-    number,
-    {
-      reject: (error: Error) => void;
-      cleanup: () => void;
-      resolve: (result: ShapedText[] | GeneratedGlyph[]) => void;
-    }
-  >();
+  private readonly owner: SessionOwner;
   stats: WorkerStats = { fontBytes: 0, fonts: 0, glyphsGenerated: 0, shapedRuns: 0, heapBytes: 0 };
-  constructor(private readonly url: URL) {}
-  private ensure(): Worker {
-    if (!this.worker) {
-      const worker = new Worker(this.url, { name: 'emap-msdf-fonts' });
-      this.worker = worker;
-      worker.onmessage = ({ data }: MessageEvent<MsdfResponse>) => {
-        const pending = this.pending.get(data.id);
-        if (!pending) return;
-        this.pending.delete(data.id);
-        pending.cleanup();
-        if (data.stats) this.stats = data.stats;
-        if (data.error) {
-          const error = new Error(data.error);
-          pending.reject(error);
-          this.clear(error);
-        } else pending.resolve(data.result ?? []);
-      };
-      worker.onerror = (event) => this.clear(new Error(`MSDF worker failed: ${event.message}`));
-      worker.onmessageerror = () => this.clear(new Error('Invalid MSDF worker response.'));
-    }
-    return this.worker;
+  constructor(url: URL, runtime?: WorkerRuntime) {
+    this.owner = new SessionOwner('msdf', url, runtime);
   }
   shape(requests: ShapeRequest[], signal: AbortSignal): Promise<ShapedText[]> {
     return this.request('shape', requests, signal) as Promise<ShapedText[]>;
@@ -49,48 +27,44 @@ export class MsdfClient {
   glyphs(requests: GlyphRequest[], signal: AbortSignal): Promise<GeneratedGlyph[]> {
     return this.request('glyphs', requests, signal) as Promise<GeneratedGlyph[]>;
   }
-  private request(
+  private async request(
     type: 'shape' | 'glyphs',
     requests: ShapeRequest[] | GlyphRequest[],
     signal: AbortSignal,
   ): Promise<ShapedText[] | GeneratedGlyph[]> {
     signal.throwIfAborted();
-    const worker = this.ensure(),
-      id = ++this.serial;
-    return new Promise((resolve, reject) => {
-      const abort = () => {
-        worker.postMessage({ id, type: 'cancel' } satisfies MsdfRequest);
-        this.pending.delete(id);
-        cleanup();
-        reject(signal.reason ?? new DOMException('Cancelled', 'AbortError'));
-      };
-      const timer = setTimeout(
-        () => this.clear(new Error('MSDF font worker timed out. Check font resources.')),
-        90000,
-      );
-      const cleanup = () => {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', abort);
-      };
-      this.pending.set(id, { resolve, reject, cleanup });
-      signal.addEventListener('abort', abort, { once: true });
-      try {
-        worker.postMessage({ id, type, requests });
-      } catch (e) {
-        this.pending.delete(id);
-        cleanup();
-        reject(e);
-      }
-    });
-  }
-  clear(error: Error = new DOMException('MSDF worker released', 'AbortError')): void {
-    this.worker?.terminate();
-    this.worker = null;
-    for (const p of this.pending.values()) {
-      p.cleanup();
-      p.reject(error);
+    let session: WorkerSession | undefined;
+    try {
+      session = this.owner.session;
+      const handle = session.enqueue('msdf', {
+        budget: {
+          inputBytes: packetByteLength({ type, requests }),
+          scratchBytes: 256 * MIB,
+          outputBytes: 64 * MIB,
+        },
+        signal,
+        cancellation: 'cooperative',
+        priority: 'interactive',
+        executionTimeoutMs: 90_000,
+        prepare: () => ({ payload: { type, requests } }),
+      });
+      return await taskValue(handle, (value) => {
+        signal.throwIfAborted();
+        if (!session || !this.owner.owns(session))
+          throw new DOMException('MSDF generation released', 'AbortError');
+        this.stats = value.stats;
+        return value.result;
+      });
+    } catch (error) {
+      if (!signal.aborted && session && this.owner.owns(session)) this.clear();
+      throw workerError(error);
     }
-    this.pending.clear();
+  }
+  get closed(): Promise<void> {
+    return this.owner.closed;
+  }
+  clear(_error: Error = new DOMException('MSDF worker released', 'AbortError')): void {
+    void this.owner.close().catch(reportWorkerCleanupFailure);
     this.stats = { fontBytes: 0, fonts: 0, glyphsGenerated: 0, shapedRuns: 0, heapBytes: 0 };
   }
 }

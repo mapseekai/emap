@@ -198,6 +198,10 @@ export class GeoTIFFReader implements RasterSource {
     this.blockCache.setLimit(bytes);
   }
 
+  getCacheFootprintKeys(): string[] {
+    return this.blockCache.getFootprintKeys();
+  }
+
   private exactPhysicalBytes(level: RasterLevel, request: RasterReadRequest): number | null {
     const counts = this.physicalBlockBytes.get(level.id);
     if (!counts) return null;
@@ -318,7 +322,6 @@ export class GeoTIFFReader implements RasterSource {
     let hasValidityMask = false;
     let metadataBytes = 0;
     const blockCache = new RasterBlockCache(runtime.cacheBytes);
-    let imageId = 0;
     try {
       for (const input of [file, ...(options.overviewFile ? [options.overviewFile] : [])]) {
         const firstLevel = levels.length;
@@ -357,7 +360,7 @@ export class GeoTIFFReader implements RasterSource {
             tiff.littleEndian,
             source,
             blockCache,
-            imageId++,
+            levels.length,
           );
           base ??= image;
           const subfileType = fd.getValue('NewSubfileType') ?? 0;

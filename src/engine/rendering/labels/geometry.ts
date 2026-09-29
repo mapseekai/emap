@@ -9,7 +9,15 @@ import {
 export type XY = readonly [number, number];
 export type Box = [number, number, number, number];
 
-export function featureBounds(dataset: MapshaperDataset, layer: MapshaperLayer, id: number): Box {
+export async function featureBounds(
+  dataset: MapshaperDataset,
+  layer: MapshaperLayer,
+  id: number,
+  signal?: AbortSignal,
+): Promise<Box> {
+  signal?.throwIfAborted();
+  const checkpoint = layoutCheckpoint(signal);
+  let visited = 0;
   const box: Box = [Infinity, Infinity, -Infinity, -Infinity];
   const add = (x: number, y: number) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -21,27 +29,86 @@ export function featureBounds(dataset: MapshaperDataset, layer: MapshaperLayer, 
   const shape = layer.shapes?.[id];
   if (!shape) return box;
   if (layer.geometry_type === 'point') {
-    for (const p of normalizePointShape(shape)) add(p[0], p[1]);
+    for (const p of normalizePointShape(shape)) {
+      add(p[0], p[1]);
+      if ((++visited & 1023) === 0) await checkpoint();
+    }
   } else {
     const data = dataset.arcs?.getVertexData?.();
     if (!data) return box;
     for (const part of shape as PathShape)
       for (const signed of part) {
+        if ((++visited & 1023) === 0) await checkpoint();
         const arc = absArcId(signed);
         if (arc >= data.nn.length) continue;
         if (data.bb) {
           add(data.bb[arc * 4], data.bb[arc * 4 + 1]);
           add(data.bb[arc * 4 + 2], data.bb[arc * 4 + 3]);
         } else
-          for (let i = data.ii[arc], end = i + data.nn[arc]; i < end; i++)
+          for (let i = data.ii[arc], end = i + data.nn[arc]; i < end; i++) {
             add(data.xx[i], data.yy[i]);
+            if ((++visited & 1023) === 0) await checkpoint();
+          }
       }
   }
   return box;
 }
 
+// Check only at bounded vertex intervals; small features stay in the current task.
+function layoutCheckpoint(signal?: AbortSignal) {
+  let slice: number | undefined;
+  return async () => {
+    signal?.throwIfAborted();
+    slice ??= performance.now();
+    if (performance.now() - slice < 4) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    signal?.throwIfAborted();
+    slice = performance.now();
+  };
+}
+
+async function sortIntersections(
+  values: number[],
+  checkpoint: () => Promise<void>,
+): Promise<number[]> {
+  const size = 8192;
+  if (values.length <= size) return values.sort((a, b) => a - b);
+  for (let start = 0; start < values.length; start += size) {
+    const sorted = values.slice(start, start + size).sort((a, b) => a - b);
+    for (let i = 0; i < sorted.length; i++) values[start + i] = sorted[i];
+    await checkpoint();
+  }
+  let from = values,
+    to = new Array<number>(values.length);
+  for (let width = size; width < values.length; width *= 2) {
+    for (let start = 0; start < values.length; start += width * 2) {
+      const middle = Math.min(start + width, values.length),
+        end = Math.min(start + width * 2, values.length);
+      let left = start,
+        right = middle;
+      for (let i = start; i < end; i++) {
+        to[i] =
+          right >= end || (left < middle && from[left] <= from[right])
+            ? from[left++]
+            : from[right++];
+        if ((i & 1023) === 0) await checkpoint();
+      }
+    }
+    [from, to] = [to, from];
+  }
+  return from;
+}
+
 /** Reads authoritative coordinates, independent of ArcCollection's retained interval. */
-export function featurePaths(dataset: MapshaperDataset, layer: MapshaperLayer, id: number): XY[][] {
+export async function featurePaths(
+  dataset: MapshaperDataset,
+  layer: MapshaperLayer,
+  id: number,
+  signal?: AbortSignal,
+): Promise<XY[][]> {
+  signal?.throwIfAborted();
+  const checkpoint = layoutCheckpoint(signal);
+  let visited = 0;
   const data = dataset.arcs?.getVertexData?.(),
     shape = layer.shapes?.[id] as PathShape | null;
   if (!data || !shape) return [];
@@ -53,6 +120,7 @@ export function featurePaths(dataset: MapshaperDataset, layer: MapshaperLayer, i
         n = data.nn[arc],
         start = data.ii[arc];
       for (let k = 0; k < n; k++) {
+        if ((++visited & 1023) === 0) await checkpoint();
         const i = start + (signed < 0 ? n - 1 - k : k),
           p: XY = [data.xx[i], data.yy[i]],
           last = path.at(-1);
@@ -67,11 +135,18 @@ export function featurePaths(dataset: MapshaperDataset, layer: MapshaperLayer, i
 
 /** Even-odd scanlines choose an interior span, excluding holes and supporting multipart islands.
  * Unlike a centroid this cannot place an anchor in a concavity or a hole. */
-export function polygonAnchor(paths: readonly (readonly XY[])[]): XY | null {
+export async function polygonAnchor(
+  paths: readonly (readonly XY[])[],
+  signal?: AbortSignal,
+): Promise<XY | null> {
+  signal?.throwIfAborted();
+  const checkpoint = layoutCheckpoint(signal);
+  let visited = 0;
   let ymin = Infinity,
     ymax = -Infinity;
   for (const path of paths)
     for (const p of path) {
+      if ((++visited & 1023) === 0) await checkpoint();
       ymin = Math.min(ymin, p[1]);
       ymax = Math.max(ymax, p[1]);
     }
@@ -83,15 +158,17 @@ export function polygonAnchor(paths: readonly (readonly XY[])[]): XY | null {
       intersections: number[] = [];
     for (const path of paths)
       for (let i = 0; i < path.length; i++) {
+        if ((++visited & 1023) === 0) await checkpoint();
         const a = path[i],
           b = path[(i + 1) % path.length];
         if (a[1] > y !== b[1] > y)
           intersections.push(a[0] + ((y - a[1]) / (b[1] - a[1])) * (b[0] - a[0]));
       }
-    intersections.sort((a, b) => a - b);
-    for (let i = 0; i + 1 < intersections.length; i += 2) {
-      const a = intersections[i],
-        b = intersections[i + 1],
+    const sorted = await sortIntersections(intersections, checkpoint);
+    for (let i = 0; i + 1 < sorted.length; i += 2) {
+      if ((i & 1023) === 0) await checkpoint();
+      const a = sorted[i],
+        b = sorted[i + 1],
         score = (b - a) * (1 - Math.abs(fraction - 0.5) * 0.5);
       if (score > 0 && score > best) {
         best = score;
@@ -108,17 +185,23 @@ export interface LabelPose {
   angle: number;
 }
 /** Longest visible run, measured in projected CSS pixels. Too-short/bent lines are omitted. */
-export function linePose(
+export async function linePose(
   paths: readonly (readonly XY[])[],
   view: AffineTransform,
   width: number,
   height: number,
   textWidth: number,
   parallel: boolean,
-): LabelPose | null {
+  signal?: AbortSignal,
+): Promise<LabelPose | null> {
+  signal?.throwIfAborted();
+  const checkpoint = layoutCheckpoint(signal);
+  let visited = 0;
+  const viewport: Box = [-32, -32, width + 32, height + 32];
   let best: XY[] = [],
     longest = 0;
   for (const path of paths) {
+    let previous: XY = path.length ? view.project(...path[0]) : [NaN, NaN];
     let run: XY[] = [],
       length = 0;
     const flush = () => {
@@ -130,13 +213,20 @@ export function linePose(
       length = 0;
     };
     for (let i = 1; i < path.length; i++) {
-      const a = view.project(...path[i - 1]),
+      if ((++visited & 1023) === 0) await checkpoint();
+      const a = previous,
         b = view.project(...path[i]);
-      if (![...a, ...b].every(Number.isFinite)) {
+      previous = b;
+      if (
+        !Number.isFinite(a[0]) ||
+        !Number.isFinite(a[1]) ||
+        !Number.isFinite(b[0]) ||
+        !Number.isFinite(b[1])
+      ) {
         flush();
         continue;
       }
-      const clipped = clipSegment(a, b, [-32, -32, width + 32, height + 32]);
+      const clipped = clipSegment(a, b, viewport);
       if (!clipped) {
         flush();
         continue;
@@ -151,23 +241,22 @@ export function linePose(
     flush();
   }
   if (longest < textWidth + 8) return null;
-  const sample = (at: number): XY => {
-    let d = 0;
-    for (let i = 1; i < best.length; i++) {
-      const a = best[i - 1],
-        b = best[i],
-        n = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (n > 0 && d + n >= at) {
-        const t = (at - d) / n;
-        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-      }
-      d += n;
+  const samples: XY[] = [],
+    distances = [(longest - textWidth) / 2, longest / 2, (longest + textWidth) / 2];
+  let d = 0;
+  for (let i = 1; i < best.length && samples.length < 3; i++) {
+    if ((++visited & 1023) === 0) await checkpoint();
+    const a = best[i - 1],
+      b = best[i],
+      n = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    while (samples.length < 3 && n > 0 && d + n >= distances[samples.length]) {
+      const t = (distances[samples.length] - d) / n;
+      samples.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
     }
-    return best.at(-1)!;
-  };
-  const center = sample(longest / 2),
-    a = sample((longest - textWidth) / 2),
-    b = sample((longest + textWidth) / 2);
+    d += n;
+  }
+  while (samples.length < 3) samples.push(best.at(-1)!);
+  const [a, center, b] = samples;
   if (parallel && Math.hypot(b[0] - a[0], b[1] - a[1]) < textWidth * 0.8) return null;
   let angle = parallel ? Math.atan2(b[1] - a[1], b[0] - a[0]) : 0;
   if (angle > Math.PI / 2) angle -= Math.PI;

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BoundLabelManager } from './manager';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { PerspectiveTransform } from '../../../domain/geo/perspective-transform';
+import Flatbush from 'flatbush';
 
 const ctx = {
   font: '',
@@ -122,4 +123,230 @@ it('reprojects navigation anchors without scaling glyphs or CSS offsets, and imm
   expect(f.manager.preview(moved, 800, 600).labels).toHaveLength(0);
   await f.manager.settled();
   f.manager.dispose();
+});
+
+it('keeps the last valid labels while the settled camera waits for an asynchronous layout', async () => {
+  const f = fixture();
+  const first = await prepare(f);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => (release = resolve));
+  const atlas = (f.manager as any).atlas;
+  atlas.prepare = vi.fn(() => pending);
+  const moved = new AffineTransform(1, 1, 7, 0);
+  const preview = f.manager.request([f.binding], moved, 800, 600, 1, false);
+  expect(preview.labels).toHaveLength(first.labels.length);
+  expect(preview.labels[0].x).toBeCloseTo(first.labels[0].x + 7);
+  expect(preview.labels[0].raster).toBe(first.labels[0].raster);
+  expect(f.manager.stats.pending).toBe(true);
+  await vi.waitFor(() => expect(atlas.prepare).toHaveBeenCalled());
+  expect(f.manager.request([f.binding], moved, 800, 600, 1).labels).toHaveLength(2);
+  release();
+  await f.manager.settled();
+  expect(f.manager.request([f.binding], moved, 800, 600, 1).labels).toHaveLength(2);
+  f.binding.dataset.attributeVersion++;
+  expect(f.manager.request([f.binding], moved, 800, 600, 1).labels).toHaveLength(0);
+  f.manager.dispose();
+  await f.manager.settled();
+});
+
+it('reprojects retained labels when only perspective orientation changes', async () => {
+  const f = fixture();
+  const first = await prepare(f);
+  const tilted = new PerspectiveTransform(view, 800, 600, { pitch: 30, bearing: 10 });
+  f.manager.pause(true);
+  const preview = f.manager.request([f.binding], tilted, 800, 600, 1);
+  const label = preview.labels.find((l) => l.featureId === first.labels[0].featureId)!;
+  expect(label.raster).toBe(first.labels[0].raster);
+  expect(label.x).toBeCloseTo(tilted.project(...label.anchor!)[0] + label.screenOffset![0]);
+  expect(preview.key).not.toBe(first.key);
+  tilted.setOrientation({ bearing: 20 });
+  expect(f.manager.request([f.binding], tilted, 800, 600, 1).key).not.toBe(preview.key);
+  f.manager.dispose();
+});
+
+it('stops shaping exhausted layer quotas without skipping candidates in other layers', async () => {
+  const f = fixture();
+  const atlas = (f.manager as any).atlas;
+  const shaped: string[] = [];
+  atlas.prepare = vi.fn(async (requests: { text: string }[]) => {
+    shaped.push(...requests.map((r) => r.text));
+  });
+  f.binding.layer.shapes = Array.from({ length: 1024 }, () => [[100, 100]]);
+  f.binding.layer.data = { getRecordAt: (id: number) => ({ name: String(id) }) };
+  Object.assign(f.binding.options, { maxLabels: 1, allowOverlap: true, priority: 1 });
+  const other = {
+    ...f.binding,
+    id: 'other',
+    options: { text: 'other', maxLabels: 2, allowOverlap: true, priority: 0 },
+  };
+  f.manager.request([other, f.binding], view, 800, 600, 1);
+  await f.manager.settled();
+  const frame = f.manager.request([other, f.binding], view, 800, 600, 1);
+  expect(frame.labels.filter((l) => l.ownerId === 'cities')).toHaveLength(1);
+  expect(frame.labels.filter((l) => l.ownerId === 'other')).toHaveLength(2);
+  expect(shaped.filter((s) => s !== 'other').length).toBeLessThanOrEqual(128);
+  expect(shaped.filter((s) => s === 'other').length).toBeLessThanOrEqual(128);
+  expect(f.manager.stats.capacitySkipped).toBe(2045);
+  f.manager.dispose();
+});
+
+it('keeps priority collision winners and draw order through navigation without sorting each preview', async () => {
+  const f = fixture();
+  Object.assign(f.binding.options, { priority: ['get', 'rank'], offset: [0, 0] });
+  await prepare(f);
+  const camera = new AffineTransform(0.01, 0.01, 200, 200);
+  const sort = vi.spyOn(Array.prototype, 'sort');
+  const first = f.manager.preview(camera, 800, 600);
+  const next = f.manager.preview(new AffineTransform(0.01, 0.01, 201, 200), 800, 600);
+  expect(sort).not.toHaveBeenCalled();
+  sort.mockRestore();
+  expect(first.labels.map((l) => l.featureId)).toEqual([1]);
+  expect(next.labels.map((l) => l.featureId)).toEqual([1]);
+  expect(next.labels[0].x - first.labels[0].x).toBeCloseTo(1);
+  f.binding.layer.data.getRecordAt = (id: number) => ({
+    ...records[id],
+    rank: 3 - records[id].rank,
+  });
+  f.binding.dataset.attributeVersion++;
+  await prepare(f);
+  expect(f.manager.preview(camera, 800, 600).labels.map((l) => l.featureId)).toEqual([0]);
+  f.manager.invalidateLayout();
+  expect(f.manager.preview(camera, 800, 600).labels).toEqual([]);
+  f.manager.dispose();
+});
+
+it('bounds index builds and full-view queries, and finds later chunks after panning', async () => {
+  const f = fixture(),
+    count = 100000;
+  f.binding.layer.shapes = Array.from({ length: count }, (_, i) => [[i + 100, 100]]);
+  f.binding.layer.data = { getRecordAt: (id: number) => ({ name: String(id), rank: id }) };
+  Object.assign(f.binding.options, { maxLabels: 1, priority: ['get', 'rank'] });
+  const sizes: number[] = [],
+    finish = Flatbush.prototype.finish;
+  vi.spyOn(Flatbush.prototype, 'finish').mockImplementation(function (this: Flatbush) {
+    sizes.push(this.numItems);
+    return finish.call(this);
+  });
+  const search = vi.spyOn(Flatbush.prototype, 'search');
+  const full = await prepare(f, new AffineTransform(0.005, 1));
+  expect(sizes.length).toBeGreaterThan(1);
+  expect(Math.max(...sizes)).toBeLessThanOrEqual(8192);
+  expect(f.manager.stats.candidates).toBe(20000);
+  expect(full.labels[0].featureId).toBe(count - 1);
+  expect(search.mock.calls.length).toBe(sizes.length);
+  expect(search.mock.results.every((result) => result.value.length <= 8192)).toBe(true);
+  const built = sizes.length;
+  const frame = await prepare(f, new AffineTransform(1, 1, -99500, 0));
+  expect(frame.labels).toHaveLength(1);
+  expect(frame.labels[0].featureId).toBe(count - 1);
+  expect(sizes).toHaveLength(built);
+  f.manager.dispose();
+  expect(f.report).not.toHaveBeenCalled();
+});
+
+it.each([
+  'mask',
+  'empty text',
+] as const)('does not spend the candidate budget on %s exclusions', async (exclusion) => {
+  const f = fixture(),
+    count = 33000;
+  f.binding.layer.shapes = Array.from({ length: count }, () => [[100, 100]]);
+  f.binding.layer.data = {
+    getRecordAt: (id: number) => ({
+      name: exclusion === 'empty text' && id < 32768 ? '' : String(id),
+    }),
+  };
+  f.binding.options = { field: 'name', maxLabels: 1 } as any;
+  if (exclusion === 'mask') {
+    const mask = new Uint8Array(count);
+    mask.fill(1, 32768);
+    Object.assign(f.binding, { mask });
+  }
+  const frame = await prepare(f);
+  expect(frame.labels.map((l) => l.featureId)).toEqual([32768]);
+  expect(f.manager.stats.candidates).toBe(232);
+  expect(f.report).not.toHaveBeenCalled();
+  f.manager.dispose();
+});
+
+it.each([
+  true,
+  false,
+])('only materializes fallback records when indexed access is unavailable: %s', async (indexed) => {
+  const f = fixture(),
+    getRecords = vi.fn(() => records);
+  f.binding.layer.data = {
+    getRecords,
+    ...(indexed ? { getRecordAt: (id: number) => records[id] } : {}),
+  };
+  expect((await prepare(f)).labels).toHaveLength(2);
+  expect(getRecords).toHaveBeenCalledTimes(indexed ? 0 : 1);
+  f.manager.dispose();
+});
+
+it('keeps global priority across chunks and layers with bounded sorting and per-layer placement quotas', async () => {
+  const f = fixture(),
+    count = 33000;
+  f.binding.layer.shapes = Array.from({ length: count }, () => [[100, 100]]);
+  f.binding.layer.data = { getRecordAt: (id: number) => ({ name: String(id), rank: id }) };
+  Object.assign(f.binding.options, { priority: ['get', 'rank'], maxLabels: 1 });
+  const layer: any = {
+    geometry_type: 'point',
+    shapes: [[[300, 100]]],
+    data: { getRecordAt: () => ({ name: 'other', rank: count }) },
+  };
+  const other = { ...f.binding, id: 'other', dataset: { layers: [layer] }, layer };
+  const sizes: number[] = [],
+    sort = Array.prototype.sort;
+  const spy = vi.spyOn(Array.prototype, 'sort').mockImplementation(function (this: any[], compare) {
+    if (this[0]?.binding) sizes.push(this.length);
+    return sort.call(this, compare);
+  });
+  try {
+    const bindings = [other, f.binding];
+    f.manager.request(bindings, view, 800, 600, 1);
+    await f.manager.settled();
+    const frame = f.manager.request(bindings, view, 800, 600, 1);
+    expect(frame.labels.map((l) => [l.ownerId, l.featureId])).toEqual([
+      ['other', 0],
+      ['cities', count - 1],
+    ]);
+    expect(f.manager.stats.candidates).toBe(20000);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(20000 + 8192);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    spy.mockRestore();
+    f.manager.dispose();
+  }
+});
+
+it('yields and cancels a fully excluded scan without publishing stale placements', async () => {
+  const f = fixture(),
+    count = 33000;
+  f.binding.layer.shapes = Array.from({ length: count }, () => [[100, 100]]);
+  Object.assign(f.binding.options, { maxLabels: 1 });
+  await prepare(f);
+  const layouts = f.manager.stats.layouts;
+  let reads = 0,
+    tick = 0;
+  f.binding.layer.data = {
+    getRecordAt: () => {
+      if (++reads === 1) setTimeout(() => f.manager.clear(), 0);
+      return { name: '' };
+    },
+  };
+  f.binding.dataset.attributeVersion++;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => (tick += 5));
+  try {
+    await prepare(f);
+    expect(reads).toBeGreaterThan(0);
+    expect(reads).toBeLessThan(20000);
+    expect(f.manager.stats.layouts).toBe(layouts);
+    expect(f.manager.placements).toEqual([]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+    f.manager.dispose();
+    await f.manager.settled();
+  }
 });

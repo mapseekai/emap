@@ -6296,8 +6296,12 @@ describe('Emap useWorker routing', () => {
         promise: runSpy(cmd, packed, files),
       }),
       reserveId: () => nextWorkerId++,
-      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
-        runSpy(cmd, packed, files),
+      dispatchPreparedWithId: async (
+        _id: number,
+        cmd: string,
+        prepare: () => Promise<any>,
+        files?: any,
+      ) => runSpy(cmd, await prepare(), files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });
@@ -6483,8 +6487,12 @@ describe("Emap useWorker: 'auto' thresholding", () => {
         promise: runSpy(cmd, packed, files),
       }),
       reserveId: () => nextId++,
-      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
-        runSpy(cmd, packed, files),
+      dispatchPreparedWithId: async (
+        _id: number,
+        cmd: string,
+        prepare: () => Promise<any>,
+        files?: any,
+      ) => runSpy(cmd, await prepare(), files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });
@@ -6601,8 +6609,12 @@ describe('Emap workerjobstart / workerjobend events', () => {
         promise: runSpy(cmd, packed, files),
       }),
       reserveId: () => nextId++,
-      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
-        runSpy(cmd, packed, files),
+      dispatchPreparedWithId: async (
+        _id: number,
+        cmd: string,
+        prepare: () => Promise<any>,
+        files?: any,
+      ) => runSpy(cmd, await prepare(), files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });
@@ -7884,11 +7896,12 @@ describe('Emap.remove() teardown', () => {
       containerRemove,
     };
   }
-  it('detaches every source data listener', async () => {
+  it('detaches every source data and display listener', async () => {
     const { map, sourceOff } = await buildStubMap();
     await map.dispose();
-    expect(sourceOff).toHaveBeenCalledTimes(2);
+    expect(sourceOff).toHaveBeenCalledTimes(4);
     expect(sourceOff).toHaveBeenCalledWith('data', expect.any(Function));
+    expect(sourceOff).toHaveBeenCalledWith('display', expect.any(Function));
   });
   it('releases map-owned source hooks without deleting retained source data', async () => {
     const { map } = await buildStubMap();

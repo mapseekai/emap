@@ -13,5 +13,7 @@ export interface ExecutionContract {
   _workerRouting?: import('../../../engine/map/worker-routing').WorkerRoutingFn;
   cancelWorkerJobs(): void;
   configure(options: Omit<MapOptions, 'container'>): void;
+  /** Physical asynchronous cleanup; may reject until disposal is retried. */
+  readonly closed?: Promise<void>;
   dispose(): void;
 }

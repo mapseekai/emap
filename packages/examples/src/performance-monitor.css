@@ -1,0 +1,137 @@
+.emap-performance {
+  position: fixed;
+  z-index: 900;
+  right: 12px;
+  bottom: 44px;
+  width: 248px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  color: var(--emap-banner-ink, #26372c);
+  background: var(--emap-banner-bg, #fff);
+  border: 1px solid var(--emap-example-border-strong, #cad3cd);
+  box-shadow: 0 3px 14px #16332212;
+  font: 11px / 1.5 var(--emap-example-font, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  contain: layout style;
+}
+.emap-performance * {
+  box-sizing: border-box;
+}
+.emap-performance > summary {
+  display: block;
+  cursor: pointer;
+  padding: 9px 12px;
+  list-style: none;
+  user-select: none;
+}
+.emap-performance > summary::-webkit-details-marker {
+  display: none;
+}
+.emap-performance-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--emap-example-muted-foreground, #59675e);
+}
+.emap-performance-heading > i {
+  width: 5px;
+  height: 5px;
+  background: var(--emap-example-primary, #00a84f);
+}
+.emap-performance-heading > [data-metric] {
+  margin-left: auto;
+  font-size: 10px;
+}
+.emap-performance-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.emap-performance-primary > strong {
+  font-size: 27px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: -1px;
+}
+.emap-performance-chevron {
+  margin-left: auto;
+}
+.emap-performance[open] .emap-performance-chevron {
+  transform: rotate(180deg);
+}
+.emap-performance-preview {
+  display: flex;
+  justify-content: space-between;
+  color: var(--emap-example-muted-foreground, #59675e);
+}
+.emap-performance-preview > b {
+  font-weight: 500;
+}
+.emap-performance-body {
+  padding: 0 12px 12px;
+  max-height: min(450px, calc(100dvh - 230px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--emap-example-border, #e2e7e3);
+}
+.emap-performance svg {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin: 10px 0;
+  overflow: visible;
+}
+.emap-performance svg path {
+  stroke: var(--emap-example-border, #e2e7e3);
+  fill: none;
+}
+.emap-performance svg polyline {
+  stroke: var(--emap-example-primary, #00a84f);
+  stroke-width: 1.5;
+  fill: none;
+}
+.emap-performance dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 5px 7px;
+  margin: 0;
+}
+.emap-performance dt {
+  color: var(--emap-example-muted-foreground, #59675e);
+}
+.emap-performance dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.emap-performance p {
+  margin: 10px 0;
+  color: var(--emap-example-muted-foreground, #59675e);
+  font: inherit;
+  font-size: 10px;
+}
+.emap-performance button {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--emap-example-border-strong, #cad3cd);
+  border-radius: 0;
+  color: inherit;
+  background: var(--emap-example-muted, #f5f7f5);
+  font: inherit;
+  cursor: pointer;
+}
+.emap-performance button:focus-visible,
+.emap-performance > summary:focus-visible {
+  outline: 2px solid var(--emap-example-primary, #00a84f);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .emap-performance {
+    right: 8px;
+    bottom: 38px;
+    width: 208px;
+  }
+  .emap-performance-primary > strong {
+    font-size: 23px;
+  }
+}

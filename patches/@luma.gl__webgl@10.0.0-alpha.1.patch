@@ -1,0 +1,86 @@
+diff --git a/dist/adapter/resources/webgl-transform-feedback.js b/dist/adapter/resources/webgl-transform-feedback.js
+index d028cd56bf3d3ead355632ba259025345ea5d05f..3c925cb482d27f1ebfd7a6805b6255543c79e067 100644
+--- a/dist/adapter/resources/webgl-transform-feedback.js
++++ b/dist/adapter/resources/webgl-transform-feedback.js
+@@ -3,7 +3,7 @@
+ // SPDX-FileCopyrightText: Copyright (c) vis.gl contributors
+ import { log, TransformFeedback } from '@luma.gl/core';
+ import { GL } from '@luma.gl/webgl/constants';
+-import { WEBGLBuffer } from "../../index.js";
++import { WEBGLBuffer } from "./webgl-buffer.js";
+ import { getGLPrimitive } from "../helpers/webgl-topology-utils.js";
+ export class WEBGLTransformFeedback extends TransformFeedback {
+     device;
+diff --git a/dist/adapter/webgl-device.js b/dist/adapter/webgl-device.js
+index d4851f0d0f011c9322d488157720d623b9f0eacf..210684bcf789a463ab5123cfd01c2857d2dc5996 100644
+--- a/dist/adapter/webgl-device.js
++++ b/dist/adapter/webgl-device.js
+@@ -208,6 +208,8 @@ export class WebGLDevice extends Device {
+             // Delete the reference to the device that we store on the WebGL context
+             const contextData = getWebGLContextData(this.handle);
+             contextData.device = null;
++      // Restored contexts require extensions to be requested again.
++      contextData.extensions = {};
+         }
+     }
+     get isLost() {
+diff --git a/dist/context/state-tracker/webgl-state-tracker.js b/dist/context/state-tracker/webgl-state-tracker.js
+index f86ced76160a6cf8a972b27c03931e99290b0016..25e841699a9172cba2dc4924b3b91555c080ac32 100644
+--- a/dist/context/state-tracker/webgl-state-tracker.js
++++ b/dist/context/state-tracker/webgl-state-tracker.js
+@@ -55,8 +55,12 @@ export class WebGLStateTracker {
+             throw new Error('WebGLStateTracker');
+         }
+         this.initialized = true;
++        const alreadyTracked = Boolean(WebGLStateTracker.get(gl));
+         // @ts-expect-error
+         this.gl.lumaState = this;
++        // Existing spies read gl.lumaState dynamically. Wrapping them again would
++        // update the cache twice and suppress the native GL setter after recovery.
++        if (alreadyTracked) return;
+         installProgramSpy(gl);
+         // intercept all setter functions in the table
+         for (const key in GL_HOOKED_SETTERS) {
+diff --git a/src/adapter/resources/webgl-transform-feedback.ts b/src/adapter/resources/webgl-transform-feedback.ts
+index d5ecb9c1e086ecc2387883c1179283576b78e252..bb4e346942cbf29f558e973612996669ed92f6dc 100644
+--- a/src/adapter/resources/webgl-transform-feedback.ts
++++ b/src/adapter/resources/webgl-transform-feedback.ts
+@@ -6,7 +6,7 @@ import type {PrimitiveTopology, ShaderLayout, TransformFeedbackProps} from '@lum
+ import {log, TransformFeedback, Buffer, BufferRange} from '@luma.gl/core';
+ import {GL} from '@luma.gl/webgl/constants';
+ import {WebGLDevice} from '../webgl-device';
+-import {WEBGLBuffer} from '../../index';
++import {WEBGLBuffer} from './webgl-buffer';
+ import {getGLPrimitive} from '../helpers/webgl-topology-utils';
+ 
+ export class WEBGLTransformFeedback extends TransformFeedback {
+diff --git a/src/adapter/webgl-device.ts b/src/adapter/webgl-device.ts
+index 322b2b1e814ae7ccf3a35e8fbff42b17cd7f6073..fb76b493309b326d964b0d9b6e6626df4fa2fa6a 100644
+--- a/src/adapter/webgl-device.ts
++++ b/src/adapter/webgl-device.ts
+@@ -300,6 +300,8 @@ export class WebGLDevice extends Device {
+       // Delete the reference to the device that we store on the WebGL context
+       const contextData = getWebGLContextData(this.handle);
+       contextData.device = null;
++      // Restored contexts require extensions to be requested again.
++      contextData.extensions = {};
+     }
+   }
+ 
+diff --git a/src/context/state-tracker/webgl-state-tracker.ts b/src/context/state-tracker/webgl-state-tracker.ts
+index 803c495dcc8b3ba27ff84f4e3fffe4ffb7716901..7c534f8b25c1f46ceddb581e4510b2a7c2c09e56 100644
+--- a/src/context/state-tracker/webgl-state-tracker.ts
++++ b/src/context/state-tracker/webgl-state-tracker.ts
+@@ -77,8 +77,12 @@ export class WebGLStateTracker {
+     }
+     this.initialized = true;
+ 
++    const alreadyTracked = Boolean(WebGLStateTracker.get(gl));
+     // @ts-expect-error
+     this.gl.lumaState = this;
++    // Existing spies read gl.lumaState dynamically. Wrapping them again would
++    // update the cache twice and suppress the native GL setter after recovery.
++    if (alreadyTracked) return;
+ 
+     installProgramSpy(gl);
+ 

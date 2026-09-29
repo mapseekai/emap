@@ -20,12 +20,59 @@ export class GeoJSONFeatureFramer {
   private expectValue = true;
   private hasValue = false;
   private afterComma = false;
+  // Numbers and coordinate-array brackets cannot end a Feature object. Let the
+  // native scanner skip them; JSON.parse still validates its complete syntax.
+  private readonly featureTokens = /[{}"\\]/g;
   count = 0;
   constructor(private consume: (value: unknown) => void) {}
+
+  private scanFeature(text: string, start: number): number {
+    const tokens = this.featureTokens;
+    tokens.lastIndex = start;
+    if (this.escaped && start < text.length) {
+      this.escaped = false;
+      tokens.lastIndex++;
+    }
+    let token: RegExpExecArray | null;
+    while ((token = tokens.exec(text))) {
+      const c = token[0];
+      if (this.quoted) {
+        if (c === '\\') {
+          if (tokens.lastIndex === text.length) this.escaped = true;
+          else tokens.lastIndex++;
+        } else if (c === '"') this.quoted = false;
+      } else if (c === '"') this.quoted = true;
+      else if (c === '{') this.depth++;
+      else if (c === '}' && --this.depth === 0) return tokens.lastIndex;
+    }
+    return text.length;
+  }
+
+  private appendFeature(text: string, start: number, end: number): void {
+    if (this.pending.length + end - start > 64 * 1024 ** 2)
+      throw new RangeError('A single GeoJSON feature exceeds the 64 MiB parsing window.');
+    this.pending += text.slice(start, end);
+  }
 
   push(text: string): void {
     let start = 0;
     for (let i = 0; i < text.length; i++) {
+      if (this.phase === 'features' && this.depth > 0) {
+        const end = this.scanFeature(text, i);
+        this.appendFeature(text, start, end);
+        if (this.depth === 0) {
+          const value = JSON.parse(this.pending) as { type?: string };
+          if (value?.type !== 'Feature')
+            throw new SyntaxError('FeatureCollection contains a non-Feature.');
+          this.consume(value);
+          this.count++;
+          this.hasValue = true;
+          this.pending = '';
+        }
+        start = end;
+        i = end - 1;
+        continue;
+      }
       const c = text[i];
       if (this.phase === 'tail') {
         this.tail += text.slice(i);
@@ -43,6 +90,7 @@ export class GeoJSONFeatureFramer {
         continue;
       }
       if (c === '"') {
+        if (this.phase === 'features') throw new SyntaxError('Expected a GeoJSON Feature object.');
         this.quoted = true;
         this.token = '';
         continue;
@@ -58,7 +106,7 @@ export class GeoJSONFeatureFramer {
         else if (c === '}' || c === ']') this.depth--;
       } else {
         if (this.depth === 0) {
-          if (/\s/.test(c)) {
+          if (c === ' ' || c === '\t' || c === '\r' || c === '\n') {
             start = i + 1;
             continue;
           }
@@ -84,25 +132,12 @@ export class GeoJSONFeatureFramer {
           this.expectValue = false;
           this.afterComma = false;
         }
-        if (c === '{' || c === '[') this.depth++;
-        else if (c === '}' || c === ']') {
-          this.depth--;
-          if (this.depth === 0) {
-            this.pending += text.slice(start, i + 1);
-            const value = JSON.parse(this.pending) as { type?: string };
-            if (value?.type !== 'Feature')
-              throw new SyntaxError('FeatureCollection contains a non-Feature.');
-            this.consume(value);
-            this.count++;
-            this.hasValue = true;
-            this.pending = '';
-            start = i + 1;
-          }
-        }
+        if (c === '{') this.depth = 1;
       }
     }
     if (this.phase === 'header') this.header += text.slice(start);
-    else if (this.phase === 'features' && this.depth > 0) this.pending += text.slice(start);
+    else if (this.phase === 'features' && this.depth > 0)
+      this.appendFeature(text, start, text.length);
     if (this.header.length + this.tail.length > 2 * 1024 ** 2)
       throw new RangeError('GeoJSON collection metadata exceeds 2 MiB.');
     if (this.pending.length > 64 * 1024 ** 2)

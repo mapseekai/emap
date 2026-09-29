@@ -28,5 +28,7 @@ export interface RenderContract {
     layer: MapshaperLayer,
     bounds: readonly number[],
   ): PointLodPick | null;
+  /** Physical asynchronous cleanup; may reject until disposal is retried. */
+  readonly closed?: Promise<void>;
   dispose(): void;
 }

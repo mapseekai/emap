@@ -469,3 +469,6 @@ export type {
   SymbolIconSettings,
 } from './engine/map/symbol';
 export type { LabelOptions } from './engine/map/label';
+
+export { createEmapWorkerRuntime } from './integrations/tasklane/runtime';
+export type { EmapWorkerRuntimeOptions, EmapWorkerPool } from './integrations/tasklane/runtime';

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installTasklaneProbe } from './fixtures/tasklane-probe.mjs';
 import { writeFile } from 'node:fs/promises';
 
 // Opt-in same-file benchmark. Source files stay on disk, never copied to fixtures.
@@ -6,6 +7,7 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
   const file = process.env.EMAP_GEOTIFF_LOCAL_FILE;
   test.skip(!file, 'Set EMAP_GEOTIFF_LOCAL_FILE to benchmark a local TIFF/.ovr pair.');
   test.setTimeout(180_000);
+  await installTasklaneProbe(page);
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
     window.rasterReadEvents = [];
@@ -14,13 +16,15 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
       constructor(...args) {
         super(...args);
         this.addEventListener('message', ({ data }) => {
+          if(data.tag !== '@mapseekai/tasklane' || !['result','error','cancelled'].includes(data.type))return;
           const event = this.pending.get(data.id);
-          if (event) { event.end = performance.now(); event.ok = data.type !== 'error'; this.pending.delete(data.id); }
+          if (event) { event.end = performance.now(); event.ok = data.type === 'result'; this.pending.delete(data.id); }
         });
       }
       postMessage(message, ...args) {
-        if (message.type === 'read' || message.type === 'render') {
-          const event = { start: performance.now(), end: 0, level: message.type === 'read' ? message.request.level : message.request.read.level };
+        const request=message.type==='request'&&message.task==='raster'?EmapTasklaneProbe.decodePacket(message.payload):null;
+        if (request?.type === 'read' || request?.type === 'render') {
+          const event = { start: performance.now(), end: 0, level: request.type === 'read' ? request.request.level : request.request.read.level };
           this.pending.set(message.id, event); window.rasterReadEvents.push(event);
         }
         super.postMessage(message, ...args);

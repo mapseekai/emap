@@ -37,8 +37,8 @@ test('GeoPackage worker imports all vector tables into one rendered source witho
   expect(result.canvasCount).toBeGreaterThan(0);
   expect(result.sourceSame).toBe(true);
   expect(result.error).toBeNull();
-  expect(wasmUrls.some(url => url.includes('127.0.0.1:4173/mapseekai/emap/examples/sql-wasm.wasm'))).toBe(true);
-  expect(wasmUrls.every(url => url.startsWith('http://127.0.0.1:4173/'))).toBe(true);
+  expect(wasmUrls.some(url => url === new URL('../sql-wasm.wasm', page.url()).href)).toBe(true);
+  expect(wasmUrls.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
   expect(errors).toEqual([]);
 });
 

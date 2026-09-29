@@ -456,6 +456,10 @@ export class SourceServiceImpl {
     const onData: EventListener<{ reason?: 'edit' | 'load' | 'replace' | 'reproject' }> = (
       event,
     ) => {
+      if (event.type === 'display') {
+        if (this.deps.document._sources.get(id) === source) this.deps.signals.requestRender();
+        return;
+      }
       this._handleSourceData(id, source, event);
     };
 
@@ -474,6 +478,7 @@ export class SourceServiceImpl {
       this.deps.document._sources.set(id, source);
       this._sourceListeners.set(id, onData);
       source.on('data', onData);
+      source.on('display', onData);
       if (releaseFormat) this.formatReleases.set(id, releaseFormat);
 
       this._pendingSourceCommits.delete(id);
@@ -483,6 +488,7 @@ export class SourceServiceImpl {
       releaseFormat?.();
       this.formatReleases.delete(id);
       source.off('data', onData);
+      source.off('display', onData);
       this._sourceListeners.delete(id);
       if (this.deps.document._sources.get(id) === source) this.deps.document._sources.delete(id);
       source.setDatasetNormalizer(null);
@@ -613,7 +619,10 @@ export class SourceServiceImpl {
     const renderedLayersBefore = this.deps.layers.getRenderedLayers();
 
     const listener = this._sourceListeners.get(id);
-    if (listener) source.off('data', listener);
+    if (listener) {
+      source.off('data', listener);
+      source.off('display', listener);
+    }
     source.setDatasetNormalizer(null);
     source.setManagedCRS(null);
     this._sourceListeners.delete(id);
@@ -649,7 +658,10 @@ export class SourceServiceImpl {
   dispose(): void {
     for (const [id, source] of this.deps.document._sources) {
       const listener = this._sourceListeners.get(id);
-      if (listener) source.off('data', listener);
+      if (listener) {
+        source.off('data', listener);
+        source.off('display', listener);
+      }
       if (isMutableTopologySource(source)) {
         source.setDatasetNormalizer(null);
         source.setManagedCRS(null);

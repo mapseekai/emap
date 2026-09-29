@@ -1594,6 +1594,29 @@ describe('TopologySource format plugin routing', () => {
 });
 
 describe('source registration LOD ownership', () => {
+  it('publishes display readiness separately from data and cancels replaced LOD work', async () => {
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      { xx: Float64Array.from([0, 1, 2, 3]), yy: Float64Array.from([0, 0, 0, 0]) },
+    ]);
+    // Enter the large-data scheduler with small storage to test ownership, not throughput.
+    vi.spyOn(arcs, 'getPointCount').mockReturnValue(500_001);
+    const dataset: MapshaperDataset = { layers: [], arcs };
+    const source = new TopologySource('async-lod'),
+      data = vi.fn(),
+      display = vi.fn();
+    source.on('data', data);
+    source.on('display', display);
+    source.setDataset(dataset);
+    const old = source.getDisplayArcs()!;
+    expect(old.hasLOD()).toBe(false);
+    source.setDataset({ layers: [] });
+    await old.ready;
+    expect(display).not.toHaveBeenCalled();
+    source.setDataset(dataset);
+    await source.getDisplayArcs()!.ready;
+    expect(display).toHaveBeenCalledOnce();
+    expect(data).toHaveBeenCalledTimes(3);
+  });
   it('reuses LOD only for silent metadata wrappers with unchanged geometry and version', () => {
     const arcs = getDefaultMapshaperAdapter().createArcCollection([
       { xx: Float64Array.from([0, 1, 0]), yy: Float64Array.from([0, 0, 0]) },
@@ -1618,5 +1641,33 @@ describe('source registration LOD ownership', () => {
     const replaced = source.getDisplayArcs();
     source.setDataset({ ...metadata, layers: metadata.layers.slice() }, false);
     expect(source.getDisplayArcs()).not.toBe(replaced);
+  });
+});
+
+describe('TopologySource cooperative projection invalidation', () => {
+  it('abandons a prepared result when the source changes while yielding', async () => {
+    const source = new TopologySource('sliced');
+    const adapter = getDefaultMapshaperAdapter();
+    const xx = new Float64Array(100_001),
+      yy = new Float64Array(xx.length);
+    for (let i = 0; i < xx.length; i++) {
+      xx[i] = i * 10;
+      yy[i] = i * 5;
+    }
+    const dataset: MapshaperDataset = {
+      info: { crs_string: 'EPSG:3857' },
+      arcs: adapter.createArcCollection([{ xx, yy }]),
+      layers: [{ geometry_type: 'polyline', shapes: [[[0]]] }],
+    };
+    setPrivate(source, '_dataset', dataset);
+    const pending = source.reproject('EPSG:4326');
+    // This edit runs at the first cooperative yield, before any commit.
+    setTimeout(() => {
+      dataset.editVersion = 1;
+    }, 0);
+    await expect(pending).rejects.toThrow('changed during reprojection');
+    expect(source.getDataset()).toBe(dataset);
+    expect(dataset.info).toEqual({ crs_string: 'EPSG:3857' });
+    expect(dataset.arcs!.getVertexData!().xx[100_000]).toBe(1_000_000);
   });
 });

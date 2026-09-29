@@ -19,7 +19,9 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - image-size@2.0.4
+  - '@mapseekai/tasklane@0.2.0-beta.2'
 
 patchedDependencies:
+  '@luma.gl/webgl@10.0.0-alpha.1': patches/@luma.gl__webgl@10.0.0-alpha.1.patch
   apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch
   msdfgen-wasm@1.0.0: patches/msdfgen-wasm@1.0.0.patch

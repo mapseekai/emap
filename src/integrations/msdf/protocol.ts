@@ -56,14 +56,4 @@ export interface WorkerStats {
   shapedRuns: number;
   heapBytes: number;
 }
-export type MsdfRequest =
-  | { id: number; type: 'shape'; requests: ShapeRequest[] }
-  | { id: number; type: 'glyphs'; requests: GlyphRequest[] }
-  | { id: number; type: 'cancel' };
-export interface MsdfResponse {
-  id: number;
-  result?: ShapedText[] | GeneratedGlyph[];
-  error?: string;
-  stats?: WorkerStats;
-}
 export const MSDF_EM_PIXELS = 48;

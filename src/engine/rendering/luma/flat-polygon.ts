@@ -187,7 +187,7 @@ export function flatSingleRingIndices(xy: Float64Array): number[] | null {
   const closed = xy[0] === xy[xy.length - 2] && xy[1] === xy[xy.length - 1];
   const n = count - Number(closed);
   if (n === 3 || n === 4) {
-    // Match Earcut's exact winding, starting node and ear order. This only
+    // Match Earcut 3.2's exact winding, starting node and final triangle order. This only
     // bypasses its linked-list allocation for strictly convex triangles/quads;
     // concavity, degeneracy and ambiguous arithmetic keep the general path.
     let winding = 0;
@@ -206,7 +206,7 @@ export function flatSingleRingIndices(xy: Float64Array): number[] | null {
     };
     if (n === 3 && convex(c, a, b) && convex(a, b, c) && convex(b, c, a)) return [c, a, b];
     if (n === 4 && convex(d, a, b) && convex(a, b, c) && convex(b, c, d) && convex(c, d, a))
-      return [d, a, b, b, c, d];
+      return [d, a, b, d, b, c];
   }
   return earcut(xy, [], 2);
 }

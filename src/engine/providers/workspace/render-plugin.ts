@@ -35,7 +35,10 @@ export const renderPlugin: Plugin.Object = {
         surface: ctx.surface,
         view: ctx.view,
       });
-      yield ctx.effect(() => () => value.dispose());
+      yield ctx.effect(() => async () => {
+        value.dispose();
+        await value.closed;
+      });
       await value.initialize();
       signal.throwIfAborted();
       yield ctx.provide('render', value);
@@ -44,7 +47,12 @@ export const renderPlugin: Plugin.Object = {
         action?: import('../../map/types').RenderAction;
         navDelta?: import('../../map/types').AffineDelta;
         settle?: boolean;
-      }) => value._scheduleRender(event.action, event.navDelta, event.settle);
+      }) => {
+        if (event.action === 'nav' && !event.navDelta) value.updateNavigation();
+        else value._scheduleRender(event.action, event.navDelta, event.settle);
+      };
+      const onMoveStart = () => value.beginNavigation();
+      const onMoveEnd = () => value.endNavigation();
       const onOverlay = () => value._scheduleOverlayRender();
       const onMove = () => {
         if (!value._navSnapshotTransform) value._scheduleRender();
@@ -55,12 +63,16 @@ export const renderPlugin: Plugin.Object = {
       events.on('renderrequest', onRender);
       events.on('overlayrequest', onOverlay);
       events.on('move', onMove);
+      events.on('movestart', onMoveStart);
+      events.on('moveend', onMoveEnd);
       events.on('resize', onResize);
       events.on('rendercacheclear', onClear);
       yield ctx.effect(() => () => {
         events.off('renderrequest', onRender);
         events.off('overlayrequest', onOverlay);
         events.off('move', onMove);
+        events.off('movestart', onMoveStart);
+        events.off('moveend', onMoveEnd);
         events.off('resize', onResize);
         events.off('rendercacheclear', onClear);
       });

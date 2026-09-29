@@ -1,5 +1,6 @@
 import type { ArcCollection } from '../../shared/types/mapshaper-types';
 import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
+import { prepareDisplayLod } from '../../integrations/mapshaper/display-lod';
 
 /** Threshold for generating low-detail arcs (500k points) */
 const LARGE_DATASET_THRESHOLD = 5e5;
@@ -26,12 +27,20 @@ export class DisplayArcs {
    * exactly once — at the next zoom-out.
    */
   private _dirty = false;
+  private _controller: AbortController | null = null;
+  private _ready: Promise<void> = Promise.resolve();
+  private _disposed = false;
 
-  constructor(arcs: ArcCollection) {
+  constructor(
+    arcs: ArcCollection,
+    private readonly onReady?: () => void,
+    private readonly onError?: (error: unknown) => void,
+  ) {
     this._unfilteredArcs = arcs;
     const pointCount = arcs.getPointCount?.() ?? 0;
     if (pointCount > LARGE_DATASET_THRESHOLD) {
-      this._initFilteredArcs();
+      if (onReady) this._prepare();
+      else this._initFilteredArcs();
     }
   }
 
@@ -44,7 +53,36 @@ export class DisplayArcs {
    * created), this is effectively a no-op.
    */
   markDirty(): void {
+    this._controller?.abort();
+    if (this.onReady) this._filteredArcs = null;
     this._dirty = true;
+  }
+
+  /** Settles the current preparation; superseded results never publish. */
+  get ready(): Promise<void> {
+    return this._ready;
+  }
+
+  private _prepare(): void {
+    this._controller?.abort();
+    const controller = (this._controller = new AbortController());
+    this._dirty = false;
+    this._ready = prepareDisplayLod(this._unfilteredArcs, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted || this._disposed) return;
+        this._filteredArcs = result.arcs;
+        this._filteredSegLen = result.segmentLength;
+        this.onReady?.();
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted && !this._disposed) this.onError?.(error);
+      });
+  }
+
+  dispose(): void {
+    this._disposed = true;
+    this._controller?.abort();
+    this._filteredArcs = null;
   }
 
   private _initFilteredArcs(): void {
@@ -76,6 +114,21 @@ export class DisplayArcs {
    * @returns Low-detail arcs when zoomed out, full-detail arcs when zoomed in
    */
   getScaledArcs(unitsPerPixel: number): ArcCollection {
+    if (this.onReady) {
+      if (this._filteredArcs && this._filteredArcs.size() !== this._unfilteredArcs.size())
+        this.markDirty();
+      if (
+        !this._disposed &&
+        this._dirty &&
+        (this._unfilteredArcs.getPointCount?.() ?? 0) > LARGE_DATASET_THRESHOLD &&
+        unitsPerPixel > this._filteredSegLen * 1.5
+      )
+        this._prepare();
+      this._filteredArcs?.setRetainedInterval?.(this._unfilteredArcs.getRetainedInterval?.() ?? 0);
+      return this._filteredArcs && unitsPerPixel > this._filteredSegLen * 1.5
+        ? this._filteredArcs
+        : this._unfilteredArcs;
+    }
     // Decide whether the filtered copy is even relevant at this zoom.
     // When it isn't, postpone any rebuild — saves the O(N) work for
     // drags that stay zoomed in.

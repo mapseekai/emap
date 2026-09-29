@@ -45,8 +45,15 @@ export class RasterBlockCache {
       limitBytes: this.limit,
     };
   }
-  // Physical block identity tracing is intentionally disabled: it can dominate
-  // memory and Worker IPC for rasters with very small tiles/strips.
+  /** Bounded recent residency, not an accumulating history of decoded blocks.
+   * Samples share a spatial affinity key; residency is a scheduling hint only. */
+  getFootprintKeys(): string[] {
+    return [
+      ...new Set(
+        [...this.entries.keys()].slice(-128).map((key) => key.slice(0, key.lastIndexOf(':'))),
+      ),
+    ];
+  }
   get bytes(): number {
     return this.retainedBytes;
   }

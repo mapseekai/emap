@@ -1,6 +1,7 @@
 import { getExampleRenderer, installExampleRendererToolbar, syncExampleRendererToolbar } from '../renderer-choice';
 import { rasterFileSelections, type RasterFileSelection } from './files';
 import { loadExampleRuntime } from '../example-runtime';
+import { monitorExampleMap } from '../performance-render-source';
 import { openGeoTIFF } from '../../../../src/integrations/geotiff/source';
 import { rasterPlugin } from '../../../../src/runtime/plugins/raster/plugin';
 import { resolveProjectCrs } from '../../../../src/domain/geo/crs-resolver';
@@ -26,6 +27,7 @@ backendInput.value = initial === 'webgpu' ? 'webgpu' : initial === 'canvas2d' ? 
 const emap = await loadExampleRuntime({ mode: 'local' });
 // This map supplies the affine view/interaction host; native GPU raster owns a separate canvas.
 const map = await emap.Emap.create({ container: 'map', preset: 'viewer', renderer: 'canvas2d' });
+monitorExampleMap(map, document);
 const fiber = map.ctx.plugin(rasterPlugin({ cacheBytes: 32 * 1024 ** 2, concurrency: 2 }));
 await fiber.await();
 let file: File | undefined,

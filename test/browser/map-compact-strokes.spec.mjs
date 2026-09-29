@@ -155,3 +155,87 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: nonuniform raw navi
  expect(actual.indexed).toBe(true);expect(actual.accepted).toBe(true);expect(actual.calls).toBeGreaterThan(0);expect(actual.envelopes).toBe(0);
  await page.evaluate(()=>strokeMap.dispose());expect(await page.evaluate(()=>strokeErrors)).toEqual([]);
 });
+
+test('webgpu: stroke sample masks preserve discard coverage and depth across paint barriers', async ({ browser }) => {
+  test.setTimeout(180000);
+  for (const dpr of [1, 1.25, 2]) {
+    const context = await browser.newContext({ viewport: { width: 1000, height: 800 }, deviceScaleFactor: dpr });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      await boot(page, 'webgpu');
+      await settle(page);
+      await page.evaluate(async () => {
+        const source = new emap.TopologySource('barriers');
+        await source.setData({ filename: 'barriers.geojson', content: new TextEncoder().encode(JSON.stringify({
+          type: 'FeatureCollection', features: [
+            { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[-2,-2],[2,-2],[2,2],[-2,2],[-2,-2]]] } },
+            { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [0,0] } },
+          ],
+        })) });
+        for (const [index, layer] of source.getLayers().entries()) layer.name = `barrier-${index}`;
+        await strokeMap.addSource('barriers', source);
+        for (const layer of source.getLayers()) strokeMap.addLayer({
+          id: layer.name, source: 'barriers', 'source-layer': layer.name,
+          type: layer.geometry_type === 'point' ? 'circle' : 'fill',
+          paint: layer.geometry_type === 'point'
+            ? { 'circle-color': '#ed5828', 'circle-radius': 40 }
+            : { 'fill-color': '#d73783', 'fill-opacity': .4 },
+        });
+        const line = strokeMap.getSource('s').getLayers()[0].name;
+        strokeMap.addLayer({ id: 'translucent', type: 'line', source: 's', 'source-layer': line, paint: { 'line-color': '#18a848', 'line-opacity': .4, 'line-width': 8 } });
+        strokeMap.addLayer({ id: 'opaque-after-barriers', type: 'line', source: 's', 'source-layer': line, paint: { 'line-color': '#981f6d', 'line-width': 3 } });
+        const gpu = strokeMap.ctx.render._painter.gpu;
+        window.coveragePipelines = [];
+        for (const [kind, entry] of gpu.pipelines) {
+          if (!kind.startsWith('path-msaa')) continue;
+          // Independent pre-optimization oracle: same vertices, round cap/join
+          // predicate and pipeline state, with the original fragment discard.
+          const input = kind.includes('compact') ? 'CompactOut' : 'PathOut';
+          const source = entry.shaders[0].source.split('@fragment')[0] + `
+            @fragment fn fragmentMain(p:${input})->@location(0) vec4<f32> {
+              if ((p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0) { discard; }
+              return premultiply(1.0);
+            }`;
+          const module = gpu.device.handle.createShaderModule({ code: source });
+          const descriptor = entry.pipeline.descriptor;
+          const compiling = gpu.device.handle.createRenderPipelineAsync({ ...descriptor, fragment: { ...descriptor.fragment, module } });
+          gpu.device.submit();
+          const [logs, reference] = await Promise.all([module.getCompilationInfo(), compiling]);
+          if (logs.messages.some(m => m.type === 'error')) throw new Error('Discard oracle failed to compile');
+          coveragePipelines.push({ pipeline: entry.pipeline, optimized: entry.pipeline.handle, reference });
+        }
+        window.captureCoverage = async reference => {
+          gpu.commandCache?.clear();
+          for (const entry of coveragePipelines) entry.pipeline.handle = reference ? entry.reference : entry.optimized;
+          // Include native command-plan replay as well as immediate submission.
+          for (let i = 0; i < 3; i++) strokeMap.render();
+          return captureStroke();
+        };
+      });
+      for (const compact of [false, true]) for (const width of [.6, 3, 8]) {
+        await page.evaluate(({ compact, width }) => {
+          strokeMap.setPaintProperty('lines', 'line-width', width);
+          strokeModes(compact, true);
+        }, { compact, width });
+        await settle(page);
+        const diff = await page.evaluate(async () => {
+          const reference = await captureCoverage(true), actual = await captureCoverage(false);
+          let different = 0, painted = 0, fractional = 0;
+          for (let i = 0; i < actual.length; i++) {
+            if (actual[i] !== reference[i]) different++;
+            if (i % 4 === 3 && actual[i]) { painted++; if (actual[i] < 255) fractional++; }
+          }
+          return { different, painted, fractional };
+        });
+        expect(diff.different, JSON.stringify({ dpr, compact, width })).toBe(0);
+        expect(diff.painted).toBeGreaterThan(1000);
+        expect(diff.fractional).toBeGreaterThan(0);
+      }
+      await page.evaluate(() => { coveragePipelines = []; return strokeMap.dispose(); });
+      expect(await page.evaluate(() => strokeErrors)).toEqual([]);
+      expect(errors).toEqual([]);
+    } finally { await context.close(); }
+  }
+});

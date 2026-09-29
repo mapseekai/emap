@@ -63,9 +63,14 @@ struct CompactOut {
  let curr=select(startPosition,endPosition,end);
  return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len);
 }
-@fragment fn fragmentMain(p:CompactOut)->@location(0) vec4<f32> {
- if((p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0){discard;}
- return vec4<f32>(emap.color.rgb*emap.color.a,emap.color.a);
+// Match the raw path's binary rejection while retaining hardware MSAA coverage.
+// No discard/helper invocation is needed for this side-effect-free fragment.
+struct PathCoverage {
+ @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
+};
+@fragment fn fragmentMain(p:CompactOut)->PathCoverage {
+ let outside=(p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0;
+ return PathCoverage(vec4<f32>(emap.color.rgb*emap.color.a,emap.color.a),select(0xffffffffu,0u,outside));
 }
 `;
 

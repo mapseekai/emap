@@ -108,6 +108,8 @@ export interface CorePainter {
   readonly frameComplete?: boolean;
   readonly frameRetained?: boolean;
   setInteracting?(value: boolean): void;
+  /** Physical asynchronous cleanup; may reject until disposal is retried. */
+  readonly closed?: Promise<void>;
   dispose?(): void;
   clearGeometryCache?(scope?: { sourceId?: string; layerId?: string }): void;
   setLayerContext?(

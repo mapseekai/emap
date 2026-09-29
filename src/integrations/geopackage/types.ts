@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '@mapseekai/tasklane';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import {
   DEFAULT_IMPORT_RESOURCE_LIMITS,
@@ -34,11 +35,14 @@ export interface ImportGeoPackageOptions {
 }
 /** Worker input buffers are copied unless transferInput explicitly transfers ownership. */
 export interface GeoPackageWorkerOptions extends ImportGeoPackageOptions {
+  /** Borrowed tasklane runtime; the application remains responsible for disposal. */
+  workerRuntime?: WorkerRuntime;
   workerUrl: string | URL;
   transferInput?: boolean;
 }
 /** Native Cordis format plugin configuration. Worker use is explicit and never silently falls back. */
 export interface GeoPackagePluginOptions extends ImportGeoPackageOptions {
+  workerRuntime?: WorkerRuntime;
   workerUrl?: string | URL;
 }
 

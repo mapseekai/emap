@@ -40,6 +40,31 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('examples build routes', () => {
+  it('injects the monitor into every registered HTML entry before example startup', async () => {
+    const { default: config } = await import('../../packages/examples/vite.config');
+    const plugin = (config.plugins as Plugin[]).find((p) => p.name === 'examples-brand')!;
+    const hook = plugin.transformIndexHtml as {
+      handler: (
+        html: string,
+      ) => Array<{ tag: string; attrs?: Record<string, string>; injectTo?: string }>;
+    };
+    const inputs = Object.values(config.build!.rollupOptions!.input as Record<string, string>);
+    expect(inputs.length).toBeGreaterThan(50);
+    for (const input of inputs) {
+      const tags = hook.handler(await readFile(input, 'utf8'));
+      expect(
+        tags.filter((tag) => tag.attrs?.src === '/src/performance-monitor-entry.ts'),
+        input,
+      ).toEqual([
+        {
+          tag: 'script',
+          attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
+          injectTo: 'body-prepend',
+        },
+      ]);
+    }
+  });
+
   it('keeps source-bundled optional modules on the loaded mapshaper vendor global', async () => {
     const configModule = await import('../../packages/examples/vite.config');
     const config = configModule.default as UserConfig;

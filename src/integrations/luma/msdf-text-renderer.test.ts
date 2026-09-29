@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MsdfTextRenderer } from './msdf-text-renderer';
+import type { MsdfAtlasPage } from '../../engine/rendering/labels/text-types';
 function setup() {
   const resources: { destroy: ReturnType<typeof vi.fn> }[] = [];
   const object = () => {
@@ -66,7 +67,7 @@ describe('MSDF pass resource ownership', () => {
         f.pass.setBindings.mock.calls[1][0].textUniforms,
       );
       r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1);
-      expect(r.stats.bufferUploads).toBe(1);
+      expect(r.stats.bufferUploads).toBe(2);
       r.draw(
         f.pass,
         { key: 'b', labels: [{ ...f.label, raster: { ...f.label.raster, color: [0, 0, 1, 1] } }] },
@@ -75,7 +76,7 @@ describe('MSDF pass resource ownership', () => {
         2,
       );
       expect(r.stats.textureUploads).toBe(1);
-      expect(r.stats.bufferUploads).toBe(2);
+      expect(r.stats.bufferUploads).toBe(4);
       r.dispose();
       r.dispose();
       expect(r.stats.liveTextureBytes).toBe(0);
@@ -96,6 +97,96 @@ describe('MSDF pass resource ownership', () => {
     r.dispose();
   });
 });
+
+for (const backend of ['webgl', 'webgpu'] as const) {
+  it(`${backend}: unchanged frames inspect atlas generations without scanning glyphs`, () => {
+    const f = setup(),
+      renderer = new MsdfTextRenderer(f.device, backend);
+    const frame = { key: 'cached', labels: [f.label] };
+    renderer.draw(f.pass, frame, 100, 100, 1);
+    const quads = f.label.raster.glyphs;
+    Object.defineProperty(f.label.raster, 'glyphs', { configurable: true, get: () => quads });
+    const glyphs = vi.spyOn(f.label.raster, 'glyphs', 'get');
+    renderer.draw(f.pass, frame, 100, 100, 1);
+    expect(glyphs).not.toHaveBeenCalled();
+    renderer.clear();
+    renderer.draw(f.pass, frame, 100, 100, 1);
+    expect(renderer.stats.glyphInstances).toBe(1);
+    expect(glyphs).toHaveBeenCalled();
+    renderer.dispose();
+  });
+  it(`${backend}: camera replay uploads poses without resending glyph UVs and paint`, () => {
+    const f = setup(),
+      writes: number[] = [];
+    const create = f.device.createBuffer;
+    f.device.createBuffer = (props: unknown) => {
+      const buffer = create(props),
+        write = buffer.write;
+      buffer.write = (data: ArrayBufferView) => {
+        writes.push(data.byteLength);
+        write(data);
+      };
+      return buffer;
+    };
+    const renderer = new MsdfTextRenderer(f.device, backend);
+    renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1);
+    writes.length = 0;
+    renderer.draw(f.pass, { key: 'pan', labels: [{ ...f.label, x: 50 }] }, 100, 100, 1);
+    expect(writes).toEqual([16]);
+    renderer.dispose();
+  });
+  it(`${backend}: skips the outline draw when a batch has no halo`, () => {
+    const f = setup(),
+      r = new MsdfTextRenderer(f.device, backend);
+    f.label.raster.haloWidth = 0;
+    r.draw(f.pass, { key: 'no-halo', labels: [f.label] }, 100, 100, 1);
+    expect(f.pass.draw).toHaveBeenCalledOnce();
+    r.dispose();
+  });
+  it(`${backend}: uploads changed atlas regions independently for each consumer`, () => {
+    const f = setup();
+    const textures: { writeData: ReturnType<typeof vi.fn> }[] = [];
+    const create = f.device.createTexture;
+    f.device.createTexture = (...args: unknown[]) => {
+      const texture = create(...args);
+      textures.push(texture);
+      return texture;
+    };
+    const a = new MsdfTextRenderer(f.device, backend),
+      b = new MsdfTextRenderer(f.device, backend);
+    const page: MsdfAtlasPage = f.page;
+    for (const renderer of [a, b])
+      renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1);
+    page.version = 3;
+    page.updates = [
+      { version: 2, rect: [8, 16, 20, 30] },
+      { version: 3, rect: [20, 30, 24, 20] },
+    ];
+    for (const renderer of [a, b])
+      renderer.draw(f.pass, { key: 'next', labels: [f.label] }, 100, 100, 1);
+    for (const texture of textures)
+      expect(texture.writeData.mock.calls[1][1]).toEqual({
+        x: 8,
+        y: 16,
+        width: 36,
+        height: 34,
+        byteOffset: (16 * 1024 + 8) * 4,
+        bytesPerRow: 4096,
+      });
+    // A consumer that missed the bounded update history must receive the whole page.
+    page.version = 100;
+    page.updates = [{ version: 100, rect: [1, 1, 4, 4] }];
+    a.draw(f.pass, { key: 'missed', labels: [f.label] }, 100, 100, 1);
+    expect(textures[0].writeData.mock.calls[2][1]).toMatchObject({
+      x: 0,
+      y: 0,
+      width: 1024,
+      height: 1024,
+    });
+    a.dispose();
+    b.dispose();
+  });
+}
 
 it('does not sample recycled atlas glyphs when a previous navigation frame is replayed', () => {
   const f = setup(),
@@ -127,7 +218,7 @@ for (const backend of ['webgl', 'webgpu'] as const)
       r.draw(f.pass, { key: 'pan-' + i, labels: [{ ...f.label, x: 40 + i }] }, 200, 200, 1);
     expect(f.resources.length).toBe(allocated);
     expect(r.stats.liveBufferBytes).toBe(bytes);
-    expect(r.stats.bufferAllocations).toBe(1);
+    expect(r.stats.bufferAllocations).toBe(2);
     expect(r.stats.reusedBatches).toBe(20);
     expect(r.stats.textureUploads).toBe(1);
     r.dispose();
@@ -145,7 +236,7 @@ it('grows a glyph buffer only when necessary and releases unused batches after m
   r.draw(f.pass, { key: 'back', labels: [f.label] }, 200, 200, 1);
   expect(f.resources.length).toBe(allocated);
   expect(r.stats.glyphInstances).toBe(1);
-  expect(r.stats.bufferAllocations).toBe(2);
+  expect(r.stats.bufferAllocations).toBe(4);
   r.draw(f.pass, { key: 'none', labels: [] }, 200, 200, 1);
   expect(r.stats.liveBufferBytes).toBe(0);
   r.dispose();

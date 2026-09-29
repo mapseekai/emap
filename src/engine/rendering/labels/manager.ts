@@ -50,9 +50,10 @@ interface IndexedLayer {
   shapes: MapshaperLayer['shapes'];
   arcs: MapshaperDataset['arcs'];
   revision: number;
-  tree: InstanceType<typeof Flatbush> | null;
+  trees: InstanceType<typeof Flatbush>[];
   anchors: Map<number, XY | null>;
 }
+const INDEX_CHUNK_SIZE = 8192;
 const MAX_CANDIDATES = 20000,
   MAX_LABELS = 2000;
 const EMPTY: LabelFrame = { key: '', labels: [] };
@@ -66,6 +67,7 @@ export class BoundLabelManager {
   private serial = 0;
   private requested = '';
   private frame: LabelFrame = EMPTY;
+  private priorityLabels: readonly PlacedLabel[] = [];
   private frameView: AffineTransform | null = null;
   private requestedContent = '';
   private frameContent = '';
@@ -193,7 +195,7 @@ export class BoundLabelManager {
     }
     return this.frame.key === key
       ? this.frame
-      : navigating && this.frameContent === content
+      : this.frameContent === content
         ? this.preview(view, width, height)
         : EMPTY;
   }
@@ -208,13 +210,13 @@ export class BoundLabelManager {
       view.mx === previous.mx &&
       view.my === previous.my &&
       view.bx === previous.bx &&
-      view.by === previous.by
+      view.by === previous.by &&
+      cameraUniforms(view).every((value, i) => value === cameraUniforms(previous)[i])
     )
       return this.frame;
     const grid = new LabelCollisionGrid(),
       accepted = new Map<PlacedLabel, PlacedLabel>();
-    const ordered = [...this.frame.labels].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-    for (const label of ordered) {
+    for (const label of this.priorityLabels) {
       const ground = label.anchor ?? previous.unproject(label.x, label.y);
       const [x, y] = view.project(...ground),
         offset = label.screenOffset ?? [0, 0];
@@ -231,7 +233,10 @@ export class BoundLabelManager {
       accepted.set(label, { ...label, ...pose, bounds });
     }
     return {
-      key: this.frame.key + ':nav:' + [view.mx, view.my, view.bx, view.by, width, height].join(':'),
+      key:
+        this.frame.key +
+        ':nav:' +
+        [view.mx, view.my, view.bx, view.by, ...cameraUniforms(view), width, height].join(':'),
       labels: this.frame.labels.flatMap((label) => {
         const next = accepted.get(label);
         return next ? [next] : [];
@@ -265,11 +270,23 @@ export class BoundLabelManager {
     )
       return cached;
     const count = layer.shapes?.length ?? 0;
-    const tree = count ? new Flatbush(count) : null;
+    const trees: InstanceType<typeof Flatbush>[] = [];
+    let tree: InstanceType<typeof Flatbush>;
     let slice = performance.now();
     for (let id = 0; id < count; id++) {
-      const b = featureBounds(dataset, layer, id);
+      if (id % INDEX_CHUNK_SIZE === 0) {
+        tree = new Flatbush(Math.min(INDEX_CHUNK_SIZE, count - id));
+        trees.push(tree);
+      }
+      // Single points need no asynchronous vertex walk or per-feature Promise.
+      const points =
+        layer.geometry_type === 'point' ? normalizePointShape(layer.shapes?.[id]) : null;
+      const point = points?.length === 1 ? points[0] : null;
+      const b: Box = point
+        ? [point[0], point[1], point[0], point[1]]
+        : await featureBounds(dataset, layer, id, signal);
       tree!.add(...(b.every(Number.isFinite) ? b : ([0, 0, 0, 0] as Box)));
+      if ((id + 1) % INDEX_CHUNK_SIZE === 0 || id + 1 === count) tree!.finish();
       if (id % 256 === 0 && performance.now() - slice > 4) {
         await new Promise<void>((r) => setTimeout(r, 0));
         signal.throwIfAborted();
@@ -277,14 +294,13 @@ export class BoundLabelManager {
       }
     }
     signal.throwIfAborted();
-    tree?.finish();
     const result = {
       dataset,
       layer,
       shapes: layer.shapes,
       arcs: dataset.arcs,
       revision,
-      tree,
+      trees,
       anchors: new Map<number, XY | null>(),
     };
     this.indices.set(layer, result);
@@ -311,6 +327,8 @@ export class BoundLabelManager {
       priority: number;
       order: number;
     }[] = [];
+    const compare = (a: (typeof candidates)[number], b: (typeof candidates)[number]) =>
+      b.priority - a.priority || b.order - a.order || a.id - b.id;
     for (let order = bindings.length - 1; order >= 0; order--) {
       signal.throwIfAborted();
       const binding = bindings[order],
@@ -321,39 +339,54 @@ export class BoundLabelManager {
         void this.document.fonts?.load(font).catch(() => {});
       }
       const index = await this.index(binding, signal);
-      const ids: number[] = index.tree?.search(...footprint) ?? [];
-      if (ids.length > MAX_CANDIDATES) ids.length = MAX_CANDIDATES;
-      ids.sort((a, b) => a - b);
       const text =
         options.field !== undefined
           ? (record: Record<string, unknown> | null | undefined) =>
               record && Object.hasOwn(record, options.field!) ? record[options.field!] : null
           : compileStyleExpression(options.text ?? '');
       const priority = compileStyleExpression(options.priority ?? 0);
-      const records = layer.data?.getRecords?.();
+      let records: Record<string, unknown>[] | undefined;
       let slice = performance.now();
-      for (let i = 0; i < ids.length && candidates.length < MAX_CANDIDATES; i++) {
-        const id = ids[i];
-        if (binding.mask && binding.mask[id] !== 1) continue;
-        const record = layer.data?.getRecordAt?.(id) ?? records?.[id];
-        const value = labelText(text(record));
-        if (!value) continue;
-        const p = priority(record);
-        candidates.push({
-          binding,
-          id,
-          text: value,
-          priority: typeof p === 'number' && Number.isFinite(p) ? p : 0,
-          order,
-        });
-        if (i % 256 === 0 && performance.now() - slice > 4) {
+      for (let chunk = 0; chunk < index.trees.length; chunk++) {
+        if (performance.now() - slice > 4) {
           await new Promise<void>((r) => setTimeout(r, 0));
           signal.throwIfAborted();
           slice = performance.now();
         }
+        const matches = index.trees[chunk].search(...footprint);
+        const before = candidates.length,
+          worst = before === MAX_CANDIDATES ? candidates[before - 1] : null;
+        for (let i = 0; i < matches.length; i++) {
+          // Check before exclusions so a fully filtered scan remains cancellable.
+          if (i % 256 === 0 && performance.now() - slice > 4) {
+            await new Promise<void>((r) => setTimeout(r, 0));
+            signal.throwIfAborted();
+            slice = performance.now();
+          }
+          const id = chunk * INDEX_CHUNK_SIZE + matches[i];
+          if (binding.mask && binding.mask[id] !== 1) continue;
+          const record =
+            layer.data?.getRecordAt?.(id) ?? (records ??= layer.data?.getRecords?.())?.[id];
+          const value = labelText(text(record));
+          if (!value) continue;
+          const p = priority(record);
+          const candidate = {
+            binding,
+            id,
+            text: value,
+            priority: typeof p === 'number' && Number.isFinite(p) ? p : 0,
+            order,
+          };
+          if (!worst || compare(candidate, worst) < 0) candidates.push(candidate);
+        }
+        // Keep global priority while limiting temporary storage to one extra source chunk.
+        if (candidates.length >= MAX_CANDIDATES && candidates.length !== before) {
+          candidates.sort(compare);
+          candidates.length = MAX_CANDIDATES;
+        }
       }
     }
-    candidates.sort((a, b) => b.priority - a.priority || b.order - a.order || a.id - b.id);
+    candidates.sort(compare);
     signal.throwIfAborted();
     this.atlas.begin();
     const grid = new LabelCollisionGrid(),
@@ -364,13 +397,20 @@ export class BoundLabelManager {
       slice = performance.now();
     for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
       const candidate = candidates[candidateIndex];
-      if (candidateIndex % 128 === 0 && accepted.length < MAX_LABELS)
-        await this.atlas.prepare?.(
-          candidates
-            .slice(candidateIndex, candidateIndex + 128)
-            .map((c) => ({ text: c.text, options: c.binding.options })),
-          signal,
-        );
+      if (candidateIndex % 128 === 0) {
+        if (
+          accepted.length >= MAX_LABELS ||
+          bindings.every((b) => (counts.get(b.id) ?? 0) >= (b.options.maxLabels ?? 1000))
+        ) {
+          capacitySkipped += candidates.length - candidateIndex;
+          break;
+        }
+        const batch = candidates
+          .slice(candidateIndex, candidateIndex + 128)
+          .filter((c) => (counts.get(c.binding.id) ?? 0) < (c.binding.options.maxLabels ?? 1000))
+          .map((c) => ({ text: c.text, options: c.binding.options }));
+        if (batch.length) await this.atlas.prepare?.(batch, signal);
+      }
       signal.throwIfAborted();
       const { binding, id, text, order } = candidate,
         { dataset, layer, options } = binding;
@@ -413,20 +453,24 @@ export class BoundLabelManager {
       } else {
         if (layer.geometry_type === 'polygon') {
           const anchors = this.indices.get(layer)!.anchors;
-          if (!anchors.has(id)) anchors.set(id, polygonAnchor(featurePaths(dataset, layer, id)));
+          if (!anchors.has(id)) {
+            const paths = await featurePaths(dataset, layer, id, signal);
+            anchors.set(id, await polygonAnchor(paths, signal));
+          }
           const anchor = anchors.get(id);
           if (anchor) {
             const [x, y] = view.project(...anchor);
             if (Number.isFinite(x + y)) poses.push({ x, y, angle: 0, anchor });
           }
         } else if (layer.geometry_type === 'polyline') {
-          const pose = linePose(
-            featurePaths(dataset, layer, id),
+          const pose = await linePose(
+            await featurePaths(dataset, layer, id, signal),
             view,
             width,
             height,
             measured.width,
             options.placement !== 'horizontal',
+            signal,
           );
           if (pose) poses.push({ ...pose, anchor: view.unproject(pose.x, pose.y) });
         }
@@ -484,6 +528,7 @@ export class BoundLabelManager {
     }
     labels.sort((a, b) => a.order - b.order || a.featureId - b.featureId);
     this.frame = { key, labels };
+    this.priorityLabels = [...labels].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this.frameView = view.clone();
     this.frameContent = content;
     Object.assign(this.stats, {
@@ -505,6 +550,7 @@ export class BoundLabelManager {
     this.controller?.abort();
     this.requested = '';
     this.frame = EMPTY;
+    this.priorityLabels = [];
     this.frameView = null;
     this.frameContent = this.requestedContent = '';
     this.stats.pending = false;
@@ -513,6 +559,7 @@ export class BoundLabelManager {
     this.controller?.abort();
     this.requested = '';
     this.frame = EMPTY;
+    this.priorityLabels = [];
     this.frameView = null;
     this.frameContent = this.requestedContent = '';
     this.indices.clear();
@@ -525,8 +572,14 @@ export class BoundLabelManager {
       atlasPages: 0,
     });
   }
+  get closed(): Promise<void> {
+    return this.atlas.closed ?? Promise.resolve();
+  }
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      this.atlas.dispose();
+      return;
+    }
     this.disposed = true;
     this.clear();
     this.atlas.dispose();

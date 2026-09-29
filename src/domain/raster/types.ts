@@ -204,13 +204,16 @@ export interface RasterWorkerBlockStats {
 }
 export interface RasterProcessingStats {
   readonly workers: number;
+  /** Source-owned tasks occupying physical Workers, including prepare/cancellation barriers. */
   readonly busyWorkers: number;
+  /** Peak physical occupancy for this source; native queued tasks are excluded. */
   readonly peakWorkers: number;
+  /** Waiting source jobs plus this source's native runtime queue, excluding executing work. */
   readonly queuedTasks: number;
   readonly reservedBytes: number;
   /** Cumulative source jobs accepted by the GeoTIFF queue. */
   readonly acceptedTasks: number;
-  /** Cumulative jobs actually dispatched to a Worker. */
+  /** Cumulative jobs submitted to the runtime, including native admission waits. */
   readonly dispatchedTasks: number;
   /** Scheduler scans blocked because the decoded-output memory budget would be exceeded. */
   readonly decodeBudgetBlocks: number;
@@ -281,5 +284,7 @@ export interface RasterSource {
     'workerMs' | 'assembleMs' | 'colorizeMs' | 'directRgb8Tiles'
   >;
   toReference(): RasterReference;
+  /** Optional physical cleanup barrier for asynchronous providers. */
+  readonly settled?: Promise<void>;
   dispose(): void;
 }

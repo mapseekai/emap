@@ -18,6 +18,8 @@ import type { ArcVertexData } from '../../../shared/types/mapshaper-types';
 import type { GeometryBuffer } from '../../../integrations/luma/types';
 
 export interface GeometryResult {
+  /** Worker computation only; excludes queueing, transport and GPU upload. */
+  preparationMs?: number;
   uploadCulledBytes?: number;
   pathInputInstances?: number;
   pathOutputInstances?: number;
@@ -142,6 +144,7 @@ export function buildGeometryPacket(
   packet: GeometryPacket,
   cache?: FeatureGeometryCache,
 ): GeometryResult {
+  const started = performance.now();
   const { coordinates, offsets, features } = packet;
   if (
     packet.storageBounds !== undefined &&
@@ -333,6 +336,7 @@ export function buildGeometryPacket(
     }
   }
   return {
+    preparationMs: performance.now() - started,
     geometries,
     pathInputInstances,
     pathOutputInstances,

@@ -30,6 +30,11 @@ function examplesBrandPlugin(): Plugin {
       order: 'pre',
       handler: (html) => [
         {
+          tag: 'script',
+          attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
+          injectTo: 'body-prepend',
+        },
+        {
           tag: 'link',
           attrs: { rel: 'icon', type: 'image/svg+xml', href: logoUrl },
           injectTo: 'head',

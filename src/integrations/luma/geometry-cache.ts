@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '@mapseekai/tasklane';
 import {
   planGeometryHandoff,
   type GeometryHandoffGroup,
@@ -72,6 +73,9 @@ export interface GeometryEntry {
   bytes: number;
   used: number;
   screenStats?: GeometryResult['screenStats'];
+  /** Observed CPU reconstruction cost, never a reservation or memory allowance. */
+  preparationMs?: number;
+  retentionPriority?: number;
   error?: Error;
   requiredBytes?: number;
   /** Exact-detail coverage of a derived fill; never reused across membership/LOD. */
@@ -97,10 +101,11 @@ export interface GeometryRequest {
   cursor: number;
 }
 type GeometryTransport = Pick<GeometryWorker, 'build' | 'dispose' | 'stats'> &
-  Partial<Pick<GeometryWorker, 'triangulation' | 'retainSources' | 'buildBatch'>>;
+  Partial<Pick<GeometryWorker, 'triangulation' | 'retainSources' | 'buildBatch' | 'closed'>>;
 interface Options {
   invalidate(): void;
   report(error: Error): void;
+  workerRuntime?: WorkerRuntime;
   workerUrl: URL;
   cacheBytes?: number;
   /** Includes active plans; only inactive completed plans may be evicted. */
@@ -167,11 +172,21 @@ export class GeometryChunkCache {
   private pinned = new Set<GeometryEntry>();
   private latest = new Map<string, GeometryEntry>();
   private turn = 0;
+  private handoffOwner: GeometryOwner | undefined;
+  private handoffRequests: GeometryRequest[] = [];
   private disposed = false;
   /** Diagnostic seam; changing batching never changes logical chunks or GPU precision. */
   batchJobs = GEOMETRY_BATCH_JOBS;
   private active: { entries: Set<GeometryEntry>; controller: AbortController } | null = null;
   private clock = 0;
+  // GreedyDual-size inflation ages out even an expensive unused mesh eventually.
+  // Current/presenting/pinned entries remain protected independently of this score.
+  private retentionAge = 0;
+  private touch(entry: GeometryEntry): void {
+    entry.used = ++this.clock;
+    entry.retentionPriority =
+      this.retentionAge + (entry.preparationMs ?? 0) / Math.max(1, entry.bytes);
+  }
   private bytes = 0;
   private externalEstimate = 0;
   private residencyVersion = 0;
@@ -208,12 +223,16 @@ export class GeometryChunkCache {
     directFeatures: 0,
     pathInputInstances: 0,
     pathOutputInstances: 0,
+    preparationMs: 0,
+    evictedPreparationMs: 0,
+    evictedFillEntries: 0,
+    evictedScreenEntries: 0,
   };
   constructor(
     private readonly gpu: GpuRenderer,
     private readonly options: Options,
   ) {
-    this.worker = options.transport ?? new GeometryWorker(options.workerUrl);
+    this.worker = options.transport ?? new GeometryWorker(options.workerUrl, options.workerRuntime);
     this.limit = options.cacheBytes ?? 256 * 1024 ** 2;
   }
   get stats() {
@@ -331,7 +350,7 @@ export class GeometryChunkCache {
         );
         this.schedule();
       }
-      for (const entry of previous.entries ?? []) entry.used = ++this.clock;
+      for (const entry of previous.entries ?? []) this.touch(entry);
       return previous;
     }
     previous?.controller.abort();
@@ -677,7 +696,7 @@ export class GeometryChunkCache {
         JSON.stringify([family, request.input.interval, request.input.screen, undefined]),
       );
       if (full?.state === 'ready' && sameJob(full.job, job)) {
-        full.used = ++this.clock;
+        this.touch(full);
         this.counters.cacheHits++;
         return full;
       }
@@ -706,7 +725,7 @@ export class GeometryChunkCache {
       coverage.bounds[2] >= requested[2] &&
       coverage.bounds[3] >= requested[3]
     ) {
-      old.used = ++this.clock;
+      this.touch(old);
       this.counters.cacheHits++;
       this.counters.coverageHits++;
       return old;
@@ -725,7 +744,7 @@ export class GeometryChunkCache {
       existing = this.entries.get(id);
     }
     if (existing) {
-      existing.used = ++this.clock;
+      this.touch(existing);
       this.counters.cacheHits++;
       return existing;
     }
@@ -996,7 +1015,62 @@ export class GeometryChunkCache {
     }, 0);
   }
   private nextQueued(): { request: GeometryRequest; entry: GeometryEntry } | undefined {
-    const available = this.current().filter((r) => !!this.queued(r));
+    const current = this.current();
+    let available = current.filter((r) => !!this.queued(r));
+    const sameOwner = (a: GeometryOwner, b: GeometryOwner) =>
+      a.sourceId === b.sourceId && a.id === b.id;
+    if (this.handoffOwner) {
+      const owner = this.handoffOwner;
+      const group = current.filter((r) => sameOwner(r.owner, owner));
+      // A continuous gesture can replace this owner's requests before its
+      // handoff completes. Its old priority no longer describes the current
+      // retirement opportunity; reselect before spending more headroom.
+      const unchanged =
+        group.length === this.handoffRequests.length &&
+        group.every((r, i) => r === this.handoffRequests[i]);
+      if (unchanged && group.length && group.every((r) => this.complete(r))) {
+        // The replacement is uploaded, but the last presented frame can still
+        // own its predecessor. Let presentation unpin it before the next owner
+        // spends this capacity. finish() resumes scheduling after that frame.
+        const wanted = this.wanted();
+        if ([...this.pinned].some((e) => sameOwner(e.owner, owner) && !wanted.has(e)))
+          return undefined;
+      }
+      if (!unchanged || !group.length || group.every((r) => this.complete(r) || this.failed(r))) {
+        this.handoffOwner = undefined;
+        this.handoffRequests = [];
+      }
+    }
+    if (!this.handoffOwner && this.bytes + this.externalBytes > this.limit) {
+      // Round-robin across many LOD replacements can fill the hard limit while
+      // no polygon has both its fill and outline ready to retire the old meshes.
+      // Finish one layer's paint requests together, starting with the most old
+      // residency to release. Cold loading keeps the normal fair scheduling.
+      const owners = new Map<string, { owner: GeometryOwner; entries: Set<GeometryEntry> }>();
+      for (const r of current) {
+        const key = JSON.stringify([r.owner.sourceId, r.owner.id]);
+        let group = owners.get(key);
+        if (!group) owners.set(key, (group = { owner: r.owner, entries: new Set() }));
+        for (const e of r.fallback ?? [])
+          if (this.isResident(e) && !this.wanted().has(e)) group.entries.add(e);
+      }
+      let largest = 0;
+      for (const { owner, entries } of owners.values()) {
+        const bytes = [...entries].reduce((sum, e) => sum + e.bytes, 0);
+        // Planning order is asynchronous too: a large retiring layer must not
+        // lose priority just because a smaller, growing layer planned first.
+        const pending = current.some(
+          (r) => sameOwner(r.owner, owner) && !r.error && (r.entries === null || !!this.queued(r)),
+        );
+        if (bytes > largest && pending) {
+          largest = bytes;
+          this.handoffOwner = owner;
+          this.handoffRequests = current.filter((r) => sameOwner(r.owner, owner));
+        }
+      }
+    }
+    if (this.handoffOwner)
+      available = available.filter((r) => sameOwner(r.owner, this.handoffOwner!));
     const preview =
       this.counters.builds === 0
         ? available.find((r) => r.input.kind === 'path' || r.input.kind === 'point')
@@ -1144,6 +1218,12 @@ export class GeometryChunkCache {
     this.latest.set(entry.family, entry);
     entry.screenStats = result.screenStats;
     entry.state = 'ready';
+    entry.preparationMs =
+      Number.isFinite(result.preparationMs) && result.preparationMs! >= 0
+        ? result.preparationMs
+        : 0;
+    this.counters.preparationMs += entry.preparationMs ?? 0;
+    this.touch(entry);
     entry.requiredBytes = undefined;
     this.counters.builds++;
     this.counters.uploadCulledBytes += result.uploadCulledBytes ?? 0;
@@ -1318,7 +1398,7 @@ export class GeometryChunkCache {
             !this.pinned.has(e) &&
             !this.active?.entries.has(e),
         )
-        .sort((a, b) => a.used - b.used);
+        .sort((a, b) => (a.retentionPriority ?? 0) - (b.retentionPriority ?? 0) || a.used - b.used);
       this.trimCursor = 0;
     }
     while (
@@ -1327,6 +1407,10 @@ export class GeometryChunkCache {
     ) {
       const entry = this.trimCandidates[this.trimCursor++];
       if (this.entries.get(entry.id) !== entry) continue;
+      this.retentionAge = Math.max(this.retentionAge, entry.retentionPriority ?? 0);
+      this.counters.evictedPreparationMs += entry.preparationMs ?? 0;
+      if (entry.meshes.some((mesh) => mesh.kind === 'fill')) this.counters.evictedFillEntries++;
+      if (entry.screenSpace) this.counters.evictedScreenEntries++;
       this.drop(entry);
       this.counters.evictions++;
     }
@@ -1365,6 +1449,10 @@ export class GeometryChunkCache {
         : scope.sourceId !== undefined
           ? owner.sourceId === scope.sourceId
           : true;
+    if (this.handoffOwner && matches(this.handoffOwner)) {
+      this.handoffOwner = undefined;
+      this.handoffRequests = [];
+    }
     for (const [id, r] of this.requests)
       if (matches(r.owner)) {
         r.controller.abort();
@@ -1389,8 +1477,14 @@ export class GeometryChunkCache {
     this.worker.retainSources?.(new Set([...this.requests.values()].map((r) => r.owner.sourceId)));
     if (errors.length) throw new AggregateError(errors, 'Geometry cache cleanup failed');
   }
+  get closed(): Promise<void> {
+    return this.worker.closed ?? Promise.resolve();
+  }
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      this.worker.dispose();
+      return;
+    }
     this.disposed = true;
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;

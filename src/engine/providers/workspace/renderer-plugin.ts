@@ -22,6 +22,7 @@ export const rendererPainterPlugin: Plugin.Object = {
             report: options?.report ?? (() => {}),
             signal: options?.signal,
             msdfWorkerUrl,
+            workerRuntime: ctx.options.workerRuntime,
             geometryWorkerUrl: ctx.options.geometryWorkerUrl,
             screenPathFiltering: ctx.options.screenPathFiltering,
           });

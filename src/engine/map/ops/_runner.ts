@@ -1,3 +1,4 @@
+import { workerDataByteBound } from '../../../integrations/mapshaper/binary';
 // Shared runner used by every dataset-replace op (clip / dissolve / buffer
 // / …). Extracted from `mapshaper-ops.ts` so per-op modules don't have to
 // import the facade class.
@@ -12,7 +13,7 @@
 //
 // `_runViaWorker` packs / unpacks via the adapter and fires the
 // `workerjobstart` / `workerjobend` events around the round-trip.
-// Buffer transfer (PR-12) lives here too via `collectTransferables`.
+// Worker input packing happens after tasklane admission.
 
 import { CompositeCommand } from '../../../domain/edit/commands/composite';
 import { DatasetReplaceCommand } from '../../../domain/edit/commands/dataset-replace';
@@ -31,7 +32,6 @@ import {
 } from '../../../integrations/mapshaper/adapter';
 import { resolveProjectCrs } from '../../../domain/geo/crs-resolver';
 import { shouldUseWorkerForHeads } from '../worker-routing';
-import { collectTransferables } from '../../worker/transferables';
 import type {
   PrepareDatasetCommand,
   PreparedDatasetMutationResult,
@@ -742,16 +742,34 @@ async function _runViaWorker(
 
   try {
     const adapter = getDefaultMapshaperAdapter();
-    const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
-    const crsLabel = await sanitizePackedSessionCrs(packed);
-    const transferList = collectTransferables(packed);
-    const command = request.commands;
-    const resultPacked = await host._workerPool.dispatchWithId(
-      id,
-      command,
-      packed,
+    const inputByteLimit = workerDataByteBound({
+      commands: request.commands,
       inputFiles,
-      transferList,
+      datasets: [
+        {
+          info: { ...dataset.info, crs: undefined },
+          arcs: dataset.arcs?.getVertexData?.(),
+          layers: dataset.layers.map((layer) => ({
+            name: layer.name,
+            geometry_type: layer.geometry_type,
+            shapes: layer.shapes,
+            records: layer.data?.getRecords?.(),
+            fields: layer.fields,
+          })),
+        },
+      ],
+    });
+    let crsLabel: string | undefined;
+    const resultPacked = await host._workerPool.dispatchPreparedWithId(
+      id,
+      request.commands,
+      async () => {
+        const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
+        crsLabel = await sanitizePackedSessionCrs(packed);
+        return packed;
+      },
+      inputFiles,
+      inputByteLimit,
     );
     const restored = await adapter.restoreSessionData(resultPacked);
     if (!restored.datasets || restored.datasets.length === 0) {

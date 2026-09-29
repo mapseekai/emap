@@ -21,8 +21,8 @@ import { LabelCollisionGrid } from '../../engine/rendering/labels/geometry';
 const vs = `#version 300 es
 precision highp float;
 layout(location=0) in vec2 corners;
-layout(location=1) in vec4 rectangle;
-layout(location=2) in vec2 rotation;
+layout(location=1) in vec4 pose;
+layout(location=2) in vec2 extent;
 layout(location=3) in vec4 atlasRect;
 layout(location=4) in vec4 fillColor;
 layout(location=5) in vec4 outlineColor;
@@ -33,8 +33,8 @@ flat out vec4 color;
 flat out vec4 halo;
 flat out vec4 effects;
 void main(){
- vec2 offset=corners*rectangle.zw*0.5;offset.x-=parameters.z*offset.y;
- vec2 p=rectangle.xy+vec2(rotation.x*offset.x-rotation.y*offset.y,rotation.y*offset.x+rotation.x*offset.y);
+ vec2 offset=corners*extent*0.5;offset.x-=parameters.z*offset.y;
+ vec2 p=pose.xy+vec2(pose.z*offset.x-pose.w*offset.y,pose.w*offset.x+pose.z*offset.y);
  gl_Position=vec4(p/text.viewport.xy*vec2(2.,-2.)+vec2(-1.,1.),0.,1.);
  uv=mix(atlasRect.xy,atlasRect.zw,(corners+1.)*0.5);color=fillColor;halo=outlineColor;effects=parameters;
 }`;
@@ -65,9 +65,9 @@ struct Uniforms{viewport:vec4<f32>};
 @group(0) @binding(1) var atlasTexture:texture_2d<f32>;
 @group(0) @binding(2) var atlasSampler:sampler;
 struct Out{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>,@location(1) @interpolate(flat) color:vec4<f32>,@location(2) @interpolate(flat) halo:vec4<f32>,@location(3) @interpolate(flat) effects:vec4<f32>};
-@vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) rectangle:vec4<f32>,@location(2) rotation:vec2<f32>,@location(3) atlasRect:vec4<f32>,@location(4) fillColor:vec4<f32>,@location(5) outlineColor:vec4<f32>,@location(6) parameters:vec4<f32>)->Out{
- var offset=corners*rectangle.zw*0.5;offset.x-=parameters.z*offset.y;
- let p=rectangle.xy+vec2<f32>(rotation.x*offset.x-rotation.y*offset.y,rotation.y*offset.x+rotation.x*offset.y);
+@vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) pose:vec4<f32>,@location(2) extent:vec2<f32>,@location(3) atlasRect:vec4<f32>,@location(4) fillColor:vec4<f32>,@location(5) outlineColor:vec4<f32>,@location(6) parameters:vec4<f32>)->Out{
+ var offset=corners*extent*0.5;offset.x-=parameters.z*offset.y;
+ let p=pose.xy+vec2<f32>(pose.z*offset.x-pose.w*offset.y,pose.w*offset.x+pose.z*offset.y);
  return Out(vec4<f32>(p/text.viewport.xy*vec2<f32>(2.,-2.)+vec2<f32>(-1.,1.),0.,1.),mix(atlasRect.xy,atlasRect.zw,(corners+1.)*0.5),fillColor,outlineColor,parameters);
 }
 fn median3(v:vec3<f32>)->f32{return max(min(v.r,v.g),min(max(v.r,v.g),v.b));}
@@ -92,10 +92,13 @@ interface Page {
 }
 interface Batch {
   buffer: Buffer;
+  poses: Buffer;
   vao: VertexArray;
   bindings: [Bindings, Bindings];
   count: number;
   bytes: number;
+  hasHalo: boolean;
+  instances: readonly Instance[];
 }
 
 /** One instance per shaped glyph, halo and fill in separate immutable uniform passes.
@@ -108,7 +111,9 @@ export class MsdfTextRenderer {
   private pages = new Map<MsdfAtlasPage, Page>();
   private groups: Batch[][] = [];
   private staging = new Float32Array(0);
-  private key = '';
+  private poses = new Float32Array(0);
+  private key: string | undefined;
+  private generations = new Map<MsdfAtlasPage, number>();
   private size = '';
   private disposed = false;
   private layout!: ShaderLayout;
@@ -117,10 +122,12 @@ export class MsdfTextRenderer {
     mode: 'msdf',
     drawCalls: 0,
     bufferUploads: 0,
+    bufferUploadedBytes: 0,
     bufferAllocations: 0,
     reusedBatches: 0,
     stagingBytes: 0,
     textureUploads: 0,
+    textureUploadedBytes: 0,
     liveTextureBytes: 0,
     liveBufferBytes: 0,
     glyphInstances: 0,
@@ -153,8 +160,8 @@ export class MsdfTextRenderer {
       if (fragment !== vertex) this.shaders.push(fragment);
       const attributes = [
         ['corners', 2],
-        ['rectangle', 4],
-        ['rotation', 2],
+        ['pose', 4],
+        ['extent', 2],
         ['atlasRect', 4],
         ['fillColor', 4],
         ['outlineColor', 4],
@@ -179,10 +186,16 @@ export class MsdfTextRenderer {
       this.buffers = [
         { name: 'corners', format: 'float32x2', stepMode: 'vertex' },
         {
-          name: 'glyphs',
-          byteStride: 88,
+          name: 'poses',
+          byteStride: 16,
           stepMode: 'instance',
-          attributes: attributes.slice(1).map(([attribute, n]) => {
+          attributes: [{ attribute: 'pose', format: 'float32x4', byteOffset: 0 }],
+        },
+        {
+          name: 'glyphs',
+          byteStride: 72,
+          stepMode: 'instance',
+          attributes: attributes.slice(2).map(([attribute, n]) => {
             const byteOffset = offset;
             offset += n * 4;
             return { attribute, format: `float32x${n}` as 'float32x2' | 'float32x4', byteOffset };
@@ -247,24 +260,57 @@ export class MsdfTextRenderer {
       this.stats.liveTextureBytes += source.data.byteLength;
     }
     if (entry.version !== source.version) {
+      const updates = source.updates;
+      let x = 0,
+        y = 0,
+        width = source.width,
+        height = source.height;
+      if (
+        entry.version >= 0 &&
+        updates?.length &&
+        entry.version >= updates[0].version - 1 &&
+        updates[updates.length - 1].version === source.version
+      ) {
+        let right = 0,
+          bottom = 0;
+        x = source.width;
+        y = source.height;
+        for (const update of updates)
+          if (update.version > entry.version) {
+            const [left, top, w, h] = update.rect;
+            x = Math.min(x, left);
+            y = Math.min(y, top);
+            right = Math.max(right, left + w);
+            bottom = Math.max(bottom, top + h);
+          }
+        width = right - x;
+        height = bottom - y;
+      }
       entry.texture.writeData(source.data, {
-        width: source.width,
-        height: source.height,
+        x,
+        y,
+        width,
+        height,
+        byteOffset: (y * source.width + x) * 4,
         bytesPerRow: source.width * 4,
       });
       entry.version = source.version;
       this.stats.textureUploads++;
+      this.stats.textureUploadedBytes += width * height * 4;
     }
     return entry;
   }
   draw(pass: RenderPass, frame: LabelFrame, width: number, height: number, dpr: number): void {
     if (this.disposed) return;
-    const candidates = frame.labels.filter((l): l is MsdfLabel => 'mode' in l.raster);
-    const epochs = [...new Set(candidates.flatMap((l) => l.raster.glyphs.map((g) => g.page)))].map(
-      (page) => page.generation ?? 0,
-    );
-    const key = frame.key + ':' + epochs.join(',');
-    if (key !== this.key) {
+    let changed = frame.key !== this.key;
+    for (const [page, generation] of this.generations)
+      if ((page.generation ?? 0) !== generation) changed = true;
+    if (changed) {
+      const candidates = frame.labels.filter((l): l is MsdfLabel => 'mode' in l.raster);
+      this.generations.clear();
+      for (const label of candidates)
+        for (const glyph of label.raster.glyphs)
+          this.generations.set(glyph.page, glyph.page.generation ?? 0);
       const reusable = this.groups.flat();
       let consumed = 0;
       this.groups = [];
@@ -313,9 +359,9 @@ export class MsdfTextRenderer {
             if (old && old !== batch) this.releaseBatches([old]);
           }
         }
-        this.key = key;
+        this.key = frame.key;
       } catch (error) {
-        this.key = '';
+        this.key = undefined;
         this.clearBatches();
         throw error;
       } finally {
@@ -331,6 +377,7 @@ export class MsdfTextRenderer {
     for (const group of this.groups)
       for (const stage of [0, 1] as const)
         for (const batch of group) {
+          if (stage === 0 && !batch.hasHalo) continue;
           pass.setBindings(batch.bindings[stage], {
             _bindGroupCacheKeys: { 0: batch.bindings[stage] },
           });
@@ -342,10 +389,23 @@ export class MsdfTextRenderer {
   private batch(instances: readonly Instance[], previous?: Batch): Batch {
     const source = instances[0].glyph.page,
       page = this.page(source);
-    const length = instances.length * 22;
-    if (this.staging.length < length) this.staging = new Float32Array(length);
-    this.stats.stagingBytes = this.staging.byteLength;
-    const data = this.staging.subarray(0, length);
+    const bytes = instances.length * 88;
+    const reuse = previous && previous.bytes >= bytes ? previous : undefined;
+    const sameStatic =
+      reuse?.instances.length === instances.length &&
+      instances.every(
+        (instance, i) =>
+          instance.glyph === reuse.instances[i].glyph &&
+          instance.label.raster === reuse.instances[i].label.raster,
+      );
+    const length = instances.length * 18,
+      poseLength = instances.length * 4;
+    if (!sameStatic && this.staging.length < length) this.staging = new Float32Array(length);
+    if (this.poses.length < poseLength) this.poses = new Float32Array(poseLength);
+    this.stats.stagingBytes = this.staging.byteLength + this.poses.byteLength;
+    const data = this.staging.subarray(0, length),
+      poses = this.poses.subarray(0, poseLength);
+    const hasHalo = instances.some(({ label }) => label.raster.haloWidth > 0);
     let last: MsdfLabel | undefined,
       c = 1,
       sine = 0;
@@ -359,37 +419,52 @@ export class MsdfTextRenderer {
       const [x, y, w, h] = g.plane,
         [u, v, uw, vh] = g.rect,
         r = l.raster;
-      const at = i * 22;
-      data[at] = l.x + c * x - sine * y;
-      data[at + 1] = l.y + sine * x + c * y;
-      data[at + 2] = w;
-      data[at + 3] = h;
-      data[at + 4] = c;
-      data[at + 5] = sine;
-      data[at + 6] = u / source.width;
-      data[at + 7] = v / source.height;
-      data[at + 8] = (u + uw) / source.width;
-      data[at + 9] = (v + vh) / source.height;
-      data.set(r.color, at + 10);
-      data.set(r.haloColor, at + 14);
-      data[at + 18] = g.rangeCss;
-      data[at + 19] = r.haloWidth;
-      data[at + 20] = r.shear;
-      data[at + 21] = 0;
+      const pose = i * 4;
+      poses[pose] = l.x + c * x - sine * y;
+      poses[pose + 1] = l.y + sine * x + c * y;
+      poses[pose + 2] = c;
+      poses[pose + 3] = sine;
+      if (!sameStatic) {
+        const at = i * 18;
+        data[at] = w;
+        data[at + 1] = h;
+        data[at + 2] = u / source.width;
+        data[at + 3] = v / source.height;
+        data[at + 4] = (u + uw) / source.width;
+        data[at + 5] = (v + vh) / source.height;
+        data.set(r.color, at + 6);
+        data.set(r.haloColor, at + 10);
+        data[at + 14] = g.rangeCss;
+        data[at + 15] = r.haloWidth;
+        data[at + 16] = r.shear;
+        data[at + 17] = 0;
+      }
     }
-    const reuse = previous && previous.bytes >= data.byteLength ? previous : undefined;
     const buffer =
       reuse?.buffer ??
       this.device.createBuffer({
-        id: 'emap-msdf-instances',
+        id: 'emap-msdf-glyphs',
         byteLength: data.byteLength,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       });
-    let vao = reuse?.vao;
+    let vao = reuse?.vao,
+      poseBuffer = reuse?.poses;
     try {
+      poseBuffer ??= this.device.createBuffer({
+        id: 'emap-msdf-poses',
+        byteLength: poses.byteLength,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      });
       // Both adapters consume writes synchronously. One staging allocation can
       // serve every run without being retained in Buffer initialization props.
-      buffer.write(data);
+      poseBuffer.write(poses);
+      this.stats.bufferUploads++;
+      this.stats.bufferUploadedBytes += poses.byteLength;
+      if (!sameStatic) {
+        buffer.write(data);
+        this.stats.bufferUploads++;
+        this.stats.bufferUploadedBytes += data.byteLength;
+      }
       if (!vao) {
         vao = this.device.createVertexArray({
           shaderLayout: this.layout,
@@ -397,13 +472,16 @@ export class MsdfTextRenderer {
         });
         if (this.backend === 'webgpu') {
           const a = vao.getBufferSlot('corners'),
-            b = vao.getBufferSlot('glyphs');
-          if (a === null || b === null) throw new Error('Missing MSDF buffer slots.');
+            b = vao.getBufferSlot('glyphs'),
+            c = vao.getBufferSlot('poses');
+          if (a === null || b === null || c === null) throw new Error('Missing MSDF buffer slots.');
           vao.setBuffer(a, this.quad);
           vao.setBuffer(b, buffer);
+          vao.setBuffer(c, poseBuffer);
         } else {
           vao.setBuffer(0, this.quad);
-          for (const location of [1, 2, 3, 4, 5, 6]) vao.setBuffer(location, buffer);
+          vao.setBuffer(1, poseBuffer);
+          for (const location of [2, 3, 4, 5, 6]) vao.setBuffer(location, buffer);
         }
       }
       const bind = (u: Buffer): Bindings => ({
@@ -415,23 +493,37 @@ export class MsdfTextRenderer {
         reuse?.bindings[0].atlasTexture === page.texture
           ? reuse.bindings
           : [bind(this.uniforms[0]), bind(this.uniforms[1])];
-      this.stats.bufferUploads++;
       this.stats.glyphInstances += instances.length;
       if (reuse) {
         this.stats.reusedBatches++;
         reuse.bindings = bindings;
         reuse.count = instances.length;
+        reuse.hasHalo = hasHalo;
+        if (!sameStatic) reuse.instances = instances;
         return reuse;
       }
-      this.stats.bufferAllocations++;
-      this.stats.liveBufferBytes += data.byteLength;
-      return { buffer, vao, bindings, count: instances.length, bytes: data.byteLength };
+      this.stats.bufferAllocations += 2;
+      this.stats.liveBufferBytes += bytes;
+      return {
+        buffer,
+        poses: poseBuffer,
+        vao,
+        bindings,
+        count: instances.length,
+        bytes,
+        hasHalo,
+        instances,
+      };
     } catch (error) {
       if (!reuse) {
         try {
           vao?.destroy();
         } finally {
-          buffer.destroy();
+          try {
+            poseBuffer?.destroy();
+          } finally {
+            buffer.destroy();
+          }
         }
       }
       throw error;
@@ -450,6 +542,11 @@ export class MsdfTextRenderer {
       } catch (error) {
         errors.push(error);
       }
+      try {
+        b.poses.destroy();
+      } catch (error) {
+        errors.push(error);
+      }
       this.stats.liveBufferBytes -= b.bytes;
     }
     if (errors.length) throw new AggregateError(errors, 'MSDF batch cleanup failed');
@@ -462,9 +559,11 @@ export class MsdfTextRenderer {
   }
   clear(): void {
     this.staging = new Float32Array(0);
+    this.poses = new Float32Array(0);
     this.stats.stagingBytes = 0;
     this.clearBatches();
-    this.key = '';
+    this.key = undefined;
+    this.generations.clear();
     for (const p of this.pages.values()) p.texture.destroy();
     this.pages.clear();
     this.stats.liveTextureBytes = 0;

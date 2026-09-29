@@ -29,7 +29,12 @@ function setup() {
     createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
   };
   // Exercise resource ownership without installing a default renderer or browser Device.
-  const gpu = new (NumericRasterRenderer as any)({}, device, 'webgl') as NumericRasterRenderer;
+  const gpu = new (NumericRasterRenderer as any)(
+    new EventTarget(),
+    device,
+    'webgl',
+    vi.fn(),
+  ) as NumericRasterRenderer;
   const tile: any = {
     key: '0:0:0',
     window: [0, 0, 2, 2],
@@ -170,4 +175,25 @@ it('owns distinct deferred uniforms for disjoint perspective coverage and releas
   expect(gpu.stats.liveRegionUniforms).toBe(0);
   gpu.dispose();
   expect(buffers.every((b) => b.destroy.mock.calls.length === 1)).toBe(true);
+});
+
+it('cancels a lost WebGL context wait without recreating a disposed device', async () => {
+  const { gpu, device } = setup();
+  (device as any).gl = {};
+  device.isLost = true;
+  const event = new Event('webglcontextlost', { cancelable: true });
+  gpu.canvas.dispatchEvent(event);
+  await gpu.lost;
+  expect(event.defaultPrevented).toBe(true);
+  expect(gpu.available).toBe(false);
+  const create = vi.spyOn(NumericRasterRenderer, 'create');
+  const controller = new AbortController();
+  const pending = gpu.recreate(controller.signal);
+  const rejection = expect(pending).rejects.toThrow('cancelled');
+  controller.abort(new Error('cancelled'));
+  await rejection;
+  gpu.canvas.dispatchEvent(new Event('webglcontextrestored'));
+  expect(create).not.toHaveBeenCalled();
+  expect(device.destroy).toHaveBeenCalledOnce();
+  create.mockRestore();
 });

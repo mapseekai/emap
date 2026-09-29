@@ -1,14 +1,24 @@
+vi.mock('../../integrations/mapshaper/binary', () => ({
+  decodeWorkerData: async () => ({ datasets: [] }),
+}));
 import { expect, it, vi } from 'vitest';
 
-const postMessage = vi.fn();
+const handlers = vi.hoisted(() => ({ current: null as any }));
+vi.mock('@mapseekai/tasklane/host', () => ({
+  browserHost: () => ({}),
+  serve: (_port: unknown, value: unknown) => {
+    handlers.current = value;
+  },
+}));
 const runParsedCommands = vi.fn((_commands, _job, callback) => {
   callback(null, { catalog: { getDefaultTargets: () => [] } });
 });
 
-vi.stubGlobal('self', { postMessage, onmessage: null });
+vi.stubGlobal('self', {});
 vi.mock('mapshaper', () => ({
   default: {
     internal: {
+      unpackSessionData: async () => ({ datasets: [], payload: { datasets: [] } }),
       parseCommands: () => [{ name: 'target', options: {} }],
       restoreSessionData: async () => ({ datasets: [{ layers: [] }] }),
       exportDatasetsToPack: vi.fn(),
@@ -23,15 +33,7 @@ vi.mock('mapshaper', () => ({
 it('reports an error when a command produces no default target', async () => {
   await import('./mapshaper-worker');
 
-  self.onmessage?.({
-    data: { id: 7, type: 'run', cmd: '-target missing', packed: {} },
-  } as MessageEvent);
-
-  await vi.waitFor(() => {
-    expect(postMessage).toHaveBeenCalledWith({
-      id: 7,
-      type: 'error',
-      message: 'mapshaper command completed but produced no default target',
-    });
-  });
+  await expect(
+    handlers.current.mapshaper({ cmd: '-target missing', bytes: new Uint8Array() }),
+  ).rejects.toThrow('mapshaper command completed but produced no default target');
 });

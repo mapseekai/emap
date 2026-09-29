@@ -397,7 +397,7 @@ describe('worker dataset command runner', () => {
       _sources: new Map([['s', source]]),
       _workerPool: {
         reserveId: () => 1,
-        dispatchWithId: vi.fn(() => {
+        dispatchPreparedWithId: vi.fn(() => {
           workerStarted.resolve();
           return workerResult.promise;
         }),
@@ -854,7 +854,7 @@ describe('recordCount routing (runner)', () => {
       _sources: new Map([['s', source]]),
       _workerPool: {
         reserveId: () => 1,
-        dispatchWithId: vi.fn(() => Promise.resolve({})),
+        dispatchPreparedWithId: vi.fn(() => Promise.resolve({})),
       },
       _workerMode: 'auto' as const,
       _workerThreshold: 100,
@@ -894,7 +894,7 @@ describe('recordCount routing (runner)', () => {
         'Classify',
       );
       expect(res.ok).toBe(true);
-      expect(host._workerPool.dispatchWithId).toHaveBeenCalledTimes(1);
+      expect(host._workerPool.dispatchPreparedWithId).toHaveBeenCalledTimes(1);
       expect(infos[0]).toMatchObject({
         recordCount: 10_000,
         vertexCount: 0,
@@ -924,7 +924,7 @@ describe('recordCount routing (runner)', () => {
         'Simplify',
       );
       expect(res.ok).toBe(true);
-      expect(host._workerPool.dispatchWithId).not.toHaveBeenCalled();
+      expect(host._workerPool.dispatchPreparedWithId).not.toHaveBeenCalled();
       expect(runOnDataset).toHaveBeenCalledTimes(1);
       expect(infos[0]).toMatchObject({ recordCount: 10_000, defaultDecision: false });
       expect(source.setDataset).toHaveBeenCalledWith(after, false);

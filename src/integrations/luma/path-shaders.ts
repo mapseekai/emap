@@ -100,8 +100,14 @@ struct PathOut {
  let position=clipPosition(projectSegmentPosition(curr,select(next,prev,end))+offset*width);
  return PathOut(position,offset,local,select(lb,la,end));
 }
-@fragment fn fragmentMain(p:PathOut)->@location(0) vec4<f32> {
- if((p.local.y<0.0||p.local.y>p.len)&&dot(p.corner,p.corner)>1.0){discard;}
- return premultiply(1.0);
+// Reject the same fragments through coverage, without WGSL discard's helper
+// invocation cost on dense overlapping strokes. The rasterizer's MSAA coverage
+// is ANDed with this mask; a rejected fragment writes neither color nor depth.
+struct PathCoverage {
+ @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
+};
+@fragment fn fragmentMain(p:PathOut)->PathCoverage {
+ let outside=(p.local.y<0.0||p.local.y>p.len)&&dot(p.corner,p.corner)>1.0;
+ return PathCoverage(premultiply(1.0),select(0xffffffffu,0u,outside));
 }
 `;

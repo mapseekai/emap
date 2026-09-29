@@ -1,28 +1,17 @@
-/**
- * Worker pool that runs mapshaper commands off-thread.
- *
- * Wire protocol matches `src/engine/worker/mapshaper-worker.ts`:
- *
- *   main → worker:  { id, type: 'run', cmd, packed, inputFiles? }
- *   worker → main:  { id, type: 'ok', packed }
- *                |  { id, type: 'error', message }
- *
- * **Concurrency model**: the pool maintains N workers (default 1).
- * mapshaper itself is not reentrant inside ONE worker — it shares
- * module-level state (parser tables, internal caches) across calls,
- * which is why the worker entry serialises via an internal queue.
- * Across DIFFERENT workers there is no shared state: each worker hosts
- * its own mapshaper instance, so the pool can run `poolSize` jobs in
- * true parallel as long as the underlying datasets are independent.
- *
- * Dispatch picks the worker with the fewest in-flight requests; ties
- * break by round-robin index so the load distribution is stable and
- * predictable.
- *
- * Lazy worker spawn: the underlying `Worker`s are constructed on
- * demand, not at pool construction. Cheap to keep an unused pool
- * around; useful for callers that toggle `useWorker` at runtime.
- */
+import type { WorkerRuntime, RuntimeScope } from '@mapseekai/tasklane';
+import {
+  encodeWorkerPacket,
+  workerPacketTransfers,
+  workerDataByteBound,
+  decodeWorkerData,
+} from '../../integrations/mapshaper/binary';
+import {
+  IMPORT_BYTES,
+  standaloneRuntime,
+  taskValue,
+  workerFactory,
+  reportWorkerCleanupFailure,
+} from '../../integrations/tasklane/runtime';
 export interface MapshaperWorkerPoolOptions {
   /**
    * URL of the worker bundle (`emap-worker.js`). Resolved by the browser
@@ -30,6 +19,8 @@ export interface MapshaperWorkerPoolOptions {
    * page-relative URL where the file is served.
    */
   workerUrl: string;
+  /** Borrowed application runtime; must contain the mapshaper pool. */
+  workerRuntime?: WorkerRuntime;
   /**
    * Optional override for the `Worker` constructor itself. Used by tests
    * to inject a `MockWorker`. Defaults to the global `Worker`.
@@ -37,7 +28,8 @@ export interface MapshaperWorkerPoolOptions {
   WorkerCtor?: typeof Worker;
   /**
    * Number of worker threads to maintain. Each adds its own mapshaper
-   * instance, so peak parallelism = `poolSize`. Default `1` to keep
+   * instance. Actual parallelism is bounded by pool size, runtime limits and budgets.
+   * Default `1` to keep
    * the historical single-worker semantics; set to e.g.
    * `navigator.hardwareConcurrency - 1` to scale.
    *
@@ -47,350 +39,134 @@ export interface MapshaperWorkerPoolOptions {
    * the first is busy, and so on.
    */
   poolSize?: number;
-  /** Maximum time for one worker request before its worker is restarted. Default 120 seconds. */
+  /** Positive integer timeout in milliseconds (maximum 2^31-1). Default 120 seconds. */
   jobTimeoutMs?: number;
 }
 
-interface PendingResolver {
-  resolve: (packed: any) => void;
-  reject: (err: Error) => void;
-  /** Index into `_slots` of the worker handling this request. */
-  workerIndex: number;
-  /** Worker epoch at the time the request was posted. Used to discard
-   *  late messages from a worker that's since been terminated. */
-  epoch: number;
-  timeoutId?: number | NodeJS.Timeout;
-}
-
-interface RunMessage {
-  id: number;
-  type: 'run';
-  /** Legacy CLI string path. Worker calls `parseCommands(cmd)` on it. */
-  cmd?: string;
-  /** Pre-parsed command path (PR-4b). Skips the worker-side CLI parser
-   *  entirely — eliminates a class of escaping bugs and lets ops build
-   *  commands as structured objects. Mutually exclusive with `cmd`. */
-  commands?: ParsedCommandWire[];
-  packed: any;
-  inputFiles?: Record<string, Uint8Array | string>;
-}
-
-/**
- * Wire-format ParsedCommand. Mirrors `mapshaper.internal.parseCommands(...)`
- * output: `{ name: kebab-case, options: snake_case key/values }`. Plain
- * data, structured-clone friendly.
- */
 export interface ParsedCommandWire {
   name: string;
   options: Record<string, unknown>;
 }
 
-type ResponseMessage =
-  | { id: number; type: 'ok'; packed: any }
-  | { id: number; type: 'error'; message: string };
-
-/**
- * Per-worker state. `worker` is null until first use (lazy spawn);
- * `epoch` increments every time we terminate to differentiate late
- * messages from the now-dead worker; `pendingCount` is the live
- * dispatch count (used for least-loaded selection).
- */
-interface WorkerSlot {
-  worker: Worker | null;
-  epoch: number;
-  pendingCount: number;
-}
-
+/** Tasklane owns physical scheduling, timeouts and worker generations. */
 export class MapshaperWorkerPool {
-  private _workerUrl: string;
-  private _WorkerCtor: typeof Worker | undefined;
-  private _slots: WorkerSlot[];
-  private _pending: Map<number, PendingResolver> = new Map();
-  private _nextId: number = 1;
-  /** Round-robin tie-breaker pointer for dispatch. */
-  private _rrCursor: number = 0;
-  private _destroyed: boolean = false;
-  private _jobTimeoutMs: number;
-
-  constructor(opts: MapshaperWorkerPoolOptions) {
-    this._workerUrl = opts.workerUrl;
-    // Tests can inject a mock; production uses the global Worker.
-    this._WorkerCtor = opts.WorkerCtor ?? globalThis.Worker;
-    const poolSize = Math.max(1, Math.floor(opts.poolSize ?? 1));
-    this._jobTimeoutMs = opts.jobTimeoutMs ?? 120_000;
-    if (!Number.isFinite(this._jobTimeoutMs) || this._jobTimeoutMs < 0) {
-      throw new Error('MapshaperWorkerPool: jobTimeoutMs must be a finite non-negative number');
-    }
-    this._slots = Array.from({ length: poolSize }, () => ({
-      worker: null,
-      epoch: 0,
-      pendingCount: 0,
-    }));
+  private readonly runtime: WorkerRuntime;
+  private scope: RuntimeScope;
+  private nextId = 1;
+  private destroyed = false;
+  private readonly timeout: number;
+  readonly poolSize: number;
+  private closing: Promise<void> = Promise.resolve();
+  private readonly retiredScopes = new Set<RuntimeScope>();
+  constructor(private readonly options: MapshaperWorkerPoolOptions) {
+    this.poolSize = Math.max(1, Math.floor(options.poolSize ?? 1));
+    this.timeout = options.jobTimeoutMs ?? 120_000;
+    if (!Number.isSafeInteger(this.timeout) || this.timeout < 1 || this.timeout > 2_147_483_647)
+      throw new Error(
+        'MapshaperWorkerPool: jobTimeoutMs must be an integer from 1 to 2147483647; unbounded execution is unsupported',
+      );
+    this.runtime =
+      options.workerRuntime ??
+      standaloneRuntime(
+        'mapshaper',
+        workerFactory(options.workerUrl, options.WorkerCtor),
+        this.poolSize,
+      );
+    this.scope = this.runtime.createScope('mapshaper');
   }
-
-  /**
-   * Send a command + packed dataset to the worker pool and resolve with
-   * the packed result. Each call gets a unique correlation id so multiple
-   * in-flight requests don't cross wires.
-   */
+  reserveId(): number {
+    return this.nextId++;
+  }
   run(
-    cmdOrCommands: string | ParsedCommandWire[],
+    cmd: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<any> {
-    return this.runWithId(cmdOrCommands, packed, inputFiles).promise;
+    return this.runWithId(cmd, packed, inputFiles).promise;
   }
-
-  /**
-   * Same as {@link run}, but also surfaces the correlation id synchronously
-   * so the caller can fire an event referencing the id BEFORE the promise
-   * resolves. Used by Emap's `workerjobstart` / `workerjobend` events.
-   *
-   * Even on an immediately-rejecting path (destroyed pool, or environments
-   * lacking a `Worker` constructor), the returned `id` is still drawn from
-   * the same monotonic counter so it never collides with live ids — UI
-   * code can correlate a `workerjobstart` with a synchronously-rejecting
-   * `workerjobend` without aliasing.
-   */
   runWithId(
-    cmdOrCommands: string | ParsedCommandWire[],
+    cmd: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
   ): { id: number; promise: Promise<any> } {
     const id = this.reserveId();
-    return { id, promise: this.dispatchWithId(id, cmdOrCommands, packed, inputFiles) };
+    return { id, promise: this.dispatchWithId(id, cmd, packed, inputFiles) };
   }
-
-  /**
-   * Reserve a correlation id without sending anything. Call {@link dispatchWithId}
-   * with the same id later to actually post the message. Useful when the
-   * caller wants to fire a "started" event with a stable id BEFORE doing
-   * expensive sync work (e.g. dataset packing) that delays the postMessage.
-   */
-  reserveId(): number {
-    return this._nextId++;
-  }
-
-  /**
-   * Send a message using a previously-reserved id (see {@link reserveId}).
-   * Returns the result promise. Same failure modes as {@link run}: pool
-   * destroyed → rejects; worker spawn fails → rejects.
-   */
-  dispatchWithId(
+  async dispatchWithId(
     id: number,
-    cmdOrCommands: string | ParsedCommandWire[],
+    cmd: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
-    /**
-     * Optional list of `Transferable` objects (typed-array `.buffer`s,
-     * `MessagePort`s, …) handed to `postMessage`. When supplied,
-     * ownership moves to the worker — saves a structured-clone copy
-     * and roughly halves the main-thread memory peak around a
-     * pack/unpack round-trip.
-     *
-     * Callers that share the buffers with main-thread code must NOT
-     * pass them via this list (transfer is destructive on the source
-     * realm).
-     */
     transferList?: Transferable[],
   ): Promise<any> {
-    if (this._destroyed) {
-      return Promise.reject(new Error('MapshaperWorkerPool: destroyed'));
-    }
-    const workerIndex = this._pickWorker();
-    let worker: Worker;
-    try {
-      worker = this._ensureWorker(workerIndex);
-    } catch (err: any) {
-      // Wrap synchronous spawn failure (e.g. missing Worker constructor)
-      // in a rejected promise so callers using only `pool.run().catch(...)`
-      // see the same shape as every other failure mode. Without this,
-      // run() would synchronously throw, breaking the Promise contract
-      // implied by the return type.
-      return Promise.reject(err);
-    }
-    const slot = this._slots[workerIndex];
-    const epoch = slot.epoch;
-    slot.pendingCount++;
-    return new Promise<any>((resolve, reject) => {
-      const pending: PendingResolver = { resolve, reject, workerIndex, epoch };
-      if (this._jobTimeoutMs > 0) {
-        pending.timeoutId = setTimeout(
-          () => this._onRequestTimeout(id, workerIndex, epoch),
-          this._jobTimeoutMs,
-        );
-      }
-      this._pending.set(id, pending);
-      const msg: RunMessage = { id, type: 'run', packed };
-      if (typeof cmdOrCommands === 'string') {
-        msg.cmd = cmdOrCommands;
-      } else {
-        msg.commands = cmdOrCommands;
-      }
-      if (inputFiles) msg.inputFiles = inputFiles;
-      try {
-        if (transferList && transferList.length > 0) {
-          worker.postMessage(msg, transferList);
-        } else {
-          worker.postMessage(msg);
-        }
-      } catch (err) {
-        clearTimeout(pending.timeoutId);
-        this._pending.delete(id);
-        slot.pendingCount = Math.max(0, slot.pendingCount - 1);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    });
-  }
-
-  /**
-   * Terminate every spawned worker, reject every pending request, and
-   * refuse subsequent `run()` calls. Idempotent.
-   */
-  destroy(): void {
-    if (this._destroyed) return;
-    this._destroyed = true;
-    this._terminateAll(new Error('MapshaperWorkerPool: destroyed'));
-  }
-
-  /**
-   * Hard-kill every spawned worker and reject every pending request as
-   * `'cancelled'`. Unlike {@link destroy}, the pool stays usable — the
-   * next {@link run} call spawns fresh workers on demand.
-   *
-   * mapshaper isn't interruptible mid-command, so this is the only sound
-   * way to abandon a job that's already running: terminate the whole
-   * worker, lose any other queued jobs as collateral, and start over. A
-   * future iteration could add per-request cancellation tokens; v1 keeps
-   * this honest by exposing only the all-or-nothing semantics.
-   */
-  cancelAll(): void {
-    if (this._destroyed) return;
-    this._terminateAll(new Error('MapshaperWorkerPool: cancelled'));
-  }
-
-  /** Number of worker slots configured (NOT the count of currently-spawned workers). */
-  get poolSize(): number {
-    return this._slots.length;
-  }
-
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Pick the worker slot to dispatch the next request to.
-   *
-   * Algorithm:
-   *   1. Among slots with the LOWEST `pendingCount`, prefer those that
-   *      are already spawned (avoid paying spawn cost when load is low).
-   *   2. Within that subset, pick by round-robin so the load stays even
-   *      across slots over time. The cursor advances on every dispatch.
-   */
-  private _pickWorker(): number {
-    let bestIndex = 0;
-    let bestCount = Infinity;
-    let bestSpawned = false;
-    const n = this._slots.length;
-    for (let i = 0; i < n; i++) {
-      const idx = (this._rrCursor + i) % n;
-      const slot = this._slots[idx];
-      const spawned = slot.worker !== null;
-      const better =
-        slot.pendingCount < bestCount ||
-        // Same load — prefer spawned over un-spawned to avoid spawn cost
-        (slot.pendingCount === bestCount && spawned && !bestSpawned);
-      if (better) {
-        bestIndex = idx;
-        bestCount = slot.pendingCount;
-        bestSpawned = spawned;
-      }
-    }
-    this._rrCursor = (bestIndex + 1) % n;
-    return bestIndex;
-  }
-
-  private _terminateAll(reason: Error): void {
-    for (const slot of this._slots) {
-      if (slot.worker) {
-        slot.worker.terminate();
-        slot.worker = null;
-      }
-      slot.epoch++;
-      slot.pendingCount = 0;
-    }
-    for (const pending of this._pending.values()) {
-      clearTimeout(pending.timeoutId);
-      pending.reject(reason);
-    }
-    this._pending.clear();
-  }
-
-  private _ensureWorker(index: number): Worker {
-    const slot = this._slots[index];
-    if (slot.worker) return slot.worker;
-    if (!this._WorkerCtor) {
-      throw new Error('MapshaperWorkerPool: Worker constructor not available in this environment');
-    }
-    const w = new this._WorkerCtor(this._workerUrl);
-    w.onmessage = (e: MessageEvent) => this._onMessage(index, e.data as ResponseMessage);
-    w.onmessageerror = () =>
-      this._failWorker(index, new Error('mapshaper worker message deserialization failed'));
-    w.onerror = (e: ErrorEvent) => this._onWorkerError(index, e);
-    slot.worker = w;
-    return w;
-  }
-
-  private _onMessage(workerIndex: number, data: ResponseMessage): void {
-    if (!data || typeof data.id !== 'number') return;
-    const pending = this._pending.get(data.id);
-    if (!pending) return;
-    // Defensive: if a fresh worker was spawned after this request's
-    // worker was terminated, a late message from the dead worker would
-    // otherwise resolve a NEW pending entry that happens to share the
-    // same id. The epoch check rules this out. We also verify the
-    // message came from the SAME worker the request was dispatched to —
-    // shouldn't happen, but cheap to guard.
-    const slot = this._slots[workerIndex];
-    if (pending.workerIndex !== workerIndex || pending.epoch !== slot.epoch) return;
-    this._pending.delete(data.id);
-    clearTimeout(pending.timeoutId);
-    slot.pendingCount = Math.max(0, slot.pendingCount - 1);
-    if (data.type === 'ok') {
-      pending.resolve(data.packed);
-    } else {
-      pending.reject(new Error(data.message || 'mapshaper worker error'));
-    }
-  }
-
-  private _onWorkerError(workerIndex: number, e: ErrorEvent): void {
-    this._failWorker(workerIndex, new Error(`mapshaper worker error: ${e.message || 'unknown'}`));
-  }
-
-  private _onRequestTimeout(id: number, workerIndex: number, epoch: number): void {
-    const pending = this._pending.get(id);
-    if (!pending || pending.workerIndex !== workerIndex || pending.epoch !== epoch) return;
-    this._failWorker(
-      workerIndex,
-      new Error(`mapshaper worker request ${id} timed out after ${this._jobTimeoutMs}ms`),
+    return this.dispatchPreparedWithId(
+      id,
+      cmd,
+      async () => {
+        // Preserve explicit ownership transfer; implicit calls keep their inputs intact.
+        return transferList?.length ? structuredClone(packed, { transfer: transferList }) : packed;
+      },
+      inputFiles,
+      workerDataByteBound({ packed, cmd, inputFiles }),
     );
   }
-
-  private _failWorker(workerIndex: number, error: Error): void {
-    const slot = this._slots[workerIndex];
-    if (slot.worker) {
-      slot.worker.terminate();
-      slot.worker = null;
-    }
-    slot.epoch++;
-    slot.pendingCount = 0;
-    const toFail: number[] = [];
-    for (const [id, pending] of this._pending) {
-      if (pending.workerIndex === workerIndex) toFail.push(id);
-    }
-    for (const id of toFail) {
-      const pending = this._pending.get(id);
-      this._pending.delete(id);
-      clearTimeout(pending?.timeoutId);
-      pending?.reject(error);
-    }
+  async dispatchPreparedWithId(
+    id: number,
+    cmd: string | ParsedCommandWire[],
+    prepare: () => Promise<any>,
+    inputFiles?: Record<string, Uint8Array | string>,
+    inputByteLimit = IMPORT_BYTES,
+  ): Promise<any> {
+    if (this.destroyed) throw new Error('MapshaperWorkerPool: destroyed');
+    const handle = this.scope.enqueuePrepared('mapshaper', {
+      pool: 'mapshaper',
+      group: String(id),
+      cancellation: 'terminate',
+      budget: { inputBytes: inputByteLimit, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
+      preparationScratchBytes: IMPORT_BYTES,
+      executionTimeoutMs: this.timeout,
+      prepareAsync: async ({ signal }) => {
+        const packed = await prepare();
+        signal.throwIfAborted();
+        // A binary envelope avoids tasklane's object-graph limit for millions of shapes.
+        const bytes = encodeWorkerPacket(packed);
+        return {
+          payload: {
+            bytes,
+            cmd: typeof cmd === 'string' ? cmd : undefined,
+            commands: typeof cmd === 'string' ? undefined : cmd,
+            inputFiles,
+          },
+          transfer: workerPacketTransfers(bytes),
+        };
+      },
+    });
+    return taskValue(handle, (bytes: Uint8Array) => decodeWorkerData(bytes));
+  }
+  cancelAll(): void {
+    if (this.destroyed) return;
+    const previous = this.scope;
+    this.scope = this.runtime.createScope('mapshaper');
+    this.retiredScopes.add(previous);
+    this.closeScopes();
+  }
+  destroy(): void {
+    this.destroyed = true;
+    this.retiredScopes.add(this.scope);
+    this.closeScopes();
+  }
+  private closeScopes(): void {
+    this.closing = Promise.all([
+      ...[...this.retiredScopes].map((scope) =>
+        scope.dispose().then(() => {
+          this.retiredScopes.delete(scope);
+        }),
+      ),
+      this.destroyed && !this.options.workerRuntime ? this.runtime.dispose() : undefined,
+    ]).then(() => {});
+    void this.closing.catch(reportWorkerCleanupFailure);
+  }
+  get closed(): Promise<void> {
+    return this.closing;
   }
 }

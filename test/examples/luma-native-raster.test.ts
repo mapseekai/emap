@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NativeRasterLayer } from '../../packages/examples/src/luma-raster/native-layer';
 import { AffineTransform } from '../../src/domain/geo/transform';
+import { registerPerformanceSource } from '../../packages/examples/src/performance-monitor';
+
+// These cache contracts run without a browser; the monitor's DOM lifecycle is tested separately.
+vi.mock('../../packages/examples/src/performance-monitor', () => ({
+  registerPerformanceSource: vi.fn(() => vi.fn()),
+}));
 
 // Small structural fixtures are only lifecycle contracts, never performance evidence.
 const metadata = {
@@ -47,7 +53,14 @@ function setup(width = 1024, height = 1024) {
       ),
     })),
   };
+  let lose!: () => void;
   const gpu = {
+    recreate: vi.fn(),
+    available: true,
+    lost: new Promise<void>((resolve) => {
+      lose = resolve;
+    }),
+    canvas: { ownerDocument: {} },
     stats: { liveTextureBytes: 0, textureUploads: 0 },
     upload: vi.fn((tile: any, r: any) => {
       const bytes = (tile.window[2] - tile.window[0]) * (tile.window[3] - tile.window[1]) * 8;
@@ -62,8 +75,9 @@ function setup(width = 1024, height = 1024) {
     dispose: vi.fn(),
   };
   const report = vi.fn(),
-    layer = new NativeRasterLayer(source as any, gpu as any, vi.fn(), report);
-  return { layer, source, gpu, report };
+    invalidate = vi.fn(),
+    layer = new NativeRasterLayer(source as any, gpu as any, invalidate, report);
+  return { layer, source, gpu, report, invalidate, lose };
 }
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (fn: () => void) => setTimeout(fn, 0));
@@ -87,6 +101,8 @@ describe('dynamic native raster cache lifecycle', () => {
     expect(source.dispose).not.toHaveBeenCalled();
     layer.dispose();
     layer.dispose();
+    const unregister = vi.mocked(registerPerformanceSource).mock.results.at(-1)!.value;
+    expect(unregister).toHaveBeenCalledOnce();
     expect(source.dispose).toHaveBeenCalledOnce();
     expect(gpu.stats.liveTextureBytes).toBe(0);
   });
@@ -262,5 +278,83 @@ it('falls back to the bounded raw reader when a nonaligned texture exceeds the p
   expect(packed).not.toHaveBeenCalled();
   expect(gpu.upload).toHaveBeenCalledOnce();
   expect(report).not.toHaveBeenCalled();
+  layer.dispose();
+});
+
+it('recovers the GPU without reopening the source or uploading an obsolete read', async () => {
+  const { layer, source, gpu, lose, invalidate, report } = setup();
+  const replacement = {
+    ...gpu,
+    lost: new Promise<void>(() => {}),
+    upload: vi.fn(gpu.upload),
+    dispose: vi.fn(),
+  };
+  let restore!: (value: any) => void;
+  gpu.recreate.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        restore = resolve;
+      }),
+  );
+  const original = source.readWindow.getMockImplementation()!;
+  let finish!: () => Promise<void>;
+  source.readWindow.mockImplementationOnce(
+    (r: any) =>
+      new Promise((resolve) => {
+        finish = async () => resolve(await original(r));
+      }),
+  );
+  const view = new AffineTransform(1, -1, 0, 1024);
+  layer.update(view, 120, 120, 1);
+  await vi.waitFor(() => expect(source.readWindow).toHaveBeenCalledOnce());
+  lose();
+  await vi.waitFor(() => expect(gpu.recreate).toHaveBeenCalledOnce());
+  expect(source.readWindow.mock.calls[0][1].aborted).toBe(true);
+  expect(layer.ready).toBe(false);
+  await finish();
+  layer.update(view, 120, 120, 1);
+  expect(gpu.upload).not.toHaveBeenCalled();
+  expect(source.readWindow).toHaveBeenCalledOnce();
+  restore(replacement);
+  await vi.waitFor(() => expect(layer.gpu).toBe(replacement));
+  expect(invalidate).toHaveBeenCalled();
+  layer.update(view, 120, 120, 1);
+  await vi.waitFor(() => expect(layer.ready).toBe(true));
+  expect(replacement.upload).toHaveBeenCalledOnce();
+  expect(source.dispose).not.toHaveBeenCalled();
+  expect(report).not.toHaveBeenCalled();
+  layer.dispose();
+  expect(replacement.dispose).toHaveBeenCalledOnce();
+});
+
+it('destroys a replacement delivered after disposal and cancels recovery', async () => {
+  const { layer, gpu, lose, invalidate, report } = setup();
+  const next = { dispose: vi.fn() };
+  let restore!: (value: any) => void;
+  gpu.recreate.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        restore = resolve;
+      }),
+  );
+  lose();
+  await vi.waitFor(() => expect(gpu.recreate).toHaveBeenCalledOnce());
+  layer.dispose();
+  expect(gpu.recreate.mock.calls[0][0].aborted).toBe(true);
+  restore(next);
+  await vi.waitFor(() => expect(next.dispose).toHaveBeenCalledOnce());
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(report).not.toHaveBeenCalled();
+});
+
+it('reports recovery failure once and stops scheduling reads', async () => {
+  const { layer, source, gpu, lose, report } = setup();
+  gpu.recreate.mockRejectedValue(new Error('replacement unavailable'));
+  lose();
+  await vi.waitFor(() => expect(report).toHaveBeenCalledOnce());
+  layer.update(new AffineTransform(1, -1, 0, 1024), 120, 120, 1);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(source.readWindow).not.toHaveBeenCalled();
+  expect(gpu.recreate).toHaveBeenCalledOnce();
   layer.dispose();
 });

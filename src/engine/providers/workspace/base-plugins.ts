@@ -1,3 +1,4 @@
+import { createEmapWorkerRuntime } from '../../../integrations/tasklane/runtime';
 import { EventDispatcher } from '../../core/events';
 import type { Plugin } from 'cordis';
 import type { EmapOptions } from '../../../runtime/services/options';
@@ -9,7 +10,18 @@ export function optionsPlugin(options: EmapOptions): Plugin.Object {
     provide: ['options'],
     apply(ctx) {
       ctx.effect(function* () {
-        yield ctx.provide('options', options);
+        const workerRuntime =
+          options.workerRuntime ??
+          createEmapWorkerRuntime({
+            urls: {
+              mapshaper: options.workerUrl ?? 'emap-worker.js',
+              geometry: options.geometryWorkerUrl,
+              msdf: options.msdfWorkerUrl,
+            },
+            sizes: { mapshaper: options.workerPoolSize ?? 1 },
+          });
+        if (!options.workerRuntime) yield () => workerRuntime.dispose();
+        yield ctx.provide('options', Object.freeze({ ...options, workerRuntime }));
       });
     },
   };

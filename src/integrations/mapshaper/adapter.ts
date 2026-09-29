@@ -21,6 +21,7 @@
 // adapter is supplied.
 
 import {
+  bindLayerFields,
   packLayerFields,
   restoreLayerFields,
   runWithLayerFields,
@@ -457,6 +458,13 @@ export interface MapshaperAdapter {
    */
   copyDataset(dataset: MapshaperDataset): MapshaperDataset;
 
+  /** Prepare a detached projection in CPU slices, or return null for the CLI path. */
+  prepareReprojectDataset?(
+    dataset: MapshaperDataset,
+    targetCrs: string,
+    assertCurrent: () => void,
+  ): Promise<MapshaperDataset | null>;
+
   // -- Command runner ----------------------------------------------------
 
   /**
@@ -507,6 +515,14 @@ import mproj from 'mproj';
 
 interface MapshaperProjectionInternals {
   parseCrsString(crs: string): unknown;
+  getDatasetCRS(dataset: MapshaperDataset): unknown;
+  isLatLngCRS(crs: unknown): boolean;
+  crsAreEqual(source: unknown, destination: unknown): boolean;
+  getProjTransform2(
+    source: unknown,
+    destination: unknown,
+  ): (x: number, y: number) => [number, number] | null;
+  copyRecord(record: Record<string, unknown>): Record<string, unknown>;
 }
 
 interface MprojInternals {
@@ -1191,6 +1207,129 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   copyDataset(dataset: MapshaperDataset): MapshaperDataset {
     return mapshaper.internal.copyDataset(dataset);
+  }
+
+  async prepareReprojectDataset(
+    dataset: MapshaperDataset,
+    targetCrs: string,
+    assertCurrent: () => void,
+  ): Promise<MapshaperDataset | null> {
+    const data = dataset.arcs?.getVertexData?.();
+    const size =
+      data?.xx.length ?? dataset.layers.reduce((n, layer) => n + (layer.shapes?.length ?? 0), 0);
+    if (size < 100_000) return null;
+    const projectionApi = mapshaper.internal as unknown as MapshaperProjectionInternals;
+    const source = projectionApi.getDatasetCRS(dataset);
+    const destination = parseMapshaperCrs(targetCrs);
+    // Geographic inputs can require whole-topology clipping/cutting. Keep that
+    // algorithm intact; projected inputs bypass preProjectionClip in mapshaper.
+    if (
+      !source ||
+      projectionApi.isLatLngCRS(source) ||
+      projectionApi.crsAreEqual(source, destination)
+    )
+      return null;
+    const project = projectionApi.getProjTransform2(source, destination);
+    let slice = 0,
+      work = 0;
+    const yieldSlice = async () => {
+      // Timer nesting adds a 4ms delay per slice in browsers. A posted task
+      // yields to input/rendering without adding seconds to large projections.
+      await new Promise<void>((resolve) => {
+        if (typeof MessageChannel === 'undefined') {
+          setTimeout(resolve, 0);
+          return;
+        }
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          channel.port2.close();
+          resolve();
+        };
+        channel.port2.postMessage(null);
+      });
+      assertCurrent();
+      slice = performance.now();
+    };
+    await yieldSlice();
+    const result: MapshaperDataset = {
+      ...dataset,
+      info: { ...dataset.info, crs: destination },
+      layers: [],
+    };
+    // Clone records/shapes once, with the same record semantics as DataTable.clone.
+    for (const layer of dataset.layers) {
+      const copy: MapshaperLayer = { ...layer, shapes: layer.shapes ? [] : null };
+      if (layer.fields) copy.fields = layer.fields.map((field) => ({ ...field }));
+      if (layer.shapes) {
+        for (const shape of layer.shapes) {
+          let copied: number[][] | null = null;
+          if (shape) {
+            copied = [];
+            for (const part of shape as number[][]) {
+              if (layer.geometry_type === 'point') {
+                const point = project(part[0], part[1]);
+                if (point) copied.push(point);
+              } else {
+                const path: number[] = [];
+                for (const id of part) {
+                  path.push(id);
+                  if ((++work & 4095) === 0 && performance.now() - slice >= 8) await yieldSlice();
+                }
+                copied.push(path);
+              }
+              if ((++work & 4095) === 0 && performance.now() - slice >= 8) await yieldSlice();
+            }
+            if (layer.geometry_type === 'point' && copied.length === 0) copied = null;
+          }
+          copy.shapes!.push(copied);
+          if ((++work & 4095) === 0 && performance.now() - slice >= 8) await yieldSlice();
+        }
+      }
+      if (layer.data) {
+        const records: Record<string, unknown>[] = [];
+        for (const record of layer.data.getRecords!()) {
+          records.push(projectionApi.copyRecord(record));
+          if ((++work & 1023) === 0 && performance.now() - slice >= 8) await yieldSlice();
+        }
+        copy.data = this.createDataTable(records);
+      }
+      bindLayerFields(copy);
+      result.layers.push(copy);
+    }
+    if (data) {
+      // Write directly to typed storage. An invalid vertex removes its arc,
+      // retaining the empty arc's id, exactly as mapshaper's projectArcs2 does.
+      const nn = new Uint32Array(data.nn.length);
+      const xx = new Float64Array(data.xx.length),
+        yy = new Float64Array(data.yy.length);
+      let out = 0;
+      for (let arc = 0; arc < nn.length; arc++) {
+        const start = out;
+        let valid = true;
+        for (let i = data.ii[arc], end = i + data.nn[arc]; i < end; i++) {
+          const p = project(data.xx[i], data.yy[i]);
+          if (!p) {
+            valid = false;
+            break;
+          }
+          xx[out] = p[0];
+          yy[out++] = p[1];
+          if ((++work & 1023) === 0 && performance.now() - slice >= 8) await yieldSlice();
+        }
+        if (!valid || out - start === 1) out = start;
+        nn[arc] = out - start;
+        if ((++work & 1023) === 0 && performance.now() - slice >= 8) await yieldSlice();
+      }
+      await yieldSlice();
+      result.arcs = restoreTransferredArcs({
+        nn,
+        xx: xx.subarray(0, out),
+        yy: yy.subarray(0, out),
+      });
+    }
+    assertCurrent();
+    return result;
   }
 
   runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset> {

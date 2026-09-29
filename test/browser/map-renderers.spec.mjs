@@ -107,6 +107,47 @@ for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: formal E
   expect(released.canvases).toBe(0);if(released.stats){expect(released.stats.liveBufferBytes).toBe(0);expect(released.stats.liveTextureBytes).toBe(0);}
   await expect.poll(()=>page.workers().length).toBe(0);expect(errors).toEqual([]);
 });
+for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: formal labels retain filtered and high-priority tail features`, async ({page}, info) => {
+  test.setTimeout(120000);
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installCanvasReadback(page);
+  await runtime(page); await create(page, renderer);
+  await page.evaluate(async () => {
+    const source = new emap.TopologySource('tail-labels');
+    const features = Array.from({length: 33000}, (_, rank) => ({type: 'Feature', properties: {name: 'Tail '+rank, tailName: rank >= 32768 ? 'Tail '+rank : '', rank}, geometry: {type: 'Point', coordinates: [0, 0]}}));
+    await source.setData({filename: 'tail-labels.geojson', content: new TextEncoder().encode(JSON.stringify({type: 'FeatureCollection', features}))});
+    await formalMap.addSource('tail-labels', source);
+    formalMap.addLayer({id: 'tail-labels', source: 'tail-labels', type: 'circle', filter: ['>=', ['get', 'rank'], 32768], label: {field: 'name', priority: ['get', 'rank'], maxLabels: 1, fontSize: 18, color: '#dd1177'}});
+  });
+  const evidence = [];
+  for (const mode of ['filtered', 'empty text', 'global priority']) {
+    if (mode !== 'filtered') await page.evaluate(mode => {
+      formalMap.setFilter('tail-labels', null);
+      formalMap.setLayerLabel('tail-labels', {field: mode === 'empty text' ? 'tailName' : 'name', priority: ['get', 'rank'], maxLabels: 1, fontSize: 18, color: '#dd1177'});
+    }, mode);
+    await page.evaluate(() => flushFormal());
+    const result = await page.evaluate(async () => {
+      const labels = formalMap.ctx.render._labels;
+      formalMap.render();
+      const pixels = await readCanvasPixels(formalMap.ctx.render._canvas);
+      let painted = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 200 && pixels[i+1] < 60 && pixels[i+2] > 90 && pixels[i+2] < 145 && pixels[i+3] > 100) painted++;
+      return {features: labels.placements.map(l => l.featureId), candidates: labels.stats.candidates, layoutMs: labels.stats.layoutMs, painted};
+    });
+    expect(result.features).toEqual([32999]);
+    expect(result.candidates).toBe(mode === 'global priority' ? 20000 : 232);
+    expect(result.painted).toBeGreaterThan(30);
+    evidence.push({mode, ...result});
+  }
+  await info.attach('tail-labels', {body: JSON.stringify(evidence, null, 2), contentType: 'application/json'});
+  await page.screenshot({path: info.outputPath('tail-labels.png')});
+  expect(await page.evaluate(() => renderErrors)).toEqual([]);
+  await page.evaluate(() => formalMap.dispose());
+  await expect.poll(() => page.workers().length).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 test('default is WebGL2 and unavailable backend rejects instead of silently using Canvas2D',async({page})=>{
   await runtime(page);expect((await create(page,undefined)).renderer).toBe('webgl2');await page.evaluate(()=>formalMap.dispose());
   const result=await page.evaluate(async()=>{
@@ -138,6 +179,20 @@ for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: formal G
     expect(direct.raster.performance.canvasPreparedTiles).toBe(0);
     expect(direct.raster.performance.pixelPreclassifiedTiles).toBeGreaterThan(0);
     expect(direct.raster.pixelCacheBytes).toBe(direct.raster.cachedBytes);
+  }
+  if(renderer==='webgpu') {
+    await page.evaluate(async()=>{
+      const map=geotiffDemo.map;map.render();
+      window.rasterRecoveryPixels=await readCanvasPixels(map.ctx.render._canvas);
+      window.rasterLostDevice=map.ctx.render._painter.gpu.device;
+      rasterLostDevice.handle.destroy();
+    });
+    await expect.poll(()=>page.evaluate(async()=>{
+      const map=geotiffDemo.map,gpu=map.ctx.render._painter.gpu;map.render();
+      if(gpu.device===rasterLostDevice||gpu.lost)return false;
+      const after=await readCanvasPixels(map.ctx.render._canvas);
+      return after.length===rasterRecoveryPixels.length&&after.every((v,i)=>v===rasterRecoveryPixels[i]);
+    })).toBe(true);
   }
   const warm=await page.evaluate(()=>geotiffDemo.map.ctx.render._painter.stats?.textureUploads);
   await page.evaluate(()=>{for(let i=0;i<5;i++)geotiffDemo.map.render();});
@@ -300,4 +355,98 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: changing styles 
   expect(result.afterDispose.nominalKnownGpuBytes).toBe(0);
   expect(result.errors).toEqual([]);
   await info.attach('memory-lifecycle', {body: JSON.stringify(result, null, 2), contentType:'application/json'});
+});
+
+for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: camera animations reuse the painted frame and settle after interruption`, async ({page}) => {
+  await runtime(page); await create(page,renderer); await settleRequests(page);
+  const during=await page.evaluate(async () => {
+    const map=formalMap,r=map.ctx.render;
+    // Deterministically select the slow-Canvas path without delaying the test.
+    r._scheduler.recordFrame(100,r._captureRenderSnapshot());
+    const scale=Math.abs(map.getTransform().mx);
+    map.easeTo({scale:scale*1.5,duration:1000});
+    await new Promise(resolve=>setTimeout(resolve,80));
+    return {active:r._navSnapshotTransform!==null,fast:r._scheduler.fastActive,scale};
+  });
+  expect(during.active).toBe(true); expect(during.fast).toBe(true);
+  await page.evaluate(async (scale) => {
+    // Supersede the first animation, then invalidate the resident presentation.
+    formalMap.easeTo({scale:scale*2,duration:180});
+    formalMap.setPaintProperty('poi','circle-color','#22dd44');
+    await new Promise(resolve=>formalMap.once('moveend',resolve));
+  },during.scale);
+  await settleRequests(page);
+  expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform)).toBeNull();
+  expect(await page.evaluate(()=>formalMap.ctx.render._canvas.style.transform)).toBe('');
+  expect(await page.evaluate(()=>Math.abs(formalMap.getTransform().mx))).toBeCloseTo(during.scale*2,8);
+  const pixel=await page.evaluate(()=>mapPixel(0,0));expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
+  // A synchronous jump also ends navigation and renders its final camera.
+  await page.evaluate(scale=>formalMap.jumpTo({scale}),during.scale); await settleRequests(page);
+  expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform)).toBeNull();
+  expect(await page.evaluate(()=>renderErrors)).toEqual([]);
+  await page.evaluate(()=>formalMap.dispose());
+});
+
+
+for (const backend of ['webgl2', 'webgpu']) test(`${backend}: device recovery restores geometry icons and labels`, async ({page}, info) => {
+  test.skip(backend === 'webgpu' && info.project.name !== 'chrome', 'WebGPU recovery is exercised on Chrome');
+  test.setTimeout(120000);
+  const errors=[]; page.on('pageerror', e=>errors.push(e.message));
+  page.on('console', m=>{if(m.type()==='error')errors.push(m.text());});
+  page.on('requestfailed', r=>errors.push(`${r.url()}: ${r.failure()?.errorText}`));
+  await installCanvasReadback(page);
+  await runtime(page); await create(page, backend);
+  await page.evaluate(()=>{
+    const url='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#aa22cc"/></svg>');
+    formalMap.setLayerSymbol('poi',{images:{marker:{url,size:[32,32]}},layout:{'icon-image':'marker','text-field':['get','name'],'text-size':18,'text-offset':[0,1.2]},paint:{'text-color':'#dd1177'}});
+  });
+  await expect.poll(()=>page.evaluate(async()=>{
+    await flushFormal();return formalMap.ctx.render._labels?.stats.placed;
+  })).toBe(1);
+  await page.evaluate(async()=>{
+    await flushFormal();
+    window.recoveryGpu=formalMap.ctx.render._painter.gpu;
+    window.beforeRecovery=await readCanvasPixels(formalMap.ctx.render._canvas);
+    window.beforeSize=[formalMap.ctx.render._canvas.width,formalMap.ctx.render._canvas.height];
+    window.contextListeners=0;
+    const canvas=formalMap.ctx.render._canvas, add=canvas.addEventListener.bind(canvas);
+    canvas.addEventListener=(type,listener,options)=>{
+      if((type==='webglcontextlost'||type==='webglcontextrestored')&&!options?.once)contextListeners++;
+      return add(type,listener,options);
+    };
+  });
+  for(let cycle=0;cycle<2;cycle++) {
+    await page.evaluate(backend=>{
+      window.lostDevice=recoveryGpu.device;
+      if(backend==='webgpu') lostDevice.handle.destroy();
+      else {
+        const ext=lostDevice.gl.getExtension('WEBGL_lose_context');
+        if(!ext)throw new Error('WEBGL_lose_context unavailable');
+        const canvas=formalMap.ctx.render._canvas;
+        canvas.addEventListener('webglcontextlost',()=>setTimeout(()=>ext.restoreContext(),50),{once:true});
+        ext.loseContext();
+      }
+    },backend);
+    await expect.poll(()=>page.evaluate(async()=>{
+      await flushFormal();
+      return recoveryGpu.device!==lostDevice&&!recoveryGpu.lost&&formalMap.ctx.render._painter.frameComplete;
+    })).toBe(true).catch(async e=>{console.log('RECOVERY_STATE',await page.evaluate(()=>({errors:renderErrors,stage:formalMap.ctx.render._canvas.dataset.gpuStage,lost:recoveryGpu.lost,stats:recoveryGpu.stats})));throw e;});
+    await expect.poll(()=>page.evaluate(async()=>{
+      await flushFormal();
+      const after=await readCanvasPixels(formalMap.ctx.render._canvas);
+      return after.length===beforeRecovery.length&&after.every((n,i)=>n===beforeRecovery[i]);
+    })).toBe(true).catch(async e=>{console.log('RECOVERY_PIXELS',await page.evaluate(async()=>{const after=await readCanvasPixels(formalMap.ctx.render._canvas);let differences=0,max=0;for(let i=0;i<after.length;i++)if(after[i]!==beforeRecovery[i]){differences++;max=Math.max(max,Math.abs(after[i]-beforeRecovery[i]));}return {differences,max,beforeSize,size:[formalMap.ctx.render._canvas.width,formalMap.ctx.render._canvas.height],pixels:[await mapPixel(0,0),await mapPixel(2,-2),await mapPixel(0,3)],errors:renderErrors,stats:recoveryGpu.stats};}));throw e;});
+  }
+  await page.screenshot({path:info.outputPath('recovered.png')});
+  const result=await page.evaluate(async()=>{
+    const stats={...recoveryGpu.stats};
+    await formalMap.dispose();
+    return {stats, bytes:recoveryGpu.memoryStats.nominalKnownGpuBytes, errors:renderErrors,contextListeners};
+  });
+  expect(result.bytes).toBe(0);
+  expect(result.contextListeners).toBe(0);
+  expect(result.errors.filter(e=>!e.includes('WebGL context lost'))).toEqual([]);
+  expect(errors).toEqual([]);
+  await expect.poll(()=>page.workers().length).toBe(0);
+  await info.attach('device-recovery',{body:JSON.stringify(result,null,2),contentType:'application/json'});
 });

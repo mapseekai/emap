@@ -1,4 +1,5 @@
 import { getExampleRenderer } from './renderer-choice';
+import { monitorExampleMap } from './performance-render-source';
 import { Context, type Plugin } from 'cordis';
 import cordisPackage from 'cordis/package.json';
 import { inspectContext, inspectServices, settleContext } from '@mapseekai/emap/context';
@@ -15,6 +16,7 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
   };
   const emap = await loadExampleRuntime();
   const map = await emap.Emap.create({ renderer: getExampleRenderer(), container: 'map', preset: 'editor' });
+  monitorExampleMap(map, document);
   await map.addControl(new emap.NavigationControl(), 'top-left');
   const definitions = new Map<string, Plugin>(editorPreset.filter(plugin => plugin.name).map(plugin => [plugin.name!, plugin]));
   const fibers = () => [...map.ctx.registry.values()].flatMap(runtime => [...runtime.fibers]);

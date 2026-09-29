@@ -51,6 +51,55 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 const signal = () => new AbortController().signal;
 describe('MSDF atlas ownership and reuse', () => {
+  it('keeps a displayed page immutable when the next layout recycles its atlas slot', async () => {
+    mock.shape.mockImplementation(async (requests: ShapeRequest[]) =>
+      requests.map((r) => ({
+        key: r.key,
+        left: 0,
+        top: -1,
+        right: 1,
+        bottom: 0,
+        missing: 0,
+        glyphs: [{ font: 'http://localhost/font.woff', id: r.text.charCodeAt(0), x: 0, y: 0 }],
+      })),
+    );
+    mock.glyphs.mockImplementation(async (requests: GlyphRequest[]) =>
+      requests.map((r) => ({
+        ...r,
+        width: 512,
+        height: 512,
+        data: new Uint8Array(512 * 512 * 4).fill(r.id),
+        plane: [0, -1, 1, 0],
+        emPixels: 48,
+        path: '',
+        upem: 100,
+      })),
+    );
+    const atlas = new MsdfLabelAtlas(new URL('http://localhost/worker.js'));
+    try {
+      const first = [...'ABCD'].map((text) => ({ text, options: {} }));
+      atlas.begin();
+      await atlas.prepare(first, signal());
+      await atlas.prepareGlyphs(first, signal());
+      const raster = atlas.get('A', {}, 1)!;
+      const old = raster.glyphs[0].page;
+      for (const text of 'BCD') atlas.get(text, {}, 1);
+      const data = old.data.slice(4100, 4116);
+      const version = old.version,
+        generation = old.generation;
+      atlas.begin();
+      const next = [{ text: 'E', options: {} }];
+      await atlas.prepare(next, signal());
+      await atlas.prepareGlyphs(next, signal());
+      expect(atlas.pageCount).toBe(4);
+      expect(old.data.slice(4100, 4116)).toEqual(data);
+      expect(old.version).toBe(version);
+      expect(old.generation).toBe(generation);
+      expect(atlas.get('E', {}, 1)!.glyphs[0].page).not.toBe(old);
+    } finally {
+      atlas.dispose();
+    }
+  });
   it('shares glyphs across strings, sizes, paint and DPR without rasterizing rejected candidates', async () => {
     const atlas = new MsdfLabelAtlas(new URL('http://localhost/worker.js'));
     try {

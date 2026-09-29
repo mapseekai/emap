@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { DisplayArcs } from './display-arcs';
 import {
   setDefaultMapshaperAdapter,
+  getDefaultMapshaperAdapter,
   type MapshaperAdapter,
 } from '../../integrations/mapshaper/adapter';
 import type { ArcCollection } from '../../shared/types/mapshaper-types';
@@ -89,6 +90,61 @@ describe('DisplayArcs lifecycle', () => {
     const result = da.getScaledArcs(100);
     expect(result).not.toBe(arcs);
     expect((result as any).isFilteredCopy).toBe(true);
+  });
+});
+
+describe('cooperative display LOD', () => {
+  function largeArcs(thresholds: boolean) {
+    const count = 500_001;
+    const xx = Float64Array.from({ length: count }, (_, i) => i);
+    const yy = Float64Array.from({ length: count }, (_, i) => Math.sin(i / 100));
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([{ xx, yy }]);
+    if (thresholds) {
+      const zz = Float64Array.from({ length: count }, (_, i) => i % 100);
+      zz[0] = zz[count - 1] = Infinity;
+      arcs.setThresholds!(zz);
+      arcs.setRetainedInterval!(2);
+    }
+    return arcs;
+  }
+  for (const thresholds of [false, true])
+    it(`prepares the same LOD as mapshaper without blocking construction (ZZ=${thresholds})`, async () => {
+      const arcs = largeArcs(thresholds),
+        ready = vi.fn();
+      const expected = new DisplayArcs(arcs).getScaledArcs(100);
+      const actual = new DisplayArcs(arcs, ready);
+      expect(actual.hasLOD()).toBe(false);
+      expect(actual.getScaledArcs(100) === arcs).toBe(true);
+      let ticks = 0;
+      const timer = setInterval(() => ticks++, 0);
+      try {
+        await actual.ready;
+      } finally {
+        clearInterval(timer);
+      }
+      expect(ticks).toBeGreaterThan(1);
+      expect(ready).toHaveBeenCalledOnce();
+      expect(actual.getScaledArcs(100).getVertexData!()).toMatchObject(expected.getVertexData!());
+      expect(arcs.getRetainedInterval!()).toBe(thresholds ? 2 : 0);
+      actual.dispose();
+    });
+  it('does not publish a cancelled preparation after an edit or source replacement', async () => {
+    const arcs = largeArcs(false),
+      ready = vi.fn();
+    const actual = new DisplayArcs(arcs, ready);
+    const initial = actual.ready;
+    actual.markDirty();
+    arcs.getVertexData!().xx[0] = -100;
+    expect(actual.getScaledArcs(100) === arcs).toBe(true);
+    await initial;
+    await actual.ready;
+    expect(ready).toHaveBeenCalledOnce();
+    expect(actual.getScaledArcs(100).getVertexData!().xx[0]).toBe(-100);
+    actual.markDirty();
+    actual.getScaledArcs(100);
+    actual.dispose();
+    await actual.ready;
+    expect(ready).toHaveBeenCalledOnce();
   });
 });
 

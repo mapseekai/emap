@@ -93,7 +93,7 @@ console.log(result.value) // 使用成功值
 | `MapOptions.workerThreshold` | `number` | `50000` | `'auto'` 顶点阈值。 |
 | `MapOptions.workerUrl` | `string` | `'emap-worker.js'` | Worker bundle URL。 |
 | `MapOptions.workerPoolSize` | `number` | `1` | Worker 池槽位数。 |
-| `MapshaperWorkerPoolOptions.jobTimeoutMs` | `number` | `120000` 毫秒 | 请求超时，有限非负。 |
+| `MapshaperWorkerPoolOptions.jobTimeoutMs` | `number` | `120000` 毫秒 | 请求超时，必须是 `1`–`2147483647` 的整数。 |
 
 Worker 以请求 `id`、消息 `type` 和槽位 `epoch` 关联响应；迟到响应会忽略。`workerUrl` 应使用与页面相同发行版的 Worker。
 

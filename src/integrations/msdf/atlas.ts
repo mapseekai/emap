@@ -1,3 +1,4 @@
+import type { WorkerRuntime } from '@mapseekai/tasklane';
 import type { LabelOptions } from '../../engine/map/label';
 import type {
   LabelAtlasProvider,
@@ -16,6 +17,7 @@ import {
 } from './protocol';
 
 interface Page extends MsdfAtlasPage {
+  updates: { version: number; rect: [number, number, number, number] }[];
   x: number;
   y: number;
   row: number;
@@ -89,8 +91,8 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   private shapedGlyphs = 0;
   private channelPixels = 0;
   private missing = 0;
-  constructor(workerUrl: URL, document: Document = globalThis.document) {
-    this.client = new MsdfClient(workerUrl);
+  constructor(workerUrl: URL, document: Document = globalThis.document, runtime?: WorkerRuntime) {
+    this.client = new MsdfClient(workerUrl, runtime);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -208,6 +210,21 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   private fits(p: Page, w: number, h: number): boolean {
     return p.x + w + 1 <= SIZE ? p.y + Math.max(p.row, h) + 1 <= SIZE : p.y + p.row + h + 2 <= SIZE;
   }
+  private createPage(generation = 0): Page {
+    return {
+      data: new Uint8Array(SIZE * SIZE * 4),
+      width: SIZE,
+      height: SIZE,
+      version: 0,
+      generation,
+      updates: [],
+      x: 1,
+      y: 1,
+      row: 0,
+      used: 0,
+      keys: new Set(),
+    };
+  }
   private install(g: GeneratedGlyph): boolean {
     if (
       !Number.isInteger(g.width) ||
@@ -221,30 +238,18 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
       throw new Error('Invalid MSDF glyph payload.');
     let p = this.pages.find((p) => this.fits(p, g.width, g.height));
     if (!p && this.pages.length < MAX_PAGES) {
-      p = {
-        data: new Uint8Array(SIZE * SIZE * 4),
-        width: SIZE,
-        height: SIZE,
-        version: 0,
-        generation: 0,
-        x: 1,
-        y: 1,
-        row: 0,
-        used: 0,
-        keys: new Set(),
-      };
+      p = this.createPage();
       this.pages.push(p);
     }
     if (!p) {
       p = this.pages.filter((p) => !this.pinned.has(p)).sort((a, b) => a.used - b.used)[0];
       if (!p) return false;
       for (const k of p.keys) this.glyphs.delete(k);
-      p.keys.clear();
-      p.generation = (p.generation ?? 0) + 1;
-      p.data.fill(0);
-      p.x = p.y = 1;
-      p.row = 0;
-      p.version++;
+      // The displayed frame may still reference this page while its replacement
+      // is prepared. Recycle the atlas slot, not the pixels owned by that frame.
+      const replacement = this.createPage((p.generation ?? 0) + 1);
+      this.pages[this.pages.indexOf(p)] = replacement;
+      p = replacement;
     }
     if (p.x + g.width + 1 > SIZE) {
       p.x = 1;
@@ -264,6 +269,8 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     p.x += g.width + 1;
     p.row = Math.max(p.row, g.height);
     p.version++;
+    p.updates.push({ version: p.version, rect });
+    if (p.updates.length > 128) p.updates.shift();
     p.used = ++this.clock;
     p.keys.add(g.key);
     this.pinned.add(p);
@@ -331,6 +338,9 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     this.missing = 0;
     this.frameGlyphs = 0;
     this.shapedGlyphs = 0;
+  }
+  get closed(): Promise<void> {
+    return this.client.closed;
   }
   dispose(): void {
     this.clear();
