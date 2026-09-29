@@ -52,7 +52,7 @@ import type { RendererBackend } from '../../engine/map/renderer';
 import type { MeshPaint, Rect } from './types';
 
 interface Options {
-  invalidate: () => void;
+  invalidate: (reason?: 'geometry') => void;
   report: (error: Error) => void;
   signal?: AbortSignal;
   workerRuntime?: WorkerRuntime;
@@ -71,6 +71,9 @@ export class LumaPainter implements EditPainter {
   private pixelRatio = 1;
   private active = false;
   private frameStarted = 0;
+  private completionSample: { start: number; valid: boolean } | null = null;
+  private completionSampleAt = -Infinity;
+  private completionMs = 0;
   private disposed = false;
   private colors: GpuColors;
   private cache: PainterGeometryCache;
@@ -114,7 +117,7 @@ export class LumaPainter implements EditPainter {
       externalBytes: () =>
         this.cache.byteSize +
         Math.max(this.gpu.pageSlackBytes ?? 0, this.gpu.pageReservationBytes ?? 0),
-      invalidate: options.invalidate,
+      invalidate: () => options.invalidate('geometry'),
       report: options.report,
       workerUrl: options.geometryWorkerUrl
         ? new URL(String(options.geometryWorkerUrl), canvas.ownerDocument.baseURI)
@@ -154,9 +157,39 @@ export class LumaPainter implements EditPainter {
       geometryPages: this.gpu.pageStats,
       renderCommands: this.gpu.commandStats,
       presentation: { ...this.presentation },
+      navigationFrameMs: this.navigationFrameMs,
       text: this.gpu.textStats,
       memory: this.gpu.memoryStats,
     };
+  }
+  get navigationFrameMs(): number {
+    if (this.disposed) return 0;
+    return Math.max(
+      this.completionMs,
+      this.completionSample?.valid ? performance.now() - this.completionSample.start : 0,
+    );
+  }
+  /** One asynchronous fence at most every 250 ms, including on devices without
+   * timestamp queries. This is completion latency, not isolated GPU execution time.
+   * Never read pixels or synchronously wait for the GPU in the input/render loop.
+   * ponytail: load spikes can precede the next probe; sample more often if early
+   * gesture latency warrants the extra fences. */
+  private measureCompletion(start: number): void {
+    if (this.completionSample || start - this.completionSampleAt < 250) return;
+    const sample = { start, valid: true };
+    this.completionSample = sample;
+    this.completionSampleAt = start;
+    void this.gpu.waitForIdle().then(
+      () => {
+        if (this.disposed || this.completionSample !== sample) return;
+        if (sample.valid) this.completionMs = performance.now() - start;
+        this.completionSample = null;
+      },
+      () => {
+        // Device loss is reported by the renderer; a failed probe is not a timing sample.
+        if (this.completionSample === sample) this.completionSample = null;
+      },
+    );
   }
   createLabelAtlas(): MsdfLabelAtlas {
     const url = this.options.msdfWorkerUrl;
@@ -179,6 +212,8 @@ export class LumaPainter implements EditPainter {
     this.chunks.setInteracting(value);
   }
   clearGeometryCache(scope: { sourceId?: string; layerId?: string } = {}): void {
+    if (this.completionSample) this.completionSample.valid = false;
+    this.completionMs = 0;
     this.forgetPolygons(scope);
     this.cache.clear(scope);
     this.chunks.clear(scope);
@@ -232,6 +267,7 @@ export class LumaPainter implements EditPainter {
         return;
       }
       this.drawnEntries.clear();
+      const drawsBefore = this.gpu.stats.drawCalls;
       try {
         // Clear and replay ALL available commands in original order on every
         // progressive frame. Never blend successive partial frames over each other.
@@ -241,11 +277,13 @@ export class LumaPainter implements EditPainter {
       }
       this.chunks.pin(this.drawnEntries);
       this.frameComplete = !pending && this.polygonFrames.every((polygon) => polygon.complete);
-      this.framePresented = true;
+      // An empty loading frame must not become a navigation snapshot that blocks first paint.
+      this.framePresented = this.frameComplete || this.gpu.stats.drawCalls > drawsBefore;
       this.paintedCommands = this.commands;
       this.paintedContent = true;
       this.paintedDimensions = dimensions;
       this.chunks.didPresent(performance.now() - this.frameStarted);
+      this.measureCompletion(this.frameStarted);
       this.presentation.presented++;
       if (!this.frameComplete) this.presentation.partial++;
       else this.presentation.complete++;
@@ -275,6 +313,7 @@ export class LumaPainter implements EditPainter {
    * by the render service; ready Worker blocks may join this replay without waiting
    * for the gesture to end. No synchronous geometry preparation runs here. */
   renderNavigation(view: AffineTransform, labels: LabelFrame = { key: '', labels: [] }): boolean {
+    const start = performance.now();
     if (
       this.disposed ||
       this.active ||
@@ -302,6 +341,7 @@ export class LumaPainter implements EditPainter {
       }
       this.chunks.pin(this.drawnEntries);
       this.presentation.replays++;
+      this.measureCompletion(start);
       return true;
     } catch (error) {
       this.paintedContent = null;
@@ -823,7 +863,7 @@ export class LumaPainter implements EditPainter {
             (!entry.meshes.some((mesh) => mesh.compactStroke) ||
               compactStrokeCompatible(this.transform, entry.screenView)),
           complete: (request) => this.chunks.complete(request),
-          invalidate: this.options.invalidate,
+          invalidate: () => this.options.invalidate('geometry'),
           report: this.options.report,
         }),
       };

@@ -66,6 +66,41 @@ for(const renderer of ['webgl2','webgpu']){
   await page.evaluate(()=>{for(let i=0;i<5;i++)progressMap.render();});expect(await pixels(page,'pixel')).toEqual(final);
   await dispose(page);
  });
+ test(`${renderer}: navigation during initial loading does not retain an empty frame`,async({page})=>{
+  await boot(page,renderer);
+  await page.evaluate(async()=>{
+   const worker=progressMap.ctx.render._painter.chunks.worker,held=[];
+   let blocked=true;
+   window.releaseFirstGeometry=()=>{blocked=false;for(const release of held.splice(0))release();};
+   for(const method of ['build','buildBatch']){
+    const build=worker[method].bind(worker);
+    worker[method]=async(...args)=>{if(blocked)await new Promise(resolve=>held.push(resolve));return build(...args);};
+   }
+   const source=await addProgressSource('loading',[feature({type:'Polygon',coordinates:[square(-3,-3,6)]}),largeLine()]);
+   const layer=source.getLayers().find(l=>l.geometry_type==='polygon');
+   progressMap.addLayer({id:'loading',source:'loading','source-layer':layer.name,type:'fill',paint:{'fill-color':'#22bb66','line-width':0}});
+   progressMap.setExtent(new emap.Bounds(-4,-4,4,4));progressMap.render();
+  });
+  await expect.poll(()=>page.evaluate(()=>{
+   const r=progressMap.ctx.render,p=r._painter;
+   return p.chunks.notification===null&&p.stats.geometryChunks.building>0&&r._pendingRender===0;
+  })).toBe(true);
+  await page.evaluate(()=>{
+   const r=progressMap.ctx.render;
+   Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:50});
+   r.beginNavigation();progressMap.ctx.view._viewport.pan(20,0);r.updateNavigation();
+  });
+  await page.evaluate(async()=>{for(let i=0;i<3;i++)await new Promise(requestAnimationFrame);});
+  expect(await page.evaluate(()=>progressMap.ctx.render._painter.stats.drawCalls)).toBe(0);
+  await page.evaluate(()=>releaseFirstGeometry());
+  await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._painter.stats.geometryChunks.pending)).toBe(0);
+  await page.evaluate(async()=>{for(let i=0;i<3;i++)await new Promise(requestAnimationFrame);});
+  const green=await pixels(page,'pixel');
+  expect(green[0]).toBeLessThan(80);expect(green[1]).toBeGreaterThan(130);
+  expect(await page.evaluate(()=>progressMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
+  await page.evaluate(()=>{delete progressMap.ctx.render._painter.navigationFrameMs;progressMap.ctx.render.endNavigation();});
+  await settled(page);await dispose(page);
+ });
  test(`${renderer}: a huge multipart polygon culls internal triangles without new geometry uploads or missing pixels`,async({page})=>{
   test.setTimeout(120000);await boot(page,renderer);
   await page.evaluate(async()=>{

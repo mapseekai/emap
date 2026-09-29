@@ -40,28 +40,31 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('examples build routes', () => {
-  it('injects the monitor into every registered HTML entry before example startup', async () => {
+  it('injects the monitor into example entries but not the catalog', async () => {
     const { default: config } = await import('../../packages/examples/vite.config');
     const plugin = (config.plugins as Plugin[]).find((p) => p.name === 'examples-brand')!;
     const hook = plugin.transformIndexHtml as {
       handler: (
         html: string,
+        context: { filename: string },
       ) => Array<{ tag: string; attrs?: Record<string, string>; injectTo?: string }>;
     };
     const inputs = Object.values(config.build!.rollupOptions!.input as Record<string, string>);
     expect(inputs.length).toBeGreaterThan(50);
     for (const input of inputs) {
-      const tags = hook.handler(await readFile(input, 'utf8'));
+      const tags = hook.handler(await readFile(input, 'utf8'), { filename: input });
       expect(
         tags.filter((tag) => tag.attrs?.src === '/src/performance-monitor-entry.ts'),
         input,
-      ).toEqual([
-        {
-          tag: 'script',
-          attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
-          injectTo: 'body-prepend',
-        },
-      ]);
+      ).toEqual(
+        input === resolve('packages/examples/index.html')
+          ? []
+          : [{
+              tag: 'script',
+              attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
+              injectTo: 'body-prepend',
+            }],
+      );
     }
   });
 

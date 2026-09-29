@@ -11,7 +11,11 @@ import { type AffineDelta, type RenderAction, type RenderRequest } from '../../m
 import { EditOverlayRenderer } from '../../rendering/edit-overlay-renderer';
 import { type EditPainter } from '../../rendering/painter';
 import { pointLodForPainter } from '../../rendering/point-lod';
-import { RenderScheduler, type RenderSnapshot } from '../../rendering/render-scheduler';
+import {
+  RenderScheduler,
+  SLOW_FRAME_MS,
+  type RenderSnapshot,
+} from '../../rendering/render-scheduler';
 import {
   checkedSourceOrder,
   sourceRenderBlocks,
@@ -251,6 +255,14 @@ export class CanvasRenderService {
     }
   }
 
+  private _schedulePreparedRender(): void {
+    if (this._disposed) return;
+    // The pending settle redraw consumes geometry, icons and labels prepared mid-gesture.
+    if (this._navSnapshotTransform && this._scheduler.fastActive && this._canvas.style.transform)
+      return;
+    this._scheduleRender();
+  }
+
   _scheduleOverlayRender(): void {
     if (this.deps.document._removed || this.deps.signal.aborted) return;
     this._overlayPending = true;
@@ -322,7 +334,7 @@ export class CanvasRenderService {
       return;
     }
     this._icons ??= new PointIconImages(
-      () => this._scheduleRender(),
+      () => this._schedulePreparedRender(),
       (asset) => {
         this._painter.forgetImage?.(asset.image);
         this._painter.clearIcons?.();
@@ -426,6 +438,8 @@ export class CanvasRenderService {
   _applyFastTransform(delta: AffineDelta): void {
     const view = this.deps.view._viewport;
     if (
+      Math.max(this._scheduler.lastFrameMs, this._painter.navigationFrameMs ?? 0) <=
+        SLOW_FRAME_MS &&
       this._painter.renderNavigation?.(
         view.transform,
         this._labels?.preview(view.transform, view.width, view.height),
@@ -437,6 +451,7 @@ export class CanvasRenderService {
       if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
       this._refreshNavigationSoon();
     } else {
+      this._cancelNavigationRefresh();
       this._canvas.style.transformOrigin = 'top left';
       this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
     }
@@ -538,7 +553,7 @@ export class CanvasRenderService {
       return;
     }
     this._labels ??= new BoundLabelManager(
-      () => this._scheduleRender(),
+      () => this._schedulePreparedRender(),
       (error) => this.deps.events.fire('error', { error }),
       globalThis.document,
       this._painter.createLabelAtlas?.(),
@@ -616,8 +631,9 @@ export class CanvasRenderService {
       this.deps.painterFactory.create(canvas, {
         role,
         signal,
-        invalidate: () => {
-          if (!this._disposed) this._scheduleRender();
+        invalidate: (reason) => {
+          if (role === 'main' && reason === 'geometry') this._schedulePreparedRender();
+          else if (!this._disposed) this._scheduleRender();
         },
         report: (error) => {
           if (!this._disposed) this.deps.events.fire('error', { error });

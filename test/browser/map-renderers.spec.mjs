@@ -333,6 +333,73 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: consecutive gesture
   await page.evaluate(()=>formalMap.dispose());
 });
 
+for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: slow GPU navigation reuses the composited frame and settles without stale content`, async ({page}, info) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await runtime(page); await create(page, renderer); await settleRequests(page);
+  await page.evaluate(() => formalMap.setLayerSymbol('poi', {
+    images: {marker: {url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ee2222"/></svg>'), size: [20, 20]}},
+    layout: {'icon-image': 'marker', 'text-field': ['get', 'name'], 'text-offset': [0, 2]},
+  }));
+  await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._icons?.stats.images; })).toBe(1);
+  await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._labels?.stats.placed; })).toBe(1);
+  await settleRequests(page);
+  const before = await page.evaluate(() => {
+    const r = formalMap.ctx.render;
+    // Deterministic slow-device policy boundary; real GPU pixels and frame submissions below.
+    Object.defineProperty(r._painter, 'navigationFrameMs', {configurable: true, value: 50});
+    const stats = {...r._painter.stats};
+    r.beginNavigation(); formalMap.ctx.view._viewport.pan(30, 10); r.updateNavigation();
+    return stats;
+  });
+  await expect.poll(() => page.evaluate(() => formalMap.ctx.render._canvas.style.transform)).not.toBe('');
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBe(before.frames);
+  expect((await composedPointPixel(page))[0]).toBeGreaterThan(180);
+  // Background geometry becoming ready must not resubmit a dense frame mid-gesture.
+  await page.evaluate(() => formalMap.ctx.render._painter.chunks.options.invalidate());
+  // No 80 ms geometry refresh should turn a bitmap-only gesture back into a dense redraw.
+  await page.evaluate(async () => { const start = performance.now(); while (performance.now() - start < 200) await new Promise(requestAnimationFrame); });
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBe(before.frames);
+  for (const owner of ['_icons', '_labels']) {
+    await page.evaluate(owner => formalMap.ctx.render[owner].invalidate(), owner);
+    await settleRequests(page);
+    expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames), owner).toBe(before.frames);
+  }
+  // Untagged invalidations (including device recovery) still redraw immediately.
+  await page.evaluate(() => formalMap.ctx.render._painter.options.invalidate());
+  await settleRequests(page);
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBeGreaterThan(before.frames);
+  await page.evaluate(() => { formalMap.ctx.view._viewport.pan(5, 0); formalMap.ctx.render.updateNavigation(); });
+  await settleRequests(page);
+  await page.evaluate(() => formalMap.removeLayerSymbol('poi'));
+  await page.evaluate(() => formalMap.setPaintProperty('poi', 'circle-color', '#22dd44'));
+  await settleRequests(page);
+  expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+  const updated = await page.evaluate(() => {
+    const r = formalMap.ctx.render, frames = r._painter.stats.frames;
+    formalMap.ctx.view._viewport.pan(20, 0); r.updateNavigation();
+    return frames;
+  });
+  await settleRequests(page);
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBe(updated);
+  expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+  await page.screenshot({path: info.outputPath('adaptive-snapshot-'+renderer+'.png')});
+  await page.evaluate(() => formalMap.ctx.render.endNavigation());
+  await settleRequests(page);
+  expect(await page.evaluate(() => formalMap.ctx.render._canvas.style.transform)).toBe('');
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBeGreaterThan(updated);
+  expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+  const settledFrames = await page.evaluate(() => {
+    const painter = formalMap.ctx.render._painter;
+    painter.chunks.options.invalidate();
+    return painter.stats.frames;
+  });
+  await settleRequests(page);
+  expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBeGreaterThan(settledFrames);
+  await page.evaluate(() => { delete formalMap.ctx.render._painter.navigationFrameMs; return formalMap.dispose(); });
+  expect(errors).toEqual([]);
+});
+
 
 for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: changing styles does not retain historical uniforms after owners disappear`, async ({page}, info) => {
   await runtime(page); await create(page, renderer); await settleRequests(page);

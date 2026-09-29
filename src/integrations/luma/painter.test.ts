@@ -27,6 +27,7 @@ async function fixture() {
     drawMesh: vi.fn(),
     stats: {},
     forgetImage: vi.fn(),
+    waitForIdle: vi.fn(async () => {}),
   };
   vi.mocked(GpuRenderer.create).mockResolvedValue(gpu as unknown as GpuRenderer);
   const painter = await LumaPainter.create(document.createElement('canvas'), 'webgl2', {
@@ -217,6 +218,46 @@ describe('formal GPU prepared path selection', () => {
     expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);
     f.painter.dispose();
   });
+});
+
+it('measures asynchronous GPU completion at bounded frequency and ignores invalidated samples', async () => {
+  const f = await fixture();
+  let time = 0;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => time);
+  let complete!: () => void;
+  f.gpu.waitForIdle.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const draw = () => f.painter.drawArcs(f.arcs, { width: 1 });
+  try {
+    f.frame(draw);
+    time = 50;
+    expect(f.painter.navigationFrameMs).toBe(50);
+    complete();
+    await Promise.resolve();
+    expect(f.painter.navigationFrameMs).toBe(50);
+    f.frame(draw);
+    expect(f.gpu.waitForIdle).toHaveBeenCalledOnce();
+    time = 300;
+    f.frame(draw);
+    time = 305;
+    complete();
+    await Promise.resolve();
+    expect(f.painter.navigationFrameMs).toBe(5);
+    time = 600;
+    f.frame(draw);
+    f.painter.clearGeometryCache();
+    time = 700;
+    complete();
+    await Promise.resolve();
+    expect(f.painter.navigationFrameMs).toBe(0);
+  } finally {
+    now.mockRestore();
+    f.painter.dispose();
+  }
 });
 
 it('invalidates the retained image after a failed GPU submission', async () => {

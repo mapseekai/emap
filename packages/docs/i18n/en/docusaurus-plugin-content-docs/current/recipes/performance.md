@@ -324,10 +324,21 @@ original TIFFs in the authorized `cdf20250916042716` folder.
 ## Formal WebGL2 / WebGPU navigation and preparation caches
 
 These optimizations are enabled by default for formal maps with `renderer: 'webgl2'` or `'webgpu'`;
-no private benchmark flags are needed. Pan and wheel gestures replay resident GPU geometry at the
-current camera and coalesce new viewport planning approximately every 80 ms. New coverage and text
-can arrive before pointer release. Content changes invalidate old work. Canvas2D retains its adaptive
-bitmap policy; failed GPU submissions never become reusable navigation frames.
+no private benchmark flags are needed. Lightweight pan and wheel gestures replay resident GPU geometry
+at the current camera and coalesce new viewport planning approximately every 80 ms. When CPU drawing
+or asynchronous GPU completion latency exceeds 33.3 ms, navigation reuses the painted frame until
+the gesture ends, then redraws the current view instead of resubmitting dense geometry on every move.
+Completion latency is sampled at most once per 250 ms; it is not isolated GPU timestamp duration.
+Background geometry, icon and label notifications wait for the gesture's settle redraw; style updates and device recovery
+still redraw immediately.
+Empty frames with pending initial geometry are not navigation snapshots; the first ready geometry still triggers a redraw.
+New areas can temporarily be blank and background strokes scale with the snapshot; edit overlays remain
+live. Content changes invalidate old work. Canvas2D retains its adaptive bitmap policy; failed GPU
+submissions never become reusable navigation frames.
+
+Ordinary examples also use viewport/path-range culling, the `Viewport` tiny-arc filter, and the large-data
+half-pixel filter described below. No per-example benchmark switches are needed. Tiny-arc and half-pixel
+filtering affect display only; original topology stays unchanged.
 
 Stable views reuse arc visibility and candidate-outline preparation instead of flattening/filtering
 again before a GPU mesh cache hit. Ordered input IDs and geometry revisions are still checked;
@@ -368,10 +379,11 @@ is not GPU execution time or FPS. Large polygons have conservative internal tria
 reducing submitted indices without new coordinate uploads or dropping holes/enclosing triangles.
 Fragmented selections may conservatively draw the entire mesh.
 
-Existing labels reproject ground anchors with fixed CSS offsets; glyph and halo sizes do not scale
+During resident GPU geometry replay, existing labels reproject ground anchors with fixed CSS offsets; glyph and halo sizes do not scale
 with map zoom. Async layouts add newly visible labels during navigation. Atlas-generation checks
 prevent recycled UVs from displaying the wrong glyph. Cold tasks, file parsing and business indexes
-still cost time; active replenishment is not a promise of zero GPU work during a gesture.
+still cost time. Lightweight views replenish geometry during gestures; expensive views reuse snapshots
+without repeated GPU submissions while content is unchanged.
 
 ## Full GeoPackage browser stress test
 

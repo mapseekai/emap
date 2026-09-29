@@ -105,6 +105,8 @@ export interface CorePainter {
   /** @internal A progressive scene may be presented before every request is ready. */
   readonly framePresented?: boolean;
   renderNavigation?(view: AffineTransform, labels?: LabelFrame): boolean;
+  /** @internal Sampled submission-to-completion latency, including pending GPU work. */
+  readonly navigationFrameMs?: number;
   readonly frameComplete?: boolean;
   readonly frameRetained?: boolean;
   setInteracting?(value: boolean): void;

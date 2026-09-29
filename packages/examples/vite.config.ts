@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import { exampleIds } from '../../docs-meta/examples';
@@ -28,12 +29,14 @@ function examplesBrandPlugin(): Plugin {
     name: 'examples-brand',
     transformIndexHtml: {
       order: 'pre',
-      handler: (html) => [
-        {
-          tag: 'script',
-          attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
-          injectTo: 'body-prepend',
-        },
+      handler: (html, ctx) => [
+        ...(resolve(ctx.filename) === htmlInput('./index.html')
+          ? []
+          : [{
+              tag: 'script',
+              attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
+              injectTo: 'body-prepend' as const,
+            }]),
         {
           tag: 'link',
           attrs: { rel: 'icon', type: 'image/svg+xml', href: logoUrl },
