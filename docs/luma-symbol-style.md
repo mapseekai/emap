@@ -1,10 +1,9 @@
 # 附属 Symbol 样式映射
 
-## 目标与边界
+## 附属样式能力
 
-现有点、线、面图层新增 `symbol: { layout, paint }`。这是 emap 的附属样式对象，
-不是 MapLibre 的 `type: "symbol"` 图层，不新增图层 ID、数据源或图层树节点。
-这里只复用常见 MapLibre 属性名称与单位约定；没有引入 MapLibre 样式运行时或替换现有渲染器。
+现有点、线、面图层通过 `symbol: { layout, paint }` 配置附属文字与图标，共用父图层的 ID、数据源和图层树节点。
+属性采用常见 MapLibre 名称与单位约定，由 emap 校验并映射到现有渲染器；支持的属性见下表。
 
 `symbol.ts` 负责纯校验和单位映射；`symbol-compat.ts` 处理旧接口；`symbol-layer.ts`
 只在添加图层、替换样式或设置属性时生成现有 `LabelOptions` / `IconOptions`。
@@ -74,25 +73,25 @@ const style = map.getLayer('poi')?.symbol; // 深拷贝，适合保存或编辑 
 | `symbol.layout.visibility` | 只开关附属文字/图标，不隐藏父几何 |
 
 父图层的 `layout.visibility`、过滤器与源数据版本仍独立生效。
-文字的自动点周边定位、线段定位、面内部锚点和碰撞策略继续使用 emap，并非 MapLibre placement。
-因此 `text-offset` 保留原有定位算法后的屏幕偏移语义；不承诺与 MapLibre 的逐字沿线/可变锚点行为一致。
+文字的自动点周边定位、线段定位、面内部锚点和碰撞策略使用 emap 的定位算法。
+`text-offset` 设置定位结果的屏幕偏移；接入时按 emap 的整段线注记和候选点定位语义配置。
 
 ## 图片与字体资源
 
-`symbol.images` 是 emap 的小型声明表，不是完整 Sprite 服务。每项包含 `url`、必需的
+`symbol.images` 是 emap 的图片资源声明表。每项包含 `url`、必需的
 `size` 和可选 `rect`。`size` 是基准 CSS 像素高度（数字，保持裁剪图片的宽高比），或
 显式 `[width,height]`。它与源图片分辨率独立：64px 的高清图可以声明 32px 基准高度。
 `icon-size: 2` 将基准 32px 放大为 64px，不重新解码或上传图片。
 
-同一图片的不同子图使用 `rect: [x,y,width,height]`（原图像素）。没有自动猜测尺寸、
-自动下载 sprite JSON、全局 addImage 注册表或按要素 icon-image 表达式。
+同一图片的不同子图使用 `rect: [x,y,width,height]`（原图像素）。应用显式提供尺寸、URL 和裁剪区域，
+`icon-image` 以图层级名称引用该声明表。
 引用不存在的名字会在设置时抛错，原样式保持不变。表最多 32 项，已有图片尺寸、缓存与文件预算仍有效。
 图标映射后的尺寸仍须在 1–512 CSS px 内（icon-size 0 除外），超范围明确拒绝而非截断。
 
-`text-font` 当前接受一个字体家族/字面名称，不伪装支持完整 font stack。
+`text-font` 接受一个字体家族/字面名称。
 可用 `['sans-serif']`、`['serif']`、`['monospace']`、`['Noto Sans SC']`，也接受内置
 `['Noto Sans SC Bold']` 等名称。任意自定义字体仍需要真实 TTF/OTF/WOFF1 轮廓 URL。
-不实现 MapLibre glyph PBF 或 glyphs URL 模板。
+字体轮廓通过上述字体文件 URL 加载。
 
 参考 QGIS 的注记设置组织方式，通用文字外观继续放在 `layout / paint`，而高级 GIS 注记行为
 放在更直观的 `symbol.labeling`：
@@ -111,7 +110,7 @@ map.setLayerSymbol('roads', {
 });
 ```
 
-`minScale`、`maxScale` 仍为 CSS 像素/源坐标单位，不是 MapLibre zoom 或比例尺分母。
+`minScale`、`maxScale` 仍为 CSS 像素/源坐标单位，接入时按该单位配置。
 图标通常完全使用 `layout / paint / images`；只有旧接口中的自定义归一化锚点和独立 enabled
 需要兼容时，才放在 `symbol.icon: { anchor, enabled }`。显式 `icon-anchor` 始终优先。
 
@@ -127,7 +126,7 @@ map.setLayerSymbol('roads', {
 表达式使用现有安全子集，不引入 eval 或函数回调。当前只有 `text-field` 和
 `labeling.priority` 支持属性表达式，颜色、字号、旋转和图标选择仍为图层级常量。
 未知键、错误的 layout/paint 分组、多字体 stack、未实现的 `text-anchor`、`symbol-sort-key`、
-`icon-text-fit`、`text-opacity` 等都会明确拒绝，不能把名称接收成功等同于效果实现。
+`icon-text-fit`、`text-opacity` 等都会明确拒绝，接入时以已列出的属性及效果为准。
 
 ## 测试与示例
 

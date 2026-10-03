@@ -5,12 +5,14 @@ title: Errors reference
 api: ["Emap", "Err", "OK", "okValue", "OpError", "OpResult", "topologyValidator", "TopologyValidatorOptions", "ValidationChange", "ValidationIssue", "ValidationReport", "Validator", "ValidatorPhase", "ValidatorRegistry", "ValidatorResult", "SourceLoadError", "DuckDbOperationError", "DuckDbOperationErrorKind"]
 examples: ["check-geometry","duckdb-query","transaction"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Errors reference
 
 Map-processing methods return `OpResult<T>`; branch on `ok` and `error.kind`.
+
+Structured diagnostics help applications identify parameters to correct, request import CRS information, and retry operations against current data.
 
 ```ts
 const result = await map.ops.checkGeometry({ source: "parcels" }) // Run a map operation

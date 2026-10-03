@@ -5,12 +5,28 @@ title: Emap 简介
 api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Emap
 
 `@mapseekai/emap` 是浏览器端 TypeScript 地图引擎，用于加载、渲染、编辑和分析矢量数据；数据保存在可撤销的 mapshaper topology dataset 中。
+
+可用它构建数据查看器、拓扑编辑器和空间分析页面，并按需组合格式、底图与后台处理插件。
+
+## 核心能力
+
+| 能力 | 可以完成的工作 | 使用指南 |
+| --- | --- | --- |
+| 三种渲染器 | 用 Canvas2D、WebGL2 或 WebGPU 绘制地图，创建时选择后端，默认 WebGL2 | [环境与配置](./reference/compatibility.md) |
+| 矢量数据 | 导入导出常用格式，管理多数据源、多图层和共享拓扑，接入 GeoPackage 与列式数据 | [数据格式](./data/formats.md) |
+| 样式与注记 | 使用属性表达式、分级颜色、线型、点标记、文字和图片符号制作专题图 | [样式](./guides/styling.md) |
+| 编辑与历史 | 绘制、吸附、变换、顶点及环/部件编辑，配合撤销重做、事务和校验 | [编辑](./guides/editing.md) |
+| 空间分析 | 执行裁剪、缓冲、融合、投影与属性处理，组合 DuckDB SQL 和空间工具 | [数据操作](./data/operations.md)、[DuckDB](./data/duckdb.md) |
+| 本地栅格 | 按窗口读取 GeoTIFF/BigTIFF，选择波段，使用金字塔和渐进显示 | [GeoTIFF](./data/geotiff.md) |
+| 应用扩展 | 组合 Cordis 插件、MapLibre 底图、控件、事件和 Agent 能力 | [插件](./guides/plugins.md) |
+| 后台执行 | 将数据操作和解码交给 Worker，按预算调度、取消任务并校验结果版本 | [Worker](./guides/worker.md) |
+
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // 导入地图和数据源

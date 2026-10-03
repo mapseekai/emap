@@ -915,7 +915,8 @@ export class CanvasPainter implements EditPainter {
     const my = this._transform.my * pr;
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
-    const radius = (Number(_style?.radius) || 4) * pr;
+    const radius = (_style.radius ?? 4) * pr;
+    if (!Number.isFinite(radius) || radius <= 0) return;
     const color = this._resolveColor(_style?.color, 'foreground');
     const fill = _style?.fill !== false;
     const markerShape = _style?.shape ?? 'circle';
@@ -926,12 +927,23 @@ export class CanvasPainter implements EditPainter {
 
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
+    if (!fill) {
+      ctx.lineWidth = pr;
+      ctx.lineJoin = 'miter';
+      ctx.lineCap = 'butt';
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
 
     // Flush the accumulated path every `batchSize` points. A single Canvas2D
     // path holding tens of thousands of sub-paths makes fill()/stroke() cost
     // super-linear in Skia (an 80k-point fill measures ~18s); batching keeps
     // it linear (~10ms). Mirrors the batching in drawPaths()/drawArcs().
-    const batchSize = 100;
+    // Only opaque colors can share a fill without changing source-over alpha.
+    // Canvas normalizes opaque sRGB paints to hex; other CSS colors take the
+    // conservative per-point path, including modern color functions.
+    const opaque = /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(String(ctx.fillStyle || color));
+    const batchSize = opaque && (ctx.globalAlpha ?? 1) === 1 ? 100 : 1;
     let count = 0;
     ctx.beginPath();
 

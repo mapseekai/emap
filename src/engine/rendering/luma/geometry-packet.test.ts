@@ -40,9 +40,12 @@ describe('geometry Worker packet boundary', () => {
     expect(pieces.length).toBe(3);
     let first = 0;
     for (const piece of pieces) {
-      expect(piece.vertices).toEqual(
-        original.vertices.slice(first * PATH_STRIDE, (first + piece.count + 3) * PATH_STRIDE),
-      );
+      expect(piece.vertices.length).toBe((piece.count + 3) * PATH_STRIDE);
+      expect(
+        piece.vertices.findIndex(
+          (value, index) => !Object.is(value, original.vertices[first * PATH_STRIDE + index]),
+        ),
+      ).toBe(-1);
       first += piece.count;
       expect(piece.vertices.byteLength).toBeLessThan(2 * 1024 ** 2);
     }

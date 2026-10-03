@@ -69,9 +69,9 @@ export function installLabelControls(host: HTMLElement, renderer: BenchmarkRende
     const jsonKey=JSON.stringify([signature,owner.value]);
     if(jsonKey!==jsonSignature){jsonSignature=jsonKey;$('label-symbol-json').textContent=JSON.stringify(specs.find(l=>l.id===owner.value)?.symbol??{},null,2);}
     const s = renderer.labelStats;
-    const msdf = s as typeof s & {mode?:string;glyphCount?:number;missingGlyphs?:number};
+    const msdf = s as typeof s & {mode?:string;glyphCount?:number;missingGlyphs?:number;bitmapFallbackLabels?:number};
     $('label-message').textContent = s.error ? `MSDF 字体/注记准备失败：${s.error}。底图继续显示；请修改字体设置后重试。` : !specs.length ? '加载矢量数据后选择字段。注记不会新增图层。' :
-      `MSDF · ${s.pending ? '正在准备字形/注记…' : '注记就绪'} · 显示 ${s.placed ?? 0} · 避让/位置不合适 ${s.collisionSkipped ?? 0} · 预算/尺寸跳过 ${s.capacitySkipped ?? 0} · 字体图集 ${((s.atlasBytes ?? 0) / 1048576).toFixed(1)} MiB · 共享字形 ${msdf.glyphCount ?? 0}${msdf.missingGlyphs ? ' · 缺字 '+msdf.missingGlyphs : ''}`;
+      `MSDF · ${s.pending ? '正在准备字形/注记…' : '注记就绪'} · 显示 ${s.placed ?? 0} · 避让/位置不合适 ${s.collisionSkipped ?? 0} · 预算/尺寸跳过 ${s.capacitySkipped ?? 0} · 字体图集 ${((s.atlasBytes ?? 0) / 1048576).toFixed(1)} MiB · 共享字形 ${msdf.glyphCount ?? 0}${msdf.missingGlyphs ? ' · 轮廓缺字 '+msdf.missingGlyphs : ''}${msdf.bitmapFallbackLabels ? ' · 浏览器字体回退 '+msdf.bitmapFallbackLabels+' 条' : ''}`;
   }
   $('label-show-symbol').addEventListener('click',()=>{const pre=$('label-symbol-json');pre.hidden=!pre.hidden;$('label-show-symbol').setAttribute('aria-expanded',String(!pre.hidden));},events);
   owner.addEventListener('change', () => { read(); refresh(); }, events);

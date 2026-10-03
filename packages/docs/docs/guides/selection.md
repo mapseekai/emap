@@ -5,12 +5,12 @@ title: 选择
 api: ["BoxSelectHandler", "BoxSelectHandlerOptions", "BoxSelectStyle", "ClickSelectHandler", "DragPanHandler", "DragPanOptions", "DrawFeatureHandler", "DrawFeatureOptions", "DrawGeometryType", "Emap", "featureMatchesLasso", "LassoSelectHandler", "LassoSelectHandlerOptions", "LassoSelectStyle", "MergeSelectedOptions", "ModifierCombo", "pointInPolygon", "resolveMode", "ScrollZoomHandler", "ScrollZoomOptions", "SelectHandlerOptions", "Selection", "SelectionDiff", "SelectionSnapshot", "SelectMode", "TransformFeatureHandler", "TransformFeatureOptions", "VertexEditHandler", "VertexEditOptions", "FeatureQuery"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 选择
 
-Emap 以 `{ source, layer, id }` 标识已选要素；选择可跨 source 和 source layer。
+Emap 支持程序化选择、点击、框选和套索选择，以 `{ source, layer, id }` 标识要素；选择可跨 source 和 source layer，并通过事件提供集合与增量。
 
 ```ts
 const refs = [{ source: 'parcels', layer: 'lots', id: 42 }]; // 标识要素

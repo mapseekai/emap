@@ -76,6 +76,22 @@ export function installExampleRendererToolbar(root: Document = document): HTMLEl
   }
   if (tools.querySelector('.emap-example-renderer-tools')) return tools;
   const url = new URL(root.defaultView?.location.href ?? root.baseURI);
+  const docsBase = '/mapseekai/emap/';
+  let docsHref = docsBase;
+  try {
+    const target = new URL(url.searchParams.get('returnTo') ?? docsBase, url);
+    if (target.origin === url.origin && target.pathname.startsWith(docsBase) &&
+      !/^\/mapseekai\/emap\/(?:en\/)?(?:examples|api)(?:\/|$)/.test(target.pathname)) {
+      docsHref = target.pathname + target.search + target.hash;
+    }
+  } catch {
+    // Invalid return URLs fall back to the documentation home.
+  }
+  const docsLink = root.createElement('a');
+  docsLink.className = 'emap-example-docs-link';
+  docsLink.href = docsHref;
+  docsLink.textContent = docsHref.startsWith(docsBase + 'en/') ? 'Return to docs' : '返回文档';
+  header.append(docsLink);
   let selected: RendererBackend | null = null;
   try {
     selected = resolveExampleRenderer(url);
@@ -123,14 +139,23 @@ export function installExampleRendererToolbar(root: Document = document): HTMLEl
   // Floating-header examples derive their map/panel offsets from the actual wrapped toolbar height.
   const view = root.defaultView;
   if (view?.ResizeObserver) {
-    const resize = new view.ResizeObserver(() =>
-      root.documentElement.style.setProperty(
-        '--emap-example-header-height',
-        header.getBoundingClientRect().height + 'px',
-      ),
-    );
+    let frame = 0;
+    const resize = new view.ResizeObserver(() => {
+      if (frame) return;
+      // Writing layout during observer delivery can trigger a resize notification loop.
+      frame = view.requestAnimationFrame(() => {
+        frame = 0;
+        root.documentElement.style.setProperty(
+          '--emap-example-header-height',
+          header.getBoundingClientRect().height + 'px',
+        );
+      });
+    });
     resize.observe(header);
-    view.addEventListener('pagehide', () => resize.disconnect(), { once: true });
+    view.addEventListener('pagehide', () => {
+      resize.disconnect();
+      view.cancelAnimationFrame(frame);
+    }, { once: true });
   }
   return tools;
 }

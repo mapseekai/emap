@@ -5,12 +5,12 @@ title: FAQ
 api: ["Emap", "MapOptions", "TopologySource", "SourceLoadError"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # FAQ
 
-常见的地图初始化、数据加载和运行时配置问题。
+配置地图显示、加载本地与远程数据，并启用格式插件和后台处理的常用方法。
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // 从 URL 加载数据
@@ -20,7 +20,7 @@ map.setExtent(source.getExtent()); // 适配数据范围
 
 ## 核心问题
 
-### 为什么地图空白？
+### 如何设置地图显示？
 
 `MapOptions.container` 定位画布挂载点。为它及父级设置非零尺寸并导入 `@mapseekai/emap/style.css`；静态展示设 `interactive: false`。
 
@@ -30,7 +30,7 @@ map.setExtent(source.getExtent()); // 适配数据范围
 
 `TopologySource.fromUrl(id, url, options?)` 的 `id` 用于 `map.addSource` 和图层 `source`；跨域 URL 需要 CORS。内存数据使用 `source.setData({ filename, content })`，按扩展名选导入器；文件数组每项为一个 dataset layer。`TopologySource.fromBytes(id, bytes, { filename })` 接受 `ArrayBuffer`，默认文件名为 `${id}.geojson`。
 
-### 为什么图层没有显示？
+### 如何显示指定图层？
 
 `spec.id` 是唯一图层键，`spec.source` 指定已注册 source，`'source-layer'` 选择数据 layer。点用 `'circle'`，线和边界用 `'line'`，面填充用 `'fill'`；`'visible'` 渲染图层，`before` 控制顺序。
 

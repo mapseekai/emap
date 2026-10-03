@@ -110,6 +110,7 @@ export class MsdfTextRenderer {
   private uniforms: Buffer[] = [];
   private pages = new Map<MsdfAtlasPage, Page>();
   private groups: Batch[][] = [];
+  private groupStarts: number[] = [];
   private staging = new Float32Array(0);
   private poses = new Float32Array(0);
   private key: string | undefined;
@@ -300,7 +301,15 @@ export class MsdfTextRenderer {
     }
     return entry;
   }
-  draw(pass: RenderPass, frame: LabelFrame, width: number, height: number, dpr: number): void {
+  draw(
+    pass: RenderPass,
+    frame: LabelFrame,
+    width: number,
+    height: number,
+    dpr: number,
+    start = 0,
+    end = frame.labels.length,
+  ): void {
     if (this.disposed) return;
     let changed = frame.key !== this.key;
     for (const [page, generation] of this.generations)
@@ -314,6 +323,7 @@ export class MsdfTextRenderer {
       const reusable = this.groups.flat();
       let consumed = 0;
       this.groups = [];
+      this.groupStarts = [];
       this.stats.glyphInstances = 0;
       try {
         // Recheck membership/collision and atlas generations even on camera-only
@@ -331,14 +341,19 @@ export class MsdfTextRenderer {
         let grid = new LabelCollisionGrid(),
           group: MsdfLabel[] = [];
         const groups: MsdfLabel[][] = [];
+        const indices = new Map(frame.labels.map((label, index) => [label, index]));
+        let previous = -1;
         for (const label of labels) {
-          if (grid.collides(label.bounds)) {
+          const index = indices.get(label)!;
+          if (group.length && (index !== previous + 1 || grid.collides(label.bounds))) {
             groups.push(group);
             group = [];
             grid = new LabelCollisionGrid();
           }
+          if (!group.length) this.groupStarts.push(index);
           group.push(label);
           grid.insert(label.bounds);
+          previous = index;
         }
         if (group.length) groups.push(group);
         for (const labels of groups) {
@@ -374,7 +389,15 @@ export class MsdfTextRenderer {
       this.size = size;
     }
     pass.setPipeline(this.pipeline);
-    for (const group of this.groups)
+    let low = 0,
+      high = start === 0 ? 0 : this.groupStarts.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (this.groupStarts[mid] < start) low = mid + 1;
+      else high = mid;
+    }
+    for (let i = low; i < this.groups.length && this.groupStarts[i] < end; i++) {
+      const group = this.groups[i];
       for (const stage of [0, 1] as const)
         for (const batch of group) {
           if (stage === 0 && !batch.hasHalo) continue;
@@ -385,6 +408,7 @@ export class MsdfTextRenderer {
           if (pass.draw({ vertexCount: 6, instanceCount: batch.count, isInstanced: true }))
             this.stats.drawCalls++;
         }
+    }
   }
   private batch(instances: readonly Instance[], previous?: Batch): Batch {
     const source = instances[0].glyph.page,

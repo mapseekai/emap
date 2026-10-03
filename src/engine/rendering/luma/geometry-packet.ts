@@ -265,13 +265,15 @@ export function buildGeometryPacket(
       if (features.length > 129 && b === a + 1 && offsets[b] - start <= 16) {
         const xy = coordinates.subarray(start * 2, offsets[b] * 2),
           indices = flatSingleRingIndices(xy);
-        directFeatures++;
-        if (indices?.length) {
-          parts.push({ coordinates: xy, indices });
-          vertexCount += xy.length * 2;
-          indexCount += indices.length;
+        if (indices !== undefined) {
+          directFeatures++;
+          if (indices?.length) {
+            parts.push({ coordinates: xy, indices });
+            vertexCount += xy.length * 2;
+            indexCount += indices.length;
+          }
+          continue;
         }
-        continue;
       }
       const build = () => flatPolygonGeometry(coordinates, offsets, a, b);
       const ringOffsets = offsets.slice(a, b + 1);

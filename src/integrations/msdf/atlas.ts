@@ -1,10 +1,11 @@
 import type { WorkerRuntime } from '@mapseekai/tasklane';
 import type { LabelOptions } from '../../engine/map/label';
+import { LabelAtlas } from '../../engine/rendering/labels/atlas';
 import type {
   LabelAtlasProvider,
   LabelTextRequest,
   MsdfAtlasPage,
-  MsdfTextRaster,
+  TextRaster,
   MsdfGlyphQuad,
 } from '../../engine/rendering/labels/text-types';
 import { MsdfClient } from './client';
@@ -91,7 +92,13 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   private shapedGlyphs = 0;
   private channelPixels = 0;
   private missing = 0;
-  constructor(workerUrl: URL, document: Document = globalThis.document, runtime?: WorkerRuntime) {
+  private fallback?: LabelAtlas;
+  private fallbackLabels = 0;
+  constructor(
+    workerUrl: URL,
+    private readonly document: Document = globalThis.document,
+    runtime?: WorkerRuntime,
+  ) {
     this.client = new MsdfClient(workerUrl, runtime);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
@@ -100,10 +107,10 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     this.sample = ctx;
   }
   get bytes(): number {
-    return this.pages.length * SIZE * SIZE * 4;
+    return this.pages.length * SIZE * SIZE * 4 + (this.fallback?.bytes ?? 0);
   }
   get pageCount(): number {
-    return this.pages.length;
+    return this.pages.length + (this.fallback?.pageCount ?? 0);
   }
   get diagnostics() {
     return {
@@ -115,6 +122,7 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
       glyphsReceived: this.generated,
       multichannelPixels: this.channelPixels,
       missingGlyphs: this.missing,
+      bitmapFallbackLabels: this.fallbackLabels,
     };
   }
   begin(): void {
@@ -122,6 +130,8 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     this.pinned.clear();
     this.missing = 0;
     this.frameGlyphs = 0;
+    this.fallbackLabels = 0;
+    this.fallback?.begin();
   }
   async prepare(requests: readonly LabelTextRequest[], signal: AbortSignal): Promise<void> {
     const pending = new Map<string, ShapeRequest>();
@@ -151,7 +161,12 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   reserve(text: string, options: LabelOptions): boolean {
     const k = key(text, options),
       shape = this.shapes.get(k);
-    if (!shape || this.frameGlyphs + shape.glyphs.length > 65536) return false;
+    if (!shape) return false;
+    if (shape.missing) {
+      this.reserved.add(k);
+      return true;
+    }
+    if (this.frameGlyphs + shape.glyphs.length > 65536) return false;
     this.frameGlyphs += shape.glyphs.length;
     this.reserved.add(k);
     return true;
@@ -178,13 +193,20 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   measure(
     text: string,
     options: LabelOptions,
-    _dpr: number,
+    dpr: number,
   ): { width: number; height: number } | null {
+    if (this.shapes.get(key(text, options))?.missing)
+      return (this.fallback ??= new LabelAtlas(this.document)).measure(text, options, dpr);
     return this.metrics(text, options);
   }
   async prepareGlyphs(requests: readonly LabelTextRequest[], signal: AbortSignal): Promise<void> {
     const needed = new Map<string, GlyphRequest>();
     for (const r of requests) {
+      const shape = this.shapes.get(key(r.text, r.options));
+      if (shape?.missing) {
+        this.missing += shape.missing;
+        continue;
+      }
       const m = this.metrics(r.text, r.options);
       if (!m) continue;
       this.missing += m.shape.missing;
@@ -290,7 +312,14 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     this.colors.set(value, result);
     return result;
   }
-  get(text: string, options: LabelOptions, _dpr: number): MsdfTextRaster | null {
+  get(text: string, options: LabelOptions, dpr: number): TextRaster | null {
+    if (this.shapes.get(key(text, options))?.missing) {
+      // Keep whole runs together: browser shaping retains ligatures, bidi and
+      // color emoji. Only missing runs pay the bitmap/DPR rasterization cost.
+      const raster = (this.fallback ??= new LabelAtlas(this.document)).get(text, options, dpr);
+      if (raster) this.fallbackLabels++;
+      return raster;
+    }
     const m = this.metrics(text, options);
     if (!m) return null;
     const glyphs: MsdfGlyphQuad[] = [];
@@ -338,6 +367,8 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
     this.missing = 0;
     this.frameGlyphs = 0;
     this.shapedGlyphs = 0;
+    this.fallback?.clear();
+    this.fallbackLabels = 0;
   }
   get closed(): Promise<void> {
     return this.client.closed;
@@ -345,6 +376,7 @@ export class MsdfLabelAtlas implements LabelAtlasProvider {
   dispose(): void {
     this.clear();
     this.colors.clear();
+    this.fallback?.dispose();
     this.sample.canvas.width = this.sample.canvas.height = 0;
   }
 }

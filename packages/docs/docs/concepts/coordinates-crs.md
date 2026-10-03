@@ -5,12 +5,14 @@ title: 坐标与 CRS
 api: ["AffineTransform", "AnimationOptions", "Bounds", "CameraOptions", "DEFAULT_CRS", "Emap", "FitBoundsOptions", "FlyToOptions", "inferFromPrj", "normalizeCrsString", "Projection", "resolveDatasetCRS", "setDatasetCrsMetadata", "Viewport"]
 examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 坐标与 CRS
 
 Emap 使用 dataset/map 坐标保存几何和空间计算，使用 Canvas 像素进行交互和绘制，并以 CRS 标识定义坐标含义与单位。
+
+应用可以在导入时统一坐标系、重投影整个地图或导出另一坐标系的图层副本。
 
 ```ts
 const map = await Emap.create({ container: '#map' }); // 创建地图实例
@@ -28,7 +30,7 @@ await map.addSource('places', source); // 登记 source 并统一地图 CRS
 
 | API | 参数 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `map.setCRS(crs)` | `crs: string` | 必填 | 为无 source 的地图设置活动 CRS。 |
+| `map.setCRS(crs)` | `crs: string` | 必填 | 在注册首个 source 前设置活动 CRS。 |
 | `map.getCRS()` / `source.getCRS()` | 无 | — | 读取地图 / source CRS。 |
 | `map.project(x, y)` / `map.unproject(px, py)` | 两个 `number` | 必填 | 当前 CRS 坐标与 Canvas 本地像素互转。 |
 | `map.reproject(targetCrs)` | `targetCrs: string` | 必填 | 重投影已登记 source、元数据、索引和视图，并创建可撤销记录。 |
@@ -62,7 +64,7 @@ await map.reproject('EPSG:3857'); // 重投影地图及其已登记 source
 | API | 参数 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `source.reproject(targetCrs, targetCrsMetadata?)` | `string`、`string \| undefined` | `targetCrs` 必填、元数据 `undefined` | 重投影独立 source 并可写入规范 CRS 元数据。 |
-| `map.ops.projectLayer(options)` | `source`、`target`、`crs` | 必填 | 导出另一 CRS 的 layer 副本，不改变地图状态。 |
+| `map.ops.projectLayer(options)` | `source`、`target`、`crs` | 必填 | 导出另一 CRS 的 layer 副本，保留当前地图状态。 |
 | `options.init` / `densify` | `string` / `boolean` | source 元数据 / `false` | 输入 CRS 覆盖值 / 投影曲线的中间顶点。 |
 | `output.format` / `output.filename` | `ExportFormat` / `string` | `'geojson'` / `${target}.${format}` | Blob 格式 / 建议文件名。 |
 

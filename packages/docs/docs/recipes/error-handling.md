@@ -5,12 +5,12 @@ title: 错误处理
 api: ["Emap", "OpResult", "OpError"]
 examples: ["check-geometry", "duckdb-buffer", "duckdb-query"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 错误处理
 
-`Emap` 数据操作返回 `OpResult`；用 `ok` 分支读取结果或结构化错误。
+Emap 通过 `OpResult` 提供结构化操作结果，通过 source 事件报告加载错误，并支持事务回滚恢复数据和选择。用 `ok` 分支读取成功结果或错误详情。
 
 
 ```ts

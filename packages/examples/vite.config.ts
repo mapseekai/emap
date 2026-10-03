@@ -662,10 +662,11 @@ function examplesRouteRewritePlugin(): Plugin {
         const pathname = queryIndex === -1 ? url : url.slice(0, queryIndex);
         const query = queryIndex === -1 ? '' : url.slice(queryIndex);
         const publicPrefix = '/mapseekai/emap/examples/';
-        if (pathname.startsWith(publicPrefix) && pathname.endsWith('/')) {
-          const routeId = pathname.slice(publicPrefix.length, -1);
+        if (pathname.startsWith(publicPrefix)) {
+          const routeId = pathname.slice(publicPrefix.length).replace(/\/(?:index\.html)?$/, '');
           if (routeIdSet.has(routeId)) {
-            request.url = `/examples/${routeId}/index.html${query}`;
+            // Vite's base middleware runs after this hook and removes the public prefix.
+            request.url = `${publicPrefix}examples/${routeId}/index.html${query}`;
           }
         }
         next();

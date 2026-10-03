@@ -58,6 +58,57 @@ const MAX_CANDIDATES = 20000,
   MAX_LABELS = 2000;
 const EMPTY: LabelFrame = { key: '', labels: [] };
 
+class LabelLayerError extends Error {
+  constructor(
+    readonly ownerId: string,
+    cause: unknown,
+  ) {
+    super(
+      `Labels for layer "${ownerId}": ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+  }
+}
+function forLabelLayer<T>(ownerId: string, operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    throw new LabelLayerError(ownerId, error);
+  }
+}
+async function prepareLabelLayers<T extends { ownerId: string }>(
+  items: readonly T[],
+  prepare: (batch: T[]) => Promise<void> | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const id = item.ownerId,
+      group = groups.get(id);
+    if (group) group.push(item);
+    else groups.set(id, [item]);
+  }
+  if (groups.size > 1) {
+    try {
+      // Preserve shared shaping batches and pin all accepted glyphs before
+      // atlas allocation. Only split a failed batch to identify its owner.
+      await prepare([...items]);
+      return;
+    } catch {
+      signal.throwIfAborted();
+    }
+  }
+  for (const [id, group] of groups) {
+    signal.throwIfAborted();
+    try {
+      await prepare(group);
+    } catch (error) {
+      signal.throwIfAborted();
+      throw new LabelLayerError(id, error);
+    }
+  }
+}
+
 /** Optional, asynchronous placement pass. Disabled maps pay no index/font/texture cost.
  * The original layer/feature remains the owner. Picking/editing use original geometries. */
 export class BoundLabelManager {
@@ -95,7 +146,7 @@ export class BoundLabelManager {
     atlas?: LabelAtlasProvider,
   ) {
     this.atlas = atlas ?? new LabelAtlas(document);
-    if (!atlas?.mode) document.fonts?.addEventListener('loadingdone', this.fontChanged);
+    document.fonts?.addEventListener('loadingdone', this.fontChanged);
   }
   private fontChanged = (): void => {
     if (this.disposed) return;
@@ -316,6 +367,35 @@ export class BoundLabelManager {
     signal: AbortSignal,
     content: string,
   ): Promise<void> {
+    let active = bindings;
+    for (;;) {
+      signal.throwIfAborted();
+      try {
+        await this.layoutBindings(active, view, width, height, dpr, key, signal, content);
+        return;
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!(error instanceof LabelLayerError)) throw error;
+        const remaining = active.filter((binding) => binding.id !== error.ownerId);
+        if (remaining.length === active.length) throw error;
+        this.report(error);
+        active = remaining;
+        // Retry placement so a failed high-priority label consumes neither
+        // collision space nor atlas reservations. Only this layout excludes it;
+        // configuration changes retry the layer, and cancellation still wins.
+      }
+    }
+  }
+  private async layoutBindings(
+    bindings: readonly LabelBinding[],
+    view: AffineTransform,
+    width: number,
+    height: number,
+    dpr: number,
+    key: string,
+    signal: AbortSignal,
+    content: string,
+  ): Promise<void> {
     const start = performance.now(),
       alive = new Set(bindings.map((b) => b.layer));
     for (const layer of this.indices.keys()) if (!alive.has(layer)) this.indices.delete(layer);
@@ -408,8 +488,9 @@ export class BoundLabelManager {
         const batch = candidates
           .slice(candidateIndex, candidateIndex + 128)
           .filter((c) => (counts.get(c.binding.id) ?? 0) < (c.binding.options.maxLabels ?? 1000))
-          .map((c) => ({ text: c.text, options: c.binding.options }));
-        if (batch.length) await this.atlas.prepare?.(batch, signal);
+          .map((c) => ({ ownerId: c.binding.id, text: c.text, options: c.binding.options }));
+        if (this.atlas.prepare)
+          await prepareLabelLayers(batch, (group) => this.atlas.prepare!(group, signal), signal);
       }
       signal.throwIfAborted();
       const { binding, id, text, order } = candidate,
@@ -421,7 +502,7 @@ export class BoundLabelManager {
         capacitySkipped++;
         continue;
       }
-      const measured = this.atlas.measure(text, options, dpr);
+      const measured = forLabelLayer(binding.id, () => this.atlas.measure(text, options, dpr));
       if (!measured) {
         capacitySkipped++;
         continue;
@@ -485,7 +566,7 @@ export class BoundLabelManager {
         const box = poseBounds(pose, measured.width, measured.height, options.padding ?? 2);
         if (box[0] < 0 || box[1] < 0 || box[2] > width || box[3] > height) continue;
         if (!options.allowOverlap && grid.collides(box)) continue;
-        if (this.atlas.reserve?.(text, options) === false) {
+        if (forLabelLayer(binding.id, () => this.atlas.reserve?.(text, options)) === false) {
           capacitySkipped++;
           break;
         }
@@ -518,11 +599,18 @@ export class BoundLabelManager {
       }
     }
     signal.throwIfAborted();
-    await this.atlas.prepareGlyphs?.(accepted, signal);
+    if (this.atlas.prepareGlyphs)
+      await prepareLabelLayers(
+        accepted,
+        (group) => this.atlas.prepareGlyphs!(group, signal),
+        signal,
+      );
     signal.throwIfAborted();
     const labels: (PlacedLabel & { order: number })[] = [];
     for (const item of accepted) {
-      const raster = this.atlas.get(item.text, item.options, dpr);
+      const raster = forLabelLayer(item.ownerId, () =>
+        this.atlas.get(item.text, item.options, dpr),
+      );
       if (raster) labels.push({ ...item, raster });
       else capacitySkipped++;
     }

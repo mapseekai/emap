@@ -5,12 +5,27 @@ title: Introduction
 api: ["Emap", "LayerSpecification", "TopologySource"]
 examples: ["china-editing","export-formats","getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Emap
 
 `@mapseekai/emap` is a browser TypeScript map engine for loading, rendering, editing, and analyzing vector data; data lives in undoable mapshaper topology datasets.
+
+Build data viewers, topology editors, and spatial-analysis pages, then add format, basemap, and background-processing plugins as needed.
+
+## Core capabilities
+
+| Capability | What you can do | Guide |
+| --- | --- | --- |
+| Three renderers | Draw maps with Canvas2D, WebGL2, or WebGPU; select the backend at creation, with WebGL2 as the default | [Environment and configuration](./reference/compatibility.md) |
+| Vector data | Import and export common formats, manage multiple sources/layers and shared topology, and load GeoPackage and columnar data | [Data formats](./data/formats.md) |
+| Styles and labels | Build thematic maps with attribute expressions, classified colors, line styles, point markers, text, and image symbols | [Styling](./guides/styling.md) |
+| Editing and history | Draw, snap, transform, and edit vertices/rings/parts with undo/redo, transactions, and validation | [Editing](./guides/editing.md) |
+| Spatial analysis | Clip, buffer, dissolve, reproject, process attributes, and combine DuckDB SQL with spatial tools | [Operations](./data/operations.md), [DuckDB](./data/duckdb.md) |
+| Local raster | Read GeoTIFF/BigTIFF windows, select bands, and use pyramids and progressive display | [GeoTIFF](./data/geotiff.md) |
+| Application extensions | Combine Cordis plugins, MapLibre basemaps, controls, events, and Agent capabilities | [Plugins](./guides/plugins.md) |
+| Background execution | Run operations and decoding in Workers with budgeted scheduling, cancellation, and result-version checks | [Workers](./guides/worker.md) |
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // import the map and data source

@@ -192,7 +192,7 @@ test('real point file: opt-in labels retain original point LOD and bounded atlas
 });
 
 
-for(const backend of ['webgl','webgpu'])test(`${backend}: true MSDF reuses glyphs across paint, size and live DPR changes`,async({page},info)=>{
+for(const backend of ['webgl','webgpu'])test(`${backend}: true MSDF reuses glyphs across paint, size and live DPR changes`,async({page,browserName},info)=>{
   test.setTimeout(120000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend);
@@ -227,9 +227,15 @@ for(const backend of ['webgl','webgpu'])test(`${backend}: true MSDF reuses glyph
   expect(quality.missing/quality.expected,JSON.stringify(quality)).toBeLessThan(.015);
   expect(quality.extra/quality.actual,JSON.stringify(quality)).toBeLessThan(.015);
   const colored=await paint(48,3,'#c020a0');expect(colored.gpu.textureUploads).toBe(initial.gpu.textureUploads);
-  const cdp=await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:2,mobile:false});
+  if(browserName==='chromium'){
+    const cdp=await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:2,mobile:false});
+  }else{
+    // Other engines have no live DPR emulation API; inject the resize input and check real canvas pixels.
+    await page.evaluate(()=>{Object.defineProperty(window,'devicePixelRatio',{configurable:true,value:2});window.dispatchEvent(new Event('resize'));});
+  }
   await expect.poll(()=>page.evaluate(()=>devicePixelRatio)).toBe(2);
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#webgl').width===Math.floor(document.querySelector('#stage').getBoundingClientRect().width)*2)).toBe(true);
   await settle(page,'lumaBenchmark');
   const high=await page.evaluate(()=>lumaBenchmark.labelStats);
   expect(high.glyphsGenerated).toBe(initial.glyphsGenerated);expect(high.gpu.textureUploads).toBe(initial.gpu.textureUploads);

@@ -5,7 +5,7 @@ title: 安装
 api: ["Emap", "TopologySource"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 安装
@@ -36,24 +36,23 @@ import '@mapseekai/emap/style.css'; // 导入内置控件和编辑样式
 }
 ```
 
-原生 Node ESM 项目的 `module` 和 `moduleResolution` 均使用 `Node16` 或 `NodeNext`：
+emap 的公开类型声明使用省略扩展名的相对导入，已验证的配置为
+`module: "ESNext"` 和 `moduleResolution: "bundler"`。浏览器应用使用此配置；
+Node.js 用于开发、构建和测试工具。
 
-```json
-{
-  "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
-  }
-}
-```
+创建地图时可选择 `renderer: 'canvas2d'`、`'webgl2'` 或 `'webgpu'`。
+默认使用 WebGL2；WebGPU 需要安全上下文与可用 GPU 适配器。
+宿主可根据设备能力选择 Canvas2D。
 
 ## 更多可选功能与 peer 依赖
 
-核心包独立运行；只安装实际导入入口的 peer 依赖。
+核心公开类型引用 MapLibre 的完整类型，因此 `maplibre-gl@^6.4.1` 是必需 peer，
+npm／pnpm 默认会自动安装。使用底图时仍须显式注册 MapLibre 插件。
+Arrow、Parquet 和 DuckDB 的 peer 依赖按需安装；下表的子入口共享核心依赖。
 
 | 入口 | 必需 peer 依赖 | 启用能力 |
 | --- | --- | --- |
-| `@mapseekai/emap` | 无 | 地图、source、图层和编辑。 |
+| `@mapseekai/emap` | `maplibre-gl` `^6.4.1` | 地图、source、图层和编辑；MapLibre 公开类型。 |
 | `@mapseekai/emap/arrow`（Arrow / GeoArrow） | `apache-arrow` `^17.0.0` | Arrow table 互操作与 GeoArrow 读写。 |
 | `@mapseekai/emap/arrow`（GeoParquet） | `apache-arrow` `^17.0.0`、`parquet-wasm` `^0.7.1` | GeoParquet 读写。 |
 | `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`、`apache-arrow` `^17.0.0` | DuckDB-Wasm 查询和空间处理。 |

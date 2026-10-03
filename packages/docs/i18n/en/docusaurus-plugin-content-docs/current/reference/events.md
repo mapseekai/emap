@@ -5,12 +5,14 @@ title: Events reference
 api: ["Emap", "EmapEventMap", "CameraEvent", "LayerChangeEvent", "EventListener", "FeatureEvent", "FeatureEventFilter", "PointerMoveEvent"]
 examples: ["feature-selection","web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Events reference
 
 `Emap` subscribes with `on`, `once`, and `off`; known event names infer payload types.
+
+Use events to synchronize attribute panels, selection, and camera state, and to present validation and style diagnostics.
 
 ```ts
 map.once('moveend', (event) => {
@@ -63,7 +65,7 @@ All camera events except `move` provide complete `CameraEvent`.
 
 ### State payload
 
-Every state event has its literal `type`; `crschange` and `resize` have no other payload.
+Every state event has its literal `type`; the payload for `crschange` and `resize` consists of that event-type marker.
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |

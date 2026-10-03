@@ -5,12 +5,14 @@ title: Emap 地图实例
 api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
 examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Emap 地图实例
 
 `Emap` 是应用的地图 facade，管理 Canvas、相机、source、render layer、选择、编辑历史、Handler 和地图事件。
+
+通过同一实例可组合数据导入、图层样式、要素查询、相机动画和可撤销操作。
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
@@ -170,7 +172,7 @@ map.on('feature:click', { layers: ['districts'] }, (event) => {
 
 ## 编辑与数据操作
 
-选择和高亮只改变交互状态。编辑使用命令、会话或 Handler；批量处理使用 `map.ops`。
+选择和高亮管理交互状态并保留数据；命令、会话或 Handler 提供编辑，`map.ops` 提供批量处理。
 
 ```ts
 const result = await map.ops.simplifyLayer({

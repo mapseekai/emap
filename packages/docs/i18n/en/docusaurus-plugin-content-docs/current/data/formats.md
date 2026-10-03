@@ -5,14 +5,14 @@ title: Data formats
 api: ["buildGeoMetadata", "crsStringToProjjson", "DatasetFormatPlugin", "decodeWkb", "detectGeometryColumn", "Emap", "ExportedFormatFile", "exportGeoArrow", "ExportGeoArrowOptions", "exportGeoParquet", "ExportGeoParquetOptions", "fromArrowTable", "FromArrowTableOptions", "GeoColumnMetadata", "GeoEncoding", "GeoMetadata", "GeometryColumnInfo", "importGeoArrow", "ImportGeoArrowOptions", "importGeoParquet", "ImportGeoParquetOptions", "initParquetWasm", "InitParquetWasmOptions", "ParquetWasmModule", "ParquetWasmTable", "parseGeoMetadata", "projjsonToCrsString", "registerArrowFormats", "registerFormat", "setArrowTable", "setParquetWasm", "toArrowTable", "toArrowTableFromSource", "ToArrowTableOptions", "TopologySource.export", "TopologySource.fromBytes", "TopologySource.fromUrl", "WkbGeometry", "WkbWriter", "TopologySource", "ExportOptions", "TopologySource.setData"]
 examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Data formats
 
-This page describes vector data. Local GeoTIFF/BigTIFF uses the separate [raster integration](./geotiff.md), not `TopologySource.fromBytes()`: original files remain external, and pyramids are mandatory above 2GiB.
+Emap loads, stores, and exports vector data through `TopologySource`. Core formats work out of the box; optional entries provide GeoPackage, GeoParquet, and GeoArrow; register a format plugin to read and write FlatGeobuf.
 
-Emap loads, stores, and exports geographic data through `TopologySource`. Core formats work out of the box; optional entries provide GeoPackage, GeoParquet, and GeoArrow; FlatGeobuf needs a registered plugin.
+Use the File/handle entry points in the [raster integration](./geotiff.md) for GeoTIFF/BigTIFF. Original files remain external, and files above 2GiB require valid pyramids.
 
 ```ts
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // load data by URL and extension
@@ -36,7 +36,7 @@ const blob = await source.export({ format: 'geojson' }); // export the current d
 | GeoJSON | `.geojson`, `.json` | yes | yes |
 | TopoJSON | `.topojson`, `.json` | yes | yes |
 | Shapefile ZIP | `.zip` | yes | yes, ZIP Blob |
-| KML | `.kml` | yes | no |
+| KML | `.kml` | yes | Export imported data as GeoJSON or another vector format |
 | mapshaper snapshot | `.msx` | yes | yes |
 
 GeoJSON, TopoJSON, and KML without CRS metadata use `EPSG:4326`.
@@ -45,7 +45,7 @@ GeoJSON, TopoJSON, and KML without CRS metadata use `EPSG:4326`.
 
 | Format | File extensions | Import | Export | Entry point |
 | --- | --- | --- | --- | --- |
-| GeoPackage | `.gpkg` | yes | no | `@mapseekai/emap/geopackage` |
+| GeoPackage | `.gpkg` | yes | Export imported data as GeoParquet | `@mapseekai/emap/geopackage` |
 | GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@mapseekai/emap/arrow` |
 | FlatGeobuf | `.fgb` | after registration | after registration | application-registered plugin |
@@ -294,7 +294,7 @@ const geoCsvCodec: DatasetFormatPlugin = {
 };
 ```
 
-Constraints:
+Codec implementation requirements:
 
 - A codec is pure binary I/O and runs on the main thread or in a Worker.
 - `importBinary` returns editable `layers`, `shapes`, `data`, and `info.crs_string`.

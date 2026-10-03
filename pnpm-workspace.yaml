@@ -6,6 +6,7 @@ overrides:
   '@ngageoint/geopackage>image-size': '2.0.4'
   '@xmldom/xmldom': '0.8.15'
   adm-zip: '0.6.1'
+  fast-uri@^3.0.1: '3.1.8'
   fflate: '0.8.3'
   form-data: '2.5.6'
   protocol-buffers-schema: '3.6.1'
@@ -20,8 +21,17 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - image-size@2.0.4
   - '@mapseekai/tasklane@0.2.0-beta.2'
+  # Fixed Firefox Worker shutdown regression; exact nightly, pending stable 1.64.
+  - '@playwright/test@1.64.0-alpha-2026-10-02'
+  - playwright-core@1.64.0-alpha-2026-10-02
+  - playwright@1.64.0-alpha-2026-10-02
 
 patchedDependencies:
   '@luma.gl/webgl@10.0.0-alpha.1': patches/@luma.gl__webgl@10.0.0-alpha.1.patch
   apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch
+  # GHSA-vfj7-8cjw-p6xm / GHSA-ch52-4w7c-c8xp: local fixes pending upstream releases.
+  # Regression coverage: test/security/docs-toolchain-dependencies.test.ts.
+  braces@3.0.3: patches/braces@3.0.3.patch
+  http-cache-semantics@4.2.0: patches/http-cache-semantics@4.2.0.patch
+  mapshaper@0.6.121: patches/mapshaper@0.6.121.patch
   msdfgen-wasm@1.0.0: patches/msdfgen-wasm@1.0.0.patch

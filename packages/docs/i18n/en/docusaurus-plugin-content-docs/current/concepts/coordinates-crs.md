@@ -5,12 +5,14 @@ title: Coordinates and CRS
 api: ["AffineTransform", "AnimationOptions", "Bounds", "CameraOptions", "DEFAULT_CRS", "Emap", "FitBoundsOptions", "FlyToOptions", "inferFromPrj", "normalizeCrsString", "Projection", "resolveDatasetCRS", "setDatasetCrsMetadata", "Viewport"]
 examples: ["crs-switch","project","duckdb-buffer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Coordinates and CRS
 
 Emap uses dataset/map coordinates for geometry and spatial operations, Canvas pixels for interaction and drawing, and CRS identifiers for coordinate meaning and units.
+
+Applications can align coordinate systems during import, reproject a whole map, or export a layer copy in another CRS.
 
 ```ts
 const map = await Emap.create({ container: '#map' }); // create the map instance
@@ -28,7 +30,7 @@ await map.addSource('places', source); // register the source and align map CRS
 
 | API | Parameters | Default | Description |
 | --- | --- | --- | --- |
-| `map.setCRS(crs)` | `crs: string` | Required | Set active CRS for a map without sources. |
+| `map.setCRS(crs)` | `crs: string` | Required | Set active CRS before registering the first source. |
 | `map.getCRS()` / `source.getCRS()` | None | — | Read map / source CRS. |
 | `map.project(x, y)` / `map.unproject(px, py)` | Two `number` values | Required | Convert current-CRS coordinates and Canvas-local pixels. |
 | `map.reproject(targetCrs)` | `targetCrs: string` | Required | Reproject registered sources, metadata, indexes, and view in one undoable entry. |
@@ -62,7 +64,7 @@ await map.reproject('EPSG:3857'); // reproject the map and its registered source
 | API | Parameters | Default | Description |
 | --- | --- | --- | --- |
 | `source.reproject(targetCrs, targetCrsMetadata?)` | `string`, `string \| undefined` | `targetCrs` required, metadata `undefined` | Reproject a detached source and optionally write canonical CRS metadata. |
-| `map.ops.projectLayer(options)` | `source`, `target`, `crs` | Required | Export a layer copy in another CRS without changing map state. |
+| `map.ops.projectLayer(options)` | `source`, `target`, `crs` | Required | Export a layer copy in another CRS while preserving map state. |
 | `options.init` / `densify` | `string` / `boolean` | Source metadata / `false` | Input-CRS override / intermediate vertices for projected curves. |
 | `output.format` / `output.filename` | `ExportFormat` / `string` | `'geojson'` / `${target}.${format}` | Blob format / suggested filename. |
 

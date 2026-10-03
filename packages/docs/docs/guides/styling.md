@@ -5,12 +5,12 @@ title: 样式图层
 api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 样式图层
 
-Emap 渲染 `fill`、`line`、`circle` 图层；图层引用 source 和可选 `source-layer`，后添加者绘制在上方。
+Emap 支持 `fill`、`line`、`circle` 图层、属性驱动样式，以及附属文字和图片符号；图层引用 source 和可选 `source-layer`，后添加者绘制在上方。
 
 
 ```ts
@@ -186,7 +186,7 @@ map.addLayer({
 
 ## 绑定式文字注记
 
-`label` 是现有 `circle`、`line`、`fill` 图层的附属配置，不新增文字图层或图层树节点。
+`label` 将文字直接附属于现有 `circle`、`line`、`fill` 图层，共用父图层的树节点。
 关闭父图层可见性、设置过滤器或移除父图层时，注记同步更新。
 
 ```ts
@@ -205,10 +205,10 @@ map.setLayerLabel('city-points', null); // 移除注记，不移除城市图层
 `setLayerLabel` 替换整个配置。`field` 与 `text` 二选一，后者支持字符串或已有的安全
 样式表达式子集。空值不显示；字号和描边使用 CSS 像素，`offset` 是像素偏移。
 点注记尝试周边位置，线注记整体沿线旋转且保持正向，面注记使用排除孔洞的内部锚点。
-`placement: 'horizontal'` 使线注记保持水平；尚不支持逐字沿曲线、引线、规则式注记
-或完整的 QGIS PAL 排布。面锚点在有效面内，但文字矩形不保证完全落在面内。
+`placement: 'horizontal'` 使线注记保持水平。当前排布以完整文字串为单位，支持上述点、线、面锚点；
+逐字曲线、引线、规则式注记和 QGIS PAL 排布需由应用另行集成。面锚点位于有效面内，文字矩形可延伸至面外。
 
-默认 Canvas 支持该配置；luma 分支在现有 GPU RenderPass 中批量绘制字体图集。
+Canvas2D 支持该配置；luma 分支在现有 GPU RenderPass 中批量绘制字体图集。
 本地 `luma-benchmark`、`luma-25d` 和 `luma-vertex-editing` 示例包含父图层注记面板。
 未启用时不建立字体图集/注记索引；已启用时跨图层避让，最多显示 2,000 条/视图，
 默认 1,000 条/图层，候选最多 20,000。预算外候选不参与优先级全局比较。
@@ -216,11 +216,11 @@ map.setLayerLabel('city-points', null); // 移除注记，不移除城市图层
 luma 路径采用 HarfBuzz 排版和按字形共享的 RGB MSDF，颜色与描边由 GPU 计算。
 默认使用自托管 Noto 子集；自定义字体通过 `label.fontUrl` 提供 TTF/OTF/WOFF1。
 字号、颜色和 DPR 的常规变化复用字形，异常宽描边可能需要更宽的距离范围档。
-手势快照期间文字仍暂随旧画面变换，停止后刷新；默认 Canvas 路径保留兼容绘制。
+手势快照期间文字仍暂随旧画面变换，停止后刷新；Canvas2D 路径保留兼容绘制。
 
 ## 点图层的图片符号
 
-`icon` 替换现有 `circle` 图层的点符号，不新增 icon 图层或图层树节点。
+`icon` 为现有 `circle` 图层设置图片点符号，共用父图层的树节点。
 父图层显隐、过滤、原有点聚合和绑定注记保持不变。
 
 ```ts
@@ -234,12 +234,12 @@ map.setLayerIcon('city-points', null); // 恢复普通点符号。
 数字尺寸为 CSS 像素高度并保持宽高比；`[width,height]` 显式设置两维。
 `rect: [x,y,width,height]` 可裁剪共享图集，`tint` 可将原图 alpha 蒙版着色。
 支持 PNG/JPEG/WebP、自包含 SVG 和本地图片；图标加载失败保留普通点并报告错误。
-luma 后端复用原点/LOD 缓冲，默认 Canvas 也支持该配置。
-此版本没有逐要素字段映射、alpha 像素拾取或新的带数量聚类规则。
+luma 后端复用原点/LOD 缓冲，Canvas2D 也支持该配置。
+图片配置以图层为单位，拾取沿用点图层规则，密度显示沿用 PointLod；逐要素图片映射、alpha 像素拾取和带数量聚类需由应用另行实现。
 ## 统一的附属 Symbol 样式
 
 推荐将文字和图标配置放入父图层的 `symbol.layout / symbol.paint`。属性名借鉴 MapLibre，
-底层只映射到现有 label/icon，不新增图层树节点，不切换渲染器。`type` 仍是 circle/line/fill。
+底层映射到现有 label/icon，共用父图层节点和渲染器。`type` 使用 circle/line/fill。
 
 ```ts
 map.addLayer({
@@ -266,7 +266,7 @@ map.removeLayerSymbol('poi'); // 同时去掉附属文字/图标，保留父图�
 ```
 
 `text-offset` 单位为 em，随 text-size 换算为像素；`icon-size` 是 images 中 size 的倍率。
-图片 size 是显式基准 CSS 尺寸，不是自动读取的源图片尺寸：数字表示等比高度，数组表示宽高。
+图片 size 由应用显式指定基准 CSS 尺寸：数字表示等比高度，数组表示宽高。
 icon-offset 先乘倍率再随 icon-rotate 旋转，icon-anchor 使用 center/bottom/top-left 等九种名称。
 `symbol.layout.visibility` 仅开关附属符号，父图层 visibility 仍控制整个图层。
 
@@ -276,9 +276,9 @@ QGIS 风格的高级文字注记设置放在 `symbol.labeling`：placement、pri
 minScale、maxScale、fontUrl、fontWeight、fontStyle、enabled。图标仅有的原生兼容项放在
 `symbol.icon`：enabled 和自定义归一化 anchor；常规锚点继续使用 `icon-anchor`。
 
-这是属性映射子集，不是完整 MapLibre Style 文档；没有完整 sprite/glyphs 服务、样式过渡、
-逐要素颜色/字号/图标表达式。原有 placement、点 LOD、图片 alpha 蒙版与 MSDF 实现保持不变。
-未知或暂不支持的属性明确报错。原始配置在校验失败时保持不变。
+使用上面列出的属性配置附属符号；完整 MapLibre Style、sprite/glyphs 服务、样式过渡和
+逐要素颜色/字号/图标表达式需使用相应的外部样式集成。附属符号复用 placement、点 LOD、图片 alpha 蒙版与 MSDF。
+校验器对列表外的属性明确报错，并保留原始配置。
 `setLayerSymbol` 替换整个对象；`removeLayerSymbol` 与 `setLayerSymbol(id, null)` 等价。
 单属性接口的 null/undefined 删除该值并恢复默认。
 

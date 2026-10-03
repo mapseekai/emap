@@ -5,12 +5,12 @@ title: Undo and redo
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Undo and redo
 
-`Emap` tracks edit commands, data operations, and transactions.
+Emap supports undo and redo for edit commands, data operations, and transactions through built-in controls, shortcuts, or custom UI. Use `historychange` to synchronize availability.
 
 ```ts
 await map.addControl(new HistoryControl(), 'top-right'); // add undo and redo buttons

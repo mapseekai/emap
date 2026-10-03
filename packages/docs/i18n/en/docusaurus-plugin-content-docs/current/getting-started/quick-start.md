@@ -5,7 +5,7 @@ title: Your first map
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Your first map
@@ -15,7 +15,7 @@ After [installation](./installation.md), create an interactive map with one GeoJ
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // import the map and data source
 import '@mapseekai/emap/style.css'; // import map styles
-const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // create a safe interactive map
+const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // create an interactive map with JavaScript expressions disabled
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // load GeoJSON
 await map.addSource('districts', source); // register the data source
 map.addLayer({
@@ -54,10 +54,10 @@ The map container must exist with a non-zero size:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `container` | `string \| HTMLElement` | Required by browser presets | Container element or `id`; omit for `headless`. |
+| [`container`](/mapseekai/emap/api/interfaces/emap.EmapOptions.html#container) | `string \| HTMLElement` | Required by browser presets | Container element or `id`; omit for `headless`. |
 | `preset` | `'editor' \| 'viewer' \| 'headless' \| 'empty'` | `'editor'` | Editing, viewing, data-only processing, or empty plugin set. |
 | `interactive` | `boolean` | `true` | Drag panning and scroll zooming. |
-| `expressionPolicy` | `'disabled' \| 'trusted'` | `'disabled'` | mapshaper JavaScript-expression policy. |
+| [`expressionPolicy`](/mapseekai/emap/api/interfaces/emap.EmapOptions.html#expressionpolicy) | `'disabled' \| 'trusted'` | `'disabled'` | mapshaper JavaScript-expression policy. |
 | `plugins` / `excludePlugins` | `readonly Plugin[]` / `readonly string[]` | `[]` / `[]` | Add/replace or exclude preset plugins. |
 | `authorizeCapability` | `CapabilityAuthorizer` | Unset | Host authorization for Agent capabilities. |
 

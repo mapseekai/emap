@@ -14,7 +14,7 @@ const map = await Emap.create({
 map.getRenderer();
 ```
 
-不提供运行时热切换。GPU 不可用或初始化失败会拒绝创建并清理资源；没有静默 fallback。
+渲染后端在创建地图时选择；切换后端需重新创建地图。GPU 不可用或初始化失败时，创建会拒绝并清理资源；宿主可显式选择 `canvas2d` 提供兼容路径。
 默认值改变属于行为变更。旧宿主保留 renderer: 'canvas2d' 即可继续使用旧绘制链路。
 headless/empty 不创建 GPU；getRenderer() 返回 null。显式自定义 painterFactory 仍可覆盖默认 Provider。
 
@@ -27,6 +27,12 @@ GPU 主 Painter 直接使用已验证的 GpuRenderer：点和图标复用原始�
 pathGeometry/PathRangeIndex，填充使用保留各要素与孔洞的 polygonGeometry，文字使用 MSDF atlas。
 CorePainter 新增可选 finishFrame/dispose/createLabelAtlas/clearGeometryCache 等接口；旧的同步 Painter
 无需实现 GPU 生命周期。主帧总是在 finally 中结束并提交，编辑覆盖层维持原来的交互与历史逻辑。
+
+三后端点样式使用相同语义：半径 0 隐藏，空心点描边为 1 CSS 像素，半透明点逐点叠加。
+Canvas 不再将显式 0 改成默认半径，也不再继承前一个线图层的描边状态。
+MSDF 缺字的文字整段使用浏览器位图回退并由 GPU 合成，正常文字仍使用 MSDF；
+混合文字保留原绘制顺序。`missingGlyphs` 与 `bitmapFallbackLabels` 记录缺字及实际回退数，
+详见 [标注字体与预算](luma-labels.md#字体资源)。
 
 初始化期间保持原生 Provider LOADING，依赖它的 Handler 在真实 Painter 就绪后激活。
 根 Context 的释放取消尚未完成的创建；迟到的 Painter 必须销毁，不再挂回 DOM。
@@ -46,7 +52,7 @@ WebGL2/WebGPU 使用已驻留 GPU 缓冲按当前相机重绘，点、图标和�
 导航时合并最新视口规划，Worker 持续处理有界任务，新区域可以在松开鼠标前补齐；
 文字使用地面锚点与 CSS 偏移预览，异步布局补充新候选。结束后校准最终视图。
 Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快照。样式、过滤、显隐与源
-变更仍使相关旧内容失效；GPU 失败不能复用失效命令。详见
+变更仍使相关旧内容失效；GPU 失败后丢弃失效命令。详见
 [渐进场景与原生导航](luma-progressive-rendering.md)。
 
 弧段缓存分为“准备条件”和“实际几何”两级。同一视口/几何版本/有序输入选择下，跳过重复
@@ -59,13 +65,13 @@ Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快�
 这些是正式共享渲染层的默认行为，无需在每个 example 设置私有开关。
 详见 [性能优化与验收](luma-formal-performance-optimization.md)。
 
-## 本次接入与实验功能的边界
+## 正式能力与实验入口
 
 - 正式主画布接入：点/线/面、图片符号、MSDF、既有栅格瓦片合成、过滤与样式、选择与编辑。
 - 编辑手柄、绘制预览、测量文字继续使用独立 Canvas2D 覆盖层，未重写为 GPU。
-- 正式 View 仍是二维 AffineTransform。luma-25d 的 pitch/bearing 和专用相机尚未成为正式 View API。
+- 正式 View 使用二维 AffineTransform；pitch/bearing 和专用透视相机通过 luma-25d 实验入口配置。
 - 正式 RasterRenderService 继续使用既有 CPU/Worker 着色与重投影，结果通过所选后端显示；
-  Native integer texture + halo 复用仍在 luma-raster / luma-25d 专用路径，不冒称本次已经替换。
+  Native integer texture + halo 复用通过 luma-raster / luma-25d 专用路径提供。
 - 大矢量的正式 Painter 已接入稳定分块和独立几何 Worker，以及不透明实线的屏幕缓存。
   主线程仍负责协作式成员规划/坐标包复制，导入和首次业务索引不属于几何 Worker。
   多彩图标保留原始重叠顺序；就绪块按图层顺序渐进重绘，保守三角形范围索引减少超大面绘制，
@@ -80,7 +86,7 @@ Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快�
 包括共享 DuckDB 示例运行器、多实例 Cordis 检查器和重建地图的 Worker 示例；不修改库的全局构造器。
 
 按钮修改当前页的 `?renderer=canvas2d|webgl2|webgpu` 后重新加载，保留其他查询参数和 URL 锚点。
-不是运行时热切换：本地文件需要重新选择，未保存的编辑会丢失。点击已选中的按钮不重载。
+页面重载后需重新选择本地文件；切换前应先保存编辑，未保存的编辑会丢失。点击已选中的按钮不重载。
 工具栏先于设备创建挂载，GPU 初始化失败后仍能点击 Canvas2D 重新打开正式示例。
 原来的 geotiff-viewer / mixed-data-viewer 侧栏下拉已经合并进统一顶部按钮，不再有两份设置。
 
@@ -149,7 +155,7 @@ Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快�
 ## 几何准备吞吐
 
 正式 GPU 将小任务合并为有总量上限的 Worker 消息，并在原生弧长可安全估算时减少一次坐标扫描。
-逻辑块仍独立，首批立即反馈，取消/资源预算保持；不是增加 Worker 或降低显示精度。
+逻辑块仍独立，首批立即反馈，取消/资源预算保持；Worker 数量与显示精度保持原设置。
 实现、同路线数据及输入/输出内存边界见 [几何微批次](luma-geometry-throughput.md)。
 
 ## 已驻留描边范围与部分区间合批
@@ -159,6 +165,6 @@ Canvas2D 和未实现原生导航的自定义 Painter 保留已有自适应快�
 
 ## 资源与显示缓存诊断
 
-GPU 的 `painter.stats.memory` 分项统计已知载荷，`nominalKnownGpuBytes` 不代表驱动实际总显存。
+GPU 的 `painter.stats.memory` 分项统计已知载荷，`nominalKnownGpuBytes` 汇总已知 GPU 载荷；驱动实际总显存需另行采集。
 正式栅格可选像素上传保持旧 Painter 兼容，连续 alpha 保留 Canvas 语义。
 具体范围、数值与测试见 [三批审查修复](luma-audit-fixes.md)。

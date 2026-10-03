@@ -5,12 +5,14 @@ title: Emap map instance
 api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
 examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Emap map instance
 
 `Emap` is the application's map facade, managing the Canvas, camera, sources, render layers, selection, edit history, handlers, and map events.
+
+Use one instance to combine data loading, layer styling, feature queries, camera animation, and undoable operations.
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap';
@@ -170,7 +172,7 @@ Every camera method returns the map. `center` uses project coordinates; `scale` 
 
 ## Editing and data processing
 
-Selection and highlighting change interaction state only. Edit with commands, sessions, or handlers; process in bulk with `map.ops`.
+Selection and highlighting manage interaction state while preserving data. Edit with commands, sessions, or handlers; process in bulk with `map.ops`.
 
 ```ts
 const result = await map.ops.simplifyLayer({

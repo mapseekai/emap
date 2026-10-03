@@ -1,0 +1,47 @@
+diff --git a/mapshaper.js b/mapshaper.js
+index ed0cb0ffb5f1537cca9f0ceb5fe83644609a4d9a..92dfd8505fa3d784bdc4bfeea8941fccb6214afa 100644
+--- a/mapshaper.js
++++ b/mapshaper.js
+@@ -11207,17 +11207,33 @@
+   }
+   // skip local zip header
+   var slzh = function (d, b) { return b + 30 + b2(d, b + 26) + b2(d, b + 28); };
++  // Backport fflate 0.8.3 ZIP64 bounds fix; this copy is embedded by upstream.
+   // read zip header
+   var zh = function (d, b, z) {
+-      var fnl = b2(d, b + 28), fn = strFromU8(d.subarray(b + 46, b + 46 + fnl), !(b2(d, b + 8) & 2048)), es = b + 46 + fnl, bs = b4(d, b + 20);
+-      var _a = z && bs == 4294967295 ? z64e(d, es) : [bs, b4(d, b + 24), b4(d, b + 42)], sc = _a[0], su = _a[1], off = _a[2];
+-      return [b2(d, b + 10), sc, su, fn, es + b2(d, b + 30) + b2(d, b + 32), off];
+-  };
+-  // read zip64 extra field
+-  var z64e = function (d, b) {
+-      for (; b2(d, b) != 1; b += 4 + b2(d, b + 2))
+-          ;
+-      return [b8(d, b + 12), b8(d, b + 4), b8(d, b + 20)];
++      var fnl = b2(d, b + 28), efl = b2(d, b + 30), fn = strFromU8(d.subarray(b + 46, b + 46 + fnl), !(b2(d, b + 8) & 2048)), es = b + 46 + fnl;
++      var _a = z64hs(d, es, efl, z, b4(d, b + 20), b4(d, b + 24), b4(d, b + 42)), sc = _a[0], su = _a[1], off = _a[2];
++      return [b2(d, b + 10), sc, su, fn, es + efl + b2(d, b + 32), off];
++  };
++  // read zip64 header sizes
++  var z64hs = function (d, b, l, z, sc, su, off) {
++      var nsc = sc == 4294967295, nsu = su == 4294967295, noff = off == 4294967295, e = b + l;
++      var nf = nsc + nsu + noff;
++      if (z && nf) {
++          for (; b + 4 < e; b += 4 + b2(d, b + 2)) {
++              if (b2(d, b) == 1) {
++                  return [
++                      nsc ? b8(d, b + 4 + 8 * nsu) : sc,
++                      nsu ? b8(d, b + 4) : su,
++                      noff ? b8(d, b + 4 + 8 * (nsu + nsc)) : off,
++                      1
++                  ];
++              }
++          }
++          // z == 2 for unknown whether or not zip64
++          if (z < 2)
++              err(13);
++      }
++      return [sc, su, off, 0];
+   };
+   // extra field length
+   var exfl = function (ex) {

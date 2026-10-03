@@ -5,12 +5,12 @@ title: Editing
 api: ["AffineMatrix", "AppendedArc", "AutoCompletePolygonHandler", "AutoCompletePolygonOptions", "AutoCompletePolygonResult", "BulkFeatureDeleteCommand", "BulkFeatureDeleteCommandOptions", "composeMatrix", "CompositeCommand", "DatasetReplaceCommand", "DatasetReplaceCommandOptions", "EditCommand", "EditHistory", "EditHistoryOptions", "Emap", "FeatureAffineCommand", "FeatureAffineCommandOptions", "FeatureAppendCommand", "FeatureAppendCommandOptions", "FeatureCreateCommand", "FeatureDeleteCommand", "FeatureDeleteCommandOptions", "FeaturePropertyChangeCommand", "FeaturePropertyChangeCommandOptions", "FeatureTranslateCommand", "FeatureTranslateCommandOptions", "FieldAddCommand", "FieldAddCommandOptions", "FieldRemoveCommand", "FieldRemoveCommandOptions", "FieldRenameCommand", "FieldRenameCommandOptions", "HistoryStateSnapshot", "IDENTITY_MATRIX", "invertMatrix", "planSharedArcSplit", "planSharedNodeSplit", "rotateMatrix", "scaleMatrix", "SplitSharedArcsCommand", "SplitSharedArcsCommandOptions", "SplitSharedArcsRemap", "SplitSharedNodeCommand", "SplitSharedNodePlan", "TopologySource.fromBytes", "Transaction", "TranslatedPointFeature", "VertexDeleteCommand", "VertexInsertCommand", "VertexMoveCommand", "AddPartOptions", "AddRingOptions", "DeletePartOptions", "DeleteRingOptions", "FillRingOptions", "PartEditHandler", "PartEditOptions", "ReshapeFeatureHandler", "ReshapeFeatureOptions", "ReshapeSelectedOptions", "ReshapeSelectedResult", "RingEditHandler", "RingEditOptions", "DrawFeatureHandler", "VertexEditHandler", "SplitFeatureHandler", "TransformFeatureHandler"]
 examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing", "luma-vertex-editing"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Editing
 
-Emap connects interactive editing, selection transforms, and undoable commands to one map state.
+Emap supports drawing, vertex editing, feature transforms, and ring/part editing through one map state and undoable commands. Transactions group several edits into one undo action.
 
 ```ts
 map.drawFeature.setOptions({
@@ -152,7 +152,7 @@ if (!clipped.ok) {
 
 ### Command contract
 
-For edits outside public operations, implement `EditCommand`: mutate first, then `map.pushCommand(command)` records redo state; initial submission does not call `do()`.
+Implement `EditCommand` for custom edits: mutate first, then use `map.pushCommand(command)` to record redo state. `do()` runs on redo.
 
 | Member | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -243,9 +243,9 @@ Shared topology nodes and closed-ring endpoints move together.
 Only point backgrounds use the existing PointLod by default (3 CSS-pixel cell target, switchable); lines and polygons stay full detail. Selection, vertex handles, edit commands and exports
 use the authoritative mapshaper dataset; affected Worker/GPU chunks are refreshed
 after commit, undo and redo. Export downloads the selected feature in source CRS
-using GeoJSON 2008, without overwriting the original file. This single-feature
-example does not implement insert/delete, node splitting or automatic geometry
-repair, and does not change the default emap rendering backend.
+using a separate GeoJSON 2008 download, preserving the original file. This example focuses on
+single-feature selection and vertex movement; use the editing tools and operations above for
+vertex insertion/deletion, node splitting, and geometry repair. Map configuration selects the rendering backend.
 
 ### Editing refresh in the luma example
 
@@ -259,6 +259,5 @@ and the UI reports synchronization rather than displaying missing chunks or mixe
 ### Deep zoom in the experimental luma editor
 
 The luma vertex editor uses corrected high/low projection and direct endpoint anchoring
-to keep handles aligned with the background at deep zoom. Disabling screen filtering
-is not required for the fix. Native mapshaper coordinates, picking, undo/redo, and the
-default Canvas editor are unchanged.
+to keep handles aligned with the background at deep zoom, including with screen filtering enabled. Native mapshaper coordinates, picking, undo/redo, and the
+Canvas2D editing path are unchanged.

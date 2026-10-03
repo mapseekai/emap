@@ -5,12 +5,12 @@ title: 文件上传
 api: ["TopologySource.fromBytes", "TopologySource", "TopologySourceFromBytesOptions"]
 examples: ["flatgeobuf-viewer", "geoparquet-viewer", "getting-started/points"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 文件上传
 
-使用 `TopologySource.fromBytes` 导入浏览器 `File`，并将成功返回的 source 加入 `Emap`。
+Emap 支持将浏览器选择的矢量文件导入可编辑 source，并为原始输入和 ZIP 解压配置资源上限。使用 `TopologySource.fromBytes` 导入 `File` 字节，再将成功返回的 source 加入地图。
 
 ```ts
 const file = input.files?.[0] // 读取浏览器选中的文件

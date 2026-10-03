@@ -5,7 +5,7 @@ title: 第一张地图
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 第一张地图
@@ -15,7 +15,7 @@ verifiedVersion: 0.13.0
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // 导入地图和数据源
 import '@mapseekai/emap/style.css'; // 导入地图样式
-const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // 创建安全的交互地图
+const map = await Emap.create({ container: 'map', expressionPolicy: 'disabled' }); // 创建禁用 JavaScript 表达式的交互地图
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // 加载 GeoJSON
 await map.addSource('districts', source); // 注册数据源
 map.addLayer({
@@ -54,10 +54,10 @@ map.setExtent(source.getExtent()); // 适配数据范围
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `container` | `string \| HTMLElement` | 浏览器 preset 必填 | 容器元素或 `id`；`headless` 可省略。 |
+| [`container`](/mapseekai/emap/api/interfaces/emap.EmapOptions.html#container) | `string \| HTMLElement` | 浏览器 preset 必填 | 容器元素或 `id`；`headless` 可省略。 |
 | `preset` | `'editor' \| 'viewer' \| 'headless' \| 'empty'` | `'editor'` | 编辑、浏览、纯数据处理或空插件集。 |
 | `interactive` | `boolean` | `true` | 拖拽平移和滚轮缩放。 |
-| `expressionPolicy` | `'disabled' \| 'trusted'` | `'disabled'` | mapshaper JavaScript 表达式策略。 |
+| [`expressionPolicy`](/mapseekai/emap/api/interfaces/emap.EmapOptions.html#expressionpolicy) | `'disabled' \| 'trusted'` | `'disabled'` | mapshaper JavaScript 表达式策略。 |
 | `plugins` / `excludePlugins` | `readonly Plugin[]` / `readonly string[]` | `[]` / `[]` | 追加/替换或排除 preset 插件。 |
 | `authorizeCapability` | `CapabilityAuthorizer` | 未设置 | Agent 能力的宿主授权策略。 |
 

@@ -5,12 +5,12 @@ title: 撤销与重做
 api: ["Emap", "HistoryControl", "HistoryControlOptions"]
 examples: ["attribute-editing", "transaction", "undo-redo"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 撤销与重做
 
-`Emap` 跟踪编辑命令、数据操作和事务。
+Emap 支持撤销和重做编辑命令、数据操作及事务，可通过内置按钮、快捷键或自定义界面调用；`historychange` 用于同步可用状态。
 
 ```ts
 await map.addControl(new HistoryControl(), 'top-right'); // 添加撤销和重做按钮

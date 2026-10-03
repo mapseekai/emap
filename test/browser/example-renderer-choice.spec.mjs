@@ -18,10 +18,10 @@ for (const example of examples) test(`${example.id}: shared renderer controls an
   if (!example.id.startsWith('luma-')) await actual(page,'webgl2');
 });
 for (const id of ['getting-started/points','getting-started/lines','getting-started/polygon-fill','vertex-editing','geotiff-viewer','mixed-data-viewer','duckdb/geometry/centroid','plugin-runtime'])
-  test(`${id}: buttons recreate the map with the selected backend`, async ({page}) => {
+  for (const target of ['canvas2d','webgpu']) test(`${id}: ${target} buttons recreate the map with the selected backend`, async ({page}) => {
     await page.goto(base+id+'/?renderer=webgl2&testParam=keep#sample');
     await actual(page,'webgl2');
-    for (const renderer of ['canvas2d','webgpu','webgl2']) {
+    for (const renderer of [target,'webgl2']) {
       await button(page,renderer).focus(); await page.keyboard.press('Enter');
       await expect(page).toHaveURL(new RegExp('renderer='+renderer)); await actual(page,renderer);
       expect(new URL(page.url()).hash).toBe('#sample'); expect(new URL(page.url()).searchParams.get('testParam')).toBe('keep');

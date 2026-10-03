@@ -1,6 +1,6 @@
 # luma 审查修复记录
 
-基线：`d43b18f9`（保存审查时尚未提交的实现）。三批修复分别提交，不推送或发布。
+本轮补齐资源回收、文字缓冲复用、可取消上传和栅格像素上传。基线：`d43b18f9`（保存审查时尚未提交的实现）。三批修复分别提交，不推送或发布。
 
 ## 第一批：资源生命周期
 
@@ -29,7 +29,7 @@ MSDF 与 bitmap 文字保留足够容量的实例 Buffer 和 VAO，并共用一�
 
 一个 GeometryResult 内按 mesh 检查 4 ms / 2 MiB 上传切片；先预留全部载荷预算，
 部分缓冲归属 building entry，完成前只显示旧 fallback。取消/失败回滚已上传 mesh 与预算。
-单次原生 buffer.write 不能被抢占，因此 4 ms 是让步检查预算而非绝对时长保证。
+4 ms 是让步检查预算；单次原生 buffer.write 完成后才进行下一次检查。
 新增 peakResultBytes、pendingUploadBytes、uploadCpuMs、maxMeshUploadMs、maxUploadSliceMs、uploadYields。
 
 第二批验证：342 条相关单元测试通过；浏览器 67 条通过、1 条环境条件跳过。
@@ -44,14 +44,14 @@ CPU staging 为 32,560 字节，正常销毁后为 0。没有将此结果换算�
 有大 backing 的小视图仍先收紧一次，源坐标与要素三角化 cache 从不随输出转移。
 面按 mesh 产出并立即执行 storage clipping，不再同时保留 full[] 和裁剪后的完整数组。
 一百万 path 实例测试：16 mesh、实例和邻居不变；输入与输出同时可达的顶点 backing
-从 56,001,428 B / 17 块降到 28,000,084 B / 1 块。这不是整个 Worker heap 或显存峰值。
+从 56,001,428 B / 17 块降到 28,000,084 B / 1 块。Worker heap 与显存峰值需分别采集。
 
 默认初始化从 16 套管线减为 13 套，三套 *-reference 在明确使用诊断模式时才创建。
 普通生产管线仍预热，避免把编译成本转移到首次正常手势。MSAA4 和两种 shader 语言保留。
 
 正式 GPU painter 提供可选 drawRasterPixels。常规不透明/NoData RGBA 使用 ImageData 的
 精确自有快照并以 Texture.writeData 上传；保留一份 CPU 显示缓存供缓存复用/设备恢复，
-不是零拷贝，也不是原始整数栅格完全 GPU 化。Canvas2D/自定义旧 painter 无需实现新能力。
+该流程包含显示像素快照与上传；原生整数纹理走独立实验路径。Canvas2D/自定义旧 painter 无需实现新能力。
 
 像素对照发现任意原始 RGBA 直接替换 Canvas 会改变透明边缘。因此泛型输出会检查 alpha：
 0 alpha 的隐藏 RGB 归零；连续 alpha 瓦片继续走原 Canvas 量化路径。
@@ -65,8 +65,8 @@ pixelTextureUploads / pixelTextureUploadedBytes。读取/解码/重投影/着色
 
 合成像素对照：两后端 × 两种 alpha × 两种 resampling × 两种 opacity，16 组 RGBA 逐像素零差异。
 固定 60 张 256×256 预分类瓦片的准备+上传+绘制 burst 对照，WebGL2 完成约 55–58 ms，
-直传约 58 ms，主要收益不是墙钟提速；WebGPU 控制约 22–24 ms，直传约 12–16 ms，
-但其 CPU 提交约 5–6 ms→10–11 ms。两轮反向次序，非连续手势 FPS，不能外推所有设备。
+直传约 58 ms，主要收益体现在数据直传；WebGPU 控制约 22–24 ms，直传约 12–16 ms，
+但其 CPU 提交约 5–6 ms→10–11 ms。两轮反向次序，非连续手势 FPS，目标设备需按相同方法复测。
 初版泛型双扫描额外消耗主线程时间，已用生成端分类修正内置数据源热路径；未掩盖测量差异。
 
 ## 最终验收
@@ -76,7 +76,7 @@ pixelTextureUploads / pixelTextureUploadedBytes。读取/解码/重投影/着色
 - 第三批浏览器：59 项正式地图/命令/描边/渐进/内存/合成像素通过；34 项真实文件及文字/2.5D
   通过；另 4 项正式地图真实 GJ/FUS 原图的直接像素缓存与 Canvas 回放对照通过，均有可见像素。
   共 97 项本批选定浏览器用例通过；动态数值栅格覆盖 DPR 1、1.25、2，使用原有数值容差。
-- 新增合成像素 16 组与正式真实文件 4 组，在各自固定视图 RGBA 逐像素一致，不能外推任意数据/视图。
+- 新增合成像素 16 组与正式真实文件 4 组，在各自固定视图 RGBA 逐像素一致，覆盖范围为这些固定数据与视图。
 - 构建、示例构建、bundle smoke、类型与公共契约、测试布局、API 导出、架构和 docs:verify 均通过。
 - 浏览器是 Apple M4 / Chrome 153.0.8010.53，明确使用 WebGL2 和 WebGPU；未运行 Windows。
   正常销毁及上传取消/失败有回归；没有把已知载荷计数当作完整浏览器 heap 或驱动显存测量。

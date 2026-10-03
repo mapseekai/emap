@@ -21,12 +21,14 @@
     "1158527",
     "1158530",
     "1193727",
-    "1193736"
+    "1193736",
+    "1240991",
+    "1240992"
   ],
   "allowedFindingPrefixes": [
     "packages/docs>",
     "packages__docs>",
     "@mapseekai/emap-docs>"
   ],
-  "reason": "Temporary allowance for the listed high-severity advisories reachable only through the Docusaurus documentation build toolchain. New advisory IDs, non-documentation paths, critical findings, and expired entries remain blocking."
+  "reason": "Temporary allowance for the listed high-severity advisories reachable only through the Docusaurus documentation build toolchain. On 2026-10-03 the release owner deferred 1240991 (http-cache-semantics) and 1240992 (braces); both retain locked local patches and test/security/docs-toolchain-dependencies.test.ts regression coverage pending upstream releases. New advisory IDs, non-documentation paths, critical findings, and expired entries remain blocking."
 }

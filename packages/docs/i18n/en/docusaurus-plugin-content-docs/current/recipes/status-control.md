@@ -5,12 +5,13 @@ title: Status control
 api: ["Emap", "StatusControl", "StatusOptions"]
 examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Status control
 
-`StatusControl` displays the pointer coordinate and map CRS.
+`StatusControl` displays pointer coordinates and the map CRS, updating as they change. Configure the readouts, alignment, and map-corner placement.
+
 ```ts
 await map.addControl(
   // mount the control

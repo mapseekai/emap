@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Plugin, UserConfig } from 'vite';
+import { createServer, type Plugin, type UserConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 const cdnFiles = {
@@ -59,11 +59,13 @@ describe('examples build routes', () => {
       ).toEqual(
         input === resolve('packages/examples/index.html')
           ? []
-          : [{
-              tag: 'script',
-              attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
-              injectTo: 'body-prepend',
-            }],
+          : [
+              {
+                tag: 'script',
+                attrs: { type: 'module', src: '/src/performance-monitor-entry.ts' },
+                injectTo: 'body-prepend',
+              },
+            ],
       );
     }
   });
@@ -178,7 +180,9 @@ describe('examples build routes', () => {
       nextCalls += 1;
     });
 
-    expect(request.url).toBe('/examples/getting-started/points/index.html?source=dev');
+    expect(request.url).toBe(
+      '/mapseekai/emap/examples/examples/getting-started/points/index.html?source=dev',
+    );
     expect(nextCalls).toBe(1);
 
     const splitRequest = {
@@ -188,8 +192,32 @@ describe('examples build routes', () => {
       nextCalls += 1;
     });
 
-    expect(splitRequest.url).toBe('/examples/split-features/index.html');
+    expect(splitRequest.url).toBe('/mapseekai/emap/examples/examples/split-features/index.html');
     expect(nextCalls).toBe(2);
+  });
+
+  it('serves public example routes through Vite base middleware', async () => {
+    const server = await createServer({
+      root: resolve('packages/examples'),
+      configFile: resolve('packages/examples/vite.config.ts'),
+      server: { host: '127.0.0.1', port: 0, hmr: false },
+      optimizeDeps: { noDiscovery: true, include: [] },
+    });
+    try {
+      await server.listen();
+      const address = server.httpServer?.address();
+      if (!address || typeof address === 'string') throw new Error('Missing server address');
+      for (const suffix of ['/', '/index.html?source=dev']) {
+        const response = await fetch(
+          `http://127.0.0.1:${address.port}/mapseekai/emap/examples/geopackage-viewer${suffix}`,
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain('text/html');
+        expect(await response.text()).toContain('<title>Emap 示例 - GeoPackage 查看器</title>');
+      }
+    } finally {
+      await server.close();
+    }
   });
 });
 

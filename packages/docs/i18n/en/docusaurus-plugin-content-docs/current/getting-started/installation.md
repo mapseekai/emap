@@ -5,7 +5,7 @@ title: Installation
 api: ["Emap", "TopologySource"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Installation
@@ -36,24 +36,24 @@ Feature entry points are `package.json` export subpaths: `/arrow`, `/duckdb`, `/
 }
 ```
 
-Native Node ESM projects use the same `Node16` or `NodeNext` value for `module` and `moduleResolution`:
+emap's public declarations use extensionless relative imports and are verified with
+`module: "ESNext"` and `moduleResolution: "bundler"`. Use this configuration for
+browser applications; Node.js supports the development, build, and test tools.
 
-```json
-{
-  "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
-  }
-}
-```
+Choose `renderer: 'canvas2d'`, `'webgl2'`, or `'webgpu'` when creating the map.
+WebGL2 is the default; WebGPU requires a secure context and an available GPU adapter.
+The host can select Canvas2D for devices that need it.
 
 ## More optional capabilities and peer dependencies
 
-The core package runs independently; install peers only for imported entry points.
+Core declarations reference MapLibre's full types, so `maplibre-gl@^6.4.1` is a
+required peer installed automatically by npm/pnpm with their default settings.
+Basemaps still require explicit MapLibre plugin registration. Install Arrow,
+Parquet, and DuckDB peers when needed; subpath entries share the core dependencies.
 
 | Entry point | Required peer dependencies | Enables |
 | --- | --- | --- |
-| `@mapseekai/emap` | None | Maps, sources, layers, and editing. |
+| `@mapseekai/emap` | `maplibre-gl` `^6.4.1` | Maps, sources, layers, editing, and public MapLibre types. |
 | `@mapseekai/emap/arrow` (Arrow / GeoArrow) | `apache-arrow` `^17.0.0` | Arrow table interoperability and GeoArrow I/O. |
 | `@mapseekai/emap/arrow` (GeoParquet) | `apache-arrow` `^17.0.0`, `parquet-wasm` `^0.7.1` | GeoParquet I/O. |
 | `@mapseekai/emap/duckdb` | `@duckdb/duckdb-wasm` `1.33.1-dev64.0`, `apache-arrow` `^17.0.0` | DuckDB-Wasm queries and spatial processing. |

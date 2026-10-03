@@ -15,8 +15,7 @@ first. CodeGraph provides focused symbol reads and flows; GitNexus provides:
   rated HIGH or CRITICAL and choose verification for affected callers/processes.
 - `rename`: symbol-aware renames, followed by review of the resulting diff.
 - `detect_changes()`: affected symbols and flows before committing code. For a
-  branch review, use compare scope with the actual target branch; do not assume
-  that every task targets `master`.
+  branch review, use compare scope with the actual target branch.
 
 Inspect freshness when graph results matter. If the local runner exists, use
 `rtk node .gitnexus/run.cjs status`; refresh stale data with
@@ -28,16 +27,15 @@ If the graph/runner is unavailable or refresh fails, report the limitation and
 use targeted `rg` searches and source reads to inspect callers, imports, and
 tests. Review the diff and run relevant checks before proceeding. Use a language
 server rename when available; otherwise review every rename reference explicitly.
-Do not install global tools or repeatedly rebuild an unusable index to unblock a
-routine edit. Documentation-only edits do not require graph analysis. Generated
-indexes supplement current source; they are not authority over it.
+Continue routine edits with the verified local fallback. Documentation-only edits
+use prose and link checks. Treat current source as authoritative and generated
+indexes as navigation aids.
 
 ## Skills
 
-Select a skill for its actual purpose and trigger, not an incidental keyword.
+Select a skill according to its purpose, trigger, and contribution to the task.
 Load its entrypoint first, then only the references needed for the task. Preserve
-the user's scope and already-granted authorization; a skill must not introduce
-unrelated work or repeated approval pauses.
+the user's scope and already-granted authorization when applying its workflow.
 
 When adding or editing a repository-owned skill:
 
@@ -50,7 +48,7 @@ When adding or editing a repository-owned skill:
 - Keep security and irreversible-action boundaries explicit. Avoid global
   requirements to plan, delegate, read every document, or stop for confirmation.
 
-`skills-lock.json` records external skill provenance and hashes; it does not
-contain skill prompts. Personal skills and installed plugin caches are outside
-this repository. Do not copy or rewrite them as a substitute for a missing local
-skill, or change lock hashes without actually updating the associated dependency.
+`skills-lock.json` records external skill provenance and hashes; skill entrypoints
+contain the instructions. Personal skills and installed plugin caches retain their own locations and
+ownership. Maintain repository-owned skill sources in this repository and update
+lock hashes together with the associated dependency.

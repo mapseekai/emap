@@ -5,12 +5,14 @@ title: 事件参考
 api: ["Emap", "EmapEventMap", "CameraEvent", "LayerChangeEvent", "EventListener", "FeatureEvent", "FeatureEventFilter", "PointerMoveEvent"]
 examples: ["feature-selection","web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 事件参考
 
 `Emap` 用 `on`、`once` 和 `off` 订阅事件；已知事件名会推断 payload 类型。
+
+事件可用于同步属性面板、选择状态和相机位置，也可将校验与样式诊断呈现给用户。
 
 ```ts
 map.once('moveend', (event) => {
@@ -63,7 +65,7 @@ map.once('moveend', (event) => {
 
 ### 状态 payload
 
-所有状态事件含对应字面量 `type`；`crschange` 和 `resize` 没有其他 payload。
+所有状态事件含对应字面量 `type`；`crschange` 和 `resize` 的 payload 为该事件类型标记。
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |

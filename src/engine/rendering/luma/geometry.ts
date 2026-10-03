@@ -1,4 +1,8 @@
 import earcut from 'earcut';
+import {
+  intersectingContours,
+  tessellateEvenOdd,
+} from '../../../integrations/luma/polygon-tessellation';
 import Flatbush from 'flatbush';
 import { normalizePointShape } from '../../../domain/source/layer-utils';
 import {
@@ -162,6 +166,8 @@ export function triangulateRings(
   positions: Point[];
   indices: number[];
 } {
+  const contours = paths.map((path) => path.flat());
+  if (intersectingContours(contours)) return tessellateEvenOdd(contours);
   const rings: Ring[] = [];
   for (const points of paths) {
     if (points.length < 3) continue;

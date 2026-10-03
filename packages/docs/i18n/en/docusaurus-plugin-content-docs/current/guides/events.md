@@ -5,12 +5,12 @@ title: Events
 api: ["CameraEvent", "Emap", "EmapEventMap", "EventDispatcher", "EventListener", "FeatureEvent", "FeatureEventFilter"]
 examples: ["feature-attributes","interaction-handlers"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Events
 
-`Emap` extends `EventDispatcher`: known events infer payloads from `EmapEventMap`, while string events use `EventListener<T>`.
+Emap supports camera, data, layer, editing, and feature subscriptions, including source/layer filters for feature events. It extends `EventDispatcher`: known events infer payloads from `EmapEventMap`, while string events use `EventListener<T>`.
 
 ```ts
 const onMoveEnd = (event: { type: 'moveend'; center: [number, number]; zoom: number }) => {

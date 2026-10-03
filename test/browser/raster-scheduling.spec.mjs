@@ -13,7 +13,8 @@ test('adaptive reader admission grows, reclaims optional replicas and reopens th
     const { openGeoTIFF } = await import('../emap-geotiff.mjs');
     const runtime = emap.createEmapWorkerRuntime({ urls: {
       geotiff: new URL('../emap-geotiff-worker.js', location.href).href,
-    }, sizes: { geotiff: 2 }, adaptive: { geotiff: { minWorkers: 1, sampleMs: 20, idleMs: 100 } } });
+    // Keep ready replicas observable under concurrent browser load before idle reclamation.
+    }, sizes: { geotiff: 2 }, adaptive: { geotiff: { minWorkers: 1, sampleMs: 20, idleMs: 1000 } } });
     let source;
     const counts = [];
     const wait = async count => {

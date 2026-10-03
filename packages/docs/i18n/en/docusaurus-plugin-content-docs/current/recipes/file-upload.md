@@ -5,12 +5,12 @@ title: File upload
 api: ["TopologySource.fromBytes", "TopologySource", "TopologySourceFromBytesOptions"]
 examples: ["flatgeobuf-viewer", "geoparquet-viewer", "getting-started/points"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # File upload
 
-Use `TopologySource.fromBytes` to import a browser `File`, then add the returned source to an `Emap`.
+Emap imports browser-selected vector files into editable sources with configurable raw-input and ZIP extraction limits. Use `TopologySource.fromBytes` for the File bytes, then add the returned source to the map.
 
 ```ts
 const file = input.files?.[0] // read the selected browser file

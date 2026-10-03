@@ -49,6 +49,7 @@ struct Out {@builtin(position) position:vec4<f32>, @location(0) uv:vec2<f32>};
 }`;
 type BitmapLabel = PlacedLabel & { raster: LabelRaster };
 interface Batch {
+  firstLabel: number;
   buffer: Buffer;
   vao: VertexArray;
   bindings: Bindings;
@@ -207,7 +208,14 @@ export class GpuTextRenderer {
     }
     return entry;
   }
-  draw(pass: RenderPass, frame: LabelFrame, width: number, height: number): void {
+  draw(
+    pass: RenderPass,
+    frame: LabelFrame,
+    width: number,
+    height: number,
+    start = 0,
+    end = frame.labels.length,
+  ): void {
     if (this.disposed) return;
     if (frame.key !== this.key) {
       const reusable = this.batches;
@@ -223,15 +231,22 @@ export class GpuTextRenderer {
             this.pages.delete(source);
           }
         // Contiguous page runs preserve label and parent-layer compositing order.
-        const runs: BitmapLabel[][] = [];
-        for (const label of labels) {
+        const runs: { labels: BitmapLabel[]; first: number }[] = [];
+        let previous = -2;
+        for (let index = 0; index < frame.labels.length; index++) {
+          const label = frame.labels[index];
+          if ('mode' in label.raster) continue;
+          const bitmap = label as BitmapLabel;
           const last = runs.at(-1);
-          if (last?.[0].raster.page === label.raster.page) last.push(label);
-          else runs.push([label]);
+          if (previous === index - 1 && last?.labels[0].raster.page === bitmap.raster.page)
+            last.labels.push(bitmap);
+          else runs.push({ labels: [bitmap], first: index });
+          previous = index;
         }
-        for (const labels of runs) {
+        for (const run of runs) {
           const old = reusable[consumed],
-            batch = this.batch(labels, old);
+            batch = this.batch(run.labels, old);
+          batch.firstLabel = run.first;
           consumed++;
           this.batches.push(batch);
           if (old && old !== batch) this.releaseBatches([old]);
@@ -252,7 +267,15 @@ export class GpuTextRenderer {
       this.size = size;
     }
     pass.setPipeline(this.pipeline);
-    for (const batch of this.batches) {
+    let low = 0,
+      high = start === 0 ? 0 : this.batches.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (this.batches[mid].firstLabel < start) low = mid + 1;
+      else high = mid;
+    }
+    for (let i = low; i < this.batches.length && this.batches[i].firstLabel < end; i++) {
+      const batch = this.batches[i];
       pass.setBindings(batch.bindings, { _bindGroupCacheKeys: { 0: batch.bindings } });
       pass.setVertexArray(batch.vao);
       if (pass.draw({ vertexCount: 6, instanceCount: batch.count, isInstanced: true }))
@@ -326,7 +349,7 @@ export class GpuTextRenderer {
       }
       this.stats.bufferAllocations++;
       this.stats.liveBufferBytes += data.byteLength;
-      return { buffer, vao, bindings, count: labels.length, bytes: data.byteLength };
+      return { buffer, vao, bindings, count: labels.length, bytes: data.byteLength, firstLabel: 0 };
     } catch (error) {
       if (!reuse) {
         try {

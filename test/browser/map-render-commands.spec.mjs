@@ -25,6 +25,11 @@ async function boot(page,renderer){
 async function settled(page){await expect.poll(()=>page.evaluate(()=>commandErrors)).toEqual([]);await expect.poll(()=>page.evaluate(()=>{const p=commandMap.ctx.render._painter;return p.frameComplete&&p.stats.geometryChunks.pending===0;}),{timeout:60000}).toBe(true);}
 async function warm(page){await page.evaluate(async()=>{for(let i=0;i<4;i++){await new Promise(requestAnimationFrame);commandMap.render();}await commandMap.ctx.render._painter.gpu.waitForIdle();});}
 async function capture(page){
+ // GPU submission and frameComplete do not guarantee a presented screenshot.
+ await page.evaluate(async()=>{
+  await commandMap.ctx.render._painter.gpu.waitForIdle();
+  await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+ });
  const png=await page.screenshot({clip:{x:0,y:0,width:800,height:600}});
  return page.evaluate(async base64=>{const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();
  const canvas=document.createElement('canvas');canvas.width=800;canvas.height=600;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);

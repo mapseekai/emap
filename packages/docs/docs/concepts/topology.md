@@ -5,12 +5,14 @@ title: 拓扑模型
 api: ["ReadonlyArcCollection", "ReadonlyArcVertexData", "ReadonlyCoord2", "ReadonlyDataTable", "ReadonlyFeatureShape", "ReadonlyMapshaperDataset", "ReadonlyMapshaperLayer", "ReadonlyNumericArray", "ReadonlyPathPart", "ReadonlyPathShape", "ReadonlyPointShape", "TopologySource", "ArcCollection", "MapshaperDataset"]
 examples: ["rebuild-topology","vertex-editing","simplify"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 拓扑模型
 
 Emap 用 mapshaper topology dataset 保存线和面：path shape 引用 arc ID，共享边界引用同一 arc；点要素直接保存坐标。
+
+共享 arc 支持一致的边界编辑；应用可按编辑任务保留或拆分共享关系，并通过重建拓扑重新计算交点。
 
 ```ts
 const dataset = source.getDataset(); // 读取 source 的只读实时 dataset 视图
@@ -92,7 +94,7 @@ if (!result.ok) console.error(result.error); // 处理操作失败
 | `source` | `string` | 必填 | 要重建的 source ID。 |
 | `snapInterval` | `number \| undefined` | 自动检测 | source CRS 单位中的顶点吸附距离。 |
 | `noSnap` | `boolean \| undefined` | `undefined` | 跳过吸附预处理。 |
-| `rebuildTopology` | `boolean \| undefined` | `undefined` | 无切点变化时也重建共享 arc。 |
+| `rebuildTopology` | `boolean \| undefined` | `undefined` | 切点保持原样时也可重建共享 arc。 |
 
 ## 渲染与数据简化
 

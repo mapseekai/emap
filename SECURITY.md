@@ -1,9 +1,13 @@
 # Security
 
+emap provides explicit expression policies, validated operation inputs, upload budgets,
+and source-version checks. Applications configure these controls for the data and
+users they serve.
+
 ## Expression evaluation policy
 
-Several `MapshaperOps` APIs accept JavaScript expression strings that
-mapshaper executes inside its own runner:
+Mapshaper-backed operations support JavaScript expression strings for reviewed,
+application-controlled workflows:
 
 - `applyExpression({ expression })`
 - `filterFeatures({ expression })`
@@ -11,46 +15,56 @@ mapshaper executes inside its own runner:
 - `splitLayer({ expression })`
 - `joinTable({ where, calc })`
 - `mosaicLayer({ calc })`
-- ... and any other op that forwards `where=` / `calc=` to mapshaper.
+- Other operations forwarding `where=` or `calc=` to mapshaper.
 
-These expressions execute with full access to the JavaScript runtime
-(no sandbox). Treating an externally-supplied expression string as data
-is a remote code execution vulnerability.
+These expressions execute with the JavaScript runtime's full privileges. Supply
+first-party, reviewed expressions and keep externally supplied text in data fields.
+An expression supplied by an attacker can execute code with those same privileges.
 
-### Default: `'disabled'`
+### Default policy: `'disabled'`
 
-`Emap` defaults `expressionPolicy` to `'disabled'`. Calls that carry a
-non-empty expression string return `false` and emit an `error` event
-with the message `"<op>: expression evaluation is disabled"`.
+`Emap` starts with `expressionPolicy: 'disabled'`. This policy validates
+expression-bearing operations before execution. An operation containing a non-empty
+JavaScript expression returns an `OpResult` with `ok: false` and
+`error.kind: 'expression-disabled'`, and emits an `error` event containing
+`"<op>: expression evaluation is disabled"`. Handle the result to explain the
+required configuration to the caller.
 
-### Opting in: `'trusted'`
+### Reviewed application expressions: `'trusted'`
 
-Apps that load only their own data — and never accept layer config,
-filter strings, or join expressions from end users or third-party
-sources — can opt in:
+Use `'trusted'` when the application owns and reviews every expression, including
+layer configuration, filters, and join calculations:
 
 ```ts
 const map = await Emap.create({ container: 'map', expressionPolicy: 'trusted' });
 
-// or, to flip at runtime
+// Applications can update the policy at runtime.
 map.setExpressionPolicy('trusted');
 ```
 
-Set the policy back to `'disabled'` before processing any
-externally-sourced strings.
+Select `'disabled'` before processing externally supplied expression strings.
+For attribute-based styles, use the validated style expression operators described
+in the [styling guide](packages/docs/docs/guides/styling.md).
 
-### Breaking change
+### Upgrade configuration
 
-Prior to this release the default was `'trusted'`. Apps that broke
-after upgrading should either:
+Earlier releases defaulted to `'trusted'`. When upgrading, choose a policy
+explicitly for each workflow:
 
-1. Pass `expressionPolicy: 'trusted'` if all expression strings are
-   first-party and audited, or
-2. Stop forwarding user-supplied strings to expression-accepting APIs
-   and keep the secure default.
+1. Application-owned, reviewed expressions: set `expressionPolicy: 'trusted'`.
+2. Externally supplied configuration: keep `'disabled'` and pass user input through
+   the documented data and typed parameter interfaces.
+
+## Upload and asynchronous work
+
+Configure source-size and ZIP expansion budgets for public uploads; the
+[file upload guide](packages/docs/docs/recipes/file-upload.md) documents those
+parameters. Prepare archives with unique entry basenames. Worker results commit
+against the current source identity and geometry/attribute versions, preserving
+the active editing state when asynchronous jobs finish.
 
 ## Reporting a vulnerability
 
-Please report security issues via GitHub's "Report a vulnerability"
-flow on this repository. Do not open public issues for unpatched
-security bugs.
+Send security reports through this repository's GitHub **Report a vulnerability**
+flow. Keep details private while maintainers investigate and prepare a fix;
+coordinate disclosure after remediation.

@@ -5,12 +5,12 @@ title: FAQ
 api: ["Emap", "MapOptions", "TopologySource", "SourceLoadError"]
 examples: ["geoparquet-viewer","web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # FAQ
 
-Common questions about map setup, data loading, and runtime configuration.
+Common ways to configure map display, load local and remote data, and enable format plugins and background processing.
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // Load data from a URL
@@ -20,7 +20,7 @@ map.setExtent(source.getExtent()); // Fit its data extent
 
 ## Core questions
 
-### Why is my map blank?
+### How do I set up map display?
 
 `MapOptions.container` locates the canvas mount point. Give it and its parents non-zero dimensions and import `@mapseekai/emap/style.css`; set `interactive: false` for static displays.
 
@@ -30,7 +30,7 @@ Load with `TopologySource.fromUrl()` or `source.setData()`, register with the sa
 
 `TopologySource.fromUrl(id, url, options?)` uses `id` for `map.addSource` and layer `source`; cross-origin URLs require CORS. For memory data, `source.setData({ filename, content })` selects an importer by extension; a file array creates one dataset layer per file. `TopologySource.fromBytes(id, bytes, { filename })` accepts `ArrayBuffer`; `filename` defaults to `${id}.geojson`.
 
-### Why is my layer not visible?
+### How do I display a specific layer?
 
 `spec.id` is the unique layer key; `spec.source` names a registered source and `'source-layer'` selects its data layer. Use `'circle'` for points, `'line'` for lines and outlines, and `'fill'` for polygon fills; `'visible'` renders the layer and `before` controls draw order.
 

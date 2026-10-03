@@ -87,11 +87,20 @@ export class LabelAtlas {
       page = this.pages.filter((p) => !this.pinned.has(p)).sort((a, b) => a.used - b.used)[0];
       if (!page) return null; // Never overwrite a page already referenced by this layout.
       for (const k of page.keys) this.entries.delete(k);
-      page.keys.clear();
-      page.x = page.y = 1;
-      page.rowHeight = 0;
-      page.canvas.getContext('2d')!.clearRect(0, 0, SIZE, SIZE);
-      page.version++;
+      // A displayed/navigation frame may still own the old pixels.
+      const canvas = this.document.createElement('canvas');
+      canvas.width = canvas.height = SIZE;
+      const replacement = {
+        canvas,
+        version: 0,
+        used: 0,
+        x: 1,
+        y: 1,
+        rowHeight: 0,
+        keys: new Set<string>(),
+      };
+      this.pages[this.pages.indexOf(page)] = replacement;
+      page = replacement;
     }
     if (page.x + w + 1 > SIZE) {
       page.x = 1;

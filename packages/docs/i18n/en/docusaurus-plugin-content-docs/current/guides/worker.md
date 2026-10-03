@@ -5,12 +5,12 @@ title: Web Worker
 api: ["Emap", "MapOptions", "MapshaperWorkerPool", "MapshaperWorkerPoolOptions", "createEmapWorkerRuntime", "EmapWorkerRuntimeOptions", "EmapWorkerPool"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Web Worker
 
-Emap can send dataset-replace operations to a Web Worker while the main thread stays responsive; independent sources can process concurrently.
+Emap supports Worker execution for dataset replacements, size-based routing, job cancellation, and result-version checks. Independent sources can process concurrently while the main thread stays responsive.
 
 ```ts
 const map = await Emap.create({
@@ -140,25 +140,25 @@ await runtime.dispose();
 
 An injected `workerRuntime` is borrowed: disposing a map or client closes its scope and sessions without disposing the shared runtime. Its owner must call `runtime.dispose()`. A custom runtime must configure the named pools its consumers use. Worker assets and the main bundle must come from the same build. GeoPackage import also accepts `workerRuntime` in its import options; GeoTIFF accepts it in its open options.
 
-The shared runtime reserves an additional 192 MiB of input and 768 MiB of output admission credits for three interactive tasks, so one maximum-size Mapshaper task does not monopolize both budgets. These are not eager allocations. Explicit `limits.budgets` values still take precedence; unspecified fields retain Emap defaults. Priority changes do not preempt running tasks.
+The shared runtime reserves an additional 192 MiB of input and 768 MiB of output admission credits for three interactive tasks, so one maximum-size Mapshaper task does not monopolize both budgets. Memory is allocated on demand against these admission credits. Explicit `limits.budgets` values still take precedence; unspecified fields retain Emap defaults. Priority changes do not preempt running tasks.
 
 GeoTIFF uses native tasklane `acquireSession` admission: primaries are required, reconstructible replicas are explicitly reclaimable, and slots return only after physical cleanup. The default shared GeoTIFF pool permits eight readers. Capacity occupied exclusively by required sessions fails promptly with `RASTER_WORKER_CAPACITY`. When optional replicas or ordinary idle Workers exist, admission may wait within both the runtime queue timeout and a five-second cancellation cap. Application-created tasklane runtimes use the same admission API.
 
 Geometry and MSDF clients replace lost sessions with a fresh generation. A lost raster reader fails its source; reopen the file rather than reading through an empty replacement session. Failed disposal retains cleanup records for retry through the client's disposal method, without destroying a borrowed runtime.
 
-The Worker binary envelope preserves dates (including invalid dates), typed-array element types, exact view bytes, and special attribute keys. Unsupported objects, accessors, and cycles fail explicitly instead of silently becoming empty objects.
+The Worker binary envelope preserves dates (including invalid dates), typed-array element types, exact view bytes, and special attribute keys. Supply encodable data objects; objects outside the encoding set, accessors, and cycles produce explicit errors.
 
 ### Continuous work and physical cleanup
 
 Emap pins `@mapseekai/tasklane@0.2.0-beta.2`, using protocol v7. Rebuild and deploy the main package and all Workers together. The former local scheduling patch is now upstream and has been removed; reservations preserve same-priority fairness without blocking physically runnable work at a higher effective priority.
 
-GeoTIFF decoded block caches use Scope-owned resident leases, sharing 256 MiB per emap runtime by default. Independent runtimes have independent budgets; share `workerRuntime` to enforce aggregate limits across sources/maps. Reclaimed replicas leave spatial routing before the next dispatch, while failed cleanup retains retry records. Readers publish block-cache hits, misses and evictions through `resourceCacheStats` and support `runtime.trim()`. Required reader state retains a conservative 128 MiB floor; shrinking below it reports a maintenance failure. These counters are not complete RSS. Once memory pressure is normal and pool capacity permits, the next read restores the decoded limit up to the source's original allocation. Queued tasks sample the current budget at dispatch; the Worker admits native resource growth before raising the reader limit. Reads continue with the smaller cache when growth is refused. Recovery does not prefetch or eagerly allocate blocks, and does not require reopening the source.
+GeoTIFF decoded block caches use Scope-owned resident leases, sharing 256 MiB per emap runtime by default. Independent runtimes have independent budgets; share `workerRuntime` to enforce aggregate limits across sources/maps. Reclaimed replicas leave spatial routing before the next dispatch, while failed cleanup retains retry records. Readers publish block-cache hits, misses and evictions through `resourceCacheStats` and support `runtime.trim()`. Required reader state retains a conservative 128 MiB floor; shrinking below it reports a maintenance failure. Measure complete RSS separately with process tools. Once memory pressure is normal and pool capacity permits, the next read restores the decoded limit up to the source's original allocation. Queued tasks sample the current budget at dispatch; the Worker admits native resource growth before raising the reader limit. Reads continue with the smaller cache when growth is refused. Recovery does not prefetch or eagerly allocate blocks, and does not require reopening the source.
 
 `await map.dispose()` waits for geometry, font and raster cleanup barriers. A repeated call retries retained cleanup failures without destroying a borrowed runtime. Standalone raster providers may expose `settled`, which can be awaited after `dispose()`.
 
 ### Binary transport and budgets
 
-Known Mapshaper inputs use a conservative data-dependent bound; opaque preparation callbacks retain the maximum input envelope. Arbitrary command output cannot reliably be predicted from input size, so its 2 GiB output ceiling remains. Reservations are not eager allocations or browser heap limits.
+Known Mapshaper inputs use a conservative data-dependent bound; opaque preparation callbacks retain the maximum input envelope. Arbitrary command output cannot reliably be predicted from input size, so its 2 GiB output ceiling remains. Reservations control admission; memory is allocated on demand and browser heap usage is measured separately.
 
 Mapshaper, GeoPackage and the benchmark use a hybrid envelope. Large binary views travel separately; caller-owned inputs are preserved by default. Explicitly owned full buffers transfer directly, while partial views copy only their actual range. Small BLOBs stay within the metadata envelope to avoid exceeding the transport's backing-store count limit.
 

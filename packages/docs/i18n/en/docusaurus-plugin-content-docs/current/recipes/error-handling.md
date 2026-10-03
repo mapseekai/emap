@@ -5,12 +5,12 @@ title: Error handling
 api: ["Emap", "OpResult", "OpError"]
 examples: ["check-geometry", "duckdb-buffer", "duckdb-query"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Error handling
 
-`Emap` data operations return `OpResult`; branch on `ok` to read a result or structured error.
+Emap provides structured operation results through `OpResult`, source events for load errors, and transaction rollback to restore data and selection. Branch on `ok` to read the result or error details.
 
 
 ```ts

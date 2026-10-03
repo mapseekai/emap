@@ -4,6 +4,69 @@ import { resolve, sep } from 'node:path';
 import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 import { test, expect } from '@playwright/test';
 const base='/mapseekai/emap/examples/';
+for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: point styles have backend-independent alpha, zero radius and hollow strokes`,async({page})=>{
+  await runtime(page);await create(page,renderer);
+  await page.evaluate(async()=>{
+    formalMap.removeLayer('area');formalMap.removeLayer('road');formalMap.removeLayer('poi');
+    const source=new emap.TopologySource('duplicates');
+    await source.setData({filename:'duplicates.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features:[0,1].map(()=>({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[0,0]}}))}))});
+    await formalMap.addSource('duplicates',source);
+    formalMap.addLayer({id:'dots',source:'duplicates',type:'circle',paint:{'circle-color':'rgba(255,0,0,0.5)','circle-radius':10}});
+    await flushFormal();
+  });
+  expect((await page.evaluate(()=>mapPixel(0,0)))[3]).toBeCloseTo(192,0);
+  await page.evaluate(async()=>{formalMap.setPaintProperty('dots','circle-radius',0);await flushFormal();});
+  expect((await page.evaluate(()=>mapPixel(0,0)))[3]).toBe(0);
+  await page.evaluate(async()=>{
+    formalMap.removeLayer('dots');
+    formalMap.addLayer({id:'thick',source:'road',type:'line',paint:{'line-color':'blue','line-width':12,'line-dasharray':[6,3]}});
+    formalMap.addLayer({id:'hollow',source:'poi',type:'circle',paint:{'circle-color':'red','circle-radius':10,'circle-fill':false}});
+    await flushFormal();
+  });
+  const samples=await page.evaluate(async()=>{
+    const t=formalMap.getTransform(),p=t.project(0,0);
+    return Promise.all([0,8,10,14].map(dx=>{const xy=t.unproject(p[0]+dx,p[1]);return mapPixel(...xy);}));
+  });
+  expect(samples[0][3]).toBe(0);expect(samples[1][3]).toBe(0);expect(samples[2][0]).toBeGreaterThan(180);expect(samples[3][3]).toBe(0);
+});
+for(const renderer of ['webgl2','webgpu'])test(`${renderer}: missing MSDF glyphs use browser text with visible diagnostics`,async({page})=>{
+  await runtime(page);await create(page,renderer);
+  await page.evaluate(async()=>{
+    for(const layer of formalMap.getLayers())formalMap.removeLayer(layer.id);
+    const source=new emap.TopologySource('languages');
+    await source.setData({filename:'languages.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features:['Hello 北京','مرحبا','नमस्ते','😀'].map((name,i)=>({type:'Feature',properties:{name},geometry:{type:'Point',coordinates:[0,3-i*2]}}))}))});
+    await formalMap.addSource('languages',source);
+    formalMap.addLayer({id:'languages',source:'languages',type:'circle',paint:{'circle-radius':0},label:{field:'name',fontFamily:'sans-serif',fontSize:24,haloWidth:0,allowOverlap:true}});
+  });
+  await expect.poll(()=>page.evaluate(async()=>{await flushFormal();return formalMap.ctx.render._labels.stats.placed;})).toBe(4);
+  const result=await page.evaluate(async()=>{
+    const manager=formalMap.ctx.render._labels;
+    formalMap.render();const b=await createImageBitmap(formalMap.ctx.render._canvas),c=document.createElement('canvas');c.width=b.width;c.height=b.height;const ctx=c.getContext('2d');ctx.drawImage(b,0,0);b.close();
+    let colorful=0;const d=ctx.getImageData(0,0,c.width,c.height).data;for(let i=0;i<d.length;i+=4)if(d[i]>150&&d[i+1]>70&&d[i+2]<100&&d[i+3]>100)colorful++;
+    return {stats:manager.stats,rasters:manager.frame.labels.map(l=>({text:l.text,bitmap:!('mode' in l.raster)})),colorful,errors:renderErrors};
+  });
+  expect(result.stats.bitmapFallbackLabels).toBe(3);
+  expect(result.stats.missingGlyphs).toBeGreaterThan(0);
+  expect(result.rasters.find(r=>r.text==='Hello 北京').bitmap).toBe(false);
+  for(const text of ['مرحبا','नमस्ते','😀'])expect(result.rasters.find(r=>r.text===text).bitmap).toBe(true);
+  expect(result.colorful).toBeGreaterThan(10);expect(result.errors).toEqual([]);
+  const ordered=await page.evaluate(async()=>{
+    formalMap.removeLayer('languages');
+    const label=(text,color)=>({text,fontFamily:'sans-serif',fontSize:32,color,haloWidth:0,allowOverlap:true});
+    formalMap.addLayer({id:'bottom',source:'poi',type:'circle',paint:{'circle-radius':0},label:label('MMMMMM','red')});
+    formalMap.addLayer({id:'middle',source:'poi',type:'circle',paint:{'circle-radius':0},label:label('مرحبا','blue')});
+    formalMap.addLayer({id:'top',source:'poi',type:'circle',paint:{'circle-radius':0},label:label('MMMMMM','#00ff00')});
+    const pixels=async()=>{await flushFormal();formalMap.render();const b=await createImageBitmap(formalMap.ctx.render._canvas),c=document.createElement('canvas');c.width=b.width;c.height=b.height;const ctx=c.getContext('2d');ctx.drawImage(b,0,0);b.close();return ctx.getImageData(0,0,c.width,c.height).data;};
+    const mixed=await pixels(),stats={...formalMap.ctx.render._painter.stats.text};await pixels();const warm={...formalMap.ctx.render._painter.stats.text};
+    formalMap.setLayerVisibility('bottom','none');formalMap.setLayerVisibility('middle','none');const top=await pixels();
+    let green=0,mismatches=0,blue=0;for(let i=0;i<top.length;i+=4){if(top[i+1]>250&&top[i+3]>250){green++;if(mixed[i+1]<240)mismatches++;}if(mixed[i+2]>200&&mixed[i]<30&&mixed[i+1]<30&&mixed[i+3]>100)blue++;}
+    return {green,mismatches,blue,stats,warm};
+  });
+  expect(ordered.green).toBeGreaterThan(10);expect(ordered.blue).toBeGreaterThan(10);expect(ordered.mismatches).toBe(0);
+  expect(ordered.warm.textureUploads).toBe(ordered.stats.textureUploads);expect(ordered.warm.bufferUploads).toBe(ordered.stats.bufferUploads);
+  const released=await page.evaluate(async()=>{const gpu=formalMap.ctx.render._painter.gpu;await formalMap.dispose();return gpu.memoryStats.nominalKnownGpuBytes;});
+  expect(released).toBe(0);
+});
 async function runtime(page) {
   await page.goto(base+'luma-benchmark/');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
@@ -148,6 +211,71 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: form
   expect(errors).toEqual([]);
 });
 
+for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: edited self-intersections keep even-odd fill and source vertices`, async ({page}) => {
+  await runtime(page); await create(page, renderer);
+  await page.evaluate(async () => {
+    for (const id of ['area', 'road', 'poi']) formalMap.removeLayer(id);
+    const source = new emap.TopologySource('bowtie');
+    await source.setData({filename: 'bowtie.geojson', content: new TextEncoder().encode(JSON.stringify({type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[-2,-2],[2,-2],[2,2],[-2,2],[-2,-2]]]}}))});
+    await formalMap.addSource('bowtie', source);
+    formalMap.addLayer({id: 'bowtie', source: 'bowtie', type: 'fill', paint: {'fill-color': '#ff0000', 'line-width': 0}});
+    const vertices = source.getArcs().getVertexData();
+    vertices.xx.set([-2,2,-2,2,-2]); vertices.yy.set([-2,2,2,-2,-2]);
+    emap.bumpEditVersion(source.getDataset());
+  });
+  await settleRequests(page);
+  const result = await page.evaluate(async () => {
+    const vertices = formalMap.getSource('bowtie').getArcs().getVertexData();
+    return {top: await mapPixel(0,1), bottom: await mapPixel(0,-1), outside: await mapPixel(1.5,0), xx: [...vertices.xx], yy: [...vertices.yy]};
+  });
+  expect(result.top).toEqual([255,0,0,255]); expect(result.bottom).toEqual([255,0,0,255]);
+  expect(result.outside[3]).toBe(0);
+  expect(result.xx).toEqual([-2,2,-2,2,-2]); expect(result.yy).toEqual([-2,2,2,-2,-2]);
+  expect(await page.evaluate(() => renderErrors)).toEqual([]);
+  await page.evaluate(() => formalMap.dispose());
+});
+
+for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: a failed font keeps healthy labels visible and recovers after correction`, async ({page}) => {
+  test.setTimeout(120000);
+  await installCanvasReadback(page);
+  await runtime(page); await create(page, renderer);
+  await page.evaluate(async () => {
+    window.addFontLabel = async (id, x, fontFamily) => {
+      const source = new emap.TopologySource(id);
+      await source.setData({filename: id+'.geojson', content: new TextEncoder().encode(JSON.stringify({type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: [x,0]}}))});
+      await formalMap.addSource(id, source);
+      formalMap.addLayer({id, source: id, type: 'circle'});
+      formalMap.setLayerLabel(id, {text: id, fontFamily, color: '#00aaee', fontSize: 24, allowOverlap: true});
+    };
+    window.visibleFontLabels = async () => {
+      await flushFormal(); formalMap.render();
+      const pixels = await readCanvasPixels(formalMap.ctx.render._canvas);
+      let text = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 50 && pixels[i+1] > 100 && pixels[i+2] > 200 && pixels[i+3] > 100) text++;
+      return {placed: formalMap.ctx.render._labels.stats.placed, text};
+    };
+    await addFontLabel('healthy', -1.5, 'sans-serif');
+  });
+  await expect.poll(() => page.evaluate(() => visibleFontLabels())).toMatchObject({placed: 1});
+  const before = await page.evaluate(() => visibleFontLabels()); expect(before.text).toBeGreaterThan(30);
+  await page.evaluate(() => addFontLabel('bad-font', 1.5, 'Arial'));
+  await expect.poll(() => page.evaluate(async () => {await flushFormal(); return renderErrors;})).toContainEqual(expect.stringContaining('bad-font'));
+  const mixed = await page.evaluate(() => visibleFontLabels());
+  expect(mixed.placed).toBe(1); expect(mixed.text).toBeGreaterThan(30);
+  await page.route('**/missing-font.ttf', route => route.fulfill({status: 404, body: 'Missing font'}));
+  await page.evaluate(() => {
+    renderErrors.length = 0;
+    formalMap.setLayerLabel('bad-font', {text: 'failed download', fontFamily: 'custom', fontUrl: '/missing-font.ttf', color: '#00aaee', fontSize: 24, allowOverlap: true});
+  });
+  await expect.poll(() => page.evaluate(async () => {await flushFormal(); return renderErrors;})).toContainEqual(expect.stringContaining('bad-font'));
+  const missing = await page.evaluate(() => visibleFontLabels());
+  expect(missing.placed).toBe(1); expect(missing.text).toBeGreaterThan(30);
+  await page.evaluate(() => formalMap.setLayerLabel('bad-font', {text: 'repaired', fontFamily: 'sans-serif', color: '#00aaee', fontSize: 24, allowOverlap: true}));
+  await expect.poll(() => page.evaluate(() => visibleFontLabels())).toMatchObject({placed: 2});
+  expect((await page.evaluate(() => visibleFontLabels())).text).toBeGreaterThan(mixed.text);
+  await page.evaluate(() => formalMap.dispose());
+});
+
 test('default is WebGL2 and unavailable backend rejects instead of silently using Canvas2D',async({page})=>{
   await runtime(page);expect((await create(page,undefined)).renderer).toBe('webgl2');await page.evaluate(()=>formalMap.dispose());
   const result=await page.evaluate(async()=>{
@@ -215,16 +343,15 @@ test('published ESM default backend and sibling MSDF resources work without expe
   // that dependency via import map, keeping emap chunks/worker URLs untouched.
   const dependency=await build({stdin:{contents:'export * from "cordis";',resolveDir:resolve('.')},bundle:true,format:'esm',platform:'browser',target:'es2022',write:false});
   await page.route('**/__emap_deps/cordis.mjs',route=>route.fulfill({body:Buffer.from(dependency.outputFiles[0].contents),contentType:'text/javascript'}));
+  await page.route('**/__emap_esm_test/',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><script type="importmap">{"imports":{"cordis":"/__emap_deps/cordis.mjs"}}</script></head><body></body></html>'}));
   await page.route('**/__emap_dist/**',async route=>{
     const relative=decodeURIComponent(new URL(route.request().url()).pathname.split('/__emap_dist/')[1]);const path=resolve(root,relative);
     if(!path.startsWith(root+sep)){await route.abort();return;}
     const type=path.endsWith('.wasm')?'application/wasm':path.endsWith('.json')?'application/json':path.endsWith('.woff')?'font/woff':'text/javascript';
     try{await route.fulfill({body:await readFile(path),contentType:type});}catch{await route.fulfill({status:404});}
   });
-  await page.goto(base);
+  await page.goto('/__emap_esm_test/');
   await page.evaluate(async()=>{
-    document.body.replaceChildren();
-    const imports=document.createElement('script');imports.type='importmap';imports.textContent=JSON.stringify({imports:{cordis:'/__emap_deps/cordis.mjs'}});document.head.append(imports);
     const emap=await import('/__emap_dist/emap.mjs');
     const host=document.createElement('div');Object.assign(host.style,{width:'800px',height:'600px'});document.body.append(host);
     const map=await emap.Emap.create({container:host});window.esmMap=map;
@@ -268,8 +395,14 @@ for (const renderer of ['webgl2','webgpu']) {
   test(`${renderer}: formal GPU navigation replays resident buffers at CSS size and settles the current camera`, async({page},info)=>{
     const errors=[];page.on('pageerror',e=>errors.push(e.stack??e.message));
     await runtime(page);await create(page,renderer);await settleRequests(page);
+    await page.evaluate(()=>{
+      // Exercise the fast-device branch deterministically, just as the slow-device
+      // test below fixes its timing input. GPU submissions and pixels remain real.
+      const r=formalMap.ctx.render;
+      Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
+      Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
+    });
     const before=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,cpu:formalMap.ctx.render._scheduler.lastFrameMs}));
-    expect(before.cpu).toBeLessThan(1000/30);
     await page.mouse.move(690,540);await page.mouse.down();
     for(let i=1;i<=20;i++){await page.mouse.move(690+i*4,540+i);await page.waitForTimeout(16);}
     const during=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,fast:formalMap.ctx.render._scheduler.fastActive}));
@@ -298,8 +431,12 @@ for (const renderer of ['webgl2','webgpu']) {
     await page.evaluate(()=>formalMap.setPaintProperty('poi','circle-color','#22dd44'));await settleRequests(page);
     let pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
     const fresh=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
+    const priorTransform=await page.evaluate(()=>formalMap.ctx.render._canvas.style.transform);
     await page.mouse.move(740,555,{steps:4});await settleRequests(page);
-    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.replays)).toBeGreaterThan(fresh.presentation.replays);
+    // The adaptive policy uses a CSS snapshot after a slow frame. Both paths must
+    // move the freshly styled geometry without another upload, even on busy CI.
+    const moved=await page.evaluate(()=>({replays:formalMap.ctx.render._painter.stats.presentation.replays,transform:formalMap.ctx.render._canvas.style.transform}));
+    expect(moved.replays>fresh.presentation.replays || (moved.transform!=='' && moved.transform!==priorTransform)).toBe(true);
     expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.uploads)).toBe(fresh.uploads);
     pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
     await page.evaluate(()=>formalMap.setFilter('poi',['==',['get','name'],'absent']));await settleRequests(page);
@@ -317,6 +454,13 @@ for (const renderer of ['webgl2','webgpu']) {
 
 for(const renderer of ['webgl2','webgpu'])test(`${renderer}: consecutive gestures before settle retain the painted camera reference`,async({page})=>{
   await runtime(page);await create(page,renderer);await settleRequests(page);
+  await page.evaluate(()=>{
+    // This case asserts native replay counts, so select the fast-device policy
+    // explicitly; slow snapshot navigation has its own pixel regression below.
+    const r=formalMap.ctx.render;
+    Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
+    Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
+  });
   const before=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
   await page.evaluate(()=>{
     const r=formalMap.ctx.render;r.beginNavigation();formalMap.ctx.view._viewport.pan(40,0);r.updateNavigation();

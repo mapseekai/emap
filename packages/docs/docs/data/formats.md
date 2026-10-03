@@ -5,14 +5,14 @@ title: 数据格式
 api: ["buildGeoMetadata", "crsStringToProjjson", "DatasetFormatPlugin", "decodeWkb", "detectGeometryColumn", "Emap", "ExportedFormatFile", "exportGeoArrow", "ExportGeoArrowOptions", "exportGeoParquet", "ExportGeoParquetOptions", "fromArrowTable", "FromArrowTableOptions", "GeoColumnMetadata", "GeoEncoding", "GeoMetadata", "GeometryColumnInfo", "importGeoArrow", "ImportGeoArrowOptions", "importGeoParquet", "ImportGeoParquetOptions", "initParquetWasm", "InitParquetWasmOptions", "ParquetWasmModule", "ParquetWasmTable", "parseGeoMetadata", "projjsonToCrsString", "registerArrowFormats", "registerFormat", "setArrowTable", "setParquetWasm", "toArrowTable", "toArrowTableFromSource", "ToArrowTableOptions", "TopologySource.export", "TopologySource.fromBytes", "TopologySource.fromUrl", "WkbGeometry", "WkbWriter", "TopologySource", "ExportOptions", "TopologySource.setData"]
 examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 数据格式
 
-本页描述矢量数据。GeoTIFF/BigTIFF 使用独立的[本地栅格集成](./geotiff.md)，不走 `TopologySource.fromBytes()`：原文件保持外部引用，超过 2GiB 必须具备金字塔。
+Emap 通过 `TopologySource` 在浏览器中加载、保存和导出矢量数据。核心格式开箱可用；可选入口提供 GeoPackage、GeoParquet、GeoArrow；注册格式插件后可读写 FlatGeobuf。
 
-Emap 通过 `TopologySource` 在浏览器中加载、保存和导出地理数据。核心格式开箱可用；可选入口提供 GeoPackage、GeoParquet、GeoArrow；FlatGeobuf 需注册插件。
+GeoTIFF/BigTIFF 使用[本地栅格集成](./geotiff.md)的 File/句柄入口：原文件保持外部引用，超过 2GiB 的文件需有效金字塔。
 
 ```ts
 const source = await TopologySource.fromUrl('districts', '/data/districts.geojson'); // 按 URL 和扩展名加载数据
@@ -36,7 +36,7 @@ const blob = await source.export({ format: 'geojson' }); // 导出当前 dataset
 | GeoJSON | `.geojson`、`.json` | 是 | 是 |
 | TopoJSON | `.topojson`、`.json` | 是 | 是 |
 | Shapefile ZIP | `.zip` | 是 | 是，ZIP Blob |
-| KML | `.kml` | 是 | 否 |
+| KML | `.kml` | 是 | 导入后可导出 GeoJSON 等矢量格式 |
 | mapshaper snapshot | `.msx` | 是 | 是 |
 
 无 CRS 元数据的 GeoJSON、TopoJSON、KML 使用 `EPSG:4326`。
@@ -45,7 +45,7 @@ const blob = await source.export({ format: 'geojson' }); // 导出当前 dataset
 
 | 格式 | 文件扩展名 | 导入 | 导出 | 入口 |
 | --- | --- | --- | --- | --- |
-| GeoPackage | `.gpkg` | 是 | 否 | `@mapseekai/emap/geopackage` |
+| GeoPackage | `.gpkg` | 是 | 导入后可导出 GeoParquet | `@mapseekai/emap/geopackage` |
 | GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@mapseekai/emap/arrow` |
 | FlatGeobuf | `.fgb` | 注册后 | 注册后 | 应用注册格式插件 |
@@ -293,7 +293,7 @@ const geoCsvCodec: DatasetFormatPlugin = {
 };
 ```
 
-约束：
+codec 实现要求：
 
 - codec 是纯二进制 I/O，可在主线程或 Worker 运行。
 - `importBinary` 返回可编辑 dataset：`layers`、`shapes`、`data` 和 `info.crs_string`。

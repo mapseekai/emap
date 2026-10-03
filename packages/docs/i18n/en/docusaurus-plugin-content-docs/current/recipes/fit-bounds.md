@@ -5,12 +5,12 @@ title: Fit bounds
 api: ["Emap", "Bounds", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Fit bounds
 
-After a source loads, use its `Bounds` to fit the camera. Empty sources, including those empty after filtering, have empty bounds, so check `hasBounds()` before `fitBounds`.
+`fitBounds` centers a data extent, calculates its display scale, and accepts padding and animation options. After loading, use `hasBounds()` to confirm a valid extent; sources with no features, including after filtering, have empty bounds.
 
 
 ```ts

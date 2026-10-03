@@ -5,12 +5,14 @@ title: Topology model
 api: ["ReadonlyArcCollection", "ReadonlyArcVertexData", "ReadonlyCoord2", "ReadonlyDataTable", "ReadonlyFeatureShape", "ReadonlyMapshaperDataset", "ReadonlyMapshaperLayer", "ReadonlyNumericArray", "ReadonlyPathPart", "ReadonlyPathShape", "ReadonlyPointShape", "TopologySource", "ArcCollection", "MapshaperDataset"]
 examples: ["rebuild-topology","vertex-editing","simplify"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Topology model
 
 Emap stores lines and polygons in a mapshaper topology dataset: path shapes reference arc IDs, shared boundaries reference one arc, and point shapes retain coordinates.
+
+Shared arcs support consistent boundary edits. Applications can retain or split sharing for each editing task and rebuild topology to recompute intersections.
 
 ```ts
 const dataset = source.getDataset(); // read the source's live readonly dataset view
@@ -92,7 +94,7 @@ if (!result.ok) console.error(result.error); // handle an operation failure
 | `source` | `string` | Required | Source ID to rebuild. |
 | `snapInterval` | `number \| undefined` | Auto-detected | Vertex snap distance in source-CRS units. |
 | `noSnap` | `boolean \| undefined` | `undefined` | Skip snap preprocessing. |
-| `rebuildTopology` | `boolean \| undefined` | `undefined` | Rebuild shared arcs without cut changes. |
+| `rebuildTopology` | `boolean \| undefined` | `undefined` | Rebuild shared arcs even when cut points stay the same. |
 
 ## Rendering and data simplification
 

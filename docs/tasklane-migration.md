@@ -13,7 +13,7 @@ All emap-owned Web Workers use `@mapseekai/tasklane@0.2.0-beta.2` (protocol v7).
 
 ## Runtime ownership
 
-A map creates a lazy runtime and disposes it through its native Cordis lifecycle. Mapshaper, geometry and font clients borrow that runtime. Optional GeoTIFF providers also use it when no custom worker URL is specified. Standalone import/source/font/geometry clients own their fallback runtime; there is no hidden global tasklane runtime.
+A map creates a lazy runtime and disposes it through its native Cordis lifecycle. Mapshaper, geometry and font clients borrow that runtime. Optional GeoTIFF providers also use it when no custom worker URL is specified. Standalone import/source/font/geometry clients own their fallback runtime, keeping lifecycle and resource budgets local to their owners.
 
 Applications can explicitly share one runtime:
 
@@ -73,10 +73,10 @@ metrics do not include other sources borrowing the same runtime.
 The default remains `workerScheduling: 'spatial'`: the measured cold-read benefit
 was small and varied by workload, while unconditional idle-reader dispatch caused
 additional warm decodes. The opt-in path includes the warm-residency safeguard;
-it is not a claim of higher map FPS. Both policies retain the same source-wide
+these measurements describe cold reads and warm decodes. Both policies retain the same source-wide
 decode/cache budgets, result ownership and physical cancellation barriers.
 
-Pool feedback control is independently opt-in:
+Applications can enable pool feedback control independently:
 
 ```ts
 const workers = createEmapWorkerRuntime({
@@ -148,7 +148,7 @@ GeoTIFF primary admission reclaims only idle optional replicas and returns capac
 
 Follow-up verification: 301 Vitest files / 4,253 tests passed, 56 tests skipped, excluding historical `test-results/` source snapshots. Chrome: 18 browser cases passed and one private-file case skipped. Firefox/WebKit: three migration cases each passed, including Date preservation. Production build, bundle smoke, examples, full `docs:verify`, architecture, changed-TypeScript formatting and lint passed. GitNexus and CodeGraph indexes were refreshed. No commit, push, publication or deployment was performed.
 
-The 2 GiB bulk task ceilings remain conservative ceilings; the added interactive headroom is an admission policy, not a reduction in peak RSS. Size-aware bulk reservations, chunked main-thread serialization and separate transferable arc buffers remain performance follow-ups. GeoTIFF LOD/decoder algorithms and DuckDB were not changed by these fixes.
+The 2 GiB bulk task ceilings remain conservative ceilings; the added interactive headroom controls admission, while peak RSS requires separate measurement. Size-aware bulk reservations, chunked main-thread serialization and separate transferable arc buffers remain performance follow-ups. GeoTIFF LOD/decoder algorithms and DuckDB retain their existing implementations.
 
 ## Follow-up resolution — 2026-09-26
 

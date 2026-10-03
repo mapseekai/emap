@@ -5,12 +5,12 @@ title: 事件
 api: ["CameraEvent", "Emap", "EmapEventMap", "EventDispatcher", "EventListener", "FeatureEvent", "FeatureEventFilter"]
 examples: ["feature-attributes","interaction-handlers"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 事件
 
-`Emap` 继承 `EventDispatcher`：已知事件从 `EmapEventMap` 推导载荷，字符串事件使用 `EventListener<T>`。
+Emap 支持订阅相机、数据、图层、编辑和要素事件，以及按 source 或图层过滤要素事件。`Emap` 继承 `EventDispatcher`：已知事件从 `EmapEventMap` 推导载荷，字符串事件使用 `EventListener<T>`。
 
 ```ts
 const onMoveEnd = (event: { type: 'moveend'; center: [number, number]; zoom: number }) => {

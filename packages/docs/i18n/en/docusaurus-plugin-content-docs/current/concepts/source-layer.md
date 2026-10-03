@@ -5,12 +5,14 @@ title: Sources and layers
 api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ImportResourceLimits", "ZipExtractionLimits"]
 examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Sources and layers
 
 Emap separates geospatial data from presentation: `TopologySource` holds a mapshaper dataset, source layers hold geometry and attributes, and `LayerSpecification` declares rendering.
+
+Render the same data as fills and outlines, and integrate import preflight, CRS confirmation, and format plugins into the application loading flow.
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // import data from a URL
@@ -137,7 +139,7 @@ if (result.status === 'ready') await map.confirmSource(result.plan); // confirm 
 
 ## Export and format plugins
 
-`source.export({ format: 'geojson' })` returns a browser `Blob`. GeoJSON, TopoJSON, Shapefile, MSX, GeoParquet, GeoArrow, and FlatGeobuf are supported; the latter formats need their plugins. GeoPackage imports through `@mapseekai/emap/geopackage` only; see [GeoPackage](../data/geopackage.md).
+`source.export({ format: 'geojson' })` returns a browser `Blob`. Core exports support GeoJSON, TopoJSON, Shapefile, and MSX; format plugins provide GeoParquet, GeoArrow, and FlatGeobuf export. Import GeoPackage vector tables through `@mapseekai/emap/geopackage`; see [GeoPackage](../data/geopackage.md).
 
 ## API
 

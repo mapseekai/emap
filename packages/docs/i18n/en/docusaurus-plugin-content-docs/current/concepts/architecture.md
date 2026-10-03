@@ -5,7 +5,7 @@ title: Current architecture and source layout
 api: ["Emap", "Context", "TopologySource"]
 examples: ["plugin-runtime", "getting-started/geojson-viewer"]
 stability: experimental
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Current architecture and source layout
@@ -34,14 +34,14 @@ src/
 
 | Zone | Responsibility | Typical contents |
 | --- | --- | --- |
-| `domain/` | GIS state and reversible changes independent of UI/plugin runtime | `source/`, `geo/`, `edit/`, `validation/` |
+| `domain/` | Independent GIS state and reversible changes | `source/`, `geo/`, `edit/`, `validation/` |
 | `engine/` | Hot-path map execution and host implementations | `map/`, `core/handlers/`, `rendering/`, `worker/`, built-in workspace providers |
 | `runtime/` | Cordis composition layer | `context/`, `services/`, `providers/`, `plugins/`, `presets/`, `ai/` |
 | `integrations/` | Third-party and optional engine boundaries | `mapshaper/`, `maplibre/`, `arrow/`, `duckdb/`, `geopackage/` |
 | `ui/` | Browser controls, CSS, icons, and theme | controls, `assets/`, `theme/` |
-| `shared/` | Declarations without one business owner | ambient `.d.ts`, external declarations, stylesheet typing |
+| `shared/` | Declarations shared across responsibility zones | ambient `.d.ts`, external declarations, stylesheet typing |
 
-Dependencies follow “inner domain, outer composition”: `runtime` may compose engine, domain, and integration capability; domain does not depend on Cordis, DOM, or a concrete provider. Hot-path pointer movement, hit testing, and painter drawing stay direct TypeScript calls.
+Dependencies follow “inner domain, outer composition”: `runtime` may compose engine, domain, and integration capability; domain stays an independent GIS model, while outer layers own Cordis, DOM, and concrete providers. Hot-path pointer movement, hit testing, and painter drawing stay direct TypeScript calls.
 
 ### `Emap.create()`
 
@@ -57,7 +57,7 @@ Dependencies follow “inner domain, outer composition”: `runtime` may compose
 | --- | --- | --- |
 | `editor` | Everything in `viewer`, editing handlers, and editing controls. | A complete interactive editor. |
 | `viewer` | Everything in `headless`, Canvas, rendering, interaction, events, shortcuts, controls, and browsing handlers. | A page for viewing, querying, selecting, and processing data. |
-| `headless` | Capability/format providers, workspace, mapshaper, editing, attributes, document, view, cache, layers, selection, history, source, policy, execution, query, validation, snapshots, projection, mutation, and scale services. | Data operations in Node, Workers, and batch jobs. |
+| `headless` | Capability/format providers, workspace, mapshaper, editing, attributes, document, view, cache, layers, selection, history, source, policy, execution, query, validation, snapshots, projection, mutation, and scale services. | Data workspaces and batch operations in the browser. |
 | `empty` | Empty preset; instance-local `host.options` is always mounted. | Application-selected Providers and Feature Plugins. |
 
 ## More runtime composition

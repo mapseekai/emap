@@ -5,18 +5,16 @@ It records the static outputs, required gates, and manual evidence expected for
 the docs, examples, and API surfaces.
 
 Load this checklist for release or documentation-platform handoff work. Routine
-local edits use [scoped verification](../AGENTS.md#verification). Preparing and
-verifying a release does not authorize publishing, tagging, or deployment.
+local edits use [scoped verification](../AGENTS.md#verification). Publishing, tagging, and deployment each require explicit authorization for that action.
 
 ## Version and Commit
 
 Review and commit the intended worktree changes before creating a release tag. The tag must
-match `package.json` and point at the commit whose complete release gate passed. This checklist
-does not itself bump versions, create tags, or publish packages.
+match `package.json` and point at the commit whose complete release gate passed. Perform version updates, tag creation, and publication as separate authorized release steps.
 
 Use `verifiedVersion: unreleased` for guides describing unreleased work. Before tagging,
 replace it with the actual version validated for that release and promote the matching
-`CHANGELOG.md` entries. A numeric future version must not stand in for an unpublished release.
+`CHANGELOG.md` entries. Keep `unreleased` during development and set the validated version in the reviewed release commit.
 
 CI runs the complete gate in `Core quality and build` and retains `Minimum Node compatibility`.
 Update any repository rules that previously required the retired per-area jobs before merging.
@@ -43,6 +41,18 @@ pnpm run browser:install
 pnpm run release:verify
 ```
 
+Run GPU checks on a host where Chrome and Firefox can create actual WebGPU
+adapters. Confirm adapter creation on the actual runner; record and resolve adapter
+creation failures before accepting its GPU results. On macOS the Firefox project uses a window
+to obtain a WebGPU adapter on the tested machine.
+Firefox tests disable inactive-window frame throttling. On macOS the Firefox
+project uses one worker: multiple headed browser instances stalled native RAF
+while ordinary timers continued; the original failing cases passed three repeats
+with one instance. GPU rendering and functional assertions remain unchanged.
+This gate validates one headed Firefox instance on macOS; validate multi-instance
+loads separately when that deployment scenario matters. Keep
+the display awake when running headed GPU checks.
+
 `release:verify` stops at the first failed gate and reuses one production build:
 
 | Stage | Gates |
@@ -56,16 +66,20 @@ pnpm run release:verify
 
 For focused debugging, `test:browser` rebuilds examples before Playwright and `test:rendering`
 rebuilds the package before the pixel checks. The release gate uses `browser:check` instead,
-which requires the earlier build stages and forces all three rendering backends.
+which requires the earlier build stages. Chrome and Firefox exercise all three
+rendering backends; WebKit exercises Canvas2D and WebGL2. The release owner deferred
+Safari/WebGPU acceptance on 2026-10-03 because the available WebKit build has no
+WebGPU adapter. WebGPU cases are explicitly named and excluded only from the
+WebKit project; renderer-switch tests retain its Canvas2D/WebGL2 transitions.
+Safari/WebGPU acceptance requires a separate run on a Safari environment with
+a WebGPU adapter. Enable those cases after completing that acceptance.
 `docs:check-api` checks generated API page and anchor targets in both documentation languages.
 
 For product documentation, API, or example changes, `npm run docs:verify` chains `typecheck`,
 `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
-`docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` generates
-the TypeDoc API reference before Docusaurus starts, so callers do not need a
-second `api:build` step. The complete release gate already includes these stages.
-Agent-instruction-only edits use link, command, and rule-consistency checks;
-they do not require rebuilding the documentation platform.
+`docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` runs `api:build` to generate
+the TypeDoc API reference before Docusaurus starts in the same command. The complete release gate already includes these stages.
+Agent-instruction-only edits use link, command, and rule-consistency checks.
 
 `npm run audit:prod` fails closed when the registry cannot return a complete
 report. The only temporary exceptions are the exact advisory IDs and
@@ -82,9 +96,8 @@ assets, and worker with a single process and port:
 pnpm run docs:preview
 ```
 
-Open `http://127.0.0.1:3000/mapseekai/emap/`. This command uses the local
-`examples:build`; it does not start a second examples server or depend on CDN
-access.
+Open `http://127.0.0.1:3000/mapseekai/emap/`. This command serves the local `examples:build` and documentation assets together
+from one process and port.
 
 Use `pnpm run examples:build:cdn` only for an exact package version that is
 already published and has passed the CDN availability and integrity checks.
@@ -117,4 +130,4 @@ Before publishing, `src/` must contain only the six responsibility zones `domain
 - Example catalog entries point to existing routes, fixtures, docs IDs, and API
   reflections.
 - Root docs link to the static documentation, generated API, examples catalog,
-  and this release checklist without restating the full API contract.
+  and this release checklist; the generated API reference provides the full contract.

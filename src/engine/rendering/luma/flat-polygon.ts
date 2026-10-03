@@ -1,4 +1,8 @@
 import earcut from 'earcut';
+import {
+  intersectingContours,
+  tessellateEvenOdd,
+} from '../../../integrations/luma/polygon-tessellation';
 import Flatbush from 'flatbush';
 import type { GeometryBuffer } from '../../../integrations/luma/types';
 interface Ring {
@@ -60,6 +64,25 @@ export function flatPolygonGeometry(
   begin = 0,
   end = offsets.length - 1,
 ): GeometryBuffer {
+  const contours = Array.from({ length: end - begin }, (_, i) =>
+    xy.subarray(offsets[begin + i] * 2, offsets[begin + i + 1] * 2),
+  );
+  if (intersectingContours(contours)) {
+    const mesh = tessellateEvenOdd(contours);
+    const vertices = new Float32Array(mesh.positions.length * 4);
+    for (let i = 0; i < mesh.positions.length; i++) {
+      const [x, y] = mesh.positions[i],
+        hx = Math.fround(x),
+        hy = Math.fround(y);
+      vertices.set([hx, hy, x - hx, y - hy], i * 4);
+    }
+    return {
+      kind: 'fill',
+      vertices,
+      indices: Uint32Array.from(mesh.indices),
+      count: mesh.indices.length,
+    };
+  }
   const rings: Ring[] = [];
   for (let r = begin; r < end; r++) {
     const start = offsets[r],
@@ -173,8 +196,10 @@ export function flatPolygonGeometry(
  * earcut indices and Float64 area predicate as the general even-odd renderer;
  * skips spatial ring indexing and avoids constructing a per-feature GPU mesh.
  */
-export function flatSingleRingIndices(xy: Float64Array): number[] | null {
+export function flatSingleRingIndices(xy: Float64Array): number[] | null | undefined {
   if (xy.length < 6) return null;
+  // Intersections require new display vertices; indices into the source cannot represent them.
+  if (intersectingContours([xy])) return undefined;
   let area = 0;
   const ox = xy[0],
     oy = xy[1];

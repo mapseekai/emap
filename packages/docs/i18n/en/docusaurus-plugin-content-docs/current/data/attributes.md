@@ -5,12 +5,12 @@ title: Attributes
 api: ["Emap", "Feature", "ApplyExpressionOptions", "JoinTableOptions", "CreateLayerOptions", "LayerFieldDefinition"]
 examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Attributes
 
-Emap stores layer attributes in a data table; feature IDs locate geometry and attributes. `map.features` reads; `map.attributes` or `map.ops` writes.
+Emap supports attribute queries, display filters, undoable field edits, classification, and table joins. Layer attributes live in data tables; feature IDs locate geometry and attributes. Read through `map.features` and write through `map.attributes` or `map.ops`.
 
 ```ts
 const hits = map.queryFeatures([240, 180], {

@@ -15,8 +15,24 @@ export default defineConfig({
   },
   projects: [
     { name: 'chrome', use: { browserName: 'chromium', channel: 'chrome' } },
-    { name: 'firefox', use: { browserName: 'firefox' } },
-    { name: 'webkit', use: { browserName: 'webkit' } },
+    // macOS Firefox exposes navigator.gpu headlessly but cannot supply an adapter.
+    {
+      name: 'firefox',
+      // Concurrent headed Firefox instances on macOS can stall native RAF.
+      workers: process.platform === 'darwin' ? 1 : undefined,
+      use: {
+        browserName: 'firefox',
+        headless: process.platform !== 'darwin',
+        launchOptions: {
+          // Keep rendering when the test browser loses focus.
+          firefoxUserPrefs: {
+            'layout.testing.top-level-always-active': true,
+          },
+        },
+      },
+    },
+    // Release scope: Safari/WebGPU is deferred; retain Canvas2D and WebGL2 coverage.
+    { name: 'webkit', use: { browserName: 'webkit' }, grepInvert: /\bwebgpu\b/i },
   ],
   webServer: {
     command: 'pnpm --filter @mapseekai/emap-examples preview --port 4173',

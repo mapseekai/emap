@@ -14,8 +14,66 @@ afterEach(() => {
   document.body.replaceChildren();
   window.history.replaceState({}, '', '/');
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 describe('shared example renderer selection', () => {
+  it.each([
+    ['/mapseekai/emap/getting-started/quick-start', '返回文档'],
+    ['/mapseekai/emap/en/getting-started/quick-start', 'Return to docs'],
+    ['https://example.com/mapseekai/emap/en/', '返回文档'],
+    ['/mapseekai/emap/examples/buffer/', '返回文档'],
+    ['javascript:alert(1)', '返回文档'],
+    ['//example.com/', '返回文档'],
+  ])('keeps the docs return destination local: %s', (returnTo, label) => {
+    window.history.replaceState(
+      {},
+      '',
+      '/mapseekai/emap/examples/buffer/?returnTo=' + encodeURIComponent(returnTo),
+    );
+    document.body.innerHTML = '<header id="header">Example</header>';
+    installExampleRendererToolbar();
+    installExampleRendererToolbar();
+    const links = document.querySelectorAll<HTMLAnchorElement>('.emap-example-docs-link');
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toBe(label);
+    const valid = returnTo.startsWith('/mapseekai/emap/') && !returnTo.includes('/examples/');
+    expect(links[0].getAttribute('href')).toBe(valid ? returnTo : '/mapseekai/emap/');
+    expect(new URL(exampleRendererUrl('webgpu')).searchParams.get('returnTo')).toBe(returnTo);
+  });
+
+  it('defers observed header layout changes until the next frame and cancels them on pagehide', () => {
+    document.body.innerHTML = '<header id="header">Example</header>';
+    let notify!: () => void;
+    let frame!: FrameRequestCallback;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect = disconnect;
+      },
+    );
+    const schedule = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frame = callback;
+      return 1;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    const write = vi.spyOn(document.documentElement.style, 'setProperty');
+    installExampleRendererToolbar();
+    notify();
+    notify();
+    expect(write).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledTimes(1);
+    frame(0);
+    expect(write).toHaveBeenCalledWith('--emap-example-header-height', '0px');
+    notify();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith(1);
+  });
   it('preserves the selected comparison GPU when the benchmark displays Canvas2D', () => {
     window.history.replaceState(
       {},

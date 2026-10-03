@@ -26,7 +26,10 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: bounded styles and 
   const p=auditMap.ctx.render._painter,g=p.gpu,device=g.device,createBuffer=device.createBuffer.bind(device),createVAO=device.createVertexArray.bind(device);let bufferCreations=0,bufferDestroy=0,vaoCreations=0,bytesAllocated=0;
   device.createBuffer=function(props){const b=createBuffer(props);bufferCreations++;bytesAllocated+=b.byteLength;const destroy=b.destroy.bind(b);b.destroy=()=>{bufferDestroy++;destroy();};return b;};
   device.createVertexArray=function(props){vaoCreations++;return createVAO(props);};
-  const before={...g.textStats};const r=auditMap.ctx.render;r.beginNavigation();
+  const before={...g.textStats};const r=auditMap.ctx.render;
+  Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
+  Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
+  r.beginNavigation();
   for(let i=0;i<20;i++){auditMap.ctx.view._viewport.transform.translate(1,0);r.updateNavigation();await new Promise(requestAnimationFrame);}
   await g.waitForIdle();const after={...g.textStats};
   device.createBuffer=createBuffer;device.createVertexArray=createVAO;

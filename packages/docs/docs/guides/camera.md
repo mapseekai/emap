@@ -5,12 +5,12 @@ title: 相机
 api: ["Emap", "Bounds", "Viewport", "CameraOptions", "AnimationOptions", "FlyToOptions", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer","crs-switch"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 相机
 
-相机以中心和比例管理二维视图；目标中心使用数据/投影坐标。WebMercator 可用 `zoom`，任意 CRS 可用 `scale`。
+相机支持立即定位、平滑平移缩放、飞行和范围适配，以中心和比例管理二维视图；目标中心使用数据/投影坐标。WebMercator 可用 `zoom`，任意 CRS 可用 `scale`。
 
 ```ts
 map.jumpTo({ center: [121.47, 31.23], zoom: 10 }); // 立即定位

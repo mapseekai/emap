@@ -5,12 +5,12 @@ title: Direct GeoPackage vector import
 api: ["importGeoPackage", "importGeoPackageInWorker", "geoPackagePlugin", "ImportGeoPackageOptions", "GeoPackageWorkerOptions", "GeoPackagePluginOptions", "GeoPackageLimits", "GeoPackageProgress", "GeoPackageDataset", "GeoPackageMetadata", "GeoPackageTableMetadata"]
 examples: ["geopackage-viewer"]
 stability: experimental
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Direct GeoPackage vector import
 
-`@mapseekai/emap/geopackage` uses the SQL.js/WASM adapter from `@ngageoint/geopackage@4.2.9` to read SQLite and decode GP Binary/WKB directly into numeric buffers.
+`@mapseekai/emap/geopackage` imports multiple vector tables, preserves attributes, normalizes CRS, and supports Worker progress and cancellation. Its `@ngageoint/geopackage@4.2.9` SQL.js/WASM adapter reads SQLite and decodes GP Binary/WKB directly into numeric buffers.
 
 ```ts
 import { importGeoPackage } from '@mapseekai/emap/geopackage'; // import the GeoPackage reader

@@ -54,7 +54,7 @@ for (const dpr of [1, 1.25, 2]) test(`Canvas exact path replay and invalidation 
     for (const factor of [1,2,4,8,16,8,4,2,1,.5,1]) {
       await page.evaluate(factor => { cacheMap.setExtent(new emap.Bounds(-3.5/factor,-3/factor,3.5/factor,3/factor)); }, factor);
       const result = await page.evaluate(() => verifyCache());
-      expect(result.changes, JSON.stringify({ factor, dpr })).toBe(0);
+      expect(result.changes, JSON.stringify({ factor, dpr, ...result })).toBe(0);
       expect(result.painted).toBe(true); expect(result.entries).toBeGreaterThan(0);
       expect(result.bytes).toBeLessThanOrEqual(32*1024**2);
     }

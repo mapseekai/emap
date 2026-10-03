@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-03
+
+### Documentation
+
+- Describe supported map, data, editing, and plugin capabilities through practical
+  workflows in the bilingual guides, with explicit configuration and host responsibilities.
+- Improve navigation between [installation](packages/docs/docs/getting-started/installation.md),
+  [the first map](packages/docs/docs/getting-started/quick-start.md),
+  [concepts](packages/docs/docs/concepts/overview.md), API references, and runnable examples.
+
+### Release scope
+
+- The formal map now defaults to WebGL2. Existing hosts can explicitly select
+  `renderer: 'canvas2d'`; GPU creation failures reject, and hosts control fallback explicitly.
+- Chrome and Firefox validate Canvas2D, WebGL2 and WebGPU. Playwright WebKit
+  validates Canvas2D and WebGL2. These combinations define the release compatibility
+  claim; the release owner deferred Safari/WebGPU acceptance.
+- The two documentation-only braces/http-cache-semantics advisories retain
+  local fixes and regression tests; upstream-version audit findings are
+  temporarily accepted under the existing expiring documentation allowance.
+
 ### Performance
 
 - Cache bounded source/style membership for large solid vector layers; pan selects
@@ -18,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduce view geometry preparation overhead: snapshot native arc metadata per partition,
   skip structurally degenerate display fills, preserve exact Earcut indices for convex
   triangles/quads. Preserve the existing timer-based cooperative yielding.
-  Keep the existing single Worker and resource budgets; no source features are removed.
+  Keep the existing single Worker, resource budgets, and every source feature.
 
 - Reuse resident fill storage for contained same-detail views and include command
   preparation in progressive-frame pacing, without changing Worker concurrency,
@@ -30,6 +51,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve 64-bit integer/Boolean/BLOB fields and cancellation atomicity.
 
 ### Fixed
+
+- Require the existing MapLibre peer so a clean core install can resolve public
+  TypeScript declarations; basemap activation still requires the integration plugin.
+- Disable benchmark controls until initialization finishes so early changes are not lost.
+- Defer example toolbar layout writes to animation frames to avoid ResizeObserver loops.
+- Correct installation guidance to use browser bundler TypeScript resolution;
+  the published declarations require bundler resolution for their extensionless relative imports.
+- Retain luma.gl 10.0.0-alpha.1 and its WebGL context-recovery fixes; pin
+  shadertools to the same release so downstream installs avoid alpha.2's broken metadata.
+- Keep bundled mapshaper and GeoPackage as build dependencies, avoiding redundant
+  downstream installs of their vulnerable Node dependency trees.
+- Backport fflate's bounded ZIP64 header parser into mapshaper's embedded copy,
+  preventing malformed ZIP/KMZ imports from hanging the browser.
+- Run macOS Firefox browser tests with a window so WebGPU can obtain an adapter.
+- Pin Playwright 1.64's 2026-10-02 preview to test Firefox 156's fix for
+  content-process crashes when a compiling Worker is terminated.
+- Retry the 2.5D readiness assertion while asynchronous rendering settles.
+
+- Preserve self-intersecting polygon fills on WebGL2/WebGPU using even-odd
+  display tessellation without changing editable source topology.
+- Fall back to browser-rendered text when default MSDF fonts lack glyphs, retain
+  mixed text paint order, and isolate font loading failures between label owners.
+- Match point rendering across backends for translucent overlaps, zero radius,
+  and hollow point outlines; retain bitmap atlas contents while older frames use them.
+- Serve example URLs ending in `index.html` from the development server.
+- Update vulnerable documentation dependencies within their supported version ranges.
 
 - Reuse full interior fill chunks across camera storage windows to avoid duplicate
   geometry exhausting the working set during GeoPackage pan handoffs. Report queued,
@@ -129,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add shared Canvas2D / WebGL2 / WebGPU renderer buttons to every example header.
   Pass the selected backend explicitly on every formal map creation, preserve other URL
   settings on reload, keep recovery controls available before GPU initialization, and
-  reconcile legacy experimental selectors without claiming Canvas support for GPU-only demos.
+  reconcile legacy experimental selectors with the GPU backend choices available in those demos.
 
 - Default formal `Emap.create()` maps to the luma WebGL2 main painter; accept explicit
   `renderer: 'canvas2d' | 'webgl2' | 'webgpu'` and expose `getRenderer()`. Keep the existing
@@ -137,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Await native provider/device readiness, clean failed/cancelled initialization and GPU resources,
   reuse geometry and immutable raster textures, and deploy lazy sibling MSDF worker assets.
   Formal raster colorization and View remain unchanged; specialized integer-raster and 2.5D
-  experimental paths are not implicitly promoted to full main-map parity.
+  capabilities retain their separate experimental scope.
 
 ### Fixed
 
@@ -146,7 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Recover missing entries instead of silently dropping chunks or stalling navigation.
 - Bound cold polygon GPU uploads to conservative viewport coverage with a small stable
   guard band, retaining complete triangles, holes and original source records. Reuse
-  resident full-coverage meshes when possible; do not raise the shared geometry budget.
+  resident full-coverage meshes when possible and retain the shared geometry budget.
 
 - Reuse valid formal WebGL2/WebGPU frames during pan/zoom regardless of CPU submission
   time, while retaining Canvas2D's adaptive navigation and full redraws for content changes.
@@ -169,10 +216,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   image reference sizes, em/factor/anchor conversions, atomic property setters and
   synchronized legacy label/icon APIs. Add `removeLayerSymbol()` as the explicit alias
   of `setLayerSymbol(id, null)`. Keep luma/MSDF/HarfBuzz/LOD/rendering unchanged and
-  document the supported MapLibre-inspired subset rather than claiming full Style Spec support.
+  document the supported MapLibre-inspired subset and its available properties.
 
 - Add image icon symbols to existing point layers via `CircleLayerSpecification.icon`
-  and `Emap.setLayerIcon`, without new layer-tree entries. Reuse point/LOD GPU buffers
+  and `Emap.setLayerIcon`, attached to their existing layer-tree entries. Reuse point/LOD GPU buffers
   in WebGL2/WebGPU with shared sprite textures, anchor/rotation/offset, tint and opacity;
   retain Canvas/filter compatibility, bounded cancellable loading, nonfatal fallback,
   label spacing, source ownership and resource cleanup. Add controls to existing luma pages.
@@ -187,7 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and polygon annotations, with safe field/expression text, font/halo settings,
   interior/parallel placement and cross-layer collision avoidance. Render bounded
   MSDF glyph atlases as instanced luma WebGL2/WebGPU quads; inherit parent visibility,
-  filtering and data revisions without additional layer-tree entries. Add controls
+  filtering and data revisions through the parent layer-tree entry. Add controls
   to the existing benchmark, 2.5D and editor pages and an optional Canvas text pass.
   Keep labels disabled by default and document placement/performance limits.
 
@@ -195,7 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WebGL2/WebGPU projection for vectors, RGBA images and native integer GeoTIFFs.
   Support pitch/bearing, ground picking, pointer-anchored navigation, four-corner
   culling, perspective-aware raster detail and per-region coverage uniforms.
-  Keep the default Canvas runtime and existing 2D behavior unchanged; document
+  Keep the formal map's two-dimensional interaction model; document
   the lack of terrain, extrusion, automatic reprojection and production editor integration.
 
 - Read nonoverlapping original raster cores and reuse resident integer GPU textures
@@ -212,8 +259,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repeated loads and disposal. Add an optional aggregate GeoTIFF block-cache ceiling;
   the dynamic raster example uses 32 MiB without changing other callers' adaptive defaults.
   Report raw-read Worker cache gauges, reuse bounded UInt16 upload packing storage,
-  and throttle example diagnostics independently of rendering. Memory budgets do not
-  represent total browser/driver memory; do not force GC in production.
+  and throttle example diagnostics independently of rendering. Memory budgets measure
+  tracked caches; total browser/driver memory requires separate measurement. Production
+  uses natural GC.
 
 - Batch adjacent original raster windows with bounded 2D/strip-aware reads in the
   dynamic luma example. Reuse shared planes for UInt16 texture packing and publish
@@ -250,8 +298,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add full-precision MSAA path rendering in the independent luma examples,
   adapting GeoArrow/deck.gl PathLayer's six-vertex indexed segment/join envelope.
-  Keep all original path coordinates and segments, round joins/caps and pixel widths;
-  do not add line/polygon LOD. Same-color opaque strokes reuse private coverage depth
+  Keep all original path coordinates and segments, round joins/caps and pixel widths
+  at full line/polygon detail. Same-color opaque strokes reuse private coverage depth
   without blending; color changes and intervening layers preserve drawing order.
 - Expose optimized, same-MSAA reference and legacy analytic path modes. Retain the
   existing analytic path for translucent/dashed strokes and missing multisampling.
@@ -287,23 +335,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regenerate only affected spatial chunks. Unchanged full-detail buffers stay resident.
   Selected-feature GeoJSON exports retain source coordinates and CRS (GeoJSON 2008).
 
-- Start the experimental `luma集成` branch with pinned luma.gl v10 alpha
-  dependencies, direct mapshaper-to-GPU geometry packing, and an isolated GPU
-  renderer prototype. This is not a completed renderer migration: the default
-  Canvas backend remains unchanged.
+- Add direct mapshaper-to-GPU geometry packing with pinned luma.gl v10 alpha
+  dependencies; the formal renderer integration and compatibility scope are
+  described above.
 
 - Add an independent `luma-benchmark` example with actual Canvas2D/WebGL2 output,
   local mapshaper point/line/holed-polygon datasets, streamed vector imports and
   fixed decoded GeoTIFF tiles. Sequential ABBA navigation reports real rAF cadence,
   CPU draw/submit timing, preparation costs, tracked resources and JSON results.
-- Add `examples:luma` and `test:luma` commands. Preserve the default Canvas presets.
+- Add `examples:luma` and `test:luma` commands. Retain explicit Canvas2D presets.
 
 ### Fixed
 
 - Fix the experimental WebGPU raster scissor origin so TIFF tiles are not clipped
   against vertically mirrored rectangles. Preserve WebGL behavior; add DPR unit
   regressions, real-TIFF Canvas/GPU coverage checks and a source-cold/fixed-texture
-  raster baseline runner. Keep the default Canvas raster runtime unchanged.
+  raster baseline runner. Keep the formal raster decoding and coloring pipeline.
 
 - Fix deep-zoom GPU/editor coordinate drift with independently scaled high/low
   position differences in GLSL and WGSL. Keep uniform layouts aligned and anchor
@@ -347,7 +394,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Make the standalone luma benchmark start empty and use explicitly selected real
-  files, not generated performance scenes. Add a repeatable five-file local runner
+  files. Replace generated performance scenes with a repeatable five-file local runner
   that records full-extent, far, close-up, actual dragging, raw frame samples,
   input SHA-256 identities, pixels, memory observations and disposal results.
 - Stream large GeoJSON FeatureCollections in a dedicated Worker through mapshaper's
@@ -355,10 +402,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buffers instead of allocating one giant decoded GeoJSON string. The normal
   import byte limit still applies; benchmark-only feature/vertex caps are removed.
 - Replace the experimental display LOD with a single full-detail geometry cache:
-  no point sampling, boundary simplification, size-based omission or coarse fallback.
+  retain every original point and boundary at full detail, including small features.
   Keep conservative spatial culling, source revisions, Worker preparation and
   local edit invalidation. Add native WebGPU/WGSL alongside WebGL2 using pinned
-  luma v10. The authoritative dataset and default Canvas presets are unchanged.
+  luma v10. The authoritative dataset is unchanged.
 
 ## [0.13.1] - 2026-09-19
 
@@ -473,7 +520,8 @@ Changes since [v0.12.0](https://github.com/mapseekai/emap/compare/v0.12.0...v0.1
 
 - Raster layers currently form a stack below vector layers. Rotated/sheared grids,
   independent validity masks, associated alpha and unsupported sample/color
-  formats are rejected explicitly. Real multi-gigabyte throughput is not yet benchmarked.
+  formats are rejected explicitly. Benchmark coverage at this release remains below
+  real multi-gigabyte throughput workloads.
 - Custom painter/render providers must implement the new `drawRasterImage` and
   `registerPass` rendering contracts to host raster plugins.
 
@@ -865,15 +913,15 @@ Changes since [v0.11.2](https://github.com/mapseekai/emap/compare/v0.11.2...v0.1
   and replace the selection; `map.splitFeature` provides the interactive workflow.
 - `map.ops.reshapeSelected({ line })` and the interactive `map.reshapeFeature`
   handler now reshape line and polygon features along a user-drawn line. Like
-  QGIS, no selection is required: every feature the line contacts is reshaped;
+  QGIS, the sketch targets every feature it contacts directly;
   the `reshape-ring-part` example and editing guide document the workflow.
 - `map.vertexEdit` now supports box-selecting vertices, Shift-additive box
   selection, group dragging, and Delete/Backspace batch deletion; the
   `reshape-ring-part` example demonstrates the workflow.
 - `map.ops.addRing({ ring })` and `map.ops.deleteRing({ point })`, together
   with the `map.ringEdit` handler, now add and remove interior polygon rings.
-  No selection is required: holes are added to the polygon containing the
-  sketch and removed by clicking inside them; the `reshape-ring-part` example
+  The sketch targets the containing polygon directly; holes are added there
+  and removed by clicking inside them; the `reshape-ring-part` example
   and editing guide document the workflow.
 - `map.ops.addPart({ coordinates })` and `map.ops.deletePart({ point,
   tolerance? })`, together with the `map.partEdit` handler, now add and remove
@@ -1431,8 +1479,8 @@ Changes since [v0.11.2](https://github.com/mapseekai/emap/compare/v0.11.2...v0.1
   Camera state is `{ center (projected/data coords, = the Phase-8
   `mapCoord` space), scale }`; `zoom` is an optional Web-Mercator
   convenience (`Projection.getScale` inverse) — non-Web-Mercator CRSs
-  pass `{ scale }`. 2D only (no bearing/pitch). A new camera call (or a
-  user pan/wheel) interrupts a running animation; the interrupted move
+  pass `{ scale }`. The camera uses a 2D view with fixed bearing/pitch. A new
+  camera call (or a user pan/wheel) interrupts a running animation; the interrupted move
   still fires its `moveend`. `getCenter`/`getZoom`/`setExtent`/`reset`/
   `zoomIn`/`zoomOut` are byte-identical; default `new Emap()` behaviour
   unchanged (no animation runs until a camera method is called).
@@ -1623,7 +1671,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mapseekai/emap/compare/v0.13.1...v0.14.0
 [0.11.2]: https://github.com/mapseekai/emap/compare/v0.11.1...v0.11.2
 [0.10.0]: https://github.com/mapseekai/emap/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/mapseekai/emap/compare/v0.9.1...v0.9.2

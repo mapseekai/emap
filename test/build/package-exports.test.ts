@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
@@ -40,6 +48,28 @@ afterEach(() => {
 });
 
 describe('published plugin architecture subpaths', () => {
+  it('ships bundled mapshaper and GeoPackage without installing their Node dependency trees', () => {
+    const manifest = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
+    const bundled = ['mapshaper', '@ngageoint/geopackage'];
+    for (const name of bundled) {
+      expect(manifest.dependencies).not.toHaveProperty(name);
+      expect(manifest.devDependencies[name]).toEqual(expect.any(String));
+    }
+    const declarations = readdirSync(resolve('dist'), { recursive: true }).filter(
+      (name): name is string => typeof name === 'string' && name.endsWith('.d.ts'),
+    );
+    expect(declarations.length).toBeGreaterThan(0);
+    for (const name of declarations) {
+      const imports = ts.preProcessFile(readFileSync(resolve('dist', name), 'utf8')).importedFiles;
+      for (const { fileName } of imports) {
+        expect(
+          bundled.some((pkg) => fileName === pkg || fileName.startsWith(`${pkg}/`)),
+          name,
+        ).toBe(false);
+      }
+    }
+  });
+
   it('publishes every explicit architecture entry point', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string } | string>;
@@ -83,17 +113,19 @@ describe('published CSS type declaration', () => {
     expect(manifest.files).toContain('dist/emap-duckdb.mjs');
   });
 
-  it('keeps optional providers out of core dependencies', () => {
+  it('keeps optional data peers opt-in and installs the peer required by public MapLibre types', () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
       peerDependenciesMeta?: Record<string, { optional?: boolean }>;
     };
 
-    for (const name of ['@duckdb/duckdb-wasm', 'apache-arrow', 'parquet-wasm', 'maplibre-gl']) {
+    for (const name of ['@duckdb/duckdb-wasm', 'apache-arrow', 'parquet-wasm']) {
       expect(manifest.dependencies).not.toHaveProperty(name);
       expect(manifest.peerDependencies?.[name]).toEqual(expect.any(String));
       expect(manifest.peerDependenciesMeta?.[name]?.optional).toBe(true);
     }
+    expect(manifest.peerDependencies?.['maplibre-gl']).toEqual(expect.any(String));
+    expect(manifest.peerDependenciesMeta?.['maplibre-gl']?.optional).not.toBe(true);
   });
 });

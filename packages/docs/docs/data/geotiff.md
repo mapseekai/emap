@@ -5,14 +5,14 @@ title: 本地 GeoTIFF 栅格
 api: ["openGeoTIFF", "openGeoTIFFHandle", "geoTIFFPlugin", "rasterPlugin", "RasterSource", "RasterStyle", "RasterReference", "RasterContract", "RASTER_PYRAMID_THRESHOLD", "GeoTIFFAddOptions", "GeoTIFFContract", "GeoTIFFPluginOptions", "OpenGeoTIFFOptions", "RasterCacheStats", "RasterPerformanceTotals", "RasterPlanningDiagnostics", "RasterLayerPlanningDiagnostics", "RasterSelectedLevelDiagnostics", "RasterError", "RasterLayerInfo", "RasterLayerReference", "RasterLevel", "RasterMetadata", "RasterBandStatistics", "RasterRenderRequest", "RasterRenderResult", "RasterTaskDiagnostics", "RasterWarpMesh", "RasterProcessingStats", "RasterNativeDeflateStatus", "RasterNativeDeflateDisabledReason", "RasterWorkerBlockStats", "RasterLevelProcessingStats", "RasterReadRequest", "RasterReadResult", "RasterTextureResult", "RasterRenderOptions", "RasterSamples", "RasterWindow", "RenderFrame", "RenderPass"]
 examples: ["geotiff-viewer", "mixed-data-viewer", "luma-raster"]
 stability: experimental
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 本地 GeoTIFF 栅格
 
-`@mapseekai/emap/geotiff` 使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片绘制到现有地图 Canvas，不创建额外地图覆盖层。对常见的 chunky UInt8 RGB + nearest 显示路径，Worker 会直接从 interleaved 解码窗口生成 RGBA，避免先拆成三个平面数组；不满足条件时自动回退通用数值路径。对标准 TIFF LZW（Compression=5）的字节对齐整数块优先使用固定的 `@developmentseed/lzw-tiff-decoder@0.2.2` Wasm 解码器；Wasm 不可用时保留有界 typed-array JavaScript 回退，不支持的布局仍交给 geotiff.js；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
+`@mapseekai/emap/geotiff` 支持本地 GeoTIFF/BigTIFF 范围读取、金字塔显示、波段样式、像素查询和渐进补图。它使用固定的 `geotiff@3.0.5`，从用户选择的原始文件按字节范围读取。解码在独立 Worker 中进行，显示瓦片直接绘制到地图 Canvas。对常见的 chunky UInt8 RGB + nearest 显示路径，Worker 会直接从 interleaved 解码窗口生成 RGBA，避免先拆成三个平面数组；不满足条件时自动回退通用数值路径。对标准 TIFF LZW（Compression=5）的字节对齐整数块优先使用固定的 `@developmentseed/lzw-tiff-decoder@0.2.2` Wasm 解码器；Wasm 不可用时保留有界 typed-array JavaScript 回退，其余布局交给 geotiff.js；DEFLATE/Adobe Deflate 在运行时支持时优先使用浏览器原生解压。
 
-每张显示瓦片只分配一份最终 RGBA，条带读取分段直接写入该缓冲区，不再为每段生成完整临时 RGBA 或全量扫描合并。未覆盖、NoData 和最终 Alpha 为零的像素不会覆盖同批次前面已写入的有效像素；这不是跨视口旧影像合成，也不是 Alpha 叠加。原来的独立着色调用仍返回新缓冲区。
+每张显示瓦片只分配一份最终 RGBA，条带读取分段直接写入该缓冲区，不再为每段生成完整临时 RGBA 或全量扫描合并。未覆盖、NoData 和最终 Alpha 为零的像素不会覆盖同批次前面已写入的有效像素；该规则作用于单批次有效像素合并；跨视口显示使用下文的区域裁剪。原来的独立着色调用仍返回新缓冲区。
 
 LZW Wasm 内嵌于同一 `emap-geotiff-worker.js`，首次需要时初始化，每个 Worker 复用实例，不增加 Worker、网络请求或部署资产。初始化失败（包括 CSP 禁用 Wasm）时自动使用有界 JS 解码器。为控制 Wasm 堆增长，仅对压缩输入和实际解码输出各不超过 4MiB 的块启用 Wasm，较大块继续走有界 JS 路径。进入 Wasm 前检查初始 CLEAR、码宽／字典进度、结束标记和输出长度，损坏／超出声明尺寸的码流直接报错，不回退到无界解码。`fastLzwBlocks` 统计快速路径完成块数（含 JS 回退），`fastLzwFallbacks` 统计其中因 Wasm 不可用或块过大而使用 JS 的块数。
 
@@ -44,15 +44,15 @@ map.fitBounds(new Bounds(...bounds), { padding: 32, duration: 0 });
 
 将包内 `dist/emap-geotiff-worker.js` 复制到部署目录。该文件是独立 classic Worker，不需要 `mapshaper-vendor.js`，不要使用 `importScripts()` 加载 ESM。服务器需返回 JavaScript MIME，CSP 需允许同源 Worker。直接使用分发 ESM 且保留同目录 Worker 时，可以省略 `workerUrl`；经 Vite/Webpack 重打包时显式部署并传入 URL。
 
-## 大文件必须具有金字塔
+## 通过金字塔读取大文件
 
-硬规则为 `file.size > 2 * 1024 ** 3`：**超过 2GiB 且没有有效概览层时，在首次像素解码前拒绝加载**，错误码 `PYRAMID_REQUIRED`。恰好 2GiB 不触发该规则，但仍受解码预算限制。没有允许绕过的配置。
+**超过 2GiB 的文件通过有效概览层加载**，判定为 `file.size > 2 * 1024 ** 3`。打开时会在首次像素解码前验证金字塔，缺少有效层级返回 `PYRAMID_REQUIRED`；此校验始终启用。恰好 2GiB 的文件可按常规读取预算加载。
 
-支持内部 IFD、SubIFD 和显式关联的外置 `.ovr`。普通多页影像、掩膜、错误尺寸比例或不匹配的波段不计为有效金字塔。外置文件名必须为原文件名加 `.ovr`；存在地理参考时还校验坐标系和覆盖范围。没有地理参考的外置文件由用户负责关联正确源文件，文件名匹配不是内容身份的密码学证明。
+支持内部 IFD、SubIFD 和显式关联的外置 `.ovr`。有效概览需为缩小分辨率的影像，尺寸比例、波段与原图相容；普通多页影像与掩膜按各自用途识别。外置文件名必须为原文件名加 `.ovr`；存在地理参考时还校验坐标系和覆盖范围。没有地理参考的外置文件由用户确认与源文件的对应关系；文件名匹配用于查找，内容身份验证由宿主另行提供。
 
 三波段原图与概览的 `MINISBLACK` / `RGB` 标签可以不同：只要数值类型与波段匹配且没有 Alpha 语义变化，仍作为原始三波段金字塔读取。不会因此放宽调色板、WhiteIsZero 或其他颜色空间校验。显式选择的 `.ovr` 若没有任何兼容层级，会在像素解码前报 `OVERVIEW_MISMATCH`，不再静默忽略。
 
-示例优先支持“目录授权”模式：用户只需授权影像所在目录，在列表中勾选一个或多个 TIFF 作为独立栅格层加载，选择 `a.tif` 时自动查找并关联同目录的 `a.tif.ovr`；目录中只有一个 TIFF 时会直接选择并加载。浏览器安全模型不允许普通 `<input type="file">` 从单个 `File` 反查父目录，因此不支持目录句柄的浏览器仍保留手动选择原图和 `.ovr` 的降级方式。emap 核心仍只接收 `File`/句柄，不会绕过浏览器权限访问其他本地文件。
+示例优先支持“目录授权”模式：用户只需授权影像所在目录，在列表中勾选一个或多个 TIFF 作为独立栅格层加载，选择 `a.tif` 时自动查找并关联同目录的 `a.tif.ovr`；目录中只有一个 TIFF 时会直接选择并加载。目录句柄为同目录查找提供授权；普通 `<input type="file">` 仅提供用户选中的 `File`，这类浏览器可手动选择原图和 `.ovr`。emap 核心按用户授权接收 File/句柄。
 
 用 QGIS 构建金字塔，或在安装 GDAL 的终端执行：
 
@@ -60,13 +60,13 @@ map.fitBounds(new Bounds(...bounds), { padding: 32, duration: 0 });
 gdaladdo -ro -r average "image.tif"
 ```
 
-`-ro` 以只读方式打开原始 TIFF，创建外置 `image.tif.ovr`；不提供显式层级时，GDAL 自动创建逐级缩小的概览。分类数据改用 `-r nearest`。创建完成后重新选择原文件和 `.ovr`。emap 不会自动修改原始文件，也不在 OPFS 中偷偷生成金字塔。
+`-ro` 以只读方式打开原始 TIFF，创建外置 `image.tif.ovr`；省略显式层级时，GDAL 自动创建逐级缩小的概览。分类数据改用 `-r nearest`。创建完成后重新选择原文件和 `.ovr`。emap 以只读方式使用原文件和已生成的概览，缓存保存在运行时内存。
 
-即使已有一层金字塔，过大的源窗口或压缩条带仍可能超过预算，此时返回 `RASTER_READ_BUDGET`，需要更完整的金字塔或分块 TIFF。文件大小不是通用性能保证。
+即使已有一层金字塔，过大的源窗口或压缩条带仍可能超过预算，此时返回 `RASTER_READ_BUDGET`，需要更完整的金字塔或分块 TIFF。实际交互速度取决于分块、概览、视口和设备，请用目标文件测量。
 
 ## 图层和样式
 
-栅格使用独立的只读数据源，不进入矢量 `TopologySource` 或 `map.addLayer()`。当前栅格栈整体位于矢量图层下方；栅格内部可以排序，暂不提供矢量与栅格任意穿插的统一排序。
+栅格通过 `map.ctx.raster` 管理独立的只读数据源。`moveLayer()` 可调整栅格内部顺序；整个栅格栈位于矢量图层下方，矢量使用 `TopologySource` 和 `map.addLayer()` 管理。
 
 ```ts
 map.ctx.raster.setStyle('imagery', { opacity: 0.6 });
@@ -76,7 +76,7 @@ const values = await map.ctx.raster.queryPixel('imagery', x, y); // 地图 CRS �
 map.ctx.raster.remove('imagery'); // 关闭读取与缓存，不删除磁盘文件
 ```
 
-默认选择前三个非 Alpha 数据波段组成 RGB；只有一个或两个可用数据波段时，默认使用第一个波段显示灰度。波段顺序不是光谱含义自动识别，遥感多光谱数据可自行指定 R/G/B 对应波段。调色板文件默认保留原始配色。
+默认选择前三个非 Alpha 数据波段组成 RGB；只有一个或两个可用数据波段时，默认使用第一个波段显示灰度。遥感多光谱数据由应用按光谱含义指定 R/G/B 对应波段。调色板文件默认保留原始配色。
 
 示例页面提供“RGB 多波段彩色”与“单波段灰度”模式，RGB 的 R/G/B 通道可分别选择，灰度模式可从任意可用波段取值；单波段文件会自动选择灰度，并禁用无效的 RGB 选项。界面编号从 1 开始，API 索引从 0 开始。
 
@@ -114,21 +114,21 @@ rasterPlugin({
 map.ctx.raster.setStyle('imagery', { stretch: 'minmax', ranges: undefined });
 ```
 
-停止移动后按视口请求目标分辨率的瓦片。就绪瓦片按默认 **60ms 的短窗口成组呈现**，不是每完成一个块就单独刷新，也不是等待整个视口全部完成。当前批次全部就绪时立即提交，不额外等待计时器。尚未就绪的区域保留上一视图影像，缺失部分也可使用缓存中覆盖该区域的父级／旧分辨率瓦片。中途再次缩放，会保留当时已经呈现的新旧混合画面，而不是退回整个旧批次。
+停止移动后按视口请求目标分辨率的瓦片。就绪瓦片按默认 **60ms 的短窗口成组呈现**，每组就绪即可刷新视口。当前批次全部就绪时立即提交，不额外等待计时器。尚未就绪的区域保留上一视图影像，缺失部分也可使用缓存中覆盖该区域的父级／旧分辨率瓦片。中途再次缩放，会保留当时已经呈现的新旧混合画面作为下一次补图的基础。
 
-新旧影像使用互不重叠的地图区域裁剪：每个位置只绘制一次，避免半透明瓦片叠加变深。已完成但透明或 NoData 的新块同样拥有覆盖区域，会显示下层内容，不能把“透明像素”误当作“块未加载”而透出旧栅格。裁剪和瓦片边界统一对齐到设备像素，避免非整数 DPR 下的接缝。
+新旧影像使用互不重叠的地图区域裁剪：每个位置只绘制一次，避免半透明瓦片叠加变深。已完成但透明或 NoData 的新块同样拥有覆盖区域，会显示下层内容，透明像素按已加载块处理，覆盖该位置的旧栅格。裁剪和瓦片边界统一对齐到设备像素，避免非整数 DPR 下的接缝。
 
 单块失败只影响它自己的区域，其他块继续加载并呈现；失败区域保留可用旧缓存并报告错误。过期或取消的结果不能覆盖新视口。仅修改透明度不重新解码。瓦片就绪产生的刷新请求由地图合并到动画帧，不为每块强制同步重绘。
 
-多次中断可能保留多个分辨率的碎片。缓存预算仍然生效：在占用或碎片数量过多时，把当前可见回退内容整理成有界的内存预览，再逐块替换；该预览可能降低临时回退画面的分辨率，但不写入 OPFS、不复制或修改原文件。首次加载或进入没有任何缓存覆盖的新区域，仍需等待首次块读取，不能凭空提供旧影像。
+多次中断可能保留多个分辨率的碎片。缓存预算仍然生效：在占用或碎片数量过多时，把当前可见回退内容整理成有界的内存预览，再逐块替换；该预览可能降低临时回退画面的分辨率，但不写入 OPFS、不复制或修改原文件。首次加载或进入缓存覆盖以外的区域，在首次块读取完成后呈现影像。
 
 `getStats()` 的 `interacting` 标记交互／去抖状态，`pendingFrames` 统计仍有请求未结束的视口批次，`presentedTiles` 统计逐块呈现次数，`committedFrames` 仅统计全部成功完成的批次，`readRequests` 统计瓦片读取次数。块可以在 `pendingFrames > 0` 时持续呈现。`taskLifecycle` 记录任务排队、开始、规划成功、空结果与失败计数，`pumpBlocked` 记录调度被手势或去抖计时器拦截的次数，`taskErrors` 保留最近的瓦片规划/读取错误（阶段、错误码、选中层级），`plannedLevels` 累计各金字塔层级的瓦片计划数。示例提供 UInt8、UInt16、Int16、Float32、Float64 内置样本及拉伸模式选择。
 
 ## 连续出图与读取吞吐
 
-数据分块与屏幕刷新是两个独立阶段。对照 [QGIS MapCanvas 源码](https://api.qgis.org/api/qgsmapcanvas_8cpp_source.html)，地图在后台任务运行时通过更新计时器读取合成图像（构造器默认 250ms，可配置），任务结束后提交最终结果；[栅格预览反馈](https://api.qgis.org/api/qgsrasterlayerrenderer_8cpp_source.html)也会限制预览刷新频率。因此不能简单把 QGIS 描述成“每解码一块就立刻上屏”。[GDAL 块缓存](https://gdal.org/en/stable/user/configoptions.html#config-GDAL_CACHEMAX)则减少重复数据块读取。这些是源码机制对照，不是对当前电脑上的 QGIS 进行性能实测。
+数据分块与屏幕刷新是两个独立阶段。对照 [QGIS MapCanvas 源码](https://api.qgis.org/api/qgsmapcanvas_8cpp_source.html)，地图在后台任务运行时通过更新计时器读取合成图像（构造器默认 250ms，可配置），任务结束后提交最终结果；[栅格预览反馈](https://api.qgis.org/api/qgsrasterlayerrenderer_8cpp_source.html)也会限制预览刷新频率。QGIS 因此按更新节奏呈现已解码内容。[GDAL 块缓存](https://gdal.org/en/stable/user/configoptions.html#config-GDAL_CACHEMAX)则减少重复数据块读取。这些引用用于对照源码机制；本机 QGIS 性能需单独实测。
 
-emap 使用更短的有界更新窗口，并保留块级进度：优先减少读取和解码次数，然后合并短时间内就绪的画面更新，而不是靠长时间遮住加载过程或取消内存保护。
+emap 使用更短的有界更新窗口，并保留块级进度：优先减少读取和解码次数，然后合并短时间内就绪的画面更新，并在既定内存预算内逐步呈现。
 
 `presentationInterval` 控制就绪块的最长合并窗口，范围 0–250ms，默认 60ms；0 恢复单块即时呈现。它与“停止移动后再开始读取”的 `settleDelay` 不同。慢块不会阻塞已经完成的组，失败、取消或卸载会清理等待队列与计时器。相比即时单块提交，最早一块可能多等不超过一个合并窗口，换取更少的局部闪变；整批提前完成则立即提交。
 
@@ -142,11 +142,11 @@ emap 使用更短的有界更新窗口，并保留块级进度：优先减少读
 
 这些缓存是**显示缓存以外**的额外预算：单个 TIFF 最多约 1MiB 已保留压缩页，加上该栅格源的解码块缓存（基准 8MiB，按上述工作集规则放大）；外置 `.ovr` 有自己的压缩页预算。在途读取、当前窗口及浏览器资源仍另有开销。多文件不会无限累积，移除图层／卸载插件时释放缓存和 Worker，不写 OPFS/IndexedDB。
 
-可用 `test/browser/raster-performance.spec.mjs` 对同一台机器、同一个本地 TIFF/.ovr 进行三轮前后对比。设置 `EMAP_GEOTIFF_LOCAL_FILE` 后运行，`EMAP_RASTER_BENCH_OUT` 可选指定 JSON 输出。指标包含导航开始至完成的时间、首个新块呈现时间、不同动画帧上的块更新次数和显示缓存；所谓源冷启动只重建 emap 源和缓存，不清除操作系统磁盘缓存。该测试不是 QGIS/emap 原生运行速度的直接对比。
+可用 `test/browser/raster-performance.spec.mjs` 对同一台机器、同一个本地 TIFF/.ovr 进行三轮前后对比。设置 `EMAP_GEOTIFF_LOCAL_FILE` 后运行，`EMAP_RASTER_BENCH_OUT` 可选指定 JSON 输出。指标包含导航开始至完成的时间、首个新块呈现时间、不同动画帧上的块更新次数和显示缓存；所谓源冷启动只重建 emap 源和缓存，不清除操作系统磁盘缓存。该测试用于比较 emap 前后版本；QGIS 原生运行速度需另行测量。
 
-## 真正并行的解码与后台着色
+## 并行解码与后台着色
 
-GeoTIFF 采用**瓦片管线 Worker 池**：同一影像的不同窗口在独立 Worker 中执行读取、解码、窗口组装、重采样、拉伸和 RGBA 生成，而不是在一个 Worker 中增加 `Promise.all()`。这里没有直接套用 geotiff.js 的块级 `Pool`，也没有为每个 TIFF block 创建线程。
+GeoTIFF 采用**瓦片管线 Worker 池**：同一影像的不同窗口在独立 Worker 中执行读取、解码、窗口组装、重采样、拉伸和 RGBA 生成。Worker 以完整窗口管线为调度单位，池内线程可复用。
 
 ```ts
 const loader = geoTIFFPlugin({
@@ -169,7 +169,7 @@ console.log(map.ctx.raster.getProcessingStats('imagery'));
 
 `RasterSource.renderTile(RasterRenderRequest, signal)` 是可选能力：GeoTIFF 默认实现并走后台路径，条带层级还会通过可选的 `renderTiles` 批量接口整行合并读取；只有 `readWindow()` 的第三方数据源继续兼容原来的主线程着色路径。`getProcessingStats()` 返回实际 Worker 数、忙碌数、历史峰值、接受/派发任务数、因解码预算阻塞的调度次数、最大任务预约字节、等待任务、预约字节数、已后台着色瓦片数、各金字塔层级活跃度与原生 Deflate 状态。示例显示“后台 Workers / 已着色块”，用来核对实际生效的管线。
 
-资源保护也按池汇总：同一源并行任务的**估算解码＋投影网格＋RGBA 在途预约合计不超过 64MiB**，超出并行余额的任务排队而非同时分配；待发送网格最多保留 32MiB。所有已打开 GeoTIFF 源的 decoded block cache 共享 **256MiB 总预算**，打开时预约不足会报 `RASTER_CACHE_BUDGET`；单个源仍会按 tiled/striped 工作集申请缓存，但可用额度不足时会自动缩小（副本优先获得额度），不再按图层线性叠加到数 GiB。每文件压缩页仍保持小型有界缓存。TIFF 目录数组在副本间合计控制在 32MiB，必要时自动减少副本数。这些仍不是浏览器整个进程的硬内存上限，独立 Worker 的运行时开销也需计入实际观测。
+资源保护也按池汇总：同一源并行任务的**估算解码＋投影网格＋RGBA 在途预约合计不超过 64MiB**，超出并行余额的任务排队而非同时分配；待发送网格最多保留 32MiB。所有已打开 GeoTIFF 源的 decoded block cache 共享 **256MiB 总预算**，打开时预约不足会报 `RASTER_CACHE_BUDGET`；单个源仍会按 tiled/striped 工作集申请缓存，但可用额度不足时会自动缩小（副本优先获得额度），不再按图层线性叠加到数 GiB。每文件压缩页仍保持小型有界缓存。TIFF 目录数组在副本间合计控制在 32MiB，必要时自动减少副本数。这些预算覆盖已列出的资源；观察整个浏览器进程时，还需计入独立 Worker 等运行时开销。
 
 取消任务时调用方立即结束等待，物理 Worker 槽在任务实际响应后才可重用，避免快速缩放把旧 CPU 工作无限排队；保留 60 秒超时保护。移除图层或卸载插件会终止所有源属 Worker，释放队列、计时器、监听器和全局附加线程名额。一个 Worker 崩溃会关闭同源池并显式报错，不留半损坏管线。
 
@@ -177,7 +177,7 @@ console.log(map.ctx.raster.getProcessingStats('imagery'));
 
 ## 工程引用与隐私
 
-`map.ctx.raster.toReferences()` 仅生成 JSON 安全的源文件身份信息、样式、可见性和排序，**不包含 File、Blob、原始 TIFF 或像素缓存**。
+`map.ctx.raster.toReferences()` 生成可保存的 JSON 引用，内容为源文件身份信息、样式、可见性和排序。File、Blob、原始 TIFF 和像素缓存保持独立，宿主按下文恢复文件访问。
 
 ```ts
 const references = map.ctx.raster.toReferences();
@@ -190,9 +190,9 @@ await map.ctx.geoTIFF.addHandle(references[0].id, handle, {
 map.ctx.raster.setVisibility(references[0].id, references[0].visible);
 ```
 
-权限检查、用户手势授权、IndexedDB 句柄表、工程迁移和重新关联界面属于宿主应用。emap 不写入 IndexedDB、OPFS 或 Cache Storage。`addHandle()` 重新获取当前 File；与 expected 的文件名、大小、修改时间不符时拒绝恢复，要求重新关联。句柄不能作为可移植 JSON 权限跨电脑使用。
+宿主实现权限检查、用户手势授权、IndexedDB 句柄表、工程迁移和重新关联界面；emap 将缓存保存在运行时内存，持久化存储由宿主显式写入。`addHandle()` 重新获取当前 File；与 expected 的文件名、大小、修改时间不符时拒绝恢复，要求重新关联。跨电脑恢复时，由目标设备重新授权文件句柄。
 
-现有矢量 MSX 快照不嵌入栅格；宿主必须另外保存上述引用，Loom 工程接入不包含在本次 emap 改动中。仅运行时内存保存显示瓦片，源文件保持原位。
+保存混合工程时，用 MSX 保存矢量快照，另行保存上述栅格引用；Loom 等宿主负责接入自己的工程存储。显示瓦片使用运行时内存，源文件保持原位。
 
 ## 资源预算与兼容范围
 
@@ -207,13 +207,13 @@ map.ctx.raster.setVisibility(references[0].id, references[0].visible);
 | 同时打开栅格 | 最多 16 个图层（`RASTER_LAYER_BUDGET`） |
 | 元数据防护 | 最多 64 个 IFD、目录数组 ≤32MiB（`TIFF_DIRECTORY_BUDGET`），字节偏移和范围读取均校验 |
 
-预算不是浏览器总进程内存上限；Worker、解码器、投影和 Canvas 仍有中间开销。视口变化取消过期任务，关闭图层/卸载插件释放 Worker 和缓存。
+预算覆盖表中资源；计算浏览器总进程内存时，还需计入 Worker、解码器、投影和 Canvas 中间开销。视口变化取消过期任务，关闭图层/卸载插件释放 Worker 和缓存。
 
-当前支持 north-up GeoTIFF/BigTIFF：8/16/32 位整数、16/32/64 位浮点、灰度/RGB/调色板。支持已知 EPSG GeoKey，未知 CRS 必须显式传入 `crs`，不默认当作 WGS84。显示重投影使用现有 CRS 转换和局部逆变换网格，而不是只变换影像四角。
+当前支持 north-up GeoTIFF/BigTIFF：8/16/32 位整数、16/32/64 位浮点、灰度/RGB/调色板。支持已知 EPSG GeoKey，未知 CRS 必须显式传入 `crs`，不默认当作 WGS84。显示重投影使用现有 CRS 转换和局部逆变换网格，在网格内逐位置计算影像映射。
 
-暂不支持旋转/剪切网格、独立 TIFF 有效性掩膜、预乘 Alpha、YCbCr/CMYK 等其他颜色空间、1/4 位分类样本。遇到这些情况明确拒绝，不静默错误显示。请先转换为受支持的 north-up、分块、带金字塔且以 NoData 或非预乘 Alpha 表示无效区的 TIFF。
+对于旋转/剪切网格、独立 TIFF 有效性掩膜、预乘 Alpha、YCbCr/CMYK 等颜色空间或 1/4 位分类样本，先转换为 north-up、分块、带金字塔且以 NoData 或非预乘 Alpha 表示无效区的 TIFF。加载器会明确拒绝转换前的这些输入。
 
-BigTIFF、小型金字塔和稀疏大文件阈值有自动化验证；尚未完成真实 10/20/50GB 影像的性能压测，不能据此宣称已保证这些容量下的交互速度。
+自动化验证覆盖 BigTIFF、小型金字塔和稀疏大文件阈值。真实 10/20/50GB 影像的性能压测仍待完成；应用采用这些数据规模前，应以实际文件和目标设备测量交互速度。
 
 ## 公开类型与独立读取
 
@@ -242,9 +242,9 @@ try {
 
 图层移除后，加载插件只保留弱所有权标记，不保留历史元数据列表。解码器关闭时清空 TIFF 目录和 File/Blob 引用；串行读取队列不会保留最后一次像素结果。地图或插件销毁会释放显示缓存、回退 Canvas、Worker、挂起请求、计时器和渲染监听。自定义数据源关闭失败时仍会清理其他数据源，最后聚合报告错误。
 
-外部 `RasterSource` 应响应 `AbortSignal` 并在 `dispose()` 中关闭自己创建的资源。emap 会解除已取消任务的等待引用，即使外部 Promise 未完成；但无法代替外部插件终止其自行启动的网络、线程或其他资源。
+外部 `RasterSource` 应响应 `AbortSignal` 并在 `dispose()` 中关闭自己创建的资源。emap 会解除已取消任务的等待引用，即使外部 Promise 未完成；外部插件负责终止自行启动的网络、线程及其他资源。
 
-`test/browser/raster-memory.spec.mjs` 使用 Chromium CDP 强制垃圾回收与 WeakRef 验证移除后的对象可回收，同时记录堆、DOM、监听器和 Worker 数量。它覆盖 3 轮预热后 30 轮加载/导航/移除、15 次 Provider 重启、销毁地图以及不响应取消的读取。JS 堆并不包括所有浏览器进程、Canvas/GPU 或操作系统文件缓存，短期回归不能构成所有数据规模下永不泄漏的证明。
+`test/browser/raster-memory.spec.mjs` 使用 Chromium CDP 强制垃圾回收与 WeakRef 验证移除后的对象可回收，同时记录堆、DOM、监听器和 Worker 数量。它覆盖 3 轮预热后 30 轮加载/导航/移除、15 次 Provider 重启、销毁地图以及不响应取消的读取。JS 堆记录需与浏览器进程、Canvas/GPU 和操作系统文件缓存观测结合。该回归验证上述有限轮次和数据；长期运行与其他规模需另外验证。
 
 ## 性能诊断（Performance Diagnostics）
 
@@ -254,7 +254,7 @@ try {
 
 金字塔选择同样可核对：`RasterLayerPlanningDiagnostics.selectedLevels` 按实际瓦片计划报告每个被选中层级的瓦片数、尺寸、块尺寸、相对原图的缩放比和 `sourcePixelsPerDisplayPixel` 范围，与 Worker 完成顺序和缓存命中无关；`selectedLevel`/`selectedLevelSource` 仅在全部瓦片选中同一层级时给出汇总。`RasterLevel.source` 区分 `base`、`internal-overview`、`external-overview`，第三方数据源未提供时记为 `unknown`。
 
-Block Cache 同时报告 eviction 数量、淘汰/写入字节量、当前/峰值占用、容量、entry 数和超大块跳过次数。`evictionRate = evictions / misses` 接近 1 且峰值长期贴近容量时，是缓存抖动的重要信号；`evictedMiB` 是本次操作的缓存 churn，不等同于唯一 working-set 大小。
+Block Cache 同时报告 eviction 数量、淘汰/写入字节量、当前/峰值占用、容量、entry 数和超大块跳过次数。`evictionRate = evictions / misses` 接近 1 且峰值长期贴近容量时，是缓存抖动的重要信号；`evictedMiB` 统计本次操作累计淘汰的字节量；同一块反复淘汰会重复计数，唯一 working-set 大小需另行测量。
 
 ```ts
 const before = map.ctx.raster.getStats();
@@ -264,13 +264,13 @@ console.log(after.performance.fileReadMs - before.performance.fileReadMs);
 console.log(after.performance.colorizeMs - before.performance.colorizeMs);
 ```
 
-`RasterCacheStats.performance` 是累计计数，宿主应取两次快照做差。Worker 可并行执行，因此 `workerMs`、`fileReadMs`、`blockLoadMs` 等是各任务累计时间，**不能相加当作墙钟总耗时**。示例中的 `decodeApprox` 以 `blockLoadMs - fileReadMs` 估算，适合定位方向，不是 profiler 的 CPU 精确采样；`transferMs` 也包含 Worker 消息调度开销，是近似值。
+`RasterCacheStats.performance` 是累计计数，宿主应取两次快照做差。Worker 可并行执行，因此 `workerMs`、`fileReadMs`、`blockLoadMs` 等是各任务累计时间，**应与墙钟总耗时分别报告**。示例中的 `decodeApprox` 以 `blockLoadMs - fileReadMs` 估算，用于定位瓶颈；CPU 精确采样需使用 profiler；`transferMs` 也包含 Worker 消息调度开销，是近似值。
 
 
 ### 可选的原始数值纹理布局
 
 `RasterSource.readTexture(request, signal)` 是[luma 栅格实验页](/mapseekai/emap/examples/luma-raster/)
 使用的可选能力，返回 `RasterTextureResult`：交错 RGBA8/16 TypedArray 保存原始无符号整数，
-未使用的通道为0。这只是存储布局，不是着色、alpha 推断或 UInt16 降位深；请求必须按源顺序选择
+未使用的通道为0。此布局保留原始数值与位深；着色和 alpha 解释由使用方执行。请求必须按源顺序选择
 全部波段。GeoTIFF 实现将单次 packed 输出限制在8 MiB内，并额外计入解码内存预留。
 没有实现此方法的外部数据源仍走 `readWindow` 兼容路径，正式 Canvas 流程保持原状。

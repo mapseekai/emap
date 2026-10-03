@@ -1,6 +1,6 @@
 {
   "name": "@mapseekai/emap",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
@@ -206,7 +206,8 @@
     "@fontsource/noto-sans-mono": "5.3.0",
     "@fontsource/noto-sans-sc": "5.3.0",
     "@fontsource/noto-serif-sc": "5.3.0",
-    "@playwright/test": "1.62.1",
+    "@ngageoint/geopackage": "4.2.9",
+    "@playwright/test": "1.64.0-alpha-2026-10-02",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
@@ -218,6 +219,7 @@
     "esbuild": "^0.25.12",
     "jsdom": "^29.1.0",
     "maplibre-gl": "^6.4.1",
+    "mapshaper": "^0.6.113",
     "parquet-wasm": "^0.7.1",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
@@ -230,10 +232,10 @@
   "dependencies": {
     "@developmentseed/lzw-tiff-decoder": "0.2.2",
     "@luma.gl/core": "10.0.0-alpha.1",
+    "@luma.gl/shadertools": "10.0.0-alpha.1",
     "@luma.gl/webgl": "10.0.0-alpha.1",
     "@luma.gl/webgpu": "10.0.0-alpha.1",
     "@mapseekai/tasklane": "0.2.0-beta.2",
-    "@ngageoint/geopackage": "4.2.9",
     "@tmcw/togeojson": "^5.8.1",
     "bidi-js": "1.0.3",
     "cordis": "4.0.0-rc.10",
@@ -244,7 +246,7 @@
     "geotiff": "3.0.5",
     "harfbuzzjs": "0.10.3",
     "kdbush": "^4.0.2",
-    "mapshaper": "^0.6.113",
+    "libtess": "1.2.2",
     "mproj": "^0.1.2",
     "msdfgen-wasm": "1.0.0"
   },
@@ -262,9 +264,6 @@
       "optional": true
     },
     "parquet-wasm": {
-      "optional": true
-    },
-    "maplibre-gl": {
       "optional": true
     }
   }

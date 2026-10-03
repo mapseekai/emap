@@ -5,12 +5,12 @@ title: 适配范围
 api: ["Emap", "Bounds", "FitBoundsOptions"]
 examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 适配范围
 
-数据加载后，用其 `Bounds` 适配相机。空数据源（包括过滤后无要素）范围为空，调用 `fitBounds` 前检查 `hasBounds()`。
+`fitBounds` 可自动居中数据范围、计算视图比例，并配置内边距和动画。数据加载后先用 `hasBounds()` 确认范围有效；空数据源（包括过滤后无要素）保留空范围。
 
 
 ```ts

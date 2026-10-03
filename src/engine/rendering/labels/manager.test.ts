@@ -51,6 +51,86 @@ async function prepare(f: ReturnType<typeof fixture>, camera = view) {
   return f.manager.request([f.binding], camera, 800, 600, 1);
 }
 describe('asynchronous owner-bound labels', () => {
+  it('prepares healthy owners together so glyph pages are pinned before allocation', async () => {
+    const f = fixture(),
+      atlas = (f.manager as any).atlas;
+    atlas.prepare = vi.fn();
+    atlas.prepareGlyphs = vi.fn();
+    const other = {
+      ...f.binding,
+      id: 'other',
+      options: { text: 'other', allowOverlap: true },
+    };
+    f.manager.request([f.binding, other], view, 800, 600, 1);
+    await f.manager.settled();
+    expect(atlas.prepare).toHaveBeenCalledTimes(1);
+    expect(atlas.prepareGlyphs).toHaveBeenCalledTimes(1);
+    expect(new Set(atlas.prepareGlyphs.mock.calls[0][0].map((r: any) => r.ownerId))).toEqual(
+      new Set(['cities', 'other']),
+    );
+    f.manager.dispose();
+  });
+  it('cancels a failed old layout without reporting it or excluding the layer from the replacement', async () => {
+    const f = fixture(),
+      atlas = (f.manager as any).atlas;
+    let reject!: (error: Error) => void;
+    atlas.prepare = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    f.manager.request([f.binding], view, 800, 600, 1);
+    await vi.waitFor(() => expect(reject).toBeDefined());
+    f.binding.dataset.attributeVersion++;
+    f.manager.request([f.binding], view, 800, 600, 1);
+    reject(new Error('Cancelled font request'));
+    await f.manager.settled();
+    expect(f.manager.request([f.binding], view, 800, 600, 1).labels).toHaveLength(2);
+    expect(f.report).not.toHaveBeenCalled();
+    f.manager.dispose();
+  });
+  it.each([
+    'prepare',
+    'prepareGlyphs',
+    'measure',
+    'reserve',
+    'get',
+  ] as const)('isolates a layer whose atlas %s fails and retries it after its configuration is repaired', async (stage) => {
+    const f = fixture();
+    const atlas = (f.manager as any).atlas;
+    const original = atlas[stage]?.bind(atlas);
+    const failure = new Error('Font failed');
+    atlas[stage] = (...args: any[]) => {
+      const requests =
+        stage === 'prepare' || stage === 'prepareGlyphs' ? args[0] : [{ options: args[1] }];
+      if (requests.some((r: any) => r.options.fontFamily === 'broken')) throw failure;
+      return original?.(...args);
+    };
+    const bad = {
+      ...f.binding,
+      id: 'bad-font',
+      options: { text: 'bad', fontFamily: 'broken', priority: 100 },
+    };
+    f.manager.request([f.binding, bad], view, 800, 600, 1);
+    await f.manager.settled();
+    const frame = f.manager.request([f.binding, bad], view, 800, 600, 1);
+    expect(frame.labels.map((l) => l.ownerId)).toEqual(['cities', 'cities']);
+    expect(f.manager.stats.placed).toBe(2);
+    expect(f.manager.stats.pending).toBe(false);
+    expect(f.report).toHaveBeenCalledTimes(1);
+    expect(f.report.mock.calls[0][0].message).toContain('bad-font');
+    bad.options.fontFamily = 'sans-serif';
+    f.manager.request([f.binding, bad], view, 800, 600, 1);
+    await f.manager.settled();
+    expect(
+      f.manager
+        .request([f.binding, bad], view, 800, 600, 1)
+        .labels.some((l) => l.ownerId === 'bad-font'),
+    ).toBe(true);
+    expect(f.report).toHaveBeenCalledTimes(1);
+    f.manager.dispose();
+  });
   it('labels features, reuses an unchanged frame and atlas, and never changes data', async () => {
     const f = fixture(),
       before = JSON.stringify(f.binding.dataset);

@@ -5,12 +5,12 @@ title: Styling layers
 api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Styling layers
 
-Emap renders `fill`, `line`, and `circle` layers. Layers reference a source and optional `source-layer`; later layers draw above earlier ones.
+Emap supports `fill`, `line`, and `circle` layers, attribute-driven styles, and attached text and image symbols. Layers reference a source and optional `source-layer`; later layers draw above earlier ones.
 
 
 ```ts
@@ -186,9 +186,8 @@ Successful `value` includes effective `breaks` or `categories`, `colors`, class 
 
 ## Attached feature labels
 
-`label` belongs to an existing `circle`, `line` or `fill` layer. It does not create a
-text layer, data source or layer-tree entry. Parent visibility, filtering and removal
-also control its labels.
+`label` attaches text to an existing `circle`, `line` or `fill` layer, sharing its
+data source and layer-tree entry. Parent visibility, filtering and removal also control its labels.
 
 ```ts
 map.addLayer({
@@ -207,11 +206,12 @@ map.setLayerLabel('city-points', null); // Remove labels, not the parent layer
 accepts a literal string or the existing safe style-expression subset. Null values
 are skipped. Font sizes, halos and `offset` use CSS pixels. Point labels try nearby
 positions, line labels rotate as an upright text run, and polygon anchors avoid holes.
-`placement: 'horizontal'` keeps line labels horizontal. Per-character curved placement,
-callouts, rule-based labeling and the full QGIS PAL engine are not implemented.
+`placement: 'horizontal'` keeps line labels horizontal. Placement operates on whole text runs
+with the point, line, and polygon anchors above. Per-character curved placement, callouts,
+rule-based labeling, and QGIS PAL layouts require a separate application integration.
 Polygon anchors are inside the valid area; the full text rectangle may extend outside it.
 
-The default Canvas renderer accepts this configuration. The luma branch draws batched
+The Canvas2D renderer accepts this configuration. The luma branch draws batched
 font-atlas quads in the existing GPU render pass. The local `luma-benchmark`, `luma-25d`
 and `luma-vertex-editing` examples include parent-layer label settings. Labels are off
 by default and allocate no font atlas or label index until enabled. Placement uses
@@ -221,14 +221,14 @@ Up to four 1024×1024 RGBA atlas pages require at most about 16 MiB each on CPU 
 excluding source indexes. The luma path uses HarfBuzz shaping and shared RGB MSDF glyphs, with GPU fill and halo.
 Default Noto subsets are hosted locally; custom outlines use `label.fontUrl` with TTF/OTF/WOFF1.
 Ordinary size, color and DPR changes reuse glyphs; very wide halos can request a wider distance-range tier.
-The default Canvas renderer retains its compatible bitmap path.
+The Canvas2D renderer retains its compatible bitmap path.
 During navigation previews labels temporarily transform with the old frame and are
 laid out again when the gesture settles.
 
 ## Image symbols on existing point layers
 
-`icon` replaces the symbol of an existing `circle` layer; it does not create an icon layer
-or an extra layer-tree node. Parent visibility, filters, point LOD and labels remain in place.
+`icon` sets an image symbol on an existing `circle` layer, sharing its layer-tree node.
+Parent visibility, filters, point LOD and labels apply to the same layer.
 
 ```ts
 map.setLayerIcon('city-points', {
@@ -241,14 +241,15 @@ map.setLayerIcon('city-points', null); // Restore the ordinary point symbol.
 A numeric size is the CSS-pixel height with preserved aspect ratio; an explicit `[width, height]`
 sets both dimensions. Optional `rect: [x, y, width, height]` crops a shared atlas, and `tint`
 recolors its alpha mask. PNG/JPEG/WebP and self-contained SVG images are supported.
-The luma backends reuse resident point buffers; the default Canvas painter also supports this API.
-Loading failures keep ordinary points and report the error. No per-feature icon mapping,
-alpha-pixel picking or new icon clustering policy is introduced.
+The luma backends reuse resident point buffers; the Canvas2D painter also supports this API.
+Loading failures keep ordinary points and report the error. Configure images per layer; picking
+uses point-layer rules and density display uses PointLod. Per-feature image mapping, alpha-pixel
+picking, and count-based clustering require application implementations.
 ## Unified attached symbol settings
 
 Use `symbol.layout / symbol.paint` on the existing parent layer. Property names are inspired by
-MapLibre; settings are mapped to the existing label/icon renderer without adding a layer-tree node
-or replacing luma, MSDF, HarfBuzz or point LOD. Layer types remain circle/line/fill.
+MapLibre; settings map to the existing label/icon renderer and share the parent layer-tree node,
+luma, MSDF, HarfBuzz and point LOD. Layer types are circle/line/fill.
 
 ```ts
 map.addLayer({
@@ -274,8 +275,8 @@ map.setSymbolLayoutProperty('poi', 'text-offset', null);
 ```
 
 `text-offset` uses ems and is converted using text-size. `icon-size` multiplies the image definition's
-explicit reference CSS size: a height preserving aspect ratio, or [width,height]. It does not infer
-logical size from the image file. Icon offset is scaled then rotated; icon-anchor uses nine named
+explicit reference CSS size: a height preserving aspect ratio, or [width,height]. The application supplies this logical size explicitly.
+ Icon offset is scaled then rotated; icon-anchor uses nine named
 anchors. Nested visibility affects attached symbols only; parent visibility still controls the layer.
 
 Supported properties are text-field/size/font/offset/allow-overlap/padding,
@@ -285,9 +286,10 @@ Text-font accepts one family/face name in an array. QGIS-style advanced labeling
 fontStyle and enabled. The small icon-only compatibility block is `symbol.icon` with enabled
 and a custom normalized anchor; ordinary anchors still use `icon-anchor`.
 
-This is a settings subset, not a complete MapLibre Style document. No sprite/glyph service,
-transitions or data-driven sizes/colors/icon selection is added. Existing placement and alpha-mask
-icon coloring remain unchanged. Unsupported keys fail explicitly without modifying prior state.
+Use the listed properties to configure attached symbols. Complete MapLibre Style documents,
+sprite/glyph services, transitions, and data-driven sizes/colors/icon selection require a separate
+style integration. Attached symbols reuse placement and alpha-mask icon coloring.
+Validation reports keys outside this set and preserves the prior configuration.
 Whole-object replacement uses setLayerSymbol; removeLayerSymbol is equivalent to
 setLayerSymbol(id, null). Null/undefined in a property setter removes that property and restores its default.
 

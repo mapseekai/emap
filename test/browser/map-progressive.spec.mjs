@@ -24,6 +24,11 @@ async function settled(page){
  await expect.poll(()=>page.evaluate(()=>{const p=progressMap.ctx.render._painter;return p.frameComplete&&p.stats.geometryChunks.pending===0&&progressMap.ctx.render._pendingRender===0;}),{timeout:30000}).toBe(true);
 }
 async function pixels(page,mode='hash',at=[0,0]){
+ // GPU submission and frameComplete do not guarantee a presented screenshot.
+ await page.evaluate(async()=>{
+  await progressMap.ctx.render._painter.gpu.waitForIdle();
+  await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+ });
  const png=await page.screenshot({clip:{x:0,y:0,width:800,height:600}});
  return page.evaluate(async({png,mode,at})=>{
   const image=new Image();image.src='data:image/png;base64,'+png;await image.decode();
@@ -148,8 +153,9 @@ for(const renderer of ['webgl2','webgpu']){
   await page.mouse.move(700,520);await page.mouse.down();for(let i=1;i<=20;i++){await page.mouse.move(700-i*25,520);await page.waitForTimeout(16);}
   await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._painter.stats.geometryChunks.builds),{timeout:30000}).toBeGreaterThan(before);
   await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._labels.placements.some(l=>l.text==='New')),{timeout:30000}).toBe(true);
+  // Label placement can finish before the final navigation refresh is presented.
+  await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._canvas.style.transform),{timeout:30000}).toBe('');
   expect(await page.evaluate(()=>progressMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
-  expect(await page.evaluate(()=>progressMap.ctx.render._canvas.style.transform)).toBe('');
   const green=await pixels(page,'pixel',[14.4,2.4]);expect(green[1]).toBeGreaterThan(130);expect(green[0]).toBeLessThan(80);
   await page.mouse.up();await settled(page);await dispose(page);
  });
@@ -161,7 +167,10 @@ for(const renderer of ['webgl2','webgpu']){
    progressMap.setExtent(new emap.Bounds(-4,-4,4,4));progressMap.render();
   });await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._labels?.stats.placed??0)).toBe(1);await settled(page);
   const before=await pixels(page,'text'),uploads=await page.evaluate(()=>progressMap.ctx.render._painter.stats.text.textureUploads);
-  await page.evaluate(()=>{const r=progressMap.ctx.render;r.beginNavigation();progressMap.ctx.view._viewport.transform.scale(2,400,300);r.updateNavigation();});
+  await page.evaluate(()=>{const r=progressMap.ctx.render;
+   Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
+   Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
+   r.beginNavigation();progressMap.ctx.view._viewport.transform.scale(2,400,300);r.updateNavigation();});
   await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._painter.stats.presentation.replays)).toBeGreaterThan(0);
   const after=await pixels(page,'text');expect(after.n).toBeGreaterThan(10);expect(Math.abs(after.height-before.height)).toBeLessThanOrEqual(1);
   expect(await page.evaluate(()=>progressMap.ctx.render._painter.stats.text.textureUploads)).toBe(uploads);
@@ -182,6 +191,8 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: cached screen strok
   const r=progressMap.ctx.render,worker=r._painter.chunks.worker,build=worker.build.bind(worker);
   const batch=worker.buildBatch.bind(worker);
   for(const [method,run] of [['build',build],['buildBatch',batch]])worker[method]=(packet,signal)=>new Promise((resolve,reject)=>{window.releaseStroke=()=>{worker.build=build;worker.buildBatch=batch;run(packet,signal).then(resolve,reject);};});
+  Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
+  Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
   r.beginNavigation();r.deps.view._viewport.transform.scale(2,400,300);r.deps.view._viewport.transform.translate(50,30);r.updateNavigation();
  });
  await expect.poll(()=>page.evaluate(()=>progressMap.ctx.render._painter.stats.presentation.replays)).toBeGreaterThan(0);

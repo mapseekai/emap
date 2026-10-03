@@ -2,8 +2,7 @@ import {test,expect} from '@playwright/test';
 import {join} from 'node:path';
 
 async function ready(page){
-  await page.waitForFunction(()=>['ready','error'].includes(document.querySelector('#status')?.dataset.state));
-  expect(await page.locator('#status').getAttribute('data-state'),await page.locator('#status').textContent()).toBe('ready');
+  await expect(page.locator('#status')).toHaveAttribute('data-state','ready');
 }
 async function pixels(page,kind,opacity=1,clip){
   return page.evaluate(async({kind,opacity,clip})=>{

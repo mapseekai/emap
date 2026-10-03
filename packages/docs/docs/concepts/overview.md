@@ -5,12 +5,14 @@ title: 核心概念
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 核心概念
 
 `@mapseekai/emap` 是浏览器 Canvas 地图与地理数据编辑库：`Emap` 管理地图，`TopologySource` 管理数据，render layer 管理显示。
+
+这些对象共同支持数据加载、多样式显示、空间查询和可撤销编辑；下文按应用任务介绍各入口。
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // 导入地图和数据源
@@ -149,7 +151,7 @@ render layer API 以图层 ID 管理显示；`addLayer` 的 `source` 必须已�
 | `once(type, filter, listener).filter` | `FeatureEventFilter` | 全部可见要素 | 单次 `feature:*` 的 source/layer 筛选器 |
 | `off(type, listener).type` / `listener` | `keyof EmapEventMap \| string` / `EventListener` | 必填 | 移除事件回调 |
 
-通过地图编辑和操作入口变更 `source.getDataset()` 的实时零复制只读 TypeScript 视图，以同步渲染、选择、索引和历史。
+`source.getDataset()` 提供实时零复制的 TypeScript 只读视图。通过地图编辑和操作入口修改其底层数据，可同步渲染、选择、索引和历史。
 
 继续阅读 [Emap 地图实例](./emap.md)、[数据源与图层](./source-layer.md)、[拓扑模型](./topology.md)、[坐标与 CRS](./coordinates-crs.md)；代码和插件组织见[技术架构与源码组织](./architecture.md)。
 

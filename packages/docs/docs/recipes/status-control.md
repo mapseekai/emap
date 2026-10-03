@@ -5,12 +5,13 @@ title: 状态控件
 api: ["Emap", "StatusControl", "StatusOptions"]
 examples: ["duckdb-geoparquet-query", "duckdb-query", "web-worker"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 状态控件
 
-`StatusControl` 显示鼠标坐标和地图 CRS。
+`StatusControl` 显示指针坐标和地图 CRS，随指针移动和 CRS 变化更新；可配置读数、对齐方式和挂载位置。
+
 ```ts
 await map.addControl(
   // 挂载控件

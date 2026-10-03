@@ -5,12 +5,14 @@ title: Concepts overview
 api: ["Emap", "TopologySource", "LayerSpecification"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Concepts overview
 
 `@mapseekai/emap` is a browser Canvas map and geodata-editing library: `Emap` owns the map, `TopologySource` owns data, and render layers own presentation.
+
+Together these objects support loading, multiple styles over the same data, spatial queries, and undoable edits. The sections below map application tasks to their entry points.
 
 ```ts
 import { Emap, TopologySource } from '@mapseekai/emap'; // import the map and data source
@@ -149,7 +151,7 @@ Event APIs return `map` for chaining; common types include `moveend`, `data`, `l
 | `once(type, filter, listener).filter` | `FeatureEventFilter` | All visible features | Source/layer filter for one `feature:*` event |
 | `off(type, listener).type` / `listener` | `keyof EmapEventMap \| string` / `EventListener` | Required | Removes event callback |
 
-Change the live zero-copy, read-only TypeScript view from `source.getDataset()` through map editing and operation APIs to synchronize rendering, selection, indexes, and history.
+`source.getDataset()` provides a live, zero-copy TypeScript readonly view. Modify its underlying data through map editing and operation APIs to synchronize rendering, selection, indexes, and history.
 
 Continue with [Emap map instance](./emap.md), [Sources and layers](./source-layer.md), [Topology model](./topology.md), and [Coordinates and CRS](./coordinates-crs.md); for code and plugin organization see [Architecture and source layout](./architecture.md).
 

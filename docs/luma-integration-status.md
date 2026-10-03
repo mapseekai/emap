@@ -3,7 +3,7 @@
 ## 正式地图入口
 
 Emap.create 支持 renderer: canvas2d / webgl2 / webgpu，默认 webgl2。
-通过原生 Cordis painterFactory 接入正式图层与编辑服务，不再只能在独立 benchmark 中选择 GPU。
+通过原生 Cordis painterFactory 接入正式图层与编辑服务。
 细节与验收范围见 [正式三后端](renderer-backends.md)。这里描述当前代码，不沿用旧报告的未提交状态。
 
 ## 已接入正式主链路
@@ -12,7 +12,7 @@ Emap.create 支持 renderer: canvas2d / webgl2 / webgpu，默认 webgl2。
 附属文字采用 [MSDF 与 HarfBuzz](luma-labels.md)，[点图片符号](luma-icons.md) 复用点坐标。
 [Symbol 样式映射](luma-symbol-style.md) 仍为 symbol.layout / paint / labeling / images，不增加图层树节点。
 既有 GeoTIFF 的读取、重投影、着色与渐进瓦片通过所选 Painter 合成；选择与编辑仍由正式地图服务管理。
-编辑覆盖层继续使用独立 Canvas2D；不是把整幅矢量地图先栅格化再上传 GPU。
+矢量主图直接由 GPU 绘制，编辑覆盖层使用独立 Canvas2D。
 
 ## 正式地图性能优化
 
@@ -25,19 +25,19 @@ Emap.create 支持 renderer: canvas2d / webgl2 / webgpu，默认 webgl2。
 [渐进渲染](luma-progressive-rendering.md) 另补齐超大面内部三角形裁剪、Worker 要素三角化缓存、
 手势中的有界补图以及保持 CSS 字号的注记预览，不再只变换旧截图。
 Brandenburg 的五百万要素已完成后续三后端专项测试，具体路线、修复及仍存在的延迟见
-[真实大文件验收](brandenburg-stress-test.md)；不能外推为所有机器与数据均无资源限制。
+[真实大文件验收](brandenburg-stress-test.md)；目标设备与数据按相同方法验证资源用量。
 
 [GeoPackage 4× 与回全图优化](geopackage-zoom-performance.md) 减少显示几何准备开销，
 保留单 Worker、默认精度和既有预算。完整旧视图仍可能因淘汰而需要重建。
 
-## 保留的实验链路
+## 实验入口与配置
 
-- [2.5D 相机](luma-25d.md) 与 [2.5D 性能](luma-25d-performance.md)：pitch/bearing 尚未进入正式 View API。
+- [2.5D 相机](luma-25d.md) 与 [2.5D 性能](luma-25d-performance.md)：在 luma-25d 入口配置 pitch/bearing；正式 View API 使用二维相机。
 - [动态整数栅格](luma-raster-dynamic.md)、[源块与 halo 复用](luma-raster-block-reuse.md)：
-  Native integer GPU 纹理仍在 luma-raster/luma-25d 专用链路，不等同于正式瓦片合成路径。
+  luma-raster/luma-25d 提供 Native integer GPU 纹理；正式地图使用瓦片合成路径。
 - [完整精度基线](luma-full-precision-performance.md)、[点优化](luma-point-optimization.md)、
   [点 LOD](luma-point-lod.md)、[线优化](luma-line-optimization.md)、[屏幕过滤](luma-canvas-screen-filter.md)、
-  [快照导航](luma-fast-navigation.md)、[退远缓存](luma-zoom-out.md)：均为相应实验版本的证据，不能当作正式 Painter 的性能承诺。
+  [快照导航](luma-fast-navigation.md)、[退远缓存](luma-zoom-out.md)：分别记录对应实验版本的性能；正式 Painter 使用上述正式链路的测量结果。
 - [顶点编辑实验](luma-vertex-editing.md)、[局部刷新](luma-editor-refresh.md)、[深缩放精度](luma-zoom-precision.md)：
   保留专用 Worker/patch 和三角网缓存验收，正式编辑使用原有命令与历史服务。
 
@@ -50,7 +50,7 @@ GPU 创建失败不会静默降级；宿主需要兼容路径时应显式创建 
 ## 后续整合重点
 
 大型矢量的有界分块 Worker 已进入正式 API；随后应按真实超大文件继续验收导入、业务索引和
-极端单要素限制，再分别接入原生整数栅格及正式相机/交互。不能因为三后端选择已接入，就把全部实验性能与 2.5D 编辑能力视为已验收。
+极端单要素限制，再分别接入原生整数栅格及正式相机/交互。三后端接入与各实验能力分项验收。
 
 ## 超大文件专项验证
 
@@ -92,7 +92,7 @@ CPU 提交减少不等于 GPU 着色量同比下降。见 [命令复用](luma-re
 ## 几何准备吞吐
 
 正式 GPU 将小任务合并为有总量上限的 Worker 消息，并在原生弧长可安全估算时减少一次坐标扫描。
-逻辑块仍独立，首批立即反馈，取消/资源预算保持；不是增加 Worker 或降低显示精度。
+逻辑块仍独立，首批立即反馈，取消/资源预算保持；Worker 数量与显示精度保持原设置。
 实现、同路线数据及输入/输出内存边界见 [几何微批次](luma-geometry-throughput.md)。
 
 ## 已驻留描边范围与部分区间合批

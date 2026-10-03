@@ -5,12 +5,12 @@ title: 属性
 api: ["Emap", "Feature", "ApplyExpressionOptions", "JoinTableOptions", "CreateLayerOptions", "LayerFieldDefinition"]
 examples: ["create-layer","attribute-editing","attribute-expressions","feature-attributes","join"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 属性
 
-Emap 将 layer 属性保存在 data table；要素 ID 定位 geometry 和属性。`map.features` 读取，`map.attributes` 或 `map.ops` 修改。
+Emap 支持属性查询、显示过滤、可撤销字段编辑、分类和表连接。layer 属性保存在 data table，要素 ID 定位 geometry 和属性；`map.features` 读取，`map.attributes` 或 `map.ops` 修改。
 
 ```ts
 const hits = map.queryFeatures([240, 180], {

@@ -5,12 +5,14 @@ title: 数据源与图层
 api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ImportResourceLimits", "ZipExtractionLimits"]
 examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 数据源与图层
 
 Emap 分离地理数据与显示配置：`TopologySource` 保存 mapshaper dataset，source layer 保存几何和属性，`LayerSpecification` 声明绘制。
+
+同一份数据可同时绘制填充与边线；导入预检、CRS 确认和格式插件用于连接应用的数据加载流程。
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson'); // 从 URL 导入数据
@@ -137,7 +139,7 @@ if (result.status === 'ready') await map.confirmSource(result.plan); // 确认�
 
 ## 导出与格式插件
 
-`source.export({ format: 'geojson' })` 返回浏览器 `Blob`。支持 GeoJSON、TopoJSON、Shapefile、MSX、GeoParquet、GeoArrow 和 FlatGeobuf；后两类格式需要对应插件。GeoPackage 仅通过 `@mapseekai/emap/geopackage` 导入，见 [GeoPackage](../data/geopackage.md)。
+`source.export({ format: 'geojson' })` 返回浏览器 `Blob`。核心支持 GeoJSON、TopoJSON、Shapefile 和 MSX 导出；GeoParquet、GeoArrow 和 FlatGeobuf 导出由对应格式插件提供。GeoPackage 矢量表导入使用 `@mapseekai/emap/geopackage`，见 [GeoPackage](../data/geopackage.md)。
 
 ## API
 

@@ -180,7 +180,8 @@ export class MsdfFontEngine {
         if (font.unicodes.has(cp)) return font;
       }
     }
-    // Explicit missing-glyph counter; no hidden system-font bitmap fallback.
+    // Report missing outlines; the main-thread atlas can rasterize the whole
+    // run with browser fonts and expose that fallback in its diagnostics.
     const fallback = this.manifest[`sans-serif:${weight}`].find((a) =>
       a.ranges.some(([l, h]) => 65 >= l && 65 <= h),
     );

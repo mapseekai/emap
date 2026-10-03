@@ -12,12 +12,15 @@ async function idle(page){
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await expect.poll(pending).toBe(0);
 }
-async function installProbe(page){
+async function installProbe(page,synchronize=false){
   await installTasklaneProbe(page);
-  await page.addInitScript(()=>{
+  await page.addInitScript(synchronize=>{
     Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>8});
     const NativeWorker=Worker;
     const events={created:0,renderWorkers:[],rawResults:0,rendered:0,invalidResults:0,peak:0,active:0};
+    // Hold the first render until both real Workers receive work. A tiny image can
+    // otherwise finish on the primary before the metadata-only replica starts.
+    const starts=new Map();
     window.rasterParallelProbe=events;
     window.Worker=class extends NativeWorker{
       identity=++events.created;
@@ -40,15 +43,22 @@ async function installProbe(page){
       }
       postMessage(message,...args){
         const request=message.type==='request'&&message.task==='raster'?EmapTasklaneProbe.decodePacket(message.payload):null;
-        if(request?.type==='render'){this.renders.add(message.id);events.active++;events.peak=Math.max(events.peak,events.active);}
+        if(request?.type==='render'){
+          this.renders.add(message.id);events.active++;events.peak=Math.max(events.peak,events.active);
+          if(synchronize){
+            starts.set(this.identity,()=>super.postMessage(message,...args));
+            if(starts.size===2){synchronize=false;for(const start of starts.values())start();starts.clear();}
+            return;
+          }
+        }
         super.postMessage(message,...args);
       }
     };
-  });
+  },synchronize);
 }
 
 test('two independent Workers decode and colorize while the UI receives only final RGBA',async({page})=>{
-  await installProbe(page);await page.goto(route);
+  await installProbe(page,true);await page.goto(route);
   await expect(page.locator('#levels')).toHaveText('4');await idle(page);
   const probe=await page.evaluate(()=>({events:window.rasterParallelProbe,processing:window.geotiffDemo.processing()}));
   expect(probe.events.renderWorkers).toHaveLength(2);

@@ -5,12 +5,14 @@ title: 错误参考
 api: ["Emap", "Err", "OK", "okValue", "OpError", "OpResult", "topologyValidator", "TopologyValidatorOptions", "ValidationChange", "ValidationIssue", "ValidationReport", "Validator", "ValidatorPhase", "ValidatorRegistry", "ValidatorResult", "SourceLoadError", "DuckDbOperationError", "DuckDbOperationErrorKind"]
 examples: ["check-geometry","duckdb-query","transaction"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 错误参考
 
 地图处理返回 `OpResult<T>`；按 `ok` 和 `error.kind` 处理成功或失败。
+
+结构化诊断帮助应用提示待修正参数、补充导入 CRS，以及在数据变化后重新发起操作。
 
 ```ts
 const result = await map.ops.checkGeometry({ source: "parcels" }) // 运行地图操作

@@ -5,13 +5,12 @@ title: Performance
 api: ["Emap", "MapOptions", "SimplifyOptions"]
 examples: ["simplify", "simplify-control", "web-worker", "point-lod", "luma-benchmark"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # Performance
 
-Tune dataset-operation and GPU-geometry Workers, shared-arc simplification, viewport/triangle
-indexes, dense-point LOD, bounded caches, progressive presentation, and navigation replenishment.
+Emap supports operation and geometry Workers, shared-arc simplification, viewport/triangle indexes, dense-point LOD, bounded caches, and progressive rendering. Measure preparation, submission, settled-view latency, and memory separately on real data to select suitable settings.
 
 
 ```ts
@@ -38,7 +37,7 @@ These `MapOptions` select where dataset-replace operations such as `clip`, `diss
 | `workerUrl` | `string` | `'emap-worker.js'` | Worker bundle URL, resolved against `document.baseURI`. |
 | `workerPoolSize` | `number` | `1` | Worker-pool size; independent sources can run in parallel and Workers spawn on demand. `workerPool` overrides it. |
 | `workerPool` | `MapshaperWorkerPool` | — | Preconstructed pool, overriding `workerUrl` and `workerPoolSize`; the map exclusively manages it. |
-| `workerRouting` | `WorkerRoutingFn` | Built-in decision | Called only for `'auto'`; receives `cmd`, `heads`, `vertexCount`, `recordCount`, `mode`, `threshold`, and `defaultDecision`, then returns `boolean`. |
+| `workerRouting` | `WorkerRoutingFn` | Built-in decision | Called for both `'auto'` and `true`; receives `cmd`, `heads`, `vertexCount`, `recordCount`, `mode`, `threshold`, and `defaultDecision`, then returns `boolean`. |
 
 ## More optimization
 
@@ -132,21 +131,21 @@ A fixed seed covers 100k, 1M, and 5M uniform and clustered points, reporting med
 
 ## luma GPU real-data benchmark and optional point aggregation
 
-The independent `luma-benchmark` waits for selected local files; it does not generate performance
+The independent `luma-benchmark` uses selected local files as its performance
 inputs. Canvas, WebGL2 and WebGPU share a native mapshaper dataset and conservative spatial culling.
 The existing PointLod is enabled for point backgrounds with a 3 CSS-pixel cell target. Lines and polygons remain full detail. GeoJSON streams through a Worker;
 full geometry is cached by revision. Formal viewer/editor presets now default to WebGL2, with explicit Canvas2D support.
 
 Open `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl` or `?gpu=webgpu`.
-Point aggregation has its own off switch and grid-size control, independent of symbol radius. Cells retain original representatives, not centroids or count bubbles.
+Point aggregation has its own off switch and grid-size control, independent of symbol radius. Cells retain original representative points and their attributes; centroid/count-bubble aggregation requires a separate application step.
 Point shader controls select automatic optimization or the same-precision standard path, a CSS radius
 (default 3), and opacity (default 1). Filled circles use four-vertex instancing and an analytic
 antialiased edge inspired by GeoArrow/deck.gl. Automatic coverage optimization applies only to
 consecutive same-color opaque circles. It changes neither coordinates, counts, radii nor sample
 resolution. Transparent points and other symbols retain the standard compositing path.
 
-The page runs Canvas → GPU → GPU → Canvas. CPU submission time is not GPU execution time.
-The point-specific runner measures fixed full/far/near views; do not mix those FPS values with
+The page runs Canvas → GPU → GPU → Canvas. CPU submission and GPU execution time are measured separately.
+The point-specific runner measures fixed full/far/near views; report those FPS values separately from
 animated-navigation results. Full-precision runners explicitly disable PointLod. The separate
 `benchmark-luma-point-lod.mjs` runner measures default 3 CSS-pixel aggregation with ABBA navigation.
 
@@ -159,12 +158,11 @@ node scripts/benchmark-luma-point-lod.mjs --data-dir /path/to/authorized/files -
 
 The point runner loads complete `points.geojson` and `pppp.geojson` files. Other real inputs use
 `benchmark:luma:real`. Optional `--reference-dir` points to a local deck.gl-geoarrow checkout to run
-actual GeoArrow layers with the same coordinates. Reference dependencies are test-only, not emap
-production dependencies. Input hashes, pixels, raw frame intervals and resource release are recorded.
+actual GeoArrow layers with the same coordinates. Reference dependencies are installed for the test build only. Input hashes, pixels, raw frame intervals and resource release are recorded.
 
 The soft cache budget only evicts inactive chunks; it never reduces visible geometry precision.
-Actual browser memory and emap import limits still apply. Fixed decoded raster tiles do not measure
-end-to-end GeoTIFF I/O, decoding or overview selection.
+Actual browser memory and emap import limits still apply. Fixed decoded raster tiles measure compositing; measure
+GeoTIFF I/O, decoding and overview selection separately.
 
 ### Full-detail line rendering
 
@@ -174,8 +172,8 @@ point LOD remains independent. Opaque solid strokes use a six-vertex indexed pat
 round joins/caps and actual render-target multisampling. A private depth mask only rejects
 already covered same-color samples. Color changes and intervening primitives reset coverage;
 translucency, dashes and devices without multisampling retain the analytic path.
-The MSAA result is not pixel-identical to the old analytic antialiasing; do not describe
-that visual change as an equal-output speed comparison.
+MSAA and analytic antialiasing can produce different edge pixels. Use the same-geometry
+MSAA reference for a comparison with matching output.
 
 ```bash
 pnpm benchmark:luma:lines --data-dir /path/to/authorized/files --gpu webgl --frames 20
@@ -184,7 +182,7 @@ pnpm benchmark:luma:lines --data-dir /path/to/authorized/files --gpu webgpu --fr
 
 This runner loads complete `big.geojson`, `lucc.geojson` and `building.geojson` and measures
 stroke-only fixed views. The UI A/B still supports full-scene animated navigation; the two
-methods must not be mixed. `--reference-dir` optionally uses a local deck.gl-geoarrow checkout
+methods should be reported separately. `--reference-dir` optionally uses a local deck.gl-geoarrow checkout
 for a real GeoArrowPathLayer comparison, without adding its dependencies to emap production.
 
 ### Snapshot navigation and conservative path culling
@@ -196,11 +194,11 @@ The editor bypasses snapshot navigation while a feature is selected to keep orig
 Native mapshaper geometry, topology and history remain unchanged; PointLod is an independent option.
 
 Range culling rejects only bounds outside the expanded viewport, including neighbor and stroke
-padding. It does not omit visible short paths or simplify vertices. Original GPU buffers are reused
+padding. It preserves visible short paths and original vertices. Original GPU buffers are reused
 with offset VAOs on WebGL and firstInstance on WebGPU. A full-extent view still submits all paths.
 Use `?nav=off` or `?cull=off` to disable each mechanism, and `&pointLod=off` for original point counts.
 
-Raw A/B trials always bypass snapshots. Snapshot rAF cadence is not full-geometry GPU throughput.
+Raw A/B trials always bypass snapshots. Snapshot rAF cadence measures frame reuse; full-geometry GPU throughput requires separate measurement.
 The UI separates navigation state, CPU submission, replacement readiness, candidate segments and
 submitted segments.
 
@@ -210,12 +208,11 @@ The independent examples enable separate micro-arc and half-device-pixel consecu
 filters for background lines and polygon strokes. They mirror Canvas's 0.35 CSS-pixel threshold
 with initial-view scaling, DPR-aware truncation, consecutive-only deduplication and the
 0.1-device-pixel stroke for a collapsed path. Native datasets, polygon fills/holes and original
-selection/editing geometry remain unchanged. This is a display approximation, not full-detail
-pixel equivalence. `screenFilter=off` disables both switches.
+selection/editing geometry remain unchanged. This display approximation uses the stated pixel thresholds. `screenFilter=off` disables both switches.
 The data Worker caches exact view/DPR/revision results with stale-result protection. Navigation
 snapshots avoid rebuilding during gestures. The two benchmark buttons separate original-geometry navigation from filtered fixed-view warm
 drawing. Neither uses snapshots. Screen preparation is reported separately; the two FPS methods
-are not interchangeable.
+measure distinct workloads and are reported separately.
 
 
 ### Near-to-far cache recovery
@@ -223,7 +220,7 @@ are not interchangeable.
 Screen-filtered strokes no longer depend on resident raw path GPU buffers. Zoom-out prepares the latest
 screen commands without rebuilding evicted raw paths first. Full polygon triangulations take eviction
 priority over inactive raw paths within the unchanged 256 MiB raw-cache budget. Oversized fill working
-sets may still need rebuilding; this is not a guarantee that every dataset stays resident. Selection,
+sets may still need rebuilding; cache capacity determines residency. Selection,
 editing precision and screen-filter rules are unchanged.
 
 ```bash
@@ -232,8 +229,8 @@ pnpm benchmark:luma:zoom-out --data-dir /path/to/authorized/files --assert-refil
 
 This runner uses complete real files and wheel input from a 16× near view, recording release-to-complete-
 frame latency separately from warm FPS. Its isolated loopback server uses port 4195 and closes afterwards,
-without modifying a user-owned 4187 server. `--assert-refill` checks the known preloaded real-file route,
-not a universal no-rebuild guarantee for arbitrary data.
+without modifying a user-owned 4187 server. `--assert-refill` checks rebuild behavior on the known preloaded real-file route.
+Validate other files and routes separately.
 
 ## API
 
@@ -256,7 +253,7 @@ not a universal no-rebuild guarantee for arbitrary data.
 The [luma dynamic raster example](/mapseekai/emap/examples/luma-raster/) keeps the TIFF source open
 and fetches finer overviews/full-resolution pixels as the camera zooms. It compares the formal Canvas
 pipeline with WebGL2 and WebGPU using the same source CRS and overview policy. The GPU experiment
-currently supports north-up UInt16 images with 1–4 bands and no palette; cross-CRS reprojection remains
+currently supports north-up UInt8/UInt16 images with 1–4 bands and no palette; cross-CRS reprojection remains
 in the formal Canvas path, without a silent bounding-box approximation.
 
 GPU numerical textures support NoData-aware nearest/bilinear sampling, source-wide stretches,
@@ -267,7 +264,7 @@ also supports exact column-window reads for eligible uncompressed strips, benefi
 
 `pnpm benchmark:luma:raster:dynamic --data-dir <local-test-directory>` runs the two authorized TIFFs.
 Stable-view timings include an eight-frame confirmation window: approximately 133–150 ms for a warm view
-is not GPU execution time. The original luma-benchmark raster path remains a separate fixed-texture
+is settled-view latency including confirmation; measure GPU execution separately. The original luma-benchmark raster path remains a separate fixed-texture
 compositing benchmark.
 
 
@@ -278,16 +275,16 @@ and publishes ready textures through disjoint progressive coverage. Pointer and 
 pauses prevent pending packing/uploads from competing with active gestures. Original values,
 source CRS, overview policy and soft cache budgets remain unchanged. Separate main-thread
 packing/submission, cumulative Worker decoding and settled wall time; the latter includes
-eight quiet-frame confirmations. Not every view is faster, and block-edge duplication
-and small striped reads still have costs.
+eight quiet-frame confirmations. Measure gains per view, including block-edge duplication
+and small striped-read costs.
 
 
 ## Dynamic raster memory diagnostics
 
 The `luma-raster` example reports decoded-block cache, GPU texture payloads, queued
 samples and reusable packing storage below the map. These tracked resources exclude
-V8/Worker temporaries, Canvas/swapchain surfaces and driver overhead; a 32 MiB cache
-budget is not total browser memory. Source values and overview selection stay unchanged.
+V8/Worker temporaries, Canvas/swapchain surfaces and driver overhead; add these costs to the 32 MiB cache
+budget when measuring total browser memory. Source values and overview selection stay unchanged.
 
 `openGeoTIFF(file, { blockCacheBytes: 32 * 1024 ** 2 })` caps the aggregate decoded-block
 cache across the source's Workers (8–256 MiB). Omitting the option retains storage-aware
@@ -310,15 +307,15 @@ image; completed regions still replace it without double alpha or stale NoData b
 Strips and incompatible layouts retain bounded window fallback, at the same overview policy.
 
 The folder selector lists TIFFs and pairs `.tif.ovr` by the full relative path. One selected
-image is loaded at a time; this is not automatic mosaicking. The verified folder contains
+image is loaded at a time; multi-image mosaicking requires a separate application step. The verified folder contains
 four UInt8 RGB originals with planar external OVRs and one internally overviewed COG.
-Embedded GeoTIFF georeferencing is used; this feature does not promise arbitrary TFW/XML
-fallback. Other sample types, palettes and cross-CRS display remain in the formal Canvas path.
+Embedded GeoTIFF georeferencing is used; inputs whose georeferencing is only in TFW/XML
+need those coordinates written into GeoTIFF keys first. Other sample types, palettes and cross-CRS display remain in the formal Canvas path.
 
 `haloCopies`, `haloCopyBytes` and `preparedUploads` separate GPU edge reuse from CPU uploads.
-`packMs=0` means no main-thread packing, not an entirely copy-free Worker/browser pipeline.
-`?pipeline=legacy` keeps the planar reader as a diagnostic comparison, not an exact old-build
-reproduction. Add `--include-cdf` to `benchmark:luma:raster:dynamic` to include all five
+`packMs=0` records zero main-thread packing; Worker/browser copies have separate costs.
+`?pipeline=legacy` compares the planar reader within the current build;
+other behavior follows the current version. Add `--include-cdf` to `benchmark:luma:raster:dynamic` to include all five
 original TIFFs in the authorized `cdf20250916042716` folder.
 
 ## Formal WebGL2 / WebGPU navigation and preparation caches
@@ -328,13 +325,13 @@ no private benchmark flags are needed. Lightweight pan and wheel gestures replay
 at the current camera and coalesce new viewport planning approximately every 80 ms. When CPU drawing
 or asynchronous GPU completion latency exceeds 33.3 ms, navigation reuses the painted frame until
 the gesture ends, then redraws the current view instead of resubmitting dense geometry on every move.
-Completion latency is sampled at most once per 250 ms; it is not isolated GPU timestamp duration.
+Completion latency is sampled at most once per 250 ms; it includes scheduling and asynchronous completion; GPU timestamps are measured separately.
 Background geometry, icon and label notifications wait for the gesture's settle redraw; style updates and device recovery
 still redraw immediately.
-Empty frames with pending initial geometry are not navigation snapshots; the first ready geometry still triggers a redraw.
+Navigation snapshots use completed content; the first ready geometry still triggers a redraw.
 New areas can temporarily be blank and background strokes scale with the snapshot; edit overlays remain
-live. Content changes invalidate old work. Canvas2D retains its adaptive bitmap policy; failed GPU
-submissions never become reusable navigation frames.
+live. Content changes invalidate old work. Canvas2D retains its adaptive bitmap policy; successful GPU
+submissions provide reusable navigation frames.
 
 Ordinary examples also use viewport/path-range culling, the `Viewport` tiny-arc filter, and the large-data
 half-pixel filter described below. No per-example benchmark switches are needed. Tiny-arc and half-pixel
@@ -361,7 +358,7 @@ const map = await Emap.create({
 ```
 
 Screen filtering defaults to half-device-pixel display filtering of large opaque solid strokes,
-not source simplification or exact original-edge pixel parity. Dashes, arrows and translucent
+preserving source coordinates with the stated display approximation. Dashes, arrows and translucent
 strokes retain raw paths. Set `screenPathFiltering: false` to disable it. Small layers and edit
 highlights remain synchronous. The geometry Worker is independent of the operation `useWorker` flag.
 
@@ -374,8 +371,8 @@ An additional exact per-feature Worker cache is bounded to 64 MiB / 20,000 entri
 coordinates and ring offsets reuse triangulations across changing batch memberships.
 
 Chunking adds scheduling and draw-call costs, so compare cold responsiveness, settle time, cache
-reuse and memory separately instead of claiming every warm frame is faster. CPU submission time
-is not GPU execution time or FPS. Large polygons have conservative internal triangle-range indexes,
+reuse and memory separately to assess gains for each workload. CPU submission time
+measures host work; GPU execution time and FPS require separate samples. Large polygons have conservative internal triangle-range indexes,
 reducing submitted indices without new coordinate uploads or dropping holes/enclosing triangles.
 Fragmented selections may conservatively draw the entire mesh.
 
@@ -391,8 +388,8 @@ Run `pnpm benchmark:geopackage:browser --file /authorized/data.gpkg --renderer w
 against the local example preview; webgpu and canvas2d are also supported. The harness checks native
 read-only SQLite row counts, the unchanged file hash, settled navigation, cache residency and disposal.
 It records import, rendering readiness, long tasks and process-group RSS separately. Default topology,
-point LOD, display arcs, paints and allocation budgets are retained. A passed stress route does not
-imply GPU rendering is faster than Canvas2D or that all viewports/DPRs fit memory.
+point LOD, display arcs, paints and allocation budgets are retained. A passed stress route validates the tested file, viewport, DPR, and machine.
+Compare GPU/Canvas2D speed and memory capacity on each target configuration.
 
 Cold polygon uploads use conservative viewport coverage and compact referenced vertices, retaining
 complete triangles and holes. Resident whole-source geometry remains reusable; source data is not clipped.
@@ -407,7 +404,7 @@ is incremental. Progressive notifications are coalesced using observed presentat
 Opaque solid strokes use source-anchored detail frames at least as fine as the requested device resolution.
 Pans within existing coverage reuse these buffers; new coverage, members, revisions or detail levels still
 require preparation. The per-axis half-device-pixel approximation bound is retained, but the grid phase
-can change, so old and new filtered strokes are not claimed pixel-identical. Set `screenPathFiltering: false`
+can change, so old and new filtered strokes can differ at edge pixels. Set `screenPathFiltering: false`
 to disable this approximation. Authoritative topology, export and editing coordinates are unchanged.
 Metadata-only registration reuses an unchanged DisplayArcs instead of constructing the same LOD twice.
 
@@ -420,12 +417,12 @@ use uint16 indices without changing coordinate precision or triangle contents. F
 padding is budgeted, never drawn. Large arc collections coalesce bounded consecutive batches after
 fine-chunk selection, preserving order, dash distances and endpoints; icons are not reordered.
 Completed LOD partition plans are retained in a bounded metadata cache and cleared on source removal
-or geometry revision changes. These defaults do not imply permanent residency of all geometry or
-faster GeoPackage decoding; full-file import and main-thread restoration remain separate costs.
+or geometry revision changes. Cache capacity and eviction determine geometry residency.
+Measure full-file GeoPackage import and main-thread restoration separately.
 
 The GeoPackage browser benchmark accepts `--warm-frames 8` to record eight CPU submissions and draw
-counts after each view has settled. The default is 0. These measurements are not GPU duration/FPS
-and must not be added to file-read or cold-preparation timings.
+counts after each view has settled. The default is 0. Report these CPU measurements separately from GPU duration/FPS,
+file reads, and cold preparation.
 
 ### Valid stroke instances and direct-upload buffer pages
 
@@ -438,23 +435,23 @@ differences; 4x antialiasing and the existing half-pixel display precision are r
 Compact strokes and uint16 fills upload directly into shared GPU pages. Only consecutive compatible
 resident slices are drawn together in their original order; no full-scene second copy is allocated.
 Page slack shares the original 256/512 MiB geometry limits. The 16 MiB new-page reserve is inside that
-budget, not extra GPU capacity. Releasing slices may temporarily increase fragmentation beyond the
+budget and counts toward total GPU capacity. Releasing slices may temporarily increase fragmentation beyond the
 reserve; actual capacity remains accounted and empty pages are destroyed immediately. Index alignment
 uses complete zero-area triangles with a separate padding counter; they produce no pixels.
 
 `benchmark:geopackage:browser --warm-frames 8 --gpu-frames 12` samples CPU submission and GPU pass
 duration separately. GPU times are collected only when timestamp queries are supported; missing samples
-are not zero-duration results. Shared index buffers are counted once by physical object. Do not add
-CPU/GPU numbers or convert them directly to FPS. Precomputation and paging have cold-preparation costs,
-so not every view is faster.
+remain unavailable measurements. Shared index buffers are counted once by physical object. Report
+CPU, GPU, and FPS measurements separately. Precomputation and paging have cold-preparation costs,
+so evaluate gains for each view.
 
 ### Ordered command reuse and page recycling
 
 Formal GPU maps cache ordered meshes, exact visible ranges and compatible page spans instead of rebuilding
 submission plans and parsing identical styles on every frame. WebGPU automatically reuses stable fill and
-opaque MSAA-stroke commands while keeping four-sample antialiasing. Text, icons, raster images and unsupported
-paths retain their existing rendering. Command reuse does not reduce source features or actual triangles,
-and CPU savings must not be reported as proportional GPU savings.
+opaque MSAA-stroke commands while keeping four-sample antialiasing. Text, icons, raster images and other
+paths retain their existing rendering. Command reuse preserves source features and actual triangles;
+measure CPU and GPU savings separately.
 
 Retired page regions can be split and coalesced without moving live data or raising geometry budgets.
 Repeated ownership/eviction maintenance is skipped only for complete resident frames with unchanged
@@ -468,7 +465,7 @@ size still checked against the existing budget. Authoritative Float64 coordinate
 Only uniform opaque MSAA stroke scopes may organize visible ranges by physical buffer; translucent
 strokes, dashes, arrows, icons and parent-layer order are not reordered. Retiring a mesh invalidates
 only the command scopes that reference it; unrelated recordings remain reusable. Import is unchanged,
-and equivalent speedups are not guaranteed at every viewport.
+and gains should be measured at each viewport.
 
 ### Bounded geometry microbatches
 
@@ -480,7 +477,7 @@ Unsimplified native arc lengths can avoid a coordinate-count scan. Speculative c
 limited to 2 MiB; larger, retained-detail or custom inputs keep exact counting. Compaction may briefly
 retain the bounded capacity buffer plus its exact result.
 `geometryChunks.messages` and `jobs` distinguish requests from logical jobs; `batchAdmissionMs` records
-admission overhead separately. This improves rendering preparation, not GPU shading, file import or MSAA.
+admission overhead separately. This optimization targets rendering preparation; measure GPU shading and file import separately.
 Existing geometry and feature-cache budgets remain unchanged.
 
 ### Resident stroke bounds and selected-range batching
@@ -490,4 +487,4 @@ Navigation selects resident Buffer ranges. Extreme joins stay drawable when safe
 and nonuniform transforms do not reuse similarity-only envelopes. MSAA and coordinate/detail precision stay unchanged.
 Constant-RGBA fill scopes group by physical page. Adjacent partially visible slices can coalesce selected ranges,
 without crossing filtered holes, retired slices or unselected triangles. Candidate/submitted work and padding
-remain separately accounted. Lower submission overhead is not a guarantee of faster frames for every view or GPU.
+remain separately accounted. Measure frame time alongside submission overhead on each target view and GPU.

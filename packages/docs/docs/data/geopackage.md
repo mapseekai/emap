@@ -5,12 +5,12 @@ title: GeoPackage 矢量直接导入
 api: ["importGeoPackage", "importGeoPackageInWorker", "geoPackagePlugin", "ImportGeoPackageOptions", "GeoPackageWorkerOptions", "GeoPackagePluginOptions", "GeoPackageLimits", "GeoPackageProgress", "GeoPackageDataset", "GeoPackageMetadata", "GeoPackageTableMetadata"]
 examples: ["geopackage-viewer"]
 stability: experimental
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # GeoPackage 矢量直接导入
 
-`@mapseekai/emap/geopackage` 通过 `@ngageoint/geopackage@4.2.9` 的 SQL.js/WASM 适配器读取 SQLite，并将 GP Binary/WKB 直接解码为数值缓冲区。
+`@mapseekai/emap/geopackage` 支持导入多张矢量表、保留属性、统一 CRS，以及 Worker 进度和取消。它通过 `@ngageoint/geopackage@4.2.9` 的 SQL.js/WASM 适配器读取 SQLite，将 GP Binary/WKB 直接解码为数值缓冲区。
 
 ```ts
 import { importGeoPackage } from '@mapseekai/emap/geopackage'; // 导入 GeoPackage 读取器

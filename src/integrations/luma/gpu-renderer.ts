@@ -108,7 +108,24 @@ export class GpuRenderer {
   private meshScopeStyles?: Map<PipelineKind, GpuStyle>;
   private textRenderer: GpuTextRenderer | null = null;
   private msdfTextRenderer: MsdfTextRenderer | null = null;
+  private labelRunsKey?: string;
+  private labelRuns: { start: number; end: number; msdf: boolean }[] = [];
   get textStats() {
+    if (this.msdfTextRenderer && this.textRenderer) {
+      const stats = { ...this.msdfTextRenderer.stats };
+      for (const name of [
+        'drawCalls',
+        'bufferUploads',
+        'bufferAllocations',
+        'reusedBatches',
+        'stagingBytes',
+        'textureUploads',
+        'liveTextureBytes',
+        'liveBufferBytes',
+      ] as const)
+        stats[name] += this.textRenderer.stats[name];
+      return stats;
+    }
     return (
       this.msdfTextRenderer?.stats ??
       this.textRenderer?.stats ?? {
@@ -127,19 +144,43 @@ export class GpuRenderer {
     this.pointGroup = null;
     this.pass.setParameters({ scissorRect: [0, 0, this.canvas.width, this.canvas.height] });
     this.fullScissor = true;
-    if ('mode' in frame.labels[0].raster) {
-      this.msdfTextRenderer ??= new MsdfTextRenderer(this.device, this.backend);
-      const calls = this.msdfTextRenderer.stats.drawCalls;
-      this.msdfTextRenderer.draw(this.pass, frame, this.width, this.height, this.pixelRatio);
-      this.stats.drawCalls += this.msdfTextRenderer.stats.drawCalls - calls;
-      return;
+    if (this.labelRunsKey !== frame.key) {
+      this.labelRuns = [];
+      for (let i = 0; i < frame.labels.length; i++) {
+        const msdf = 'mode' in frame.labels[i].raster,
+          last = this.labelRuns.at(-1);
+        if (last?.msdf === msdf) last.end = i + 1;
+        else this.labelRuns.push({ start: i, end: i + 1, msdf });
+      }
+      this.labelRunsKey = frame.key;
     }
-    this.textRenderer ??= new GpuTextRenderer(this.device, this.backend);
-    const calls = this.textRenderer.stats.drawCalls;
-    this.textRenderer.draw(this.pass, frame, this.width, this.height);
-    this.stats.drawCalls += this.textRenderer.stats.drawCalls - calls;
+    // Prepare each renderer from the whole frame once, then draw contiguous
+    // runs in source order. Mixed text never uploads the same frame per run.
+    for (const { start, end, msdf } of this.labelRuns) {
+      if (msdf) {
+        this.msdfTextRenderer ??= new MsdfTextRenderer(this.device, this.backend);
+        const calls = this.msdfTextRenderer.stats.drawCalls;
+        this.msdfTextRenderer.draw(
+          this.pass,
+          frame,
+          this.width,
+          this.height,
+          this.pixelRatio,
+          start,
+          end,
+        );
+        this.stats.drawCalls += this.msdfTextRenderer.stats.drawCalls - calls;
+      } else {
+        this.textRenderer ??= new GpuTextRenderer(this.device, this.backend);
+        const calls = this.textRenderer.stats.drawCalls;
+        this.textRenderer.draw(this.pass, frame, this.width, this.height, start, end);
+        this.stats.drawCalls += this.textRenderer.stats.drawCalls - calls;
+      }
+    }
   }
   clearLabels(): void {
+    this.labelRunsKey = undefined;
+    this.labelRuns = [];
     this.textRenderer?.clear();
     this.msdfTextRenderer?.clear();
   }

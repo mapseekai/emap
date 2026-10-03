@@ -5,12 +5,12 @@ title: 编辑
 api: ["AffineMatrix", "AppendedArc", "AutoCompletePolygonHandler", "AutoCompletePolygonOptions", "AutoCompletePolygonResult", "BulkFeatureDeleteCommand", "BulkFeatureDeleteCommandOptions", "composeMatrix", "CompositeCommand", "DatasetReplaceCommand", "DatasetReplaceCommandOptions", "EditCommand", "EditHistory", "EditHistoryOptions", "Emap", "FeatureAffineCommand", "FeatureAffineCommandOptions", "FeatureAppendCommand", "FeatureAppendCommandOptions", "FeatureCreateCommand", "FeatureDeleteCommand", "FeatureDeleteCommandOptions", "FeaturePropertyChangeCommand", "FeaturePropertyChangeCommandOptions", "FeatureTranslateCommand", "FeatureTranslateCommandOptions", "FieldAddCommand", "FieldAddCommandOptions", "FieldRemoveCommand", "FieldRemoveCommandOptions", "FieldRenameCommand", "FieldRenameCommandOptions", "HistoryStateSnapshot", "IDENTITY_MATRIX", "invertMatrix", "planSharedArcSplit", "planSharedNodeSplit", "rotateMatrix", "scaleMatrix", "SplitSharedArcsCommand", "SplitSharedArcsCommandOptions", "SplitSharedArcsRemap", "SplitSharedNodeCommand", "SplitSharedNodePlan", "TopologySource.fromBytes", "Transaction", "TranslatedPointFeature", "VertexDeleteCommand", "VertexInsertCommand", "VertexMoveCommand", "AddPartOptions", "AddRingOptions", "DeletePartOptions", "DeleteRingOptions", "FillRingOptions", "PartEditHandler", "PartEditOptions", "ReshapeFeatureHandler", "ReshapeFeatureOptions", "ReshapeSelectedOptions", "ReshapeSelectedResult", "RingEditHandler", "RingEditOptions", "DrawFeatureHandler", "VertexEditHandler", "SplitFeatureHandler", "TransformFeatureHandler"]
 examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing", "luma-vertex-editing"]
 stability: stable
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 编辑
 
-Emap 将交互编辑、选择变换和可撤销命令写入同一地图状态。
+Emap 支持绘制、顶点编辑、要素变换、环与部件编辑，并将交互编辑、选择变换和可撤销命令写入同一地图状态。事务可将多个编辑组合为一次撤销。
 
 ```ts
 map.drawFeature.setOptions({
@@ -152,7 +152,7 @@ if (!clipped.ok) {
 
 ### 命令契约
 
-公开操作不足时实现 `EditCommand`：先修改数据，再 `map.pushCommand(command)` 记录重做状态；首次提交不调用 `do()`。
+自定义编辑可实现 `EditCommand`：先修改数据，再 `map.pushCommand(command)` 记录重做状态；`do()` 在重做时调用。
 
 | 成员 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
@@ -241,18 +241,18 @@ Ctrl/Cmd+Shift+Z 重做。共享拓扑节点及闭合环首尾一起移动。
 
 点背景默认使用已有 PointLod，目标网格 3 CSS px（可关闭），线面背景保持全精度；选择、编辑顶点、命令和导出均使用原始 mapshaper dataset。
 提交、撤销和重做后同步刷新受影响的 Worker/GPU 分块。导出选中要素为保留源坐标系
-的 GeoJSON 2008，不覆盖原文件。本例只演示单要素选择和顶点移动，不包含插入/删除
-顶点、共享节点拆分或自动几何修复，也没有改变默认 emap 渲染后端。
+的 GeoJSON 2008 下载副本，保留原文件。本例的交互范围是单要素选择和顶点移动；
+插入/删除顶点、共享节点拆分和几何修复请使用上文的编辑工具与操作。渲染后端由地图配置选择。
 
 ### luma 示例的编辑刷新
 
 独立 `luma-vertex-editing` 示例保留原始选中轮廓与编辑顶点，背景描边可使用 Canvas 屏幕过滤。
-背景缓存不包含手柄：拖动和松开后实时绘制新位置，不等待整幅地图重新三角化。后台按版本准备
+手柄独立于背景缓存：拖动和松开后实时绘制新位置，不等待整幅地图重新三角化。后台按版本准备
 受影响填充和描边，完整就绪后一次切换，加载阶段不呈现部分图层。涉及大量洞归属变化的编辑
 仍可能等待后台面重建；这时原始顶点已经更新，界面会明确显示同步状态，不显示混合版本或缺块。
 
 ### luma 实验示例的深度缩放
 
 luma 顶点编辑示例已修正高/低位坐标投影及线段端点计算，避免拉近后手柄与背景错位。
-过滤后的描边与原始编辑坐标仍分离管理；关闭过滤并非修复错位的必要条件。
-原始 mapshaper dataset、命中测试、撤销/重做和默认 Canvas 编辑器不受这项改动影响。
+过滤后的描边与原始编辑坐标分离管理；开启过滤时也能保持手柄对齐。
+原始 mapshaper dataset、命中测试、撤销/重做和Canvas2D 编辑路径不受这项改动影响。

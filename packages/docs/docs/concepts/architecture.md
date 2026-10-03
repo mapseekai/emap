@@ -5,7 +5,7 @@ title: 当前技术架构与源码组织
 api: ["Emap", "Context", "TopologySource"]
 examples: ["plugin-runtime", "getting-started/geojson-viewer"]
 stability: experimental
-verifiedVersion: 0.13.0
+verifiedVersion: 0.14.0
 ---
 
 # 当前技术架构与源码组织
@@ -34,14 +34,14 @@ src/
 
 | 区域 | 当前职责 | 典型内容 |
 | --- | --- | --- |
-| `domain/` | 与 UI/插件框架无关的 GIS 状态和可逆修改 | `source/`、`geo/`、`edit/`、`validation/` |
+| `domain/` | 独立的 GIS 状态和可逆修改 | `source/`、`geo/`、`edit/`、`validation/` |
 | `engine/` | 地图执行热路径和宿主实现 | `map/`、`core/handlers/`、`rendering/`、`worker/`、内置 workspace provider |
 | `runtime/` | Cordis 组合层 | `context/`、`services/`、`providers/`、`plugins/`、`presets/`、`ai/` |
 | `integrations/` | 第三方引擎与可选能力边界 | `mapshaper/`、`maplibre/`、`arrow/`、`duckdb/`、`geopackage/` |
 | `ui/` | 浏览器控件、CSS、图标和主题 | controls、`assets/`、`theme/` |
-| `shared/` | 没有单一业务所有者的共享声明 | ambient `.d.ts`、外部库声明、样式类型 |
+| `shared/` | 跨职责区共享的声明 | ambient `.d.ts`、外部库声明、样式类型 |
 
-依赖遵循“领域在内、运行时组合在外”：`runtime` 可组合 engine、domain 和 integration；domain 不依赖 Cordis、DOM 或具体 Provider。高频 pointer、hit-test 和 Painter draw 保持 TypeScript 直接调用。
+依赖遵循“领域在内、运行时组合在外”：`runtime` 可组合 engine、domain 和 integration；domain 保持独立的 GIS 模型，Cordis、DOM 和具体 Provider 由外层组合。高频 pointer、hit-test 和 Painter draw 保持 TypeScript 直接调用。
 
 ### `Emap.create()`
 
@@ -57,7 +57,7 @@ src/
 | --- | --- | --- |
 | `editor` | `viewer` 全部能力、编辑 Handler 与编辑控件。 | 完整交互式编辑器。 |
 | `viewer` | `headless` 全部数据与处理能力、Canvas、渲染、交互、事件、快捷键、控件与浏览 Handler。 | 浏览、查询、选择和数据处理页面。 |
-| `headless` | Capability/格式 Provider、workspace、mapshaper、编辑、属性、文档、视图、缓存、图层、选择、历史、数据源、策略、执行、查询、校验、快照、投影、修改与比例尺服务。 | Node、Worker 和批处理中的数据操作。 |
+| `headless` | Capability/格式 Provider、workspace、mapshaper、编辑、属性、文档、视图、缓存、图层、选择、历史、数据源、策略、执行、查询、校验、快照、投影、修改与比例尺服务。 | 浏览器中的纯数据工作区与批量操作。 |
 | `empty` | 空 preset；实例级 `host.options` 始终挂载。 | 应用精确选择 Provider 与 Feature Plugin。 |
 
 ## 更多运行时组合
