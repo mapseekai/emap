@@ -23,3 +23,7 @@ jobs:
       - run: pnpm run browser:install
       - run: sudo apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri xvfb
       - run: xvfb-run -a node scripts/check-browser-gpu.mjs
+      - run: pnpm run build && pnpm run examples:build
+      - run: xvfb-run -a pnpm exec playwright test geotiff.spec.mjs luma-25d.spec.mjs luma-icons.spec.mjs --project=chrome --grep 'fractional|perspective|icons retain' --retries=0 --max-failures=3
+        env:
+          DEBUG: pw:browser
