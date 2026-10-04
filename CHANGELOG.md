@@ -11,10 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Configure the GitHub Linux runners with Mesa and a virtual display so Chrome
-  and Firefox can exercise WebGPU and all three browsers can exercise WebGL2.
-- Check GPU pixel readback before the complete release gate, using the same
-  browser options as the functional tests. GitHub Releases trigger verified npm publication.
+- Skip empty spatial bins during geometry preparation to avoid unnecessary timer delays.
+- Run the complete GitHub release gate on a hosted macOS 15 runner with Metal,
+  covering Chrome and Firefox WebGPU plus WebGL2 in all three browsers.
+- Check GPU texture and canvas pixel readback before the complete release gate,
+  using the functional tests' browser options. GitHub Releases trigger verified npm publication.
 
 ## [0.14.0] - 2026-10-03
 
