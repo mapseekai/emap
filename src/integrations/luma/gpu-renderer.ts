@@ -1376,6 +1376,57 @@ export class GpuRenderer {
     if (enabled && this.timestampSupported && !this.query)
       this.query = this.device.createQuerySet({ type: 'timestamp', count: 2 });
   }
+  /** A navigation probe is polled by animation frames, with no timeout or blocking
+   * GPU wait. In particular, a late JS timer must not make an already-signaled
+   * WebGL fence look like expensive GPU execution. Timestamp diagnostics remain
+   * separate; readiness measures queue pressure, not the duration of one draw. */
+  probeCompletion(): { poll(): 'pending' | 'complete' | 'unavailable'; dispose(): void } {
+    const device = this.device;
+    let active = !this.disposed && !this.lost;
+    let state: 'pending' | 'complete' | 'unavailable' = 'pending';
+    let gl: WebGL2RenderingContext | undefined;
+    let fence: WebGLSync | null = null;
+    try {
+      if (active && this.backend === 'webgpu') {
+        void (device as import('@luma.gl/webgpu').WebGPUDevice).handle.queue
+          .onSubmittedWorkDone()
+          .then(
+            () => {
+              if (active) state = 'complete';
+            },
+            () => {
+              if (active) state = 'unavailable';
+            },
+          );
+      } else if (active) {
+        gl = (device as WebGLDevice).gl;
+        fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (fence) gl.flush();
+        else state = 'unavailable';
+      }
+    } catch {
+      state = 'unavailable';
+    }
+    return {
+      poll: () => {
+        if (!active || this.disposed || this.lost || device !== this.device) return 'unavailable';
+        if (gl && fence && state === 'pending') {
+          const status = gl.clientWaitSync(fence, 0, 0);
+          if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED)
+            state = 'complete';
+          else if (status !== gl.TIMEOUT_EXPIRED) state = 'unavailable';
+        }
+        return state;
+      },
+      dispose: () => {
+        if (!active) return;
+        active = false;
+        // Restored WebGL contexts reject handles owned by the old device.
+        if (gl && fence && device === this.device) gl.deleteSync(fence);
+        fence = null;
+      },
+    };
+  }
   /** Completion barrier for snapshot publication/diagnostics, never called per pointermove.
    * WebGL polls a fence asynchronously; gl.finish/readPixels must not stall input handling.
    */

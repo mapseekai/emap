@@ -71,9 +71,14 @@ export class LumaPainter implements EditPainter {
   private pixelRatio = 1;
   private active = false;
   private frameStarted = 0;
-  private completionSample: { start: number; valid: boolean } | null = null;
+  private completionSample: {
+    start: number;
+    probe: ReturnType<GpuRenderer['probeCompletion']>;
+  } | null = null;
   private completionSampleAt = -Infinity;
-  private completionMs = 0;
+  private completionMs: number | null = null;
+  private queueBusyMs: number | null = null;
+  private navigationCpuMs = 0;
   private disposed = false;
   private colors: GpuColors;
   private cache: PainterGeometryCache;
@@ -158,38 +163,59 @@ export class LumaPainter implements EditPainter {
       renderCommands: this.gpu.commandStats,
       presentation: { ...this.presentation },
       navigationFrameMs: this.navigationFrameMs,
+      navigationTiming: {
+        cpuMs: this.navigationCpuMs,
+        gpuMs: null, // Independent GPU duration is available only through timestamp diagnostics.
+        completionMs: this.completionMs,
+        queueBusyMs: this.queueBusyMs,
+        pending: this.completionSample !== null,
+      },
       text: this.gpu.textStats,
       memory: this.gpu.memoryStats,
     };
   }
+  get navigationPending(): boolean {
+    // Poll the fence now; its most recent observation may predate this recovery timer.
+    void this.navigationFrameMs;
+    return this.completionSample !== null;
+  }
   get navigationFrameMs(): number {
     if (this.disposed) return 0;
-    return Math.max(
-      this.completionMs,
-      this.completionSample?.valid ? performance.now() - this.completionSample.start : 0,
-    );
-  }
-  /** One asynchronous fence at most every 250 ms, including on devices without
-   * timestamp queries. This is completion latency, not isolated GPU execution time.
-   * Never read pixels or synchronously wait for the GPU in the input/render loop.
-   * ponytail: load spikes can precede the next probe; sample more often if early
-   * gesture latency warrants the extra fences. */
-  private measureCompletion(start: number): void {
-    if (this.completionSample || start - this.completionSampleAt < 250) return;
-    const sample = { start, valid: true };
-    this.completionSample = sample;
-    this.completionSampleAt = start;
-    void this.gpu.waitForIdle().then(
-      () => {
-        if (this.disposed || this.completionSample !== sample) return;
-        if (sample.valid) this.completionMs = performance.now() - start;
+    const now = performance.now();
+    const sample = this.completionSample;
+    if (sample) {
+      const status = sample.probe.poll();
+      if (status === 'pending') {
+        // A nonblocking poll actually observed unfinished work at this instant.
+        this.queueBusyMs = now - sample.start;
+      } else {
+        this.completionMs = status === 'complete' ? now - sample.start : null;
+        if (status === 'unavailable') this.queueBusyMs = null;
+        sample.probe.dispose();
         this.completionSample = null;
-      },
-      () => {
-        // Device loss is reported by the renderer; a failed probe is not a timing sample.
-        if (this.completionSample === sample) this.completionSample = null;
-      },
-    );
+      }
+    }
+    // Expired/unavailable samples require a recovery draw, never a zero-cost GPU claim.
+    if (!this.completionSample && now - this.completionSampleAt > 1000) return Infinity;
+    return Math.max(this.navigationCpuMs, this.queueBusyMs ?? Infinity);
+  }
+  /** One outstanding fence, at most every 250 ms during camera-only replay.
+   * Full content/view replanning starts a new sample generation in clear(). */
+  private measureCompletion(start: number): void {
+    this.navigationCpuMs = performance.now() - start;
+    if (this.completionSample || start - this.completionSampleAt < 250) return;
+    this.completionSample = { start, probe: this.gpu.probeCompletion() };
+    this.completionSampleAt = start;
+    this.completionMs = null;
+    // Zero is the observed lower bound of queue pressure, NOT a GPU duration.
+    this.queueBusyMs = 0;
+  }
+  private resetNavigationTiming(): void {
+    this.completionSample?.probe.dispose();
+    this.completionSample = null;
+    this.completionSampleAt = -Infinity;
+    this.completionMs = this.queueBusyMs = null;
+    this.navigationCpuMs = 0;
   }
   createLabelAtlas(): MsdfLabelAtlas {
     const url = this.options.msdfWorkerUrl;
@@ -210,10 +236,10 @@ export class LumaPainter implements EditPainter {
   }
   setInteracting(value: boolean): void {
     this.chunks.setInteracting(value);
+    if (!value) this.resetNavigationTiming();
   }
   clearGeometryCache(scope: { sourceId?: string; layerId?: string } = {}): void {
-    if (this.completionSample) this.completionSample.valid = false;
-    this.completionMs = 0;
+    this.resetNavigationTiming();
     this.forgetPolygons(scope);
     this.cache.clear(scope);
     this.chunks.clear(scope);
@@ -238,6 +264,9 @@ export class LumaPainter implements EditPainter {
   clear(): void {
     if (this.disposed) return;
     this.finishFrame();
+    // A full frame may have different visible layers, content, labels or viewport.
+    // Retire the old generation without discarding any hidden geometry buffers.
+    this.resetNavigationTiming();
     this.frameStarted = performance.now();
     this.colors.reset();
     this.cache.begin();
@@ -990,6 +1019,7 @@ export class LumaPainter implements EditPainter {
     }
     // Teardown must not render or depend on a successful final GPU submission.
     this.disposed = true;
+    this.resetNavigationTiming();
     this.active = false;
     this.commands = this.paintedCommands = [];
     this.requests = [];

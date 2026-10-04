@@ -470,7 +470,8 @@ describe('Emap rendering', () => {
     const refresh = vi.spyOn(render as any, '_refreshNavigationSoon').mockImplementation(() => {});
     callPrivate(map, '_applyFastTransform', { tx: 12, ty: 3, sx: 1, sy: 1 });
     expect(renderNavigation).toHaveBeenCalledTimes(replay ? 1 : 0);
-    expect(refresh).toHaveBeenCalledTimes(replay ? 1 : 0);
+    expect(refresh).toHaveBeenCalledOnce();
+    if (!replay) expect(refresh).toHaveBeenCalledWith(250);
     expect(style.transform).toBe(replay ? '' : 'translate(12px,3px) scale(1,1)');
     expect(overlay).toHaveBeenCalledOnce();
     refresh.mockRestore();

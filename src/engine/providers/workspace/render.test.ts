@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasRenderService } from './render';
+import { AffineTransform } from '../../../domain/geo/transform';
+import { RenderScheduler } from '../../rendering/render-scheduler';
 
 describe('map canvas teardown', () => {
   it('releases backing pixel storage before detaching canvases, even if handles remain reachable', () => {
@@ -12,6 +14,137 @@ describe('map canvas teardown', () => {
     expect([main.width, main.height, overlay.width, overlay.height]).toEqual([0, 0, 0, 0]);
     expect(main.remove).toHaveBeenCalledOnce();
     expect(overlay.remove).toHaveBeenCalledOnce();
+  });
+});
+
+describe('navigation recovery during a continuous gesture', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function fixture() {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { devicePixelRatio: 1 });
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) =>
+      setTimeout(() => cb(performance.now()), 16),
+    );
+    vi.stubGlobal('cancelAnimationFrame', clearTimeout);
+    const view = { transform: new AffineTransform(1, -1, 0, 0) };
+    const render = new CanvasRenderService({
+      view: { _viewport: view },
+      document: { _removed: false },
+      signal: new AbortController().signal,
+      events: { fire: vi.fn() },
+    } as never);
+    const style = { transform: '', transformOrigin: '' };
+    render._canvas = { width: 800, height: 600, style, remove() {} } as never;
+    let cost = 100;
+    let redraws = 0;
+    let replays = 0;
+    render._painter = {
+      get navigationFrameMs() {
+        return cost;
+      },
+      renderNavigation() {
+        replays++;
+        return true;
+      },
+    } as never;
+    render._renderImpl = () => {
+      redraws++;
+      cost = 5;
+    };
+    render._renderEditOverlay = () => {};
+    render._scheduler = new RenderScheduler(
+      {
+        fullRedraw: () => render._renderFull(),
+        requestRedraw: () => render._scheduleRender('redraw', undefined, true),
+        fastNav: (delta) => render._applyFastTransform(delta),
+        getSnapshot: () => render._captureRenderSnapshot(),
+      },
+      'snapshot',
+    );
+    render._scheduler.recordFrame(5, render._captureRenderSnapshot());
+    render.beginNavigation();
+    const step = () => {
+      view.transform.bx++;
+      render.updateNavigation();
+      vi.advanceTimersByTime(16);
+    };
+    return {
+      render,
+      style,
+      step,
+      get redraws() {
+        return redraws;
+      },
+      get replays() {
+        return replays;
+      },
+    };
+  }
+
+  it('re-evaluates a slow sample and resumes replay before continuous navigation ends', () => {
+    const f = fixture();
+    f.step();
+    expect(f.style.transform).not.toBe('');
+    for (let i = 0; i < 50; i++) f.step();
+    expect(f.render._navSnapshotTransform).not.toBeNull();
+    expect(f.redraws).toBeGreaterThan(0);
+    expect(f.replays).toBeGreaterThan(10);
+    expect(f.style.transform).toBe('');
+    f.render.endNavigation();
+    const before = f.redraws;
+    vi.advanceTimersByTime(32);
+    expect(f.redraws).toBe(before + 1);
+    f.render.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('limits recovery drawing when the scene stays slow', () => {
+    const f = fixture();
+    let redraws = 0;
+    f.render._renderImpl = () => {
+      redraws++;
+    };
+    for (let i = 0; i < 125; i++) f.step();
+    expect(redraws).toBeGreaterThan(0);
+    expect(redraws).toBeLessThanOrEqual(8);
+    expect(f.replays).toBe(0);
+    expect(f.style.transform).not.toBe('');
+    f.render.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not pile recovery frames onto a GPU queue that has not completed', () => {
+    const f = fixture();
+    Object.defineProperty(f.render._painter, 'navigationPending', {
+      value: true,
+      configurable: true,
+    });
+    for (let i = 0; i < 125; i++) f.step();
+    expect(f.redraws).toBe(0);
+    Object.defineProperty(f.render._painter, 'navigationPending', { value: false });
+    for (let i = 0; i < 40; i++) f.step();
+    expect(f.replays).toBeGreaterThan(0);
+    f.render.dispose();
+  });
+
+  it.each([
+    'cancelNavigation',
+    'endNavigation',
+    'dispose',
+  ] as const)('does not leave recovery work after %s', (action) => {
+    const f = fixture();
+    f.step();
+    f.render[action]();
+    vi.advanceTimersByTime(32);
+    const before = f.redraws;
+    vi.advanceTimersByTime(3000);
+    expect(f.redraws).toBe(before);
+    expect(vi.getTimerCount()).toBe(0);
+    f.render.dispose();
   });
 });
 

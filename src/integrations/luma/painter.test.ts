@@ -28,6 +28,10 @@ async function fixture() {
     stats: {},
     forgetImage: vi.fn(),
     waitForIdle: vi.fn(async () => {}),
+    probeCompletion: vi.fn(() => ({
+      poll: () => 'complete' as 'pending' | 'complete' | 'unavailable',
+      dispose: vi.fn(),
+    })),
   };
   vi.mocked(GpuRenderer.create).mockResolvedValue(gpu as unknown as GpuRenderer);
   const painter = await LumaPainter.create(document.createElement('canvas'), 'webgl2', {
@@ -220,44 +224,108 @@ describe('formal GPU prepared path selection', () => {
   });
 });
 
-it('measures asynchronous GPU completion at bounded frequency and ignores invalidated samples', async () => {
-  const f = await fixture();
-  let time = 0;
-  const now = vi.spyOn(performance, 'now').mockImplementation(() => time);
-  let complete!: () => void;
-  f.gpu.waitForIdle.mockImplementation(
-    () =>
-      new Promise<void>((resolve) => {
-        complete = resolve;
-      }),
-  );
-  const draw = () => f.painter.drawArcs(f.arcs, { width: 1 });
-  try {
-    f.frame(draw);
-    time = 50;
-    expect(f.painter.navigationFrameMs).toBe(50);
-    complete();
-    await Promise.resolve();
-    expect(f.painter.navigationFrameMs).toBe(50);
-    f.frame(draw);
-    expect(f.gpu.waitForIdle).toHaveBeenCalledOnce();
-    time = 300;
-    f.frame(draw);
-    time = 305;
-    complete();
-    await Promise.resolve();
-    expect(f.painter.navigationFrameMs).toBe(5);
-    time = 600;
-    f.frame(draw);
-    f.painter.clearGeometryCache();
-    time = 700;
-    complete();
-    await Promise.resolve();
-    expect(f.painter.navigationFrameMs).toBe(0);
-  } finally {
-    now.mockRestore();
+describe('navigation timing samples', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('does not mistake late observation of a completed fence for GPU execution time', async () => {
+    const f = await fixture();
+    let time = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    // The GPU finished while JS could not run. No timer callback is needed to observe it.
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    time = 150;
+    expect(f.painter.navigationFrameMs).toBeLessThan(33.3);
+    expect(f.painter.stats.navigationTiming.completionMs).toBe(150);
+    expect(f.painter.stats.navigationTiming.gpuMs).toBeNull();
     f.painter.dispose();
-  }
+  });
+
+  it('backs off while the GPU queue really remains pending, then expires the slow sample', async () => {
+    const f = await fixture();
+    let time = 0;
+    let ready = false;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    const dispose = vi.fn();
+    f.gpu.probeCompletion.mockReturnValue({
+      poll: () => (ready ? 'complete' : 'pending'),
+      dispose,
+    });
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    time = 60;
+    expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
+    time = 80;
+    ready = true;
+    expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
+    expect(dispose).toHaveBeenCalledOnce();
+    time = 1500;
+    // Unknown/expired cost requires a bounded recovery draw, not an assertion of zero GPU time.
+    expect(f.painter.navigationFrameMs).toBe(Infinity);
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    expect(f.painter.navigationFrameMs).toBeLessThan(33.3);
+    f.painter.dispose();
+  });
+
+  it('replaces old-scene samples when hidden layers change the next full frame', async () => {
+    const f = await fixture();
+    let time = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    const old = { poll: () => 'pending' as const, dispose: vi.fn() };
+    f.gpu.probeCompletion.mockReturnValueOnce(old);
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    time = 100;
+    expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
+    f.frame(() => f.painter.drawPoints([[[1, 1]]], { radius: 4 }));
+    expect(old.dispose).toHaveBeenCalledOnce();
+    expect(f.painter.navigationFrameMs).toBeLessThan(33.3);
+    f.painter.dispose();
+  });
+
+  it('bounds camera-only sampling and measures replay CPU work separately', async () => {
+    const f = await fixture();
+    let time = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    expect(f.painter.navigationFrameMs).toBeLessThan(33.3);
+    for (let i = 1; i <= 10; i++) {
+      time = i * 16;
+      f.painter.renderNavigation(f.view.transform);
+    }
+    expect(f.gpu.probeCompletion).toHaveBeenCalledOnce();
+    time = 300;
+    f.gpu.drawMesh.mockImplementation(() => {
+      time += 40;
+    });
+    f.painter.renderNavigation(f.view.transform);
+    expect(f.gpu.probeCompletion).toHaveBeenCalledTimes(2);
+    expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
+    expect(f.painter.stats.navigationTiming.cpuMs).toBe(40);
+    f.painter.dispose();
+  });
+
+  it.each([
+    'setInteracting',
+    'dispose',
+    'clearGeometryCache',
+  ] as const)('releases outstanding probes on %s and cannot receive a stale completion', async (action) => {
+    const f = await fixture();
+    const probe = { poll: () => 'pending' as const, dispose: vi.fn() };
+    f.gpu.probeCompletion.mockReturnValue(probe);
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    if (action === 'setInteracting') f.painter.setInteracting(false);
+    else f.painter[action]();
+    expect(probe.dispose).toHaveBeenCalledOnce();
+    f.painter.dispose();
+    expect(probe.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('keeps unavailable completion measurement conservative rather than treating it as zero', async () => {
+    const f = await fixture();
+    f.gpu.probeCompletion.mockReturnValue({ poll: () => 'unavailable', dispose: vi.fn() });
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    expect(f.painter.navigationFrameMs).toBe(Infinity);
+    expect(f.painter.stats.navigationTiming.gpuMs).toBeNull();
+    f.painter.dispose();
+  });
 });
 
 it('invalidates the retained image after a failed GPU submission', async () => {

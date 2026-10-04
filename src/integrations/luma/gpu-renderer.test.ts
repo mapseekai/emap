@@ -2,6 +2,73 @@ import type { GeometryBuffer } from './types';
 import { describe, expect, it, vi } from 'vitest';
 import { GpuRenderer } from './gpu-renderer';
 
+describe('nonblocking navigation completion probes', () => {
+  it('observes a WebGL fence immediately after JS resumes and owns no polling timer', () => {
+    vi.useFakeTimers();
+    const fence = {};
+    const gl = {
+      SYNC_GPU_COMMANDS_COMPLETE: 1,
+      ALREADY_SIGNALED: 2,
+      CONDITION_SATISFIED: 3,
+      TIMEOUT_EXPIRED: 4,
+      WAIT_FAILED: 5,
+      fenceSync: vi.fn(() => fence),
+      flush: vi.fn(),
+      deleteSync: vi.fn(),
+      clientWaitSync: vi.fn().mockReturnValueOnce(4).mockReturnValue(2),
+    };
+    const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: { type: 'webgl', gl },
+      disposed: false,
+      lost: false,
+    });
+    try {
+      const probe = renderer.probeCompletion();
+      expect(probe.poll()).toBe('pending');
+      vi.advanceTimersByTime(150);
+      expect(probe.poll()).toBe('complete');
+      expect(gl.clientWaitSync).toHaveBeenLastCalledWith(fence, 0, 0);
+      probe.dispose();
+      probe.dispose();
+      expect(gl.deleteSync).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(probe.poll()).toBe('unavailable');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores late WebGPU callbacks after cancellation and reports failed probes as unavailable', async () => {
+    let complete!: () => void;
+    const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
+      device: {
+        type: 'webgpu',
+        handle: {
+          queue: {
+            onSubmittedWorkDone: () =>
+              new Promise<void>((r) => {
+                complete = r;
+              }),
+          },
+        },
+      },
+      disposed: false,
+      lost: false,
+    });
+    const probe = renderer.probeCompletion();
+    expect(probe.poll()).toBe('pending');
+    probe.dispose();
+    complete();
+    await Promise.resolve();
+    expect(probe.poll()).toBe('unavailable');
+    Reflect.get(renderer, 'device').handle.queue.onSubmittedWorkDone = () =>
+      Promise.reject(new Error('device lost'));
+    const failed = renderer.probeCompletion();
+    await Promise.resolve();
+    expect(failed.poll()).toBe('unavailable');
+  });
+});
+
 describe('GPU allocation failure cleanup', () => {
   it('releases the vertex buffer if the following index allocation fails', () => {
     const vertex = { destroy: vi.fn(), write: vi.fn() };

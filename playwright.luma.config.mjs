@@ -6,6 +6,7 @@ export default defineConfig({
   ...base,
   testMatch: [
     'map-renderers.spec.mjs',
+    'map-navigation-recovery.spec.mjs',
     'map-resource-performance.spec.mjs',
     'map-pixel-upload.spec.mjs',
     'map-render-commands.spec.mjs',

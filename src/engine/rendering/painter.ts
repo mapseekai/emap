@@ -105,8 +105,11 @@ export interface CorePainter {
   /** @internal A progressive scene may be presented before every request is ready. */
   readonly framePresented?: boolean;
   renderNavigation?(view: AffineTransform, labels?: LabelFrame): boolean;
-  /** @internal Sampled submission-to-completion latency, including pending GPU work. */
+  /** @internal Navigation CPU/observed queue-pressure budget, not isolated GPU time.
+   * Infinity means unavailable/stale: the scheduler must retain bounded recovery probes. */
   readonly navigationFrameMs?: number;
+  /** @internal Recheck completion before submitting a recovery frame to a busy queue. */
+  readonly navigationPending?: boolean;
   readonly frameComplete?: boolean;
   readonly frameRetained?: boolean;
   setInteracting?(value: boolean): void;
