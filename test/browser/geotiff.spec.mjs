@@ -11,7 +11,7 @@ async function ready(page, renderer) {
   await page.goto(route + (renderer ? "?renderer=" + renderer : ""));
   await expect(page.locator('#levels')).toHaveText('4');
   await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().cachedBytes)).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().activeReads + window.geotiffDemo.stats().queuedReads)).toBe(0);
+  await idleRaster(page);
 }
 
 test('local TIFF decodes in a classic Worker and paints the existing map canvas', async ({ page }) => {
@@ -200,7 +200,7 @@ for(const [kind,bits,format,first] of [['uint16',16,1,1000],['int16',16,2,-2000]
 }
 
 test('continuous real wheel events perform no new tile reads or frame swaps until idle',async({page})=>{
-  await ready(page);await idleRaster(page);
+  await ready(page);
   const before=await page.evaluate(()=>window.geotiffDemo.stats());
   await page.mouse.move(700,360);
   for(let i=0;i<8;i++){
@@ -214,7 +214,7 @@ test('continuous real wheel events perform no new tile reads or frame swaps unti
 });
 
 test('the last complete raster remains visible while a slow provider prepares replacement tiles',async({page})=>{
-  await ready(page);await idleRaster(page);
+  await ready(page);
   await page.evaluate(()=>{
     const state=window.geotiffDemo;
     const reference=state.map.ctx.raster.toReferences()[0].source;
@@ -259,7 +259,7 @@ test('the last complete raster remains visible while a slow provider prepares re
 
 
 test('RGB defaults can switch to one selected grayscale band and back without changing source values',async({page})=>{
-  await ready(page);await idleRaster(page);
+  await ready(page);
   await expect(page.locator('#render-mode')).toHaveValue('rgb');
   await expect(page.locator('#red-band')).toHaveValue('0');
   await expect(page.locator('#green-band')).toHaveValue('1');
@@ -307,7 +307,7 @@ test('single-band numerical files select grayscale automatically and prevent inv
 
 
 async function stagedRaster(page, transparent, renderer) {
-  await ready(page, renderer);await idleRaster(page);
+  await ready(page, renderer);
   await page.evaluate(({transparent})=>{
     const state=window.geotiffDemo, metadata={...state.metadata,noData:0};
     const reference=state.map.ctx.raster.toReferences()[0].source;
