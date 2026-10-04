@@ -430,15 +430,21 @@ for (const renderer of ['webgl2','webgpu']) {
     expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
     await page.evaluate(()=>formalMap.setPaintProperty('poi','circle-color','#22dd44'));await settleRequests(page);
     let pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
-    const fresh=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats}));
-    const priorTransform=await page.evaluate(()=>formalMap.ctx.render._canvas.style.transform);
-    await page.mouse.move(740,555,{steps:4});await settleRequests(page);
-    // The adaptive policy uses a CSS snapshot after a slow frame. Both paths must
-    // move the freshly styled geometry without another upload, even on busy CI.
-    const moved=await page.evaluate(()=>({replays:formalMap.ctx.render._painter.stats.presentation.replays,transform:formalMap.ctx.render._canvas.style.transform}));
-    expect(moved.replays>fresh.presentation.replays || (moved.transform!=='' && moved.transform!==priorTransform)).toBe(true);
-    expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.uploads)).toBe(fresh.uploads);
-    pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
+    for (const refresh of [false, true]) {
+      const fresh=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,point:formalMap.getTransform().project(0,0),transform:formalMap.ctx.render._canvas.style.transform}));
+      if (refresh) {
+        // Reproduce the 80 ms navigation refresh racing with a new pan in one frame.
+        await page.evaluate(()=>{const r=formalMap.ctx.render;r._scheduleRender('redraw');formalMap.ctx.view._viewport.pan(20,5);r.updateNavigation();});
+      } else await page.mouse.move(740,555,{steps:4});
+      await settleRequests(page);
+      const moved=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,point:formalMap.getTransform().project(0,0),transform:formalMap.ctx.render._canvas.style.transform}));
+      // A queued complete refresh can consume navigation before either fast path.
+      expect(moved.presentation.replays>fresh.presentation.replays || moved.presentation.complete>fresh.presentation.complete || (moved.transform!=='' && moved.transform!==fresh.transform)).toBe(true);
+      expect(moved.point[0]-fresh.point[0]).toBeCloseTo(20,0);
+      expect(moved.point[1]-fresh.point[1]).toBeCloseTo(5,0);
+      expect(moved.uploads).toBe(fresh.uploads);
+      pixel=await composedPointPixel(page);expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
+    }
     await page.evaluate(()=>formalMap.setFilter('poi',['==',['get','name'],'absent']));await settleRequests(page);
     expect(await composedPointPixel(page)).toEqual([255,255,255,255]);
     await page.evaluate(()=>formalMap.setFilter('poi',null));await settleRequests(page);

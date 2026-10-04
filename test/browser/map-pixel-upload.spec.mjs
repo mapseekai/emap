@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
-for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and alpha compatibility preserve exact Canvas pixels with odd row widths`, async ({page}, info) => {
+for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and alpha compatibility preserve Canvas pixels with odd row widths`, async ({page}, info) => {
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -18,7 +18,7 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and 
     const g=pixelMap.ctx.render._painter.gpu,raster=pixelMap.ctx.raster;
     raster.rawPixels=true;
     const initialPixels=g.stats.pixelTextureUploads;
-    const comparisons=[],representations=[];
+    const comparisons=[],representations=[],textureComparisons=[];
     for(const continuous of [false,true]){
       const rgba=new Uint8ClampedArray(5*3*4);
       for(let y=0;y<3;y++)for(let x=0;x<5;x++)rgba.set([40+x*35,20+y*75,210-x*20,(x===2&&y===1)?0:(continuous&&x===1?128:255)],(y*5+x)*4);
@@ -37,6 +37,21 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and 
         let max=0,alphaMax=0,changed=0;
         for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);if(i%4===3)alphaMax=Math.max(alphaMax,d);else max=Math.max(max,d);if(d)changed++;}
         comparisons.push({continuous,smoothing,opacity,max,alphaMax,changed});
+      }
+      if (g.backend === 'webgl') {
+        // Read uploaded texels before filtering to isolate browser sampling precision.
+        const gl=g.device.gl,previous=gl.getParameter(gl.READ_FRAMEBUFFER_BINDING),framebuffer=gl.createFramebuffer(),texels=[];
+        try {
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER,framebuffer);
+          for (const source of [canvas,image]) {
+            gl.framebufferTexture2D(gl.READ_FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,g.images.get(source).texture.handle,0);
+            if(gl.checkFramebufferStatus(gl.READ_FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Unreadable image texture');
+            const bytes=new Uint8Array(5*3*4);gl.readPixels(0,0,5,3,gl.RGBA,gl.UNSIGNED_BYTE,bytes);texels.push(bytes);
+          }
+          textureComparisons.push({continuous,equal:texels[0].every((value,i)=>value===texels[1][i])});
+        } finally {
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER,previous);gl.deleteFramebuffer(framebuffer);
+        }
       }
       const warm=g.stats.textureUploads;await capture(true,false,1);
       if(g.stats.textureUploads!==warm)throw new Error('Immutable pixels were reuploaded');
@@ -64,16 +79,23 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and 
       const cpuMs=performance.now()-start;await g.waitForIdle();
       uploadBurst.push({direct,preclassified:true,iterations:60,cpuMs,completedMs:performance.now()-start});
     }
-    return {comparisons,representations,preparation,uploadBurst,pixelUploads,pipelines:g.memoryStats.pipelines};
+    return {comparisons,representations,textureComparisons,preparation,uploadBurst,pixelUploads,pipelines:g.memoryStats.pipelines};
   });
-  for(const c of result.comparisons){expect(c.alphaMax,JSON.stringify(c)).toBe(0);expect(c.max,JSON.stringify(c)).toBe(0);}
+  console.log('PIXEL_UPLOAD',renderer,JSON.stringify(result));
+  for(const c of result.textureComparisons)expect(c.equal,JSON.stringify(c)).toBe(true);
+  for(const c of result.comparisons){
+    // WebGL linear filtering may round imported Canvas textures one RGBA8 step
+    // differently from typed-array textures. Uploaded texels remain byte-identical.
+    const tolerance=renderer==='webgl2' && c.smoothing ? 1 : 0;
+    expect(c.alphaMax,JSON.stringify(c)).toBeLessThanOrEqual(tolerance);
+    expect(c.max,JSON.stringify(c)).toBeLessThanOrEqual(tolerance);
+  }
   expect(result.representations).toEqual([{continuous:false,pixels:true},{continuous:true,pixels:false}]);
   expect(result.pixelUploads).toBe(1);expect(result.pipelines).toBe(13);
   await page.screenshot({path:info.outputPath('pixel-upload.png')});
   const released=await page.evaluate(async()=>{const g=pixelMap.ctx.render._painter.gpu;await pixelMap.dispose();return g.memoryStats;});
   expect(released.nominalKnownGpuBytes).toBe(0);expect(errors).toEqual([]);expect(await page.evaluate(()=>pixelErrors)).toEqual([]);
   await info.attach('pixel-upload',{body:JSON.stringify(result,null,2),contentType:'application/json'});
-  console.log('PIXEL_UPLOAD',renderer,JSON.stringify(result));
 });
 
 
