@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { FullGeometrySource, packDisplayChunk, unpackDisplayChunk } from './spatial-chunks';
@@ -134,4 +134,20 @@ it('keeps outside point centers whose larger symbols overlap the viewport', asyn
   expect(wide.length).toBeGreaterThan(narrow.length);
   expect(wide.some((c) => c.bounds[0] === -40)).toBe(true);
   source.dispose();
+});
+
+it('does not schedule timers for empty spatial bins', async () => {
+  const timers = vi.spyOn(globalThis, 'setTimeout');
+  const source = new FullGeometrySource(
+    { layers: [{ geometry_type: 'point', shapes: [[[1, 2]]] }] },
+    [0, 0, 16, 16],
+  );
+  try {
+    await source.initialize(new AbortController().signal);
+    expect(source.chunks).toHaveLength(1);
+    expect(timers.mock.calls.length).toBeLessThan(10);
+  } finally {
+    source.dispose();
+    timers.mockRestore();
+  }
 });
