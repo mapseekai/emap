@@ -15,6 +15,7 @@ try {
     });
     try {
       const page = await browser.newPage();
+      page.on('console', message => console.log(name, message.text()));
       await page.goto(`http://127.0.0.1:${server.address().port}`);
       const result = await page.evaluate(async () => {
         const gl = document.createElement('canvas').getContext('webgl2');
@@ -23,6 +24,10 @@ try {
           gl.clearColor(1, 0, 0, 1);
           gl.clear(gl.COLOR_BUFFER_BIT);
           gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        }
+        for (const options of [{}, { featureLevel: 'core' }, { powerPreference: 'high-performance' }, { featureLevel: 'core', powerPreference: 'high-performance' }]) {
+          const candidate = await navigator.gpu?.requestAdapter(options);
+          console.log('adapter-probe', JSON.stringify({options, available: Boolean(candidate), info: candidate?.info && {vendor:candidate.info.vendor, architecture:candidate.info.architecture, device:candidate.info.device, description:candidate.info.description}}));
         }
         const adapter = await navigator.gpu?.requestAdapter();
         const device = await adapter?.requestDevice();
