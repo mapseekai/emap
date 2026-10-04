@@ -576,29 +576,29 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: changing styles 
 
 for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: camera animations reuse the painted frame and settle after interruption`, async ({page}) => {
   await runtime(page); await create(page,renderer); await settleRequests(page);
-  const during=await page.evaluate(async () => {
+  const scale=await page.evaluate(() => {
     const map=formalMap,r=map.ctx.render;
     // Deterministically select the slow-Canvas path without delaying the test.
     r._scheduler.recordFrame(100,r._captureRenderSnapshot());
     const scale=Math.abs(map.getTransform().mx);
-    map.easeTo({scale:scale*1.5,duration:1000});
-    await new Promise(resolve=>setTimeout(resolve,80));
-    return {active:r._navSnapshotTransform!==null,fast:r._scheduler.fastActive,scale};
+    // Keep the animation active until a real navigation frame is observed.
+    map.easeTo({scale:scale*1.5,duration:10_000});
+    return scale;
   });
-  expect(during.active).toBe(true); expect(during.fast).toBe(true);
+  await page.waitForFunction(()=>{const r=formalMap.ctx.render;return r._navSnapshotTransform!==null && r._scheduler.fastActive;});
   await page.evaluate(async (scale) => {
     // Supersede the first animation, then invalidate the resident presentation.
     formalMap.easeTo({scale:scale*2,duration:180});
     formalMap.setPaintProperty('poi','circle-color','#22dd44');
     await new Promise(resolve=>formalMap.once('moveend',resolve));
-  },during.scale);
+  },scale);
   await settleRequests(page);
   expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform)).toBeNull();
   expect(await page.evaluate(()=>formalMap.ctx.render._canvas.style.transform)).toBe('');
-  expect(await page.evaluate(()=>Math.abs(formalMap.getTransform().mx))).toBeCloseTo(during.scale*2,8);
+  expect(await page.evaluate(()=>Math.abs(formalMap.getTransform().mx))).toBeCloseTo(scale*2,8);
   const pixel=await page.evaluate(()=>mapPixel(0,0));expect(pixel[1]).toBeGreaterThan(180);expect(pixel[0]).toBeLessThan(90);
   // A synchronous jump also ends navigation and renders its final camera.
-  await page.evaluate(scale=>formalMap.jumpTo({scale}),during.scale); await settleRequests(page);
+  await page.evaluate(scale=>formalMap.jumpTo({scale}),scale); await settleRequests(page);
   expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform)).toBeNull();
   expect(await page.evaluate(()=>renderErrors)).toEqual([]);
   await page.evaluate(()=>formalMap.dispose());
