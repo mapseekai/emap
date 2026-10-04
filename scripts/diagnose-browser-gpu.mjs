@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { chromium, firefox, webkit } from 'playwright';
+import { chromium, firefox, webkit } from '@playwright/test';
 
 const server = createServer((_, response) => response.end('<!doctype html>'));
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
