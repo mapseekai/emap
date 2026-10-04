@@ -22,7 +22,18 @@ export default defineConfig({
         browserName: 'chromium',
         channel: 'chrome',
         // Opt in to software WebGPU on the isolated Linux test runner.
-        launchOptions: { args: linuxCI ? ['--enable-unsafe-webgpu'] : [] },
+        launchOptions: {
+          args: linuxCI
+            ? [
+                '--enable-unsafe-webgpu',
+                '--enable-features=Vulkan',
+                '--use-angle=vulkan',
+                '--use-vulkan=swiftshader',
+                '--use-webgpu-adapter=swiftshader',
+                '--disable-vulkan-surface',
+              ]
+            : [],
+        },
       },
     },
     // macOS Firefox exposes navigator.gpu headlessly but cannot supply an adapter.
