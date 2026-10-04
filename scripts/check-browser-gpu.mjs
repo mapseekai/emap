@@ -24,26 +24,42 @@ try {
           gl.clear(gl.COLOR_BUFFER_BIT);
           gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
         }
-        const adapter = await navigator.gpu?.requestAdapter();
+        const adapter = await navigator.gpu?.requestAdapter({ featureLevel: 'core', powerPreference: 'high-performance' });
         const device = await adapter?.requestDevice();
         let gpuPixel;
+        let presentedPixel;
         if (device) {
-          const texture = device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 4;
+          document.body.append(canvas);
+          const context = canvas.getContext('webgpu');
+          context.configure({ device, format: navigator.gpu.getPreferredCanvasFormat(), alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+          const texture = context.getCurrentTexture();
           const buffer = device.createBuffer({ size: 256, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
           const encoder = device.createCommandEncoder();
-          const pass = encoder.beginRenderPass({ colorAttachments: [{ view: texture.createView(), clearValue: [1, 0, 0, 1], loadOp: 'clear', storeOp: 'store' }] });
+          const pass = encoder.beginRenderPass({ colorAttachments: [{ view: texture.createView(), clearValue: [0, 1, 0, 1], loadOp: 'clear', storeOp: 'store' }] });
           pass.end();
           encoder.copyTextureToBuffer({ texture }, { buffer, bytesPerRow: 256 }, [1, 1]);
           device.queue.submit([encoder.finish()]);
+          const snapshot = createImageBitmap(canvas);
           await buffer.mapAsync(GPUMapMode.READ);
           gpuPixel = Array.from(new Uint8Array(buffer.getMappedRange()).slice(0, 4));
+          const bitmap = await snapshot;
+          const copy = document.createElement('canvas').getContext('2d');
+          copy.drawImage(bitmap, 0, 0);
+          presentedPixel = Array.from(copy.getImageData(0, 0, 1, 1).data);
+          bitmap.close();
+          context.unconfigure();
           device.destroy();
         }
-        return { gl: Boolean(gl), pixel: Array.from(pixel), gpu: Boolean(device), gpuPixel, adapter: adapter?.info?.description };
+        return { gl: Boolean(gl), pixel: Array.from(pixel), gpu: Boolean(device), gpuPixel, presentedPixel, adapter: adapter?.info?.architecture };
       });
       console.log(name, JSON.stringify(result));
       assert.deepEqual(result.pixel, [255, 0, 0, 255], `${name} WebGL2`);
-      if (name !== 'webkit') assert.deepEqual(result.gpuPixel, [255, 0, 0, 255], `${name} WebGPU`);
+      if (name !== 'webkit') {
+        assert.deepEqual(result.gpuPixel, [0, 255, 0, 255], `${name} WebGPU texture`);
+        assert.deepEqual(result.presentedPixel, [0, 255, 0, 255], `${name} WebGPU canvas`);
+      }
     } catch (error) {
       console.error(name, error);
       process.exitCode = 1;

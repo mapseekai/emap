@@ -279,6 +279,7 @@ export class FullGeometrySource {
       bins[y * 16 + x].push(id);
     }
     for (const bin of bins) {
+      if (!bin.length) continue;
       await lodYield(signal);
       let members: number[] = [],
         bounds = emptyBounds(),
