@@ -1,7 +1,5 @@
 import { defineConfig } from '@playwright/test';
 
-const linuxCI = Boolean(process.env.CI) && process.platform === 'linux';
-
 export default defineConfig({
   testDir: './test/browser',
   timeout: 60_000,
@@ -16,26 +14,7 @@ export default defineConfig({
     viewport: { width: 1280, height: 800 },
   },
   projects: [
-    {
-      name: 'chrome',
-      use: {
-        browserName: 'chromium',
-        channel: 'chrome',
-        // Opt in to software WebGPU on the isolated Linux test runner.
-        launchOptions: {
-          args: linuxCI
-            ? [
-                '--enable-unsafe-webgpu',
-                '--enable-features=Vulkan',
-                '--use-angle=swiftshader',
-                '--use-vulkan=swiftshader',
-                '--use-webgpu-adapter=swiftshader',
-                '--disable-vulkan-surface',
-              ]
-            : [],
-        },
-      },
-    },
+    { name: 'chrome', use: { browserName: 'chromium', channel: 'chrome' } },
     // macOS Firefox exposes navigator.gpu headlessly but cannot supply an adapter.
     {
       name: 'firefox',
@@ -43,12 +22,11 @@ export default defineConfig({
       workers: process.platform === 'darwin' ? 1 : undefined,
       use: {
         browserName: 'firefox',
-        headless: process.platform !== 'darwin' && !linuxCI,
+        headless: process.platform !== 'darwin',
         launchOptions: {
           // Keep rendering when the test browser loses focus.
           firefoxUserPrefs: {
             'layout.testing.top-level-always-active': true,
-            ...(linuxCI ? { 'dom.webgpu.enabled': true } : {}),
           },
         },
       },
