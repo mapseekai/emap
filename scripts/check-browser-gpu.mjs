@@ -7,7 +7,7 @@ const engines = { chromium, firefox, webkit };
 const server = createServer((_, response) => response.end('<!doctype html>'));
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 try {
-  for (const { name, use } of config.projects) {
+  for (const { name, use } of [...config.projects, {name: 'chrome-swiftshader', use: {...config.projects[0].use, launchOptions: {args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader']}}}]) {
     const browser = await engines[use.browserName].launch({
       headless: use.headless ?? config.use.headless,
       channel: use.channel,
@@ -18,6 +18,7 @@ try {
       page.on('console', message => console.log(name, message.text()));
       await page.goto(`http://127.0.0.1:${server.address().port}`);
       const result = await page.evaluate(async () => {
+        console.log('before-WebGL', Boolean(await navigator.gpu?.requestAdapter({featureLevel:'core',powerPreference:'high-performance'})));
         const gl = document.createElement('canvas').getContext('webgl2');
         const pixel = new Uint8Array(4);
         if (gl) {
