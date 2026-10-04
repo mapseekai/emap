@@ -6,7 +6,11 @@ permissions:
   contents: read
 jobs:
   gpu:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     env:
       LIBGL_ALWAYS_SOFTWARE: '1'
@@ -22,8 +26,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run browser:install
       - run: sudo apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri xvfb
+        if: runner.os == 'Linux'
       - run: xvfb-run -a node scripts/check-browser-gpu.mjs
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+      - run: caffeinate -di node scripts/check-browser-gpu.mjs
+        if: runner.os == 'macOS'
+        timeout-minutes: 2
       - run: pnpm run build && pnpm run examples:build
       - run: xvfb-run -a pnpm exec playwright test geotiff.spec.mjs luma-25d.spec.mjs luma-icons.spec.mjs --project=chrome --grep 'fractional|perspective|icons retain' --retries=0 --max-failures=3
+        if: runner.os == 'Linux'
         env:
           DEBUG: pw:browser
+      - run: caffeinate -di pnpm exec playwright test geotiff.spec.mjs luma-25d.spec.mjs luma-icons.spec.mjs --grep 'fractional|perspective|icons retain' --retries=0 --max-failures=3
+        if: runner.os == 'macOS'
