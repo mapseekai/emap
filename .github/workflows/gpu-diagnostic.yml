@@ -10,7 +10,7 @@ permissions:
 jobs:
   gpu:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,6 +23,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run browser:install
       - run: sudo apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri xvfb
-      - run: xvfb-run -a node scripts/diagnose-browser-gpu.mjs
+      - run: xvfb-run -a node scripts/check-browser-gpu.mjs
+        timeout-minutes: 2
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - run: pnpm run release:verify
+        shell: xvfb-run -a bash -e {0}
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'

@@ -53,6 +53,16 @@ This gate validates one headed Firefox instance on macOS; validate multi-instanc
 loads separately when that deployment scenario matters. Keep
 the display awake when running headed GPU checks.
 
+GitHub Actions uses Ubuntu 24.04, Mesa software drivers, and Xvfb for Firefox's
+display. Chrome opts into software WebGPU and Firefox enables its Linux WebGPU
+API in the isolated test processes. `node scripts/check-browser-gpu.mjs` uses
+the Playwright project options to check WebGL2 pixels in all three browsers
+and WebGPU pixels in Chrome and Firefox before the complete gate. This gives
+CI functional rendering coverage; hardware performance measurements use the
+target GPU separately. Both CI and npm publication run the gate under Xvfb.
+Publishing a GitHub Release triggers `.github/workflows/publish-npm.yml`, which
+checks the release tag, runs the gate, and publishes through npm trusted publishing.
+
 `release:verify` stops at the first failed gate and reuses one production build:
 
 | Stage | Gates |

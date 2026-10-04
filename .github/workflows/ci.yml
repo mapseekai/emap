@@ -19,7 +19,10 @@ env:
 jobs:
   core:
     name: Core quality and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env:
+      LIBGL_ALWAYS_SOFTWARE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,8 +34,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run browser:install
+      - run: sudo apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri xvfb
+      - name: Verify browser GPU adapters and pixel readback
+        run: xvfb-run -a node scripts/check-browser-gpu.mjs
+        timeout-minutes: 2
       # One build, one checkout, and exactly the same gate as npm publication.
       - run: pnpm run release:verify
+        shell: xvfb-run -a bash -e {0}
 
   node-compatibility:
     name: Minimum Node compatibility

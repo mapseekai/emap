@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { chromium, firefox, webkit } from '@playwright/test';
+import config from '../playwright.config.mjs';
 
+const engines = { chromium, firefox, webkit };
 const server = createServer((_, response) => response.end('<!doctype html>'));
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 try {
-  for (const [name, type, options] of [
-    ['chrome', chromium, { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }],
-    ['firefox', firefox, { headless: false, firefoxUserPrefs: { 'dom.webgpu.enabled': true } }],
-    ['webkit', webkit, {}],
-  ]) {
-    const browser = await type.launch(options);
+  for (const { name, use } of config.projects) {
+    const browser = await engines[use.browserName].launch({
+      headless: use.headless ?? config.use.headless,
+      channel: use.channel,
+      ...use.launchOptions,
+    });
     try {
       const page = await browser.newPage();
       await page.goto(`http://127.0.0.1:${server.address().port}`);

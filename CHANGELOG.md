@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-04
+
+### Fixed
+
+- Configure the GitHub Linux runners with Mesa and a virtual display so Chrome
+  and Firefox can exercise WebGPU and all three browsers can exercise WebGL2.
+- Check GPU pixel readback before the complete release gate, using the same
+  browser options as the functional tests. GitHub Releases trigger verified npm publication.
+
 ## [0.14.0] - 2026-10-03
 
 ### Documentation
