@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-05
+
+### Fixed
+
+- Recover live GPU navigation during continuous interaction after a slow or stale
+  sample, using bounded recovery draws while retaining protection for busy GPU queues.
+- Separate CPU and observed queue pressure from asynchronous completion latency;
+  invalidate navigation samples when render content changes and clean up probes on teardown.
+- Cover navigation recovery with 199 labeled points and 20 hidden layers across
+  Canvas2D, WebGL2, and WebGPU.
+
 ## [0.14.1] - 2026-10-04
 
 ### Fixed
