@@ -46,10 +46,15 @@ async function requestPreview(handler: PreviewHandler, url: string, method = 'GE
 }
 
 describe('release documentation checklist', () => {
-  it('uses the same complete gate for CI, local publishing, and release publishing', async () => {
+  it('keeps browser checks in CI and explicit verification but out of local publishing', async () => {
     const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8'));
-    const release = manifest.scripts['release:verify'];
-    expect(manifest.scripts.prepublishOnly).toBe('npm run release:verify');
+    expect(manifest.scripts.prepublishOnly).toBe('npm run release:verify:local');
+    const local = manifest.scripts['release:verify:local'];
+    expect(local).not.toMatch(/browser:|playwright|test:rendering/);
+    expect(manifest.scripts['release:verify']).toBe(
+      'npm run release:verify:local && npm run browser:check',
+    );
+    const release = `${local} && npm run browser:check`;
     for (const gate of [
       'format:check',
       'typecheck',

@@ -10,7 +10,9 @@ local edits use [scoped verification](../AGENTS.md#verification). Publishing, ta
 ## Version and Commit
 
 Review and commit the intended worktree changes before creating a release tag. The tag must
-match `package.json` and point at the commit whose complete release gate passed. Perform version updates, tag creation, and publication as separate authorized release steps.
+match `package.json` and point at the verified release commit. Local publication uses
+`release:verify:local`; CI and GitHub publication use the complete `release:verify` gate.
+Perform version updates, tag creation, and publication as separate authorized release steps.
 
 Use `verifiedVersion: unreleased` for guides describing unreleased work. Before tagging,
 replace it with the actual version validated for that release and promote the matching
@@ -33,7 +35,20 @@ The publication workflow independently runs the complete gate on its checked-out
 
 ## Required Gates
 
-Run the same verification used by CI, `prepublishOnly`, and the publication workflow:
+`publishConfig.registry` pins publication to `https://registry.npmjs.org/`, even
+when dependency installation uses a mirror. Authenticate with
+`npm login --registry=https://registry.npmjs.org/` before publishing.
+
+Local `npm publish` runs `release:verify:local` through `prepublishOnly`. It retains
+source, package, documentation, distribution and dependency-audit checks, but does
+not install or launch browsers. Playwright and browser pixel checks are opt-in locally:
+
+```bash
+pnpm run release:verify:local
+```
+
+For complete verification, including browsers, run the gate used by CI and the
+GitHub publication workflow:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -57,12 +72,13 @@ GitHub Actions runs the complete gate on a hosted macOS 15 runner with Metal.
 `node scripts/check-browser-gpu.mjs` uses the Playwright project options to check
 WebGL2 pixels in all three browsers, plus WebGPU texture and canvas snapshot
 pixels in Chrome and Firefox. This preflight runs before the complete gate.
-CI and npm publication use `caffeinate -di` to keep headed Firefox rendering
+CI and GitHub npm publication use `caffeinate -di` to keep headed Firefox rendering
 active. The separate minimum Node compatibility job runs on Linux.
 Publishing a GitHub Release triggers `.github/workflows/publish-npm.yml`, which
 checks the release tag, runs the gate, and publishes through npm trusted publishing.
 
-`release:verify` stops at the first failed gate and reuses one production build:
+`release:verify` runs `release:verify:local` followed by `browser:check`, stopping
+at the first failed gate and reusing one production build:
 
 | Stage | Gates |
 | --- | --- |
@@ -70,8 +86,8 @@ checks the release tag, runs the gate, and publishes through npm trusted publish
 | Package | `build`, `bundle:smoke`, `test:run`, `test:duckdb` |
 | Documentation | `examples:build`, `docs:build`, `docs:compose-examples` |
 | Documentation contracts | `docs:check-i18n`, `docs:check-api`, `examples:check` |
-| Real browsers | `browser:check`: Playwright plus Canvas pixel checks in Chrome, Firefox, and WebKit |
 | Distribution | `pnpm pack --dry-run`, `audit:prod` |
+| Real browsers (complete gate only) | `browser:check`: Playwright plus Canvas pixel checks in Chrome, Firefox, and WebKit |
 
 For focused debugging, `test:browser` rebuilds examples before Playwright and `test:rendering`
 rebuilds the package before the pixel checks. The release gate uses `browser:check` instead,
