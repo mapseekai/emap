@@ -230,6 +230,8 @@ for(const backend of ['webgl','webgpu'])test(`${backend}: true MSDF reuses glyph
   if(browserName==='chromium'){
     const cdp=await page.context().newCDPSession(page);
     await cdp.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:2,mobile:false});
+    // A DPR-only CDP override does not emit the resize input consumed by the example.
+    await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
   }else{
     // Other engines have no live DPR emulation API; inject the resize input and check real canvas pixels.
     await page.evaluate(()=>{Object.defineProperty(window,'devicePixelRatio',{configurable:true,value:2});window.dispatchEvent(new Event('resize'));});

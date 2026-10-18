@@ -316,7 +316,6 @@ describe('full precision solid path scheduling', () => {
     expect(pass.draw).toHaveBeenCalledTimes(2);
     expect(pass.draw).toHaveBeenLastCalledWith({
       indexCount: 12,
-      vertexCount: 6,
       instanceCount: 12,
       isInstanced: true,
     });
@@ -360,7 +359,6 @@ describe('full precision solid path scheduling', () => {
     expect(Reflect.get(renderer, 'vertexArray')).toHaveBeenCalledTimes(1);
     expect(pass.draw).toHaveBeenLastCalledWith({
       indexCount: 12,
-      vertexCount: 6,
       instanceCount: 2,
       isInstanced: true,
       firstInstance: 0,
@@ -668,11 +666,7 @@ describe('portable fill index ABI', () => {
         f.gpu.drawMesh(mesh, { color: [1, 0, 0, 1] }, undefined, [
           { firstIndex: 3, indexCount: 3 },
         ]);
-        expect(f.pass.draw.mock.calls[0][0]).toMatchObject(
-          backend === 'webgpu'
-            ? { firstIndex: 3, indexCount: 3 }
-            : { firstVertex: 3 * ArrayType.BYTES_PER_ELEMENT, indexCount: 3 },
-        );
+        expect(f.pass.draw).toHaveBeenCalledExactlyOnceWith({ firstIndex: 3, indexCount: 3 });
       });
     }
   }
@@ -744,6 +738,12 @@ describe('pooled resident draw spans', () => {
       expect(pass.draw).toHaveBeenCalledTimes(1);
       expect(pass.draw.mock.calls[0][0].indexCount).toBe(15);
       expect(renderer.stats.fillFrameSubmitted).toBe(3);
+      pass.draw.mockClear();
+      renderer.drawMesh(b, paint);
+      expect(pass.draw).toHaveBeenCalledExactlyOnceWith({
+        firstIndex: b.firstIndex,
+        indexCount: 3,
+      });
       renderer.destroyMesh(b);
       pass.draw.mockClear();
       renderer.drawMeshSequence(

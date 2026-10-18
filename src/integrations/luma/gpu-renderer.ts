@@ -245,7 +245,7 @@ export class GpuRenderer {
     return this.device.type as 'webgl' | 'webgpu';
   }
   get label(): string {
-    return `luma.gl 10.0.0-alpha.1 / ${this.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'}`;
+    return `luma.gl 10.0.0-alpha.4 / ${this.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'}`;
   }
   /** Known payloads only: excludes swapchain/driver allocations and CPU caches.
    * Shared geometry pages are counted once, including slack. Attachment bytes
@@ -1219,17 +1219,10 @@ export class GpuRenderer {
           range.firstIndex + range.indexCount > mesh.count
         )
           throw new Error('Invalid fill index range');
-        // Installed luma WebGL indexed draws interpret firstVertex as a byte
-        // offset. WebGPU uses firstIndex in index elements. Do not shift vertices.
         if (
           this.pass.draw({
             indexCount: range.indexCount,
-            vertexCount: range.indexCount,
-            ...(this.backend === 'webgpu'
-              ? { firstIndex: (mesh.firstIndex ?? 0) + range.firstIndex }
-              : {
-                  firstVertex: ((mesh.firstIndex ?? 0) + range.firstIndex) * (mesh.indexBytes ?? 4),
-                }),
+            firstIndex: (mesh.firstIndex ?? 0) + range.firstIndex,
           })
         ) {
           this.stats.drawCalls++;
@@ -1246,7 +1239,6 @@ export class GpuRenderer {
     const options = fastPath
       ? {
           indexCount: 12,
-          vertexCount: 6,
           instanceCount: mesh.count,
           isInstanced: true,
           ...(this.backend === 'webgpu' && baseInstance ? { firstInstance: baseInstance } : {}),

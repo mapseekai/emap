@@ -350,7 +350,7 @@ async function compare(framesPerTrial = 60, screenMode = false) {
       method: screenMode?'ABBA same fixed view; 12 warmup frames; screen preparation separate; no snapshots':'ABBA frame-indexed pan/zoom; 12 warmup frames; no snapshots',
       gpuExecutionMs: null, navigationMode: 'full-redraw', screenFiltering: screenMode?{...renderers.screenFilterStats}:{applied:false,reason:'original GPU Buffer navigation; screen preparation excluded'}, pathCulling: renderers.pathCullingEnabled, geometryMode: renderers.lodStats.geometryMode, passMode: renderers.passMode, backend: requestedGpu, environment: { userAgent: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
         cssViewport: [width, height], dpr, deviceViewport: [renderers.glCanvas.width, renderers.glCanvas.height],
-        lumaVersion: '10.0.0-alpha.1', gpu: renderers.gpu.deviceInfo },
+        lumaVersion: '10.0.0-alpha.4', gpu: renderers.gpu.deviceInfo },
       scene: { name: scene.name, features: scene.featureCount, vertices: scene.vertexCount, tiles: scene.tiles.length,
         rasterMode: scene.tiles.length ? 'fixed decoded working set; no navigation I/O or new overviews' : null },
       geometry: geometryByBackend.luma, geometryByBackend, preparation, rasterProcessing: scene.rasterStats, results, trialResults, rawFrames: samples, gpuResources: after, lod: { ...renderers.lodStats },
