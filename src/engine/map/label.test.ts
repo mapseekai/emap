@@ -15,7 +15,9 @@ describe('parent-owned label configuration', () => {
     };
     const copy = cloneLayerSpecification(source);
     (copy.label!.text as any[])[1][1] = 'other';
-    (copy.label!.offset as number[])[0] = 99;
+    const coordinates = copy.label!.offset;
+    if (!Array.isArray(coordinates)) throw new Error('Expected cloned coordinate tuple');
+    Reflect.set(coordinates, 0, 99);
     expect(source.label.text[1]).toEqual(['get', 'kind']);
     expect(source.label.offset).toEqual([3, -5]);
     expect(copy.type).toBe('line');

@@ -80,8 +80,11 @@ export function installExampleRendererToolbar(root: Document = document): HTMLEl
   let docsHref = docsBase;
   try {
     const target = new URL(url.searchParams.get('returnTo') ?? docsBase, url);
-    if (target.origin === url.origin && target.pathname.startsWith(docsBase) &&
-      !/^\/mapseekai\/emap\/(?:en\/)?(?:examples|api)(?:\/|$)/.test(target.pathname)) {
+    if (
+      target.origin === url.origin &&
+      target.pathname.startsWith(docsBase) &&
+      !/^\/mapseekai\/emap\/(?:en\/)?(?:examples|api)(?:\/|$)/.test(target.pathname)
+    ) {
       docsHref = target.pathname + target.search + target.hash;
     }
   } catch {
@@ -152,10 +155,14 @@ export function installExampleRendererToolbar(root: Document = document): HTMLEl
       });
     });
     resize.observe(header);
-    view.addEventListener('pagehide', () => {
-      resize.disconnect();
-      view.cancelAnimationFrame(frame);
-    }, { once: true });
+    view.addEventListener(
+      'pagehide',
+      () => {
+        resize.disconnect();
+        view.cancelAnimationFrame(frame);
+      },
+      { once: true },
+    );
   }
   return tools;
 }

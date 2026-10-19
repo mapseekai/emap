@@ -1,8 +1,10 @@
+import { TopologySource } from '../../../domain/source/topology-source';
+import { asMutableTopologySource } from '../../../domain/source/source';
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type { EditCommand } from '../../../domain/edit/edit-command';
 import type { EmapHostInternal } from '../emap-host';
-import { okValue, type OpResult } from '../op-result';
+import { okValue } from '../op-result';
 import { Selection } from '../selection';
 import type { FeatureRef } from '../types';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
@@ -64,7 +66,11 @@ async function importDataset(
 function exportCoordinates(dataset: MapshaperDataset): unknown[] {
   const file = getDefaultMapshaperAdapter().exportFileContent(dataset, { format: 'geojson' })[0]!;
   const collection = JSON.parse(String(file.content)) as GeoJSON.FeatureCollection;
-  return collection.features.map((feature) => feature.geometry!.coordinates);
+  return collection.features.map((feature) => {
+    if (feature.geometry.type === 'GeometryCollection')
+      throw new Error('Unexpected geometry collection in path fixture');
+    return feature.geometry.coordinates;
+  });
 }
 
 function referencedArcIds(dataset: MapshaperDataset): number[] {
@@ -123,17 +129,14 @@ async function createFixture(
 ) {
   let dataset = await importDataset(0, selectedCoordinates);
   let before: MapshaperDataset | undefined;
-  const undone: EditCommand[] = [];
-  const entries: EditCommand[] = [];
+  const undone: (EditCommand & { publish?(): void })[] = [];
+  const entries: (EditCommand & { publish?(): void })[] = [];
   const selection = new Selection();
   selection.apply(refs, 'replace');
   const historyChange = vi.fn();
   const selectionChange = vi.fn();
-  const source = {
-    getDataset: () => dataset,
-    getArcs: () => dataset.arcs,
-    fire: vi.fn(),
-  };
+  const source = asMutableTopologySource(new TopologySource('source'));
+  source.setDataset(dataset, false);
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'reshape-selected'
       ? (layers.find((layer) => layer.name === layerId) ?? null)
@@ -163,13 +166,14 @@ async function createFixture(
     host,
     runDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
-    runPreparedDatasetMutation: async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
+    runPreparedDatasetMutation: async (_sourceId, _label, mutate) => {
       const original = dataset;
       const working = getDefaultMapshaperAdapter().copyDataset(original);
       const outcome = await mutate(working, original);
       if ('ok' in outcome) return outcome;
       before = original;
       dataset = working;
+      source.setDataset(dataset, false);
       return okValue(outcome.value);
     },
     runPreparedEditCommand: (sourceId, label, plan) =>
@@ -192,7 +196,10 @@ async function createFixture(
         undone.push(command);
         return;
       }
-      if (before) dataset = before;
+      if (before) {
+        dataset = before;
+        source.setDataset(dataset, false);
+      }
     },
     redo: () => {
       const command = undone.pop();
@@ -206,9 +213,9 @@ async function createFixture(
 
 async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
   const aDataset = await importDataset(aOffset);
-  let lastUndone: EditCommand | undefined;
+  let lastUndone: (EditCommand & { publish?(): void }) | undefined;
   const bDataset = await importDataset(bOffset);
-  const entries: EditCommand[] = [];
+  const entries: (EditCommand & { publish?(): void })[] = [];
   const selection = new Selection();
   selection.apply(
     [
@@ -259,7 +266,9 @@ async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
     host,
     runDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetCommandParsed: async () => okValue(undefined),
-    runPreparedDatasetMutation: async <T>(): Promise<OpResult<T>> => okValue(undefined as T),
+    runPreparedDatasetMutation: async () => {
+      throw new Error('Dataset mutation is not used by this direct-edit fixture');
+    },
     runPreparedEditCommand: (sourceId, label, plan) =>
       _runPreparedEditCommand(host, sourceId, label, plan),
     runPreparedEditCommandMany: (sourceIds, label, plan) =>
@@ -569,7 +578,7 @@ describe('reshapeSelected', () => {
   it('rejects a reshape whose prepared edit version becomes stale', async () => {
     const fixture = await createFixture();
     const before = exportCoordinates(fixture.dataset());
-    fixture.ctx.runPreparedEditCommandMany = <T>(sourceIds, label, plan) =>
+    fixture.ctx.runPreparedEditCommandMany = (sourceIds, label, plan) =>
       _runPreparedEditCommandMany(fixture.host, sourceIds, label, (sourceId, planned, source) => {
         const outcome = plan(sourceId, planned, source);
         planned.editVersion = (planned.editVersion ?? 0) + 1;

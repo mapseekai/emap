@@ -100,7 +100,7 @@ d('shipped bundles are self-contained', () => {
 
   it('bootstraps the browser bundles without global Buffer or process', () => {
     const dom = new JSDOM('', { runScripts: 'outside-only', url: 'http://localhost/' });
-    const browserWindow = dom.window as unknown as Window & {
+    const browserWindow = dom.window as typeof dom.window & {
       Buffer?: unknown;
       process?: unknown;
       mapshaper?: unknown;

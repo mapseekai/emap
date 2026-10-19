@@ -130,7 +130,7 @@ describe('renderLayers fill rendering', () => {
       type: 'line' as const,
       source: 'src-a',
       paint: { 'line-dashstyle': 'arrow-dot', 'line-arrow-spacing': 18, 'line-arrow-size': 12 },
-    };
+    } satisfies LayerSpecification;
     const mapshaperLayer = {
       name: 'roads',
       geometry_type: 'polyline',
@@ -189,7 +189,7 @@ describe('renderLayers fill rendering', () => {
         'line-dashstyle': 'arrow-dot',
         'line-arrow-spacing': 20,
       },
-    };
+    } satisfies LayerSpecification;
     const mapshaperLayer = {
       name: 'areas',
       geometry_type: 'polygon',
@@ -330,21 +330,28 @@ function fixture(type: 'circle' | 'line' | 'fill', classified: boolean) {
   };
   const { painter } = createCanvasPainterHarness(context);
   painter.setTransform(viewport.transform);
-  const layer: LayerSpecification = {
-    ...(type === 'circle' ? { pointLod: false as const } : {}),
+  const common = {
     id: 'style',
     source: 's',
-    type,
     ...(classified ? { styleSource: 'mapshaper' as const } : {}),
-    paint:
-      type === 'circle'
-        ? { 'circle-radius': 4, ...(classified ? {} : { 'circle-color': '#1133cc80' }) }
-        : {
+  };
+  const layer: LayerSpecification =
+    type === 'circle'
+      ? {
+          ...common,
+          type,
+          pointLod: false,
+          paint: { 'circle-radius': 4, ...(classified ? {} : { 'circle-color': '#1133cc80' }) },
+        }
+      : {
+          ...common,
+          type,
+          paint: {
             'line-width': 1,
             'line-dasharray': [3, 2],
             ...(classified ? {} : { 'fill-color': '#1133cc80', 'line-color': '#1133cc80' }),
           },
-  };
+        };
   const ctx: LayerRendererContext = {
     layers: [layer],
     sources,
@@ -437,6 +444,7 @@ function makeStyleCtx(opts: {
     resolveSourceLayer: vi.fn(() => opts.ml ?? null),
     getLayerArcIds: vi.fn(),
     styleResolver: new StyleResolver(),
+    filterResolver: new FilterResolver(),
   };
 }
 

@@ -168,7 +168,7 @@ describe('upload-ready original texture samples', () => {
   });
   it.each([
     1, 2,
-  ])('assembles physical blocks directly with planar configuration %i and at most two decodes', async (planar) => {
+  ] as const)('assembles physical blocks directly with planar configuration %i and at most two decodes', async (planar) => {
     const input = await image({ bits: 16, bands: 3, width: 8, height: 8 });
     input.isTiled = true;
     input.planarConfiguration = planar;

@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { EditHistory } from './edit-history';
 import type { EditCommand } from './edit-command';
 
-function makeCmd(
-  label?: string,
-): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
+function makeCmd(label?: string): EditCommand & {
+  do: ReturnType<typeof vi.fn<() => void>>;
+  undo: ReturnType<typeof vi.fn<() => void>>;
+} {
   return {
     do: vi.fn(),
     undo: vi.fn(),
@@ -161,8 +162,8 @@ describe('EditHistory', () => {
 // ---------------------------------------------------------------------------
 
 function makeBarrier(label?: string): EditCommand & {
-  do: ReturnType<typeof vi.fn>;
-  undo: ReturnType<typeof vi.fn>;
+  do: ReturnType<typeof vi.fn<() => void>>;
+  undo: ReturnType<typeof vi.fn<() => void>>;
 } {
   return {
     do: vi.fn(),
@@ -264,8 +265,8 @@ function makeMergeable(
   label: string,
   key: string,
 ): EditCommand & {
-  do: ReturnType<typeof vi.fn>;
-  undo: ReturnType<typeof vi.fn>;
+  do: ReturnType<typeof vi.fn<() => void>>;
+  undo: ReturnType<typeof vi.fn<() => void>>;
   merge: ReturnType<typeof vi.fn>;
   mergeKey: string;
   mergedCount: number;

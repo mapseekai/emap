@@ -26,7 +26,7 @@ export function spatialFilter(
   reference: MapshaperDataset,
   options: SpatialFilterOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return spatialRelation(input, reference, { ...options, mode: 'filter' }, runtime);
 }
 export const spatialFilterTool = defineDuckDbTool({

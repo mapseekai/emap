@@ -4,7 +4,7 @@ import type { DrawOverlayState, MeasurementOverlayState } from '../rendering/pai
 import type { EditVertexState } from './types';
 
 function makeStore() {
-  const onChange = vi.fn<[EditStateChange], void>();
+  const onChange = vi.fn<(change: EditStateChange) => void>();
   const store = new EditStateStore(onChange);
   return { store, onChange };
 }

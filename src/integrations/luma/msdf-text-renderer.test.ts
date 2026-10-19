@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RenderPass } from '@luma.gl/core';
 import { MsdfTextRenderer } from './msdf-text-renderer';
 import type { MsdfAtlasPage } from '../../engine/rendering/labels/text-types';
 function setup() {
@@ -25,11 +26,12 @@ function setup() {
     }),
     createVertexArray: () => ({ ...object(), setBuffer: vi.fn(), getBufferSlot: () => 0 }),
   };
+  const draw = vi.fn<RenderPass['draw']>(() => true);
   const pass: any = {
     setPipeline: vi.fn(),
     setBindings: vi.fn(),
     setVertexArray: vi.fn(),
-    draw: vi.fn(() => true),
+    draw,
   };
   const page = { data: new Uint8Array(1024 * 1024 * 4), width: 1024, height: 1024, version: 1 };
   const raster: any = {
@@ -52,7 +54,7 @@ function setup() {
     bounds: [20, 20, 60, 60],
     raster,
   };
-  return { device, pass, page, label, resources };
+  return { device, pass, draw, page, label, resources };
 }
 describe('MSDF pass resource ownership', () => {
   for (const backend of ['webgl', 'webgpu'] as const)
@@ -62,7 +64,7 @@ describe('MSDF pass resource ownership', () => {
       r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1);
       expect(r.stats.textureUploads).toBe(1);
       expect(r.stats.glyphInstances).toBe(1);
-      expect(f.pass.draw.mock.calls.every((c) => c[0].isInstanced)).toBe(true);
+      expect(f.draw.mock.calls.every(([props]) => props.isInstanced)).toBe(true);
       expect(f.pass.setBindings.mock.calls[0][0].textUniforms).not.toBe(
         f.pass.setBindings.mock.calls[1][0].textUniforms,
       );

@@ -278,6 +278,7 @@ it('keeps exact counting for large raw bounds instead of speculatively allocatin
 
 it('reads one native vertex-data view per partition, not one per arc per pass', async () => {
   const getVertexData = vi.fn(() => ({
+    zz: null,
     xx: new Float64Array([1, 2, 10, 11, 1, 2]),
     yy: new Float64Array([1, 1, 1, 1, 10, 10]),
     nn: new Uint32Array([2, 2, 2]),
@@ -285,7 +286,7 @@ it('reads one native vertex-data view per partition, not one per arc per pass', 
     bb: new Float64Array([1, 1, 2, 1, 10, 1, 11, 1, 1, 10, 2, 10]),
   }));
   const input = fixture();
-  input.arcs!.getVertexData = getVertexData as ArcCollection['getVertexData'];
+  input.arcs!.getVertexData = getVertexData;
   const partition = await partitionGeometry(input, signal());
   expect(getVertexData).toHaveBeenCalledTimes(1);
   expect(partition.membership.length).toBe(3);

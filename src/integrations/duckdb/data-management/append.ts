@@ -11,7 +11,7 @@ export function append(
   incoming: MapshaperDataset,
   options: MergeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return merge(target, incoming, options, runtime);
 }
 export const appendTool = defineDuckDbTool({

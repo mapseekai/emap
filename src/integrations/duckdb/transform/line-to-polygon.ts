@@ -12,7 +12,7 @@ export function lineToPolygon(
   input: MapshaperDataset,
   options: AggregateOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runSingleInputTool(
     input,
     'line_to_polygon',

@@ -56,7 +56,10 @@ export function deleteSelectedFeatures(
 function groupSelectedFeatureIds(
   refs: readonly FeatureRef[],
 ): globalThis.Map<string, globalThis.Map<string, number[]>> {
-  const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
+  const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map<
+    string,
+    Map<string, number[]>
+  >();
   for (const ref of refs) {
     let bySource = grouped.get(ref.source);
     if (!bySource) {

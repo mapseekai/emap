@@ -30,8 +30,11 @@ export class CapabilityRegistry implements CapabilityRegistryContract {
       throw new Error('Invalid capability id');
     if (this.entries.has(definition.id))
       throw new Error(`Capability already registered: ${definition.id}`);
-    const { execute, ...metadata } = definition;
-    if (typeof execute !== 'function') throw new TypeError('Capability execute must be a function');
+    if (typeof definition.execute !== 'function')
+      throw new TypeError('Capability execute must be a function');
+    const execute = definition.execute.bind(definition);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Metadata omits the method; execution uses its bound copy.
+    const { execute: _execute, ...metadata } = definition;
     const descriptor = freezeJson(structuredClone(metadata));
     const entry = { descriptor, execute, controller: new AbortController() };
     this.entries.set(descriptor.id, entry);

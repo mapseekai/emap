@@ -1,3 +1,4 @@
+import type { EditCommand } from '../../../domain/edit/edit-command';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DrawFeatureHandler, projectPointOnSegment } from './draw-feature';
 import { EMAP_THEME_COLORS } from '../../../ui/theme/colors';
@@ -39,7 +40,7 @@ function createMockMap(sources?: Record<string, unknown>) {
     on: vi.fn(),
     off: vi.fn(),
     getSource: vi.fn((id: string) => sourceMap.get(id)),
-    pushCommand: vi.fn(),
+    pushCommand: vi.fn<(command: EditCommand) => void>(),
   };
 }
 
@@ -90,8 +91,11 @@ describe('DrawFeatureHandler draw-state defaults', () => {
   });
   it('skips distant arc vertices and segments when snapping on a large source', () => {
     const arcs = getDefaultMapshaperAdapter().createArcCollection([
-      { xx: [0, 100], yy: [0, 0] },
-      { xx: Array.from({ length: 10000 }, (_, i) => 1000 + i), yy: Array(10000).fill(1000) },
+      { xx: Float64Array.from([0, 100]), yy: Float64Array.from([0, 0]) },
+      {
+        xx: Float64Array.from({ length: 10000 }, (_, i) => 1000 + i),
+        yy: new Float64Array(10000).fill(1000),
+      },
     ]);
     const data = arcs.getVertexData!();
     let distantReads = 0;
@@ -814,6 +818,7 @@ describe('DrawFeatureHandler', () => {
       const onCalls = map.on.mock.calls;
       const editmodechangeCall = onCalls.find((c: any[]) => c[0] === 'editmodechange');
       expect(editmodechangeCall).toBeTruthy();
+      if (!editmodechangeCall) throw new Error('Expected the editmodechange listener');
       const listener = editmodechangeCall[1] as (e: { mode: string }) => void;
 
       // Fire it with a non-draw mode

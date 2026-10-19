@@ -7,7 +7,7 @@ export type SourceRenderBlock = { layers: readonly LayerSpecification[] } | { pa
 
 export function checkedSourceOrder(order: readonly string[]): string[] {
   if (
-    !Array.isArray(order) ||
+    !Array.isArray(order as unknown) ||
     order.some((id) => typeof id !== 'string' || !id || id.length > 256) ||
     new Set(order).size !== order.length
   ) {

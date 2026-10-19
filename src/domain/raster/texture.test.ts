@@ -19,7 +19,11 @@ describe('texture output reservations', () => {
       validateRasterTextureRead(level, { level: 0, window: [0, 0, 512, 512], samples: [0, 1, 2] }),
     ).toBeGreaterThan(512 * 512 * 8);
   });
-  it.each([[2, 1, 0], [0], [0, 0, 2]])('rejects unsupported band layout %s', (samples) => {
+  it.each([
+    { samples: [2, 1, 0] },
+    { samples: [0] },
+    { samples: [0, 0, 2] },
+  ])('rejects unsupported band layout $samples', ({ samples }) => {
     expect(() =>
       validateRasterTextureRead(level, { level: 0, window: [0, 0, 512, 512], samples }),
     ).toThrow();

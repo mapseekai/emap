@@ -16,7 +16,8 @@
     "noImplicitOverride": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "verbatimModuleSyntax": true
   },
   "include": ["src"],
   "exclude": ["**/*.test.ts", "**/*.test.tsx"]

@@ -3,9 +3,11 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promise
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import { createServer, type Plugin, type UserConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
+import { createPluginMiddleware } from '../utils/vite-plugin';
 
 const cdnFiles = {
   'mapshaper-vendor.js': 'vendor fixture\n',
@@ -157,43 +159,42 @@ describe('examples build routes', () => {
     );
     expect(routePlugin).toBeDefined();
 
-    let middleware:
-      | ((request: IncomingMessage, response: ServerResponse, next: () => void) => void)
-      | undefined;
-    if (typeof routePlugin?.configureServer !== 'function') {
-      throw new Error('examples-route-rewrite must configure the Vite development server');
+    if (!routePlugin) throw new Error('Missing examples-route-rewrite plugin');
+    const server = await createPluginMiddleware(routePlugin, {
+      root: resolve('packages/examples'),
+      base: '/mapseekai/emap/examples/',
+    });
+    const middleware = server.middlewares;
+    try {
+      const request = new IncomingMessage(new Socket());
+      request.url = '/mapseekai/emap/examples/getting-started/points/?source=dev';
+      let nextCalls = 0;
+      await new Promise<void>((resolveNext) => {
+        middleware(request, new ServerResponse(request), () => {
+          nextCalls += 1;
+          resolveNext();
+        });
+      });
+
+      expect(request.url).toBe(
+        '/mapseekai/emap/examples/examples/getting-started/points/index.html?source=dev',
+      );
+      expect(nextCalls).toBe(1);
+
+      const splitRequest = new IncomingMessage(new Socket());
+      splitRequest.url = '/mapseekai/emap/examples/split-features/';
+      await new Promise<void>((resolveNext) => {
+        middleware(splitRequest, new ServerResponse(splitRequest), () => {
+          nextCalls += 1;
+          resolveNext();
+        });
+      });
+
+      expect(splitRequest.url).toBe('/mapseekai/emap/examples/examples/split-features/index.html');
+      expect(nextCalls).toBe(2);
+    } finally {
+      await server.close();
     }
-    routePlugin.configureServer({
-      middlewares: {
-        use(handler: typeof middleware) {
-          middleware = handler;
-        },
-      },
-    } as never);
-    if (!middleware) throw new Error('examples route middleware was not registered');
-
-    const request = {
-      url: '/mapseekai/emap/examples/getting-started/points/?source=dev',
-    } as IncomingMessage;
-    let nextCalls = 0;
-    middleware(request, {} as ServerResponse, () => {
-      nextCalls += 1;
-    });
-
-    expect(request.url).toBe(
-      '/mapseekai/emap/examples/examples/getting-started/points/index.html?source=dev',
-    );
-    expect(nextCalls).toBe(1);
-
-    const splitRequest = {
-      url: '/mapseekai/emap/examples/split-features/',
-    } as IncomingMessage;
-    middleware(splitRequest, {} as ServerResponse, () => {
-      nextCalls += 1;
-    });
-
-    expect(splitRequest.url).toBe('/mapseekai/emap/examples/examples/split-features/index.html');
-    expect(nextCalls).toBe(2);
   });
 
   it('serves public example routes through Vite base middleware', async () => {

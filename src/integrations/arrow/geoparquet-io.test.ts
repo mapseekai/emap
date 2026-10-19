@@ -102,7 +102,7 @@ describe('GeoParquet round trip', () => {
   it('writes GeoParquet bbox covering metadata by default', async () => {
     const dataset = await datasetFromGeoJSON(FC);
     const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: false });
-    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes.slice()]));
     const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
     const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
     expect(column?.covering?.bbox).toEqual({
@@ -145,7 +145,7 @@ describe('GeoParquet round trip', () => {
       ymax: 8,
     });
 
-    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes.slice()]));
     try {
       const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
       const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
@@ -181,7 +181,7 @@ describe('GeoParquet round trip', () => {
     expect(geomField?.metadata.has('ARROW:extension:name')).toBe(false);
     expect(geomField?.metadata.has('ARROW:extension:metadata')).toBe(false);
 
-    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes.slice()]));
     try {
       const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
       expect(fileGeo).toEqual(expect.any(String));
@@ -214,7 +214,7 @@ describe('GeoParquet round trip', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
     const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: true });
 
-    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes.slice()]));
     try {
       const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
       expect(typeof fileGeo).toBe('string');
@@ -265,11 +265,10 @@ describe('GeoParquet round trip', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4490' };
     const bytes = await exportGeoParquet(dataset, { fetch: localEpsgIndexFetch });
 
-    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes.slice()]));
     try {
       const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
-      const fileCrs = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry
-        .crs as Record<string, unknown>;
+      const fileCrs = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry.crs;
 
       expect(fileCrs).toMatchObject({
         type: 'GeographicCRS',
@@ -282,11 +281,10 @@ describe('GeoParquet round trip', () => {
       );
       expect(fileCrs).toHaveProperty('datum');
       expect(fileCrs).toHaveProperty('coordinate_system');
-      expect(
-        (fileCrs.coordinate_system as { axis: Array<{ direction: string }> }).axis.map(
-          (axis) => axis.direction,
-        ),
-      ).toEqual(['north', 'east']);
+      expect(fileCrs).toHaveProperty('coordinate_system.axis', [
+        expect.objectContaining({ direction: 'north' }),
+        expect.objectContaining({ direction: 'east' }),
+      ]);
     } finally {
       file.free?.();
     }
@@ -339,10 +337,7 @@ describe('GeoParquet round trip', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
     const bytes = await exportGeoParquet(dataset);
     const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
 
     expect(column).not.toHaveProperty('crs');
     expect((await importGeoParquet(bytes)).info?.crs_string).toBe('EPSG:4326');
@@ -356,12 +351,9 @@ describe('GeoParquet round trip', () => {
     delete dataset.info?.crs;
     const bytes = await exportGeoParquet(dataset);
     const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
 
-    expect(column.crs).toBeNull();
+    expect(column?.crs).toBeNull();
     expect((await importGeoParquet(bytes)).info?.crs_string).toBe('EPSG:4326');
   });
 

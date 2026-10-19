@@ -50,10 +50,12 @@ export const controlContextPlugin: Plugin.Object = {
           return interaction.require('measure') as ControlContext['measure'];
         },
         off: ((...args: unknown[]) => {
+          // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
           Reflect.apply(routing.off, routing, args);
           return context;
         }) as ControlContext['off'],
         on: ((...args: unknown[]) => {
+          // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
           Reflect.apply(routing.on, routing, args);
           return context;
         }) as ControlContext['on'],

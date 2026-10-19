@@ -13,7 +13,7 @@ import { EMAP_THEME_COLORS } from '../../ui/theme/colors';
  */
 export class HighlightManager {
   private _highlighted: globalThis.Map<string, globalThis.Map<string, Set<number>>> =
-    new globalThis.Map();
+    new globalThis.Map<string, Map<string, Set<number>>>();
 
   private _highlightStyle: HighlightStyle = {
     color: EMAP_THEME_COLORS.primary,
@@ -35,7 +35,8 @@ export class HighlightManager {
       this._highlightStyle = { ...this._highlightStyle, ...style };
     }
     for (const feature of features) {
-      const sourceMap = this._highlighted.get(feature.source) || new globalThis.Map();
+      const sourceMap =
+        this._highlighted.get(feature.source) || new globalThis.Map<string, Set<number>>();
       const ids = sourceMap.get(feature.layer) || new Set<number>();
       ids.add(feature.id);
       sourceMap.set(feature.layer, ids);

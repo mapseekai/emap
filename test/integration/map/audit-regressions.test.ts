@@ -223,7 +223,7 @@ describe('async source commits reject stale data', () => {
     gate.resolve({ ...dataset(1), info: { crs_string: 'EPSG:3857' } });
     await assertion;
     expect(source.getDataset()).toBe(before);
-    expect(source.getDataset()?.layers[0].data?.getRecords()[0].value).toBe(9);
+    expect(source.getDataset()?.layers[0].data?.getRecords?.()[0].value).toBe(9);
     expect(map.getCRS()).toBe('EPSG:4326');
   });
   it('whole-map reprojection rejects a transaction opened during preparation', async () => {

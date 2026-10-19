@@ -77,11 +77,10 @@ function bridge(map: Emap): Emap {
         methods = new Map();
         bound.set(owner, methods);
       }
-      let callable = methods.get(value);
-      if (!callable) {
-        callable = value.bind(owner);
-        methods.set(value, callable);
-      }
+      const cached = methods.get(value);
+      if (cached) return cached;
+      const callable: Function = value.bind(owner);
+      methods.set(value, callable);
       return callable;
     },
     set(target, key, value) {

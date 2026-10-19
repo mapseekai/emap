@@ -1,13 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TopologySource } from '../../../domain/source/topology-source';
+import { asMutableTopologySource, type MutableTopologySource } from '../../../domain/source/source';
+
+import type {
+  MapshaperDataset,
+  MapshaperLayer,
+  PathShape,
+} from '../../../shared/types/mapshaper-types';
 import { splitSelected } from './split-selected';
 import { makeStubCtx } from './_test-helpers';
+
+import { EditHistory } from '../../../domain/edit/edit-history';
+import { Transaction } from '../../../domain/edit/transaction';
+import { VertexMoveCommand } from '../../../domain/edit/commands/vertex-move';
+import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
+import type { EmapHostInternal } from '../emap-host';
+import { MapshaperOps } from '../mapshaper-ops';
+import { Selection } from '../selection';
+import { _runPreparedDatasetMutation } from './_runner';
+import * as splitLine from './split-selected-line';
+import type { FeatureRef } from '../types';
+
+interface LoadedSource extends MutableTopologySource {
+  getDataset(): MapshaperDataset;
+  getLayers(): MapshaperLayer[];
+}
 
 describe('splitSelected', () => {
   it('rejects an empty selection without dispatching a prepared edit', async () => {
     const { ctx } = makeStubCtx();
     let dispatched = false;
     // This stub only reaches the selection read boundary.
-    ctx.host._selection = { getAll: () => [] } as unknown as typeof ctx.host._selection;
+    vi.spyOn(ctx.host._selection, 'getAll').mockReturnValue([]);
     ctx.runPreparedEditCommand = async () => {
       dispatched = true;
       throw new Error('must not dispatch');
@@ -26,12 +50,13 @@ describe('splitSelected', () => {
     const { ctx } = makeStubCtx();
     let dispatched = false;
     // These stubs only reach pre-dispatch validation boundaries.
-    ctx.host._selection = {
-      getAll: () => [{ source: 's1', layer: 'parks', id: 0 }],
-    } as unknown as typeof ctx.host._selection;
-    ctx.host.layers = {
-      resolve: () => ({ geometry_type: 'polyline', shapes: [[[0]]] }),
-    } as unknown as typeof ctx.host.layers;
+    vi.spyOn(ctx.host._selection, 'getAll').mockReturnValue([
+      { source: 's1', layer: 'parks', id: 0 },
+    ]);
+    vi.spyOn(ctx.host.layers, 'resolve').mockReturnValue({
+      geometry_type: 'polyline',
+      shapes: [[[0]]],
+    });
     ctx.runPreparedEditCommand = async () => {
       dispatched = true;
       throw new Error('must not dispatch');
@@ -46,16 +71,6 @@ describe('splitSelected', () => {
     expect(dispatched).toBe(false);
   });
 });
-import { EditHistory } from '../../../domain/edit/edit-history';
-import { Transaction } from '../../../domain/edit/transaction';
-import { VertexMoveCommand } from '../../../domain/edit/commands/vertex-move';
-import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
-import type { EmapHostInternal } from '../emap-host';
-import { MapshaperOps } from '../mapshaper-ops';
-import { Selection } from '../selection';
-import { _runPreparedDatasetMutation } from './_runner';
-import * as splitLine from './split-selected-line';
-import type { FeatureRef } from '../types';
 async function importDataset(features: GeoJSON.Feature[]): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runImport('-i split-selected.geojson', {
     'split-selected.geojson': JSON.stringify({ type: 'FeatureCollection', features }),
@@ -76,9 +91,17 @@ function point(coordinates: number[], properties: Record<string, unknown> = {}):
   return { type: 'Feature', properties, geometry: { type: 'Point', coordinates } };
 }
 
-function exportFeatures(dataset: MapshaperDataset): GeoJSON.Feature[] {
+function exportFeatures(
+  dataset: MapshaperDataset,
+): GeoJSON.Feature<Exclude<GeoJSON.Geometry, GeoJSON.GeometryCollection>>[] {
   const [file] = getDefaultMapshaperAdapter().exportFileContent(dataset, { format: 'geojson' });
-  return (JSON.parse(String(file!.content)) as GeoJSON.FeatureCollection).features;
+  return (JSON.parse(String(file!.content)) as GeoJSON.FeatureCollection).features.map(
+    (feature) => {
+      if (feature.geometry.type === 'GeometryCollection')
+        throw new Error('Unexpected geometry collection in split fixture');
+      return { ...feature, geometry: feature.geometry };
+    },
+  );
 }
 
 function polygonArea(coordinates: number[][][]): number {
@@ -175,7 +198,7 @@ function hasComplementarySharedArc(left: PathShape, right: PathShape): boolean {
 }
 
 interface SplitHarness {
-  source: { getDataset(): MapshaperDataset; fire: () => void };
+  source: Pick<LoadedSource, 'getDataset' | 'fire'>;
   selection: Selection;
   history: { entries: unknown[] };
   events: { selection: () => void; history: () => void };
@@ -201,30 +224,31 @@ function addLayer(dataset: MapshaperDataset, name: string): void {
 
 function harness(
   dataset: MapshaperDataset,
-  selected: number[],
+  selected: readonly number[],
 ): {
   ops: MapshaperOps;
   host: EmapHostInternal;
-  source: {
-    getDataset(): MapshaperDataset;
-    getLayers(): MapshaperLayer[];
-    setDataset(value: MapshaperDataset): void;
-    fire: ReturnType<typeof vi.fn>;
-  };
+  source: LoadedSource;
   selection: Selection;
   history: { entries: unknown[]; push(entry: unknown): void; isCapturing(): boolean };
-  events: { selection: ReturnType<typeof vi.fn>; history: ReturnType<typeof vi.fn> };
+  events: {
+    selection: ReturnType<typeof vi.fn<() => void>>;
+    history: ReturnType<typeof vi.fn<() => void>>;
+  };
 } {
   let current = dataset;
-  const source = {
+  const nativeSource = asMutableTopologySource(new TopologySource('source'));
+  nativeSource.setDataset(dataset, false);
+  const install = nativeSource.setDataset.bind(nativeSource);
+  vi.spyOn(nativeSource, 'fire');
+  const source: LoadedSource = Object.assign(nativeSource, {
     getDataset: () => current,
     getLayers: () => current.layers,
-    getArcs: () => current.arcs,
     setDataset: (value: MapshaperDataset) => {
       current = value;
+      install(value, false);
     },
-    fire: vi.fn(),
-  };
+  });
   const selection = new Selection();
   selection.apply(
     selected.map((id) => ({ source: 'source', layer: 'split-selected', id })),
@@ -402,7 +426,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     dataset.layers[0]!.name = 'split-selected';
     const state = harness(dataset, [0]);
     const history = new EditHistory();
-    state.host._history = history;
+    Reflect.set(state.host, '_history', history);
     const stages = [snapshotSplitState(dataset, state.selection)];
     const arcStages = [snapshotArcLifecycle(dataset)];
 
@@ -457,7 +481,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     ]);
     const state = harness(dataset, [0]);
     const history = new EditHistory();
-    state.host._history = history;
+    Reflect.set(state.host, '_history', history);
     const before = snapshotSplitState(dataset, state.selection);
 
     await expect(
@@ -837,7 +861,7 @@ describe('MapshaperOps.splitSelected integration', () => {
 
     for (const corrupt of [
       (dataset: MapshaperDataset) => {
-        dataset.layers[0]!.shapes = undefined;
+        dataset.layers[0]!.shapes = null;
       },
       (dataset: MapshaperDataset) => {
         dataset.layers[0]!.shapes![0] = null;
@@ -1024,7 +1048,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     const beforeSelection = selection.getAll();
     const beforeHistory = history.entries.length;
     const beforeSelectionEvents = events.selection.mock.calls.length;
-    const beforeDataEvents = source.fire.mock.calls.length;
+    const beforeDataEvents = vi.mocked(source.fire).mock.calls.length;
     const beforeHistoryEvents = events.history.mock.calls.length;
     const noCut = await ops.splitSelected({
       cutter: {
@@ -1179,7 +1203,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     original.layers[0]!.name = 'split-selected';
     const rollback = harness(original, [0]);
     const rollbackHistory = new EditHistory();
-    rollback.host._history = rollbackHistory;
+    Reflect.set(rollback.host, '_history', rollbackHistory);
     const rollbackBefore = snapshotSplitState(original, rollback.selection);
 
     const rollbackTx = new Transaction(rollback.host);
@@ -1212,7 +1236,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     committedOriginal.layers[0]!.name = 'split-selected';
     const committed = harness(committedOriginal, [0]);
     const committedHistory = new EditHistory();
-    committed.host._history = committedHistory;
+    Reflect.set(committed.host, '_history', committedHistory);
     const committedBefore = snapshotSplitState(committedOriginal, committed.selection);
     const commitTx = new Transaction(committed.host);
     await expect(
@@ -1253,7 +1277,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     dataset.layers[0]!.name = 'split-selected';
     const state = harness(dataset, [0]);
     const history = new EditHistory();
-    state.host._history = history;
+    Reflect.set(state.host, '_history', history);
 
     await expect(
       state.ops.reshapeSelected({
@@ -1267,7 +1291,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     const directState = snapshotSplitState(dataset, state.selection);
 
     await expect(
-      _runPreparedDatasetMutation(state.host, 'source', 'Prepared replacement', (working) => ({
+      _runPreparedDatasetMutation(state.host, 'source', 'Prepared replacement', (_working) => ({
         value: undefined,
         selection: state.selection.getAll(),
       })),
@@ -1301,7 +1325,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     dataset.layers[0]!.name = 'split-selected';
     const state = harness(dataset, [0]);
     const history = new EditHistory();
-    state.host._history = history;
+    Reflect.set(state.host, '_history', history);
     const stages = [snapshotSplitState(dataset, state.selection)];
 
     await expect(
@@ -1403,7 +1427,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     const afterPrior = source.getDataset();
     const selectionAfterPrior = selection.getAll();
     const historyCount = history.entries.length;
-    const dataEvents = source.fire.mock.calls.length;
+    const dataEvents = vi.mocked(source.fire).mock.calls.length;
     const selectionEvents = events.selection.mock.calls.length;
     const historyEvents = events.history.mock.calls.length;
 
@@ -1493,6 +1517,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     ]);
     dataset.layers[0]!.name = 'split-selected';
     const originalShapes = structuredClone(dataset.layers[0]!.shapes);
+    if (!originalShapes) throw new Error('Missing original shapes');
     const originalGeometry = snapshotLiveGeometry(dataset);
 
     const state = harness(dataset, [0]);

@@ -56,6 +56,9 @@ pnpm run browser:install
 pnpm run release:verify
 ```
 
+`browser:install` installs Firefox and WebKit before checking system Chrome,
+whose installer can exit early when Chrome is already installed.
+
 Run GPU checks on a host where Chrome and Firefox can create actual WebGPU
 adapters. Confirm adapter creation on the actual runner; record and resolve adapter
 creation failures before accepting its GPU results. On macOS the Firefox project uses a window

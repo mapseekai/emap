@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { isGeoTIFFFilename, listGeoTIFFs, openRasterPair, overviewFilename } from './local-raster-directory';
+import {
+  isGeoTIFFFilename,
+  listGeoTIFFs,
+  openRasterPair,
+  overviewFilename,
+} from './local-raster-directory';
 
 function directory(files: Record<string, File>) {
-  const handles = new Map(Object.entries(files).map(([name, file]) => [name, {
-    kind: 'file' as const, name, getFile: async () => file,
-  }]));
+  const handles = new Map(
+    Object.entries(files).map(([name, file]) => [
+      name,
+      {
+        kind: 'file' as const,
+        name,
+        getFile: async () => file,
+      },
+    ]),
+  );
   return {
     kind: 'directory' as const,
     name: 'imagery',
-    async *entries() { for (const entry of handles) yield entry; },
+    async *entries() {
+      for (const entry of handles) yield entry;
+    },
     async getFileHandle(name: string) {
       const handle = handles.get(name);
       if (!handle) throw new DOMException('Not found', 'NotFoundError');

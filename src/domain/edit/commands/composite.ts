@@ -37,7 +37,7 @@ export class CompositeCommand implements EditCommand {
   publish(): void {
     for (const child of this.children) {
       if ('publish' in child && typeof child.publish === 'function') {
-        child.publish();
+        Reflect.apply(child.publish, child, []);
       }
     }
   }

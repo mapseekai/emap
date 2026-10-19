@@ -155,7 +155,7 @@ function record(value: unknown, path: string): void {
     !value ||
     typeof value !== 'object' ||
     Array.isArray(value) ||
-    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value) as object | null)
   )
     throw new Error(`${path} must be a plain object.`);
 }

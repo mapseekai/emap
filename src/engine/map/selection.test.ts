@@ -16,6 +16,64 @@ function sortedKeys(refs: FeatureRef[]): string[] {
 }
 
 describe('Selection', () => {
+  it.each([
+    NaN,
+    Infinity,
+    -Infinity,
+    -1,
+    0.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('rejects invalid id %s before any selection mutation', (id) => {
+    const selection = new Selection();
+    selection.apply([A, B], 'replace');
+    const before = selection.snapshot();
+    for (const mode of ['replace', 'add', 'toggle'] as const) {
+      expect(() => selection.apply([C, { ...D, id }], mode)).toThrow(RangeError);
+      expect(selection.snapshot()).toEqual(before);
+      expect(selection.size).toBe(2);
+    }
+    expect(() => selection.remove([A, { ...D, id }])).toThrow(RangeError);
+    expect(selection.snapshot()).toEqual(before);
+  });
+
+  it.each([
+    'invalid json',
+    'null',
+    '{}',
+    '["s", "l"]',
+    '["s", "l", 0, 1]',
+    '[1, "l", 0]',
+    '["s", null, 0]',
+    '["s", "l", null]',
+    '["s", "l", "0"]',
+    '["s", "l", -1]',
+    '["s", "l", 0.5]',
+    '["s", "l", 1e400]',
+    '["s", "l", 9007199254740992]',
+  ])('validates the entire snapshot before replacing live state: %s', (invalid) => {
+    const selection = new Selection();
+    selection.apply([A, B], 'replace');
+    const before = selection.snapshot();
+    expect(() =>
+      selection.restore(new Set([JSON.stringify(['new', 'layer', 0]), invalid])),
+    ).toThrow();
+    expect(selection.snapshot()).toEqual(before);
+    expect(selection.size).toBe(2);
+  });
+
+  it('restores canonical refs and reports the actual diff for equivalent encoded keys', () => {
+    const selection = new Selection();
+    const ref = { source: 's/"\\', layer: 'l/"\\', id: Number.MAX_SAFE_INTEGER };
+    selection.apply([ref], 'replace');
+    const snapshot = selection.snapshot();
+    selection.clear();
+    expect(selection.restore(snapshot).added).toEqual([ref]);
+    expect(
+      selection.restore(
+        new Set([`[${JSON.stringify(ref.source)}, ${JSON.stringify(ref.layer)}, ${ref.id}]`]),
+      ).changed,
+    ).toBe(false);
+  });
   describe('initial state', () => {
     it('is empty', () => {
       const s = new Selection();

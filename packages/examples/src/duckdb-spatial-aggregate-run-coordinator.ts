@@ -63,7 +63,9 @@ export async function executeDuckDbSpatialAggregateQuery<Dataset>({
 
   const result = await runMapOp();
   if (!result.ok || !result.value) {
-    throw new Error(`${result.error?.kind ?? 'unknown'}: ${result.error?.reason ?? result.error?.id}`);
+    throw new Error(
+      `${result.error?.kind ?? 'unknown'}: ${result.error?.reason ?? result.error?.id}`,
+    );
   }
   return result.value.dataset;
 }

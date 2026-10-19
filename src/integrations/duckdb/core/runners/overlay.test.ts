@@ -124,10 +124,7 @@ class FakeRuntime implements DuckDbRuntime {
   readonly events: string[] = [];
   readonly connection: FakeConnection;
 
-  constructor(
-    resultTable: Table,
-    private readonly options: FakeRuntimeOptions = {},
-  ) {
+  constructor(resultTable: Table, options: FakeRuntimeOptions = {}) {
     this.connection = new FakeConnection(resultTable, this.events, options);
   }
 

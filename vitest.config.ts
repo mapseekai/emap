@@ -42,11 +42,15 @@ export default defineConfig({
       },
       {
         find: '@mapseekai/emap/maplibre',
-        replacement: fileURLToPath(new URL('./src/integrations/maplibre/index.ts', import.meta.url)),
+        replacement: fileURLToPath(
+          new URL('./src/integrations/maplibre/index.ts', import.meta.url),
+        ),
       },
       {
         find: '@mapseekai/emap/geopackage',
-        replacement: fileURLToPath(new URL('./src/integrations/geopackage/index.ts', import.meta.url)),
+        replacement: fileURLToPath(
+          new URL('./src/integrations/geopackage/index.ts', import.meta.url),
+        ),
       },
       {
         find: '@mapseekai/emap/geotiff',

@@ -273,7 +273,9 @@ describe('full precision solid path scheduling', () => {
       setBindings: vi.fn(),
       setVertexArray: vi.fn(),
       setParameters: vi.fn(),
-      draw: vi.fn(() => true),
+      draw: vi.fn(
+        (_options: { instanceCount?: number; firstInstance?: number; indexCount?: number }) => true,
+      ),
     };
     const a = {
       kind: 'path',
@@ -481,7 +483,10 @@ describe('raster scissor coordinate origins', () => {
             setPipeline: vi.fn(),
             setBindings: vi.fn(),
             setVertexArray: vi.fn(),
-            draw: vi.fn(() => true),
+            draw: vi.fn(
+              (_options: { instanceCount?: number; firstInstance?: number; indexCount?: number }) =>
+                true,
+            ),
           };
           const renderer: GpuRenderer = Object.assign(Object.create(GpuRenderer.prototype), {
             device: { type: backend },
@@ -532,7 +537,9 @@ describe('point icon GPU submission', () => {
       setBindings: vi.fn(),
       setParameters: vi.fn(),
       setVertexArray: vi.fn(),
-      draw: vi.fn(() => true),
+      draw: vi.fn(
+        (_options: { instanceCount?: number; firstInstance?: number; indexCount?: number }) => true,
+      ),
     };
     const texture = {},
       vao = { destroy: vi.fn() },
@@ -609,7 +616,9 @@ function indexFixture(backend: 'webgl' | 'webgpu') {
     }),
   };
   const pass = {
-    draw: vi.fn(() => true),
+    draw: vi.fn(
+      (_options: { instanceCount?: number; firstInstance?: number; indexCount?: number }) => true,
+    ),
     setPipeline: vi.fn(),
     setBindings: vi.fn(),
     setVertexArray: vi.fn(),
@@ -990,7 +999,9 @@ for (const backend of ['webgl', 'webgpu'] as const)
       setPipeline: vi.fn(),
       setBindings: vi.fn(),
       setVertexArray: vi.fn(),
-      draw: vi.fn(() => true),
+      draw: vi.fn(
+        (_options: { instanceCount?: number; firstInstance?: number; indexCount?: number }) => true,
+      ),
     };
     const texture = { setSampler: vi.fn() };
     const imageEntry = { texture, smoothing: true };
@@ -1170,6 +1181,7 @@ it('rebuilds a lost WebGPU device once, invalidates meshes, and discards a repla
     .mockResolvedValueOnce(a.device)
     .mockResolvedValueOnce(b.device)
     .mockImplementationOnce(
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- This adapter test double intentionally returns an asynchronous result.
       () =>
         new Promise((resolve) => {
           release = resolve;

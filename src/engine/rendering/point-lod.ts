@@ -189,7 +189,7 @@ export class PointLod {
         mask,
         cellSize,
         budget,
-        levels: new Map(),
+        levels: new Map<number, Level>(),
         bypassBelow: -Infinity,
         budgetFloor: -Infinity,
         small: false,

@@ -1,9 +1,12 @@
+import { isPathLayer } from '../../../shared/types/mapshaper-types';
+import { TopologySource } from '../../../domain/source/topology-source';
+import { asMutableTopologySource } from '../../../domain/source/source';
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type { EditCommand } from '../../../domain/edit/edit-command';
 import { EditHistory } from '../../../domain/edit/edit-history';
 import type { EmapHostInternal } from '../emap-host';
-import { Err, okValue, type OpResult } from '../op-result';
+import { Err, okValue } from '../op-result';
 import type { FeatureRef } from '../types';
 import type {
   MapshaperDataset,
@@ -61,10 +64,8 @@ async function createFixture(
 ) {
   let dataset = await importDataset(geometry);
   const entries: EditCommand[] = [];
-  const source = {
-    getDataset: () => dataset,
-    getArcs: () => dataset.arcs,
-  };
+  const source = asMutableTopologySource(new TopologySource('source'));
+  source.setDataset(dataset, false);
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'rings'
       ? (layers.find((layer) => layer.name === layerId) ?? null)
@@ -84,24 +85,24 @@ async function createFixture(
     host,
     runDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
-    runPreparedDatasetMutation: async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
+    runPreparedDatasetMutation: async (_sourceId, _label, mutate) => {
       const original = dataset;
       const working = adapter.copyDataset(original);
       const outcome = await mutate(working, original);
       if ('ok' in outcome) return outcome;
       dataset = working;
+      source.setDataset(dataset, false);
       return okValue(outcome.value);
     },
-    runPreparedEditCommand: async <T>(
-      _sourceId: string,
-      _label: string,
-      plan: (planned: MapshaperDataset, plannedSource: unknown) => any,
-    ): Promise<OpResult<T>> => {
+    runPreparedEditCommand: async (_sourceId, _label, plan) => {
       const outcome = plan(dataset, source);
       if ('ok' in outcome) return outcome;
       outcome.command.do();
       entries.push(outcome.command);
       return okValue(outcome.value);
+    },
+    runPreparedEditCommandMany: async () => {
+      throw new Error('Multi-source runner is not used by this fixture');
     },
   };
   return {
@@ -115,7 +116,7 @@ async function createFixture(
   };
 }
 
-function expectRingValidation(result: OpResult<void>) {
+function expectRingValidation(result: import('../op-result').OpResult<void>) {
   expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'ring' } });
 }
 
@@ -266,16 +267,12 @@ describe('addRing', () => {
     const fixture = await createFixture();
     const before = exported(fixture.dataset());
     let historyEntries = 0;
-    fixture.ctx.runPreparedEditCommand = async <T>(
-      _sourceId,
-      _label,
-      plan,
-    ): Promise<OpResult<T>> => {
+    fixture.ctx.runPreparedEditCommand = async (_sourceId, _label, plan) => {
       const dataset = fixture.dataset();
-      const result = plan({ ...dataset } as any, {
-        getDataset: () => dataset,
-        getArcs: () => dataset.arcs,
-      });
+      const source = fixture.ctx.host._sources.get('source');
+      if (!source) throw new Error('Missing fixture source');
+      const result = plan({ ...dataset }, source);
+      if (!('ok' in result)) throw new Error('Stale preparation unexpectedly succeeded');
       if (result.ok) historyEntries++;
       return result;
     };
@@ -352,7 +349,9 @@ describe('addRing', () => {
       value: undefined,
     });
 
-    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes?.[0]) throw new Error('Expected path fixture shape');
+    const shape = layer.shapes[0];
     expect(collectPolygonExteriors(shape, fixture.dataset().arcs!, adapter)).toEqual([
       { exteriorIndex: 0, holeIndexes: [] },
       { exteriorIndex: 1, holeIndexes: [2] },
@@ -401,7 +400,9 @@ describe('addRing', () => {
     ],
   ] as const)('rejects a ring with %s', async (_name, ring) => {
     const fixture = await createFixture();
-    expectRingValidation(await addRing(fixture.ctx, { ring: [...ring] }));
+    expectRingValidation(
+      await addRing(fixture.ctx, { ring: ring.map(([x, y]): [number, number] => [x, y]) }),
+    );
   });
 
   it('rejects an island inside an existing hole', async () => {
@@ -538,13 +539,13 @@ describe('addRing', () => {
 
   it('rejects stale prepared datasets', async () => {
     const fixture = await createFixture();
-    fixture.ctx.runPreparedEditCommand = async <T>(
-      _sourceId,
-      _label,
-      plan,
-    ): Promise<OpResult<T>> => {
+    fixture.ctx.runPreparedEditCommand = async (_sourceId, _label, plan) => {
       const dataset = fixture.dataset();
-      return plan({ ...dataset } as any, { getDataset: () => dataset });
+      const source = fixture.ctx.host._sources.get('source');
+      if (!source) throw new Error('Missing fixture source');
+      const result = plan({ ...dataset }, source);
+      if (!('ok' in result)) throw new Error('Stale preparation unexpectedly succeeded');
+      return result;
     };
     await expect(
       addRing(fixture.ctx, {
@@ -619,9 +620,11 @@ describe('source-scan error flow', () => {
           ['other', { getDataset: () => other.dataset() }],
         ]),
       } as unknown as EmapHostInternal,
-      runPreparedEditCommand: async <T>(sourceId, _label, plan): Promise<OpResult<T>> => {
+      runPreparedEditCommand: async (sourceId, _label, plan) => {
         const dataset = (sourceId === 'conflict' ? conflict : other).dataset();
-        const outcome = plan(dataset, { getDataset: () => dataset });
+        const source = (sourceId === 'conflict' ? conflict : other).ctx.host._sources.get('source');
+        if (!source) throw new Error('Missing fixture source');
+        const outcome = plan(dataset, source);
         return 'ok' in outcome ? outcome : okValue(outcome.value);
       },
     };
@@ -795,7 +798,7 @@ describe('deleteRing', () => {
         [2, 2],
       ],
     ]);
-    expectRingValidation(await deleteRing(fixture.ctx, { point }));
+    expectRingValidation(await deleteRing(fixture.ctx, { point: [point[0], point[1]] }));
   });
 
   it('rejects deletion from a polygon with no holes', async () => {
@@ -868,6 +871,7 @@ describe('fillRing', () => {
     const arcs = fixture.dataset().arcs!;
     const arcCount = arcs.size();
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({
       ok: true,
       value: undefined,
@@ -885,7 +889,8 @@ describe('fillRing', () => {
         .map((id) => ~id),
     ]);
     // Empty attribute record appended.
-    const records = layer.data!.getRecords();
+    const records = layer.data!.getRecords?.();
+    if (!records) throw new Error('Missing fixture records');
     expect(records).toHaveLength(2);
     expect(records[1]).toEqual({});
   });
@@ -910,6 +915,7 @@ describe('fillRing', () => {
       value: undefined,
     });
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     expect(layer.shapes).toHaveLength(2);
     expect(layer.shapes![1]).toHaveLength(1);
 
@@ -921,6 +927,7 @@ describe('fillRing', () => {
   it('fills the hole of the correct part in a multi-part feature', async () => {
     const fixture = await createFixture(undefined, undefined, MULTIPART_HOLED);
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     await expect(fillRing(fixture.ctx, { point: [23, 23] })).resolves.toEqual({
       ok: true,
       value: undefined,
@@ -954,6 +961,7 @@ describe('fillRing', () => {
   it('creates no record when the layer has no data table', async () => {
     const fixture = await createFixture(undefined, undefined, HOLED);
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     delete layer.data; // strip the data table the GeoJSON import created
     await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({
       ok: true,
@@ -973,7 +981,7 @@ describe('fillRing', () => {
     await fillRing(fixture.ctx, { point: [5, 5] });
     fixture.entries[0]!.undo();
     expect(fixture.dataset().layers[0]!.shapes).toHaveLength(1);
-    expect(fixture.dataset().layers[0]!.data!.getRecords()).toHaveLength(1);
+    expect(fixture.dataset().layers[0]!.data!.getRecords?.()).toHaveLength(1);
     expect(arcs.size()).toBe(arcCount);
     fixture.entries[0]!.do();
     expect(fixture.dataset().layers[0]!.shapes).toHaveLength(2);
@@ -1041,6 +1049,7 @@ describe('fillRing', () => {
     ];
     const fixture = await createFixture(undefined, undefined, multi);
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toMatchObject({ ok: true });
     // 3 features now: host (hole kept), neighbour, filling feature.
     expect(layer.shapes).toHaveLength(3);
@@ -1058,7 +1067,7 @@ describe('fillRing', () => {
   });
 });
 
-function area(ring: Position[]): number {
+function area(ring: readonly (readonly number[])[]): number {
   return (
     ring.slice(1).reduce((sum, point, index) => {
       const previous = ring[index]!;

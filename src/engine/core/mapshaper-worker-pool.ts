@@ -1,4 +1,5 @@
 import type { WorkerRuntime, RuntimeScope } from '@mapseekai/tasklane';
+import type { PackedSession } from '../../integrations/mapshaper/adapter';
 import {
   encodeWorkerPacket,
   workerPacketTransfers,
@@ -116,7 +117,7 @@ export class MapshaperWorkerPool {
     prepare: () => Promise<any>,
     inputFiles?: Record<string, Uint8Array | string>,
     inputByteLimit = IMPORT_BYTES,
-  ): Promise<any> {
+  ): Promise<PackedSession> {
     if (this.destroyed) throw new Error('MapshaperWorkerPool: destroyed');
     const handle = this.scope.enqueuePrepared('mapshaper', {
       pool: 'mapshaper',
@@ -141,7 +142,7 @@ export class MapshaperWorkerPool {
         };
       },
     });
-    return taskValue(handle, (bytes: Uint8Array) => decodeWorkerData(bytes));
+    return taskValue<PackedSession>(handle, (bytes: Uint8Array) => decodeWorkerData(bytes));
   }
   cancelAll(): void {
     if (this.destroyed) return;

@@ -274,7 +274,7 @@ describe('raster display tiles', () => {
       { opacity: NaN },
       { opacity: 2 },
       { bands: [1] },
-      { ranges: [[2, 1]] },
+      { ranges: [[2, 1] as const] },
       { bands: [0, 0] },
     ])
       expect(() => validateRasterStyle(metadata, invalid)).toThrow();

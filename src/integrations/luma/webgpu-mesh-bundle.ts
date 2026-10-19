@@ -79,7 +79,7 @@ export class WebgpuMeshRecorder extends RenderPass {
     if (!(uniform instanceof Buffer) || Object.keys(bindings).length !== 1)
       throw new Error('Only mesh uniform buffers may be recorded');
     let byBuffer = this.bindings.get(this.pipeline);
-    if (!byBuffer) this.bindings.set(this.pipeline, (byBuffer = new Map()));
+    if (!byBuffer) this.bindings.set(this.pipeline, (byBuffer = new Map<Buffer, GPUBindGroup>()));
     let group = byBuffer.get(uniform);
     if (!group) {
       group = this.device.handle.createBindGroup({

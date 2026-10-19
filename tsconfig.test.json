@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@mapseekai/emap": ["./src/index.ts"],
+      "@mapseekai/emap/arrow": ["./src/integrations/arrow/index.ts"],
+      "@mapseekai/emap/duckdb": ["./src/integrations/duckdb/index.ts"],
+      "@mapseekai/emap/style.css": ["./src/shared/types/style.css.d.ts"],
+      "@mapseekai/emap/context": ["./src/runtime/context/index.ts"],
+      "@mapseekai/emap/services": ["./src/runtime/services/index.ts"],
+      "@mapseekai/emap/providers": ["./src/runtime/providers/index.ts"],
+      "@mapseekai/emap/plugins": ["./src/runtime/plugins/index.ts"],
+      "@mapseekai/emap/presets": ["./src/runtime/presets/index.ts"],
+      "@mapseekai/emap/ai": ["./src/runtime/ai/index.ts"],
+      "@mapseekai/emap/maplibre": ["./src/integrations/maplibre/index.ts"],
+      "@mapseekai/emap/geopackage": ["./src/integrations/geopackage/index.ts"],
+      "@mapseekai/emap/geotiff": ["./src/integrations/geotiff/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "packages/**/*.test.ts",
+    "packages/**/*.test.tsx",
+    "test/**/*.ts",
+    "src/shared/types/**/*.d.ts"
+  ],
+  "exclude": []
+}

@@ -20,7 +20,7 @@ const parameters = {
   planarConfiguration: 1,
   bitsPerSample: [8, 8, 8],
   predictor: 1,
-} as const;
+} satisfies Parameters<typeof getDecoder>[1];
 
 describe('allocation-light TIFF LZW decoder', () => {
   it('keeps the bounded JS fallback correct after filling the 12-bit dictionary', () => {
@@ -37,7 +37,9 @@ describe('allocation-light TIFF LZW decoder', () => {
     for (const planarConfiguration of [1, 2]) {
       const ArrayType = bits === 16 ? Uint16Array : Uint32Array;
       const stride = planarConfiguration === 2 ? 1 : 3;
-      const original = ArrayType.from({ length: 64 * 16 * stride }, (_, i) => i * 173 + 7);
+      const original = new ArrayType(
+        Array.from({ length: 64 * 16 * stride }, (_, i) => i * 173 + 7),
+      );
       const predicted = original.slice();
       for (let row = 0; row < 16; row++)
         for (let index = 64 * stride - 1; index >= stride; index--)

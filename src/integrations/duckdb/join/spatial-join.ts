@@ -41,7 +41,7 @@ export function spatialJoin(
   join: MapshaperDataset,
   options: SpatialJoinOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   const predicate = options.predicate ?? 'intersects';
   const fn = FUNCTIONS[predicate];
   if (!fn)

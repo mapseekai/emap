@@ -103,7 +103,8 @@ function resolveSpatialExtensionUrl(
   selectedBundle: { mainModule: string },
 ): string | null {
   if (!urls) return null;
-  const matchingPlatforms = Object.entries(bundles)
+  const entries: Array<[string, unknown]> = Object.entries(bundles);
+  const matchingPlatforms = entries
     .filter(
       ([, bundle]) =>
         typeof bundle === 'object' &&

@@ -120,7 +120,7 @@ export class GeoPackageStreamReceiver {
           geometry_type: layer.geometry_type,
           fields: layer.fields,
           shapes: new Array(layer.rows),
-          records: new Array(layer.rows),
+          records: new Array<Record<string, unknown>>(layer.rows),
         });
         this.received.push(0);
       }

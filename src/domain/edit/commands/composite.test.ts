@@ -3,8 +3,8 @@ import { CompositeCommand } from './composite';
 import type { EditCommand } from '../edit-command';
 
 function makeCmd(label?: string): EditCommand & {
-  do: ReturnType<typeof vi.fn>;
-  undo: ReturnType<typeof vi.fn>;
+  do: ReturnType<typeof vi.fn<() => void>>;
+  undo: ReturnType<typeof vi.fn<() => void>>;
 } {
   return {
     do: vi.fn(),

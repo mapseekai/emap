@@ -526,7 +526,9 @@ export class GpuRenderer {
     this.pathSamples =
       this.backend === 'webgpu'
         ? 4
-        : (this.device as WebGLDevice).gl.getParameter((this.device as WebGLDevice).gl.SAMPLES);
+        : ((this.device as WebGLDevice).gl.getParameter(
+            (this.device as WebGLDevice).gl.SAMPLES,
+          ) as number);
     this.nearest = this.device.createSampler({
       minFilter: 'nearest',
       magFilter: 'nearest',
@@ -924,7 +926,7 @@ export class GpuRenderer {
         values: new Float32Array(60),
         frame: -1,
         bindings: { emapUniforms: buffer },
-        images: new Map(),
+        images: new Map<Texture, Bindings>(),
       };
       this.styles.set(key, entry);
     }
@@ -1132,7 +1134,7 @@ export class GpuRenderer {
   }
   private runMeshPlan(plan: MeshCommandPlan, paint: MeshPaint): void {
     const previous = this.meshScopeStyles;
-    this.meshScopeStyles = new Map();
+    this.meshScopeStyles = new Map<PipelineKind, GpuStyle>();
     try {
       for (const command of plan.compiled) {
         const { mesh, original, ranges, indexRanges } = command;
@@ -1277,7 +1279,7 @@ export class GpuRenderer {
         let rangeVao = vao;
         if (this.backend === 'webgl' && range.firstInstance) {
           const key = `${fastPath ? msaaKind : kind}:${range.firstInstance}`;
-          mesh.rangeVertexArrays ??= new Map();
+          mesh.rangeVertexArrays ??= new Map<string, VertexArray>();
           const previous = mesh.rangeVertexArrays.get(key);
           if (previous) {
             mesh.rangeVertexArrays.delete(key);

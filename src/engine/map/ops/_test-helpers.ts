@@ -4,14 +4,19 @@
 // coupling. Extracted so multiple op test files can stay in sync when
 // the host contract grows new fields.
 
-import { OK, type OpResult } from '../op-result';
+import { OK } from '../op-result';
+import { TopologySource } from '../../../domain/source/topology-source';
+import { asMutableTopologySource } from '../../../domain/source/source';
+import { EditHistory } from '../../../domain/edit/edit-history';
+import { Selection } from '../selection';
+import { LayerRegistry } from '../layer-registry';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../../integrations/mapshaper/adapter';
 import type { MapshaperLayer, MapshaperDataset } from '../../../shared/types/mapshaper-types';
 
 export interface StubLayer {
   name: string;
-  geometry_type?: string;
+  geometry_type?: MapshaperLayer['geometry_type'];
 }
 
 export interface StubCtxResult {
@@ -20,38 +25,29 @@ export interface StubCtxResult {
 }
 
 export function makeStubCtx(layers: StubLayer[] = [{ name: 'parks' }]): StubCtxResult {
-  const layerObjs: MapshaperLayer[] = layers.map(
-    (l) =>
-      ({
-        name: l.name,
-        geometry_type: (l.geometry_type ?? 'polygon') as any,
-        shapes: [[[0]]],
-      }) as MapshaperLayer,
-  );
-  const dataset: MapshaperDataset = { layers: layerObjs, info: {} } as MapshaperDataset;
-
+  const layerObjs: MapshaperLayer[] = layers.map((layer) => ({
+    name: layer.name,
+    geometry_type: layer.geometry_type ?? 'polygon',
+    shapes: [],
+  }));
+  const dataset: MapshaperDataset = { layers: layerObjs, info: {} };
+  const source = new TopologySource('s1');
+  source.setDataset(dataset, false);
+  const sources = new Map([['s1', asMutableTopologySource(source)]]);
   const calls: StubCtxResult['calls'] = [];
   const ctx: OpContext = {
     host: {
       _removed: false,
-      _sources: new globalThis.Map([
-        [
-          's1',
-          {
-            getDataset: () => dataset,
-            setDataset: () => undefined,
-          } as any,
-        ],
-      ]),
-      _history: null as any,
-      _selection: null as any,
+      _sources: sources,
+      _history: new EditHistory(),
+      _selection: new Selection(),
       _activeTransaction: null,
-      _validators: null as any,
       _workerPool: null,
       _workerMode: false,
       _workerThreshold: 1e9,
-      layers: { resolve: () => null } as any,
-      _resolveLayer: () => null,
+      layers: new LayerRegistry(sources),
+      _resolveRenderLayerTarget: () => null,
+      _filterMaskForRenderLayer: () => null,
       _scheduleRender: () => undefined,
       _fireHistoryChange: () => undefined,
       _fireSelectionChange: () => undefined,
@@ -59,15 +55,19 @@ export function makeStubCtx(layers: StubLayer[] = [{ name: 'parks' }]): StubCtxR
       _clearSpatialIndexesForSources: () => undefined,
       _allowExpressionEvaluation: () => true,
       fire: () => undefined,
-    } as any,
+    },
     runDatasetCommandParsed: (sourceId, cmds, label) => {
       calls.push({ sourceId, cmds, label });
       return Promise.resolve(OK);
     },
-    runPreparedDatasetCommandParsed: () => Promise.resolve(OK),
-    runPreparedDatasetMutation: <T>() => Promise.resolve(OK as OpResult<T>),
-    runPreparedEditCommand: <T>() => Promise.resolve(OK as OpResult<T>),
-    runPreparedEditCommandMany: <T>() => Promise.resolve(OK as OpResult<T[]>),
+    runPreparedDatasetCommandParsed: unsupportedRunner,
+    runPreparedDatasetMutation: unsupportedRunner,
+    runPreparedEditCommand: unsupportedRunner,
+    runPreparedEditCommandMany: unsupportedRunner,
   };
   return { ctx, calls };
+}
+
+async function unsupportedRunner(): Promise<never> {
+  throw new Error('Prepared runners are not configured in this command-only fixture');
 }

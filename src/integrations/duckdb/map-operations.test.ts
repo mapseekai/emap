@@ -47,7 +47,7 @@ async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
 
 async function polygonJoinDataset(): Promise<MapshaperDataset> {
   const dataset = await polygonDataset();
-  const records = dataset.layers[0]!.data?.getRecords();
+  const records = dataset.layers[0]!.data?.getRecords?.();
   if (!records?.[0]) throw new Error('Expected polygon fixture record');
   records[0].sales = 12;
   return dataset;
@@ -179,7 +179,7 @@ describe('duckDbAttributeFilterLayer', () => {
     if (result.ok) {
       expect(result.value.sourceId).toBe('query');
       expect(result.value.dataset).toBe(ctx.outputDatasets.get('query'));
-      expect(result.value.dataset.layers[0]!.data?.getRecords()).toEqual([{ name: 'a' }]);
+      expect(result.value.dataset.layers[0]!.data?.getRecords?.()).toEqual([{ name: 'a' }]);
     }
   });
 
@@ -202,10 +202,13 @@ describe('duckDbAttributeFilterLayer', () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
 
-    const result = await duckDbAttributeFilterLayer(ctx, {
-      src: 'src',
-      sql: 'SELECT name FROM input',
-    });
+    const result = await Reflect.apply(duckDbAttributeFilterLayer, undefined, [
+      ctx,
+      {
+        src: 'src',
+        sql: 'SELECT name FROM input',
+      },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -366,10 +369,13 @@ describe('duckDbGeoParquetQueryLayer', () => {
   it('returns validation when output source id is missing', async () => {
     const ctx = makeByteContext('src', new Uint8Array([1]));
 
-    const result = await duckDbGeoParquetQueryLayer(ctx, {
-      src: 'src',
-      sql: 'SELECT geometry FROM input',
-    });
+    const result = await Reflect.apply(duckDbGeoParquetQueryLayer, undefined, [
+      ctx,
+      {
+        src: 'src',
+        sql: 'SELECT geometry FROM input',
+      },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -439,7 +445,7 @@ describe('duckDbSpatialSummaryJoinLayer', () => {
       { operation: 'count', outputColumn: 'match_count' },
       { operation: 'sum', field: 'sales', outputColumn: 'sales_total' },
     ],
-  } as const satisfies Omit<DuckDbSpatialSummaryJoinLayerOptions, 'src' | 'join'>;
+  } as const satisfies Omit<DuckDbSpatialSummaryJoinLayerOptions, 'src' | 'join' | 'output'>;
 
   const invalidOutputSourceIds = [
     ['undefined', undefined],
@@ -518,7 +524,7 @@ describe('duckDbSpatialSummaryJoinLayer', () => {
     expect(result.ok && result.value.sourceId).toBe(paddedSourceId);
     expect(ctx.outputDatasets.has(paddedSourceId.trim())).toBe(false);
     expect(result.ok && result.value.dataset.layers[0]!.name).toBe('joined statistics');
-    expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords()).toEqual([
+    expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords?.()).toEqual([
       { id: 'matched', match_count: 1, sales_total: 12 },
     ]);
     expect(runtime.connection.inserted).toHaveLength(2);
@@ -613,11 +619,14 @@ describe('duckDbSpatialSummaryJoinLayer', () => {
     ctx.sources.set('join', new FakeSource(await polygonDataset()));
 
     await expect(
-      duckDbSpatialSummaryJoinLayer(ctx, {
-        src: 'target',
-        join: 'join',
-        ...aggregationOptions,
-      }),
+      Reflect.apply(duckDbSpatialSummaryJoinLayer, undefined, [
+        ctx,
+        {
+          src: 'target',
+          join: 'join',
+          ...aggregationOptions,
+        },
+      ]),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -660,7 +669,7 @@ describe('duckDbSpatialSummaryJoinLayer', () => {
 
   it('uses a collision-free aggregate row id from the dataset operation', async () => {
     const target = await polygonDataset();
-    const targetRecords = target.layers[0]!.data?.getRecords();
+    const targetRecords = target.layers[0]!.data?.getRecords?.();
     targetRecords![0]!.__emap_rowid = 'reserved';
     const ctx = makeContext('target', target);
     ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
@@ -812,11 +821,14 @@ describe('duckDbOverlayLayer', () => {
     const ctx = makeContext('src', input);
     ctx.sources.set('mask', new FakeSource(mask));
 
-    const result = await duckDbOverlayLayer(ctx, {
-      src: 'src',
-      mask: 'mask',
-      operation: 'intersection',
-    });
+    const result = await Reflect.apply(duckDbOverlayLayer, undefined, [
+      ctx,
+      {
+        src: 'src',
+        mask: 'mask',
+        operation: 'intersection',
+      },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -897,7 +909,7 @@ function setup() {
   const queries: ReturnType<typeof deferred<MapshaperDataset>>[] = [];
   const input: MapshaperDataset = { layers: [], editVersion: 0, attributeVersion: 0 };
   const output: MapshaperDataset = { layers: [] };
-  let bytes = new Uint8Array([1]);
+  let bytes: Uint8Array = new Uint8Array([1]);
   const querySource = {
     query() {
       const pending = deferred<MapshaperDataset>();

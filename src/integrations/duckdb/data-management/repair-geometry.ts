@@ -16,7 +16,7 @@ export function repairGeometry(
   input: MapshaperDataset,
   options: RepairGeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runUnaryGeometryTool(
     input,
     options,

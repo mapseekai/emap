@@ -114,14 +114,17 @@ export class ControlServiceImpl {
     const context = Object.create(base) as ControlContext;
     context.on = ((...args: unknown[]) => {
       ctx.effect(() => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
         Reflect.apply(base.on, base, args);
         return () => {
+          // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
           Reflect.apply(base.off, base, [args[0], args[args.length - 1]]);
         };
       }, 'control event subscription');
       return context;
     }) as ControlContext['on'];
     context.off = ((...args: unknown[]) => {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
       Reflect.apply(base.off, base, args);
       return context;
     }) as ControlContext['off'];

@@ -14,7 +14,7 @@ export function extractVertices(
   input: MapshaperDataset,
   options: ExtractVerticesOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runSingleInputTool(
     input,
     'extract_vertices',

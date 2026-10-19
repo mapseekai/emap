@@ -165,6 +165,7 @@ export class SegmentConflictIndex {
     this._closedRings = closedRings;
     // Flatbush.finish() throws when nothing was added; empty indexes never search.
     this._index = count === 0 ? null : new Flatbush(count);
+    if (!this._index) return;
     for (let ring = 0; ring < rings.length; ring++) {
       const segments = rings[ring]!;
       for (let position = 0; position < segments.length; position++) {

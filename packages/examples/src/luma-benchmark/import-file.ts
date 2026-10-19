@@ -1,10 +1,25 @@
 import benchmarkWorkerUrl from './import-worker?worker&url';
-import { browserWorker, type WorkerRuntime, type RuntimeScope, type WorkerSession } from '@mapseekai/tasklane';
-import { standaloneRuntime, taskValue, IMPORT_BYTES } from '../../../../src/integrations/tasklane/runtime';
+import {
+  browserWorker,
+  type WorkerRuntime,
+  type RuntimeScope,
+  type WorkerSession,
+} from '@mapseekai/tasklane';
+import {
+  standaloneRuntime,
+  taskValue,
+  IMPORT_BYTES,
+} from '../../../../src/integrations/tasklane/runtime';
 import { decodeWorkerData } from '../../../../src/integrations/mapshaper/binary';
 import { groundBounds } from '../../../../src/domain/geo/perspective-transform';
-import type { ScreenPathRequest, ScreenPathPacket } from '../../../../src/engine/rendering/luma/screen-paths';
-import type { PointLodRequest, PointLodPacket } from '../../../../src/engine/rendering/luma/point-lod-source';
+import type {
+  ScreenPathRequest,
+  ScreenPathPacket,
+} from '../../../../src/engine/rendering/luma/screen-paths';
+import type {
+  PointLodRequest,
+  PointLodPacket,
+} from '../../../../src/engine/rendering/luma/point-lod-source';
 import type { CoordinatePatch } from '../../../../src/engine/rendering/luma/edit-patch';
 import Flatbush from 'flatbush';
 import {
@@ -48,28 +63,55 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
   private readonly runtime: WorkerRuntime;
   private readonly scope: RuntimeScope;
   private readonly session: WorkerSession;
-  constructor(private file: File, private progress: (message: string) => void) {
-    this.runtime = standaloneRuntime('benchmark', browserWorker(benchmarkWorkerUrl, { type: 'module', name: 'emap-benchmark-data-lod' }), 1, IMPORT_BYTES);
+  constructor(
+    private file: File,
+    private progress: (message: string) => void,
+  ) {
+    this.runtime = standaloneRuntime(
+      'benchmark',
+      browserWorker(benchmarkWorkerUrl, { type: 'module', name: 'emap-benchmark-data-lod' }),
+      1,
+      IMPORT_BYTES,
+    );
     this.scope = this.runtime.createScope('benchmark');
     this.session = this.scope.session('benchmark');
   }
   async open(): Promise<MapshaperDataset> {
-    const data = await this.request('import', { file: this.file, vendorUrl: new URL(`${import.meta.env.BASE_URL}vendor/mapshaper-vendor.js`, location.href).href }) as Response;
-    const layers: MapshaperLayer[] = (data.layers ?? []).map(({ records, ...layer }) => ({ ...layer, ...(records ? { data: getDefaultMapshaperAdapter().createDataTable(records) } : {}) }));
-    return { layers, info: data.info, ...(data.arcs ? { arcs: restoreTransferredArcs(data.arcs) } : {}) };
+    const data = (await this.request('import', {
+      file: this.file,
+      vendorUrl: new URL(`${import.meta.env.BASE_URL}vendor/mapshaper-vendor.js`, location.href)
+        .href,
+    })) as Response;
+    const layers: MapshaperLayer[] = (data.layers ?? []).map(({ records, ...layer }) => ({
+      ...layer,
+      ...(records ? { data: getDefaultMapshaperAdapter().createDataTable(records) } : {}),
+    }));
+    return {
+      layers,
+      info: data.info,
+      ...(data.arcs ? { arcs: restoreTransferredArcs(data.arcs) } : {}),
+    };
   }
   setBounds(bounds: Rect): void {
     this.bounds = bounds;
   }
-  private async request(type: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> {
+  private async request(
+    type: string,
+    args: Record<string, unknown> = {},
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     if (this.closed) throw new DOMException('Worker closed', 'AbortError');
     const handle = this.session.enqueue('benchmark', {
       budget: { inputBytes: IMPORT_BYTES, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
       blobLimits: { inputBytes: type === 'import' ? this.file.size : 0, outputBytes: 0 },
-      signal, cancellation: 'cooperative',
+      signal,
+      cancellation: 'cooperative',
       onProgress: (value) => {
         const data = value as Response;
-        if (data.type === 'progress') this.progress(`流式导入 ${this.file.name}：${(((data.bytes ?? 0) / this.file.size) * 100).toFixed(1)}% · ${(data.features ?? 0).toLocaleString()} 要素`);
+        if (data.type === 'progress')
+          this.progress(
+            `流式导入 ${this.file.name}：${(((data.bytes ?? 0) / this.file.size) * 100).toFixed(1)}% · ${(data.features ?? 0).toLocaleString()} 要素`,
+          );
         else this.progress(data.message ?? '构建显示缓存');
       },
       prepare: () => ({ payload: { type, ...args } }),
@@ -98,15 +140,24 @@ export class BenchmarkFileWorker implements ChunkGeometryAccess {
     }
   }
   visible(transform: AffineTransform, width: number, height: number, padding = 8): SpatialChunk[] {
-    const ids: number[] = this.index?.search(...groundBounds(transform, width, height, padding)) ?? [];
+    const ids: number[] =
+      this.index?.search(...groundBounds(transform, width, height, padding)) ?? [];
     return ids.sort((a, b) => a - b).map((id) => this.chunks[id]);
   }
-  level(_transform: AffineTransform): number { return 0; }
-  async queryPointLod(pointView: PointLodRequest): Promise<PointLodPacket[]> {
-    return await this.request('point-lod', { pointView }) as PointLodPacket[];
+  level(_transform: AffineTransform): number {
+    return 0;
   }
-  async buildScreenPaths(chunk: SpatialChunk, screenView: ScreenPathRequest): Promise<ScreenPathPacket> {
-    return await this.request('screen-paths',{chunk:chunk.id,screenView}) as ScreenPathPacket;
+  async queryPointLod(pointView: PointLodRequest): Promise<PointLodPacket[]> {
+    return (await this.request('point-lod', { pointView })) as PointLodPacket[];
+  }
+  async buildScreenPaths(
+    chunk: SpatialChunk,
+    screenView: ScreenPathRequest,
+  ): Promise<ScreenPathPacket> {
+    return (await this.request('screen-paths', {
+      chunk: chunk.id,
+      screenView,
+    })) as ScreenPathPacket;
   }
   async build(chunk: SpatialChunk, level: number) {
     const packet = (await this.request('build', { chunk: chunk.id, level })) as DisplayPacket;

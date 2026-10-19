@@ -44,10 +44,10 @@ export async function polygonPresentationGroups(
     const part = parts[i],
       paths = part.kind === 'path';
     let kinds = indexes.get(part.partition);
-    if (!kinds) indexes.set(part.partition, (kinds = new Map()));
+    if (!kinds) indexes.set(part.partition, (kinds = new Map<boolean, (typeof domains)[number]>()));
     let domain = kinds.get(paths);
     if (!domain) {
-      domain = { partition: part.partition, paths, chunks: new Map() };
+      domain = { partition: part.partition, paths, chunks: new Map<number, number>() };
       kinds.set(paths, domain);
       domains.push(domain);
     }
@@ -125,7 +125,7 @@ export async function polygonColdGroups(
     const part = current[i];
     if (part.kind !== 'path') continue;
     let chunks = paths.get(part.partition);
-    if (!chunks) paths.set(part.partition, (chunks = new Map()));
+    if (!chunks) paths.set(part.partition, (chunks = new Map<number, number>()));
     // Multiple paint owners of the same path partition need the conservative plan.
     if (chunks.has(part.job.chunk)) return undefined;
     chunks.set(part.job.chunk, i);

@@ -367,7 +367,7 @@ export class LayerServiceImpl {
   }
 
   _getVisibleLayerKeys(): MutableLayerKeyIndex {
-    const keys: MutableLayerKeyIndex = new globalThis.Map();
+    const keys: MutableLayerKeyIndex = new globalThis.Map<string, Set<string>>();
     const layers = this._getEffectiveLayers();
     for (const layer of layers) {
       if (layer.layout?.visibility === 'none') continue;

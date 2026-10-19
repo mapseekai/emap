@@ -66,7 +66,7 @@ export function translateMiniDataset(opts: {
     }
   }
 
-  const miniToLiveFinal: (number | undefined)[] = new Array(miniArcCount);
+  const miniToLiveFinal: (number | undefined)[] = new Array<number | undefined>(miniArcCount);
   const appendedArcs: AppendedArc[] = [];
   const assignAppend = (postId: number): void => {
     miniToLiveFinal[postId] = liveArcCount + appendedArcs.length;

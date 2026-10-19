@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type * as maplibregl from 'maplibre-gl';
-import type { MapLibreOverlayService, MapLibreService } from './maplibre-service';
+import type {
+  MapLibreOverlayService,
+  MapLibreOverlayResourceService,
+  MapLibreService,
+} from './maplibre-service';
 import { createMapLibreServiceManager } from './maplibre-service-manager';
+
+// MapLibre exposes its ambient request enum only as a type; use its declared wire values.
+const SPRITE_RESOURCE = 'SpriteImage' as maplibregl.ResourceType;
+const SOURCE_RESOURCE = 'Source' as maplibregl.ResourceType;
 
 type FakeMapListener = (event?: unknown) => void;
 type FakeAddFailure = {
@@ -288,21 +296,21 @@ const base = {
   name: 'Light',
   role: 'basemap',
   style: 'https://example.test/light.json',
-} as const;
+} satisfies MapLibreService;
 
 const dark = {
   ...base,
   id: 'dark',
   name: 'Dark',
   style: 'https://example.test/dark.json',
-} as const;
+} satisfies MapLibreService;
 
 const streets = {
   ...base,
   id: 'streets',
   name: 'Streets',
   style: 'https://example.test/streets.json',
-} as const;
+} satisfies MapLibreService;
 
 const roads = {
   id: 'roads',
@@ -312,7 +320,7 @@ const roads = {
     roads: { type: 'vector', url: 'https://example.test/roads.json' },
   },
   layers: [{ id: 'roads-line', type: 'line', source: 'roads', 'source-layer': 'roads' }],
-} as const satisfies MapLibreOverlayService;
+} satisfies MapLibreOverlayService;
 
 const traffic = {
   id: 'traffic',
@@ -325,7 +333,7 @@ const traffic = {
     { id: 'traffic-casing', type: 'line', source: 'traffic' },
     { id: 'traffic-line', type: 'line', source: 'traffic' },
   ],
-} as const satisfies MapLibreOverlayService;
+} satisfies MapLibreOverlayService;
 
 const labels = {
   id: 'labels',
@@ -335,7 +343,7 @@ const labels = {
     labels: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
   },
   layers: [{ id: 'labels-symbol', type: 'symbol', source: 'labels' }],
-} as const satisfies MapLibreOverlayService;
+} satisfies MapLibreOverlayService;
 
 const EMPTY_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -367,7 +375,7 @@ const brightStyle = {
     { id: 'roads', type: 'line', source: 'land', 'source-layer': 'roads' },
     { id: 'places', type: 'symbol', source: 'places', 'source-layer': 'places' },
   ],
-} as const satisfies maplibregl.StyleSpecification;
+} satisfies maplibregl.StyleSpecification;
 
 const objectBasemap = {
   ...base,
@@ -424,7 +432,7 @@ function createManager(
   options: {
     crs?: string;
     defaultBasemap?: string;
-    mapOptions?: maplibregl.MapOptions;
+    mapOptions?: Partial<maplibregl.MapOptions>;
     fetchStyle?: typeof fetch;
   } = {},
 ) {
@@ -496,7 +504,7 @@ describe('MapLibreServiceManager registry', () => {
       name: 'Bright',
       role: 'overlay',
       style: 'https://tiles.openfreemap.org/styles/bright',
-    } as const;
+    } satisfies MapLibreService;
     const { loadMapLibre, manager } = createManager([styleOverlay]);
 
     expect(manager.getServices()).toEqual([styleOverlay]);
@@ -526,7 +534,9 @@ describe('MapLibreServiceManager registry', () => {
     await manager.addService(base);
     await manager.addService(roads);
     const services = manager.getServices();
-    (services[1] as MapLibreOverlayService).sources.roads.url = 'changed';
+    const copiedRoads = (services[1] as MapLibreOverlayResourceService).sources.roads;
+    if (!copiedRoads || !('url' in copiedRoads)) throw new Error('Missing vector source URL');
+    copiedRoads.url = 'changed';
 
     expect(changes).toEqual([
       { serviceId: 'light', reason: 'add', active: false },
@@ -537,9 +547,11 @@ describe('MapLibreServiceManager registry', () => {
       active: false,
       status: 'idle',
     });
-    expect((manager.getServices()[1] as MapLibreOverlayService).sources.roads.url).toBe(
-      'https://example.test/roads.json',
-    );
+    expect(
+      (manager.getServices()[1] as MapLibreOverlayResourceService).sources.roads,
+    ).toMatchObject({
+      url: 'https://example.test/roads.json',
+    });
   });
 
   it('rejects duplicate service ids without mutating the registry', async () => {
@@ -583,7 +595,7 @@ describe('MapLibreServiceManager registry', () => {
       role: 'overlay',
       sources: {},
       layers: [{ id: 'background-fill', type: 'background' }],
-    } as const satisfies MapLibreOverlayService;
+    } satisfies MapLibreOverlayService;
     const unknownSource = {
       ...roads,
       id: 'unknown-source',
@@ -599,7 +611,7 @@ describe('MapLibreServiceManager registry', () => {
     await expect(manager.addService(unknownSource)).rejects.toThrow(
       'MapLibre overlay layer "unknown-source-line" references unknown source "other"',
     );
-    await expect(manager.addService(missingSource)).rejects.toThrow(
+    await expect(Reflect.apply(manager.addService, manager, [missingSource])).rejects.toThrow(
       'MapLibre overlay layer "missing-source-line" requires a source',
     );
   });
@@ -788,7 +800,7 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
         geojson: { type: 'geojson', data: './data/features.geojson' },
       },
       layers: [{ id: 'background', type: 'background' }],
-    } as const satisfies maplibregl.StyleSpecification;
+    } satisfies maplibregl.StyleSpecification;
     const finalUrl = 'https://redirected.example.test/releases/v2/style.json';
     const fetchStyle = vi.fn(
       async () =>
@@ -799,8 +811,8 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
           json: async () => basemapStyle,
         }) as Response,
     );
-    const transformRequest = vi.fn((url: string) => ({
-      url: `https://cdn.example.test/proxy?style=${encodeURIComponent(url)}`,
+    const transformRequest = vi.fn((url: Parameters<typeof fetch>[0]) => ({
+      url: `https://cdn.example.test/proxy?style=${encodeURIComponent(String(url))}`,
     }));
     const { manager } = createManager(
       [
@@ -2132,7 +2144,7 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
         center: [0, 0],
         zoom: 12,
         interactive: true,
-        attributionControl: true,
+        attributionControl: {},
         maxPitch: 35,
         renderWorldCopies: false,
       },
@@ -2172,7 +2184,7 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect(ownedContainer.style.zIndex).toBe('0');
     expect(ownedContainer.style.pointerEvents).toBe('none');
     expect(map.options).toMatchObject({
-      attributionControl: true,
+      attributionControl: {},
       maxPitch: 35,
       renderWorldCopies: false,
       container: ownedContainer,
@@ -3540,7 +3552,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
   it('removes the sole style overlay while its fetch preparation is pending without retaining a request', async () => {
     FakeMap.instances.length = 0;
     const started = deferred<void>();
-    const fetchStyle = vi.fn(async (_url: string, options?: RequestInit) => {
+    const fetchStyle = vi.fn(async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
       started.resolve();
       await new Promise<void>((_resolve, reject) =>
         options?.signal?.addEventListener('abort', () =>
@@ -3602,7 +3614,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
   });
 
   it('style overlay removal and update rebuild their complete composite resources', async () => {
-    const oldStyle = { ...brightStyle, glyphs: undefined } as const;
+    const oldStyle = { ...brightStyle, glyphs: undefined } satisfies maplibregl.StyleSpecification;
     const replacementStyle = {
       ...brightStyle,
       glyphs: undefined,
@@ -3610,7 +3622,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
       },
       layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([objectBasemap]);
     const basemap = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -3721,7 +3733,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       name: 'Bright',
       role: 'overlay',
       style: 'https://example.test/bright.json',
-    } as const;
+    } satisfies MapLibreService;
     const alternateBasemap = {
       ...objectBasemap,
       id: 'dark',
@@ -3730,7 +3742,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         ...objectBasemap.style,
         layers: [{ id: 'dark-fill', type: 'fill' as const, source: 'base' }],
       },
-    } as const;
+    } satisfies MapLibreService;
     const { manager } = createManager(
       [objectBasemap, alternateBasemap, { ...roads, visible: true }, styleOverlay],
       {
@@ -3805,7 +3817,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       name: 'Bright',
       role: 'overlay',
       style: 'https://example.test/original.json',
-    } as const;
+    } satisfies MapLibreService;
     const replacement = {
       ...original,
       name: 'Replacement',
@@ -3838,7 +3850,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
       },
       layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([objectBasemap]);
     const basemap = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -3900,14 +3912,14 @@ describe('MapLibreServiceManager overlay rendering', () => {
         other: { type: 'vector' as const, url: 'https://example.test/other.json' },
       },
       layers: [{ id: 'other', type: 'fill' as const, source: 'other' }],
-    } as const satisfies maplibregl.StyleSpecification;
+    } satisfies maplibregl.StyleSpecification;
     const replacementStyle = {
       ...brightStyle,
       sources: {
         replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
       },
       layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([objectBasemap]);
     const basemap = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -3970,7 +3982,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
   it('attributes a late transformed sprite error to its owner while rolling back an updated overlay', async () => {
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const firstStyle = {
       ...brightStyle,
@@ -4042,7 +4054,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       'replacement style was not composed',
     );
     const rawSprite = `${firstStyle.sprite}@2x.png`;
-    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    const rewrittenSprite = (await map.options.transformRequest?.(rawSprite, SPRITE_RESOURCE))?.url;
     map.emit('style.load');
     await update;
 
@@ -4073,8 +4085,13 @@ describe('MapLibreServiceManager overlay rendering', () => {
     ['glyph URL', { glyphUrl: 'https://example.test/base/{fontstack}/{range}.pbf' }, 'style'],
     [
       'transformed video URL',
-      (map: FakeMap) => ({
-        url: map.options.transformRequest?.('https://example.test/base-video.mp4', 'Source')?.url,
+      async (map: FakeMap) => ({
+        url: (
+          await map.options.transformRequest?.(
+            'https://example.test/base-video.mp4',
+            SOURCE_RESOURCE,
+          )
+        )?.url,
       }),
       'style',
     ],
@@ -4099,9 +4116,9 @@ describe('MapLibreServiceManager overlay rendering', () => {
         },
         layers: [{ id: 'base-layer', type: 'fill', source: 'base-source' }],
       },
-    } as const;
+    } satisfies MapLibreService;
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const { manager } = createManager([basemap], {
       mapOptions: { transformRequest: transformRequest as never },
@@ -4149,7 +4166,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         basemapStates.push(event.state.status);
       }
     });
-    const errorDetails = typeof details === 'function' ? details(map) : details;
+    const errorDetails = typeof details === 'function' ? await details(map) : details;
     map.emit('error', { error: new Error('committed basemap resource failed'), ...errorDetails });
 
     expect(events[0]).toEqual({ serviceId: 'light', phase, fatal: true });
@@ -4160,7 +4177,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
   it('attributes a transformed overlay sprite request to an existing overlay during a basemap recomposition', async () => {
     const dark = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const { manager } = createManager([objectBasemap, dark], {
       mapOptions: { transformRequest: transformRequest as never },
@@ -4188,7 +4205,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       'basemap recomposition did not start',
     );
     const rawSprite = `${brightStyle.sprite}@2x.json`;
-    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    const rewrittenSprite = (await map.options.transformRequest?.(rawSprite, SPRITE_RESOURCE))?.url;
     expect(rewrittenSprite).toBe(
       `https://proxy.example.test/?url=${encodeURIComponent(rawSprite)}`,
     );
@@ -4205,7 +4222,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
   it('attributes a transformed resource URL to its non-trigger style overlay', async () => {
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const otherStyle = {
       ...brightStyle,
@@ -4263,7 +4280,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
     manager.on('error', (event) => errors.push(event));
     const rawSource = otherStyle.sources.other.url;
-    const rewrittenSource = map.options.transformRequest?.(rawSource, 'Source')?.url;
+    const rewrittenSource = (await map.options.transformRequest?.(rawSource, SOURCE_RESOURCE))?.url;
     map.emit('error', { error: new Error('rewritten source failed'), url: rewrittenSource });
     await waitForCondition(() => map.setStyleCalls.length === 5, 'rollback style was not composed');
     map.emit('style.load');
@@ -4277,7 +4294,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
   it('attributes a transformed sprite error emitted after style.load to the committed overlay', async () => {
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const { manager } = createManager(
       [{ id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle }],
@@ -4293,7 +4310,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
     manager.on('error', (event) => errors.push(event));
     const rawSprite = `${brightStyle.sprite}@2x.png`;
-    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    const rewrittenSprite = (await map.options.transformRequest?.(rawSprite, SPRITE_RESOURCE))?.url;
     map.emit('error', { error: new Error('late sprite failed'), url: rewrittenSprite });
 
     expect(errors.map(({ serviceId, phase, fatal }) => ({ serviceId, phase, fatal }))).toEqual([
@@ -4304,7 +4321,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
   it('does not let a transformed stale committed resource error change the current overlay state', async () => {
     const transformRequest = vi.fn((url: string) => ({
-      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+      url: `https://proxy.example.test/?url=${encodeURIComponent(String(url))}`,
     }));
     const oldStyle = {
       ...brightStyle,
@@ -4348,9 +4365,8 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
     const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
     manager.on('error', (event) => errors.push(event));
-    const rewrittenOldSource = map.options.transformRequest?.(
-      oldStyle.sources.old.url,
-      'Source',
+    const rewrittenOldSource = (
+      await map.options.transformRequest?.(oldStyle.sources.old.url, SOURCE_RESOURCE)
     )?.url;
     map.emit('error', { error: new Error('stale source failed'), url: rewrittenOldSource });
 
@@ -4363,7 +4379,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     const replacementStyle = {
       ...brightStyle,
       glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf',
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const glyphBasemap = {
       ...objectBasemap,
       style: { ...objectBasemap.style, glyphs: oldStyle.glyphs },
@@ -4476,7 +4492,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         ...objectBasemap.style,
         glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf',
       },
-    } as const;
+    } satisfies MapLibreService;
     const { manager } = createManager([objectBasemap, conflictingBasemap]);
     const initial = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -4647,7 +4663,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
       },
       layers: [{ id: 'replacement', type: 'line' as const, source: 'replacement' }],
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([{ ...base, style: styleUrl }], {
       fetchStyle: vi.fn(async () => new Response(JSON.stringify(objectBasemap.style))),
     });
@@ -4860,7 +4876,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
   it('destroy aborts style overlay fetches without stale events', async () => {
     const fetchStarted = deferred<void>();
     let signal: AbortSignal | undefined;
-    const fetchStyle = vi.fn(async (_url: string, options?: RequestInit) => {
+    const fetchStyle = vi.fn(async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
       signal = options?.signal ?? undefined;
       fetchStarted.resolve();
       return new Promise<Response>(() => undefined);
@@ -4892,8 +4908,8 @@ describe('MapLibreServiceManager overlay rendering', () => {
   it('aborts an obsolete style-overlay update fetch and only readies the replacement', async () => {
     const oldFetch = deferred<Response>();
     let oldSignal: AbortSignal | undefined;
-    const fetchStyle = vi.fn((url: string, options?: RequestInit) => {
-      if (url.endsWith('/old.json')) {
+    const fetchStyle = vi.fn((url: Parameters<typeof fetch>[0], options?: RequestInit) => {
+      if (String(url).endsWith('/old.json')) {
         oldSignal = options?.signal ?? undefined;
         options?.signal?.addEventListener('abort', () =>
           oldFetch.reject(new DOMException('aborted', 'AbortError')),
@@ -4908,7 +4924,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       role: 'overlay',
       visible: true,
       style: 'https://example.test/original.json',
-    } as const;
+    } satisfies MapLibreService;
     const { manager } = createManager([objectBasemap, original], { fetchStyle });
     const initial = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -4943,7 +4959,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
   it('removes a style overlay during fetch without publishing a stale error or status', async () => {
     const started = deferred<void>();
-    const fetchStyle = vi.fn(async (_url: string, options?: RequestInit) => {
+    const fetchStyle = vi.fn(async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
       started.resolve();
       await new Promise<void>((_resolve, reject) =>
         options?.signal?.addEventListener('abort', () =>
@@ -5021,8 +5037,8 @@ describe('MapLibreServiceManager overlay rendering', () => {
   ] as const)('readies concurrent style overlays when deferred fetches resolve %s', async (order) => {
     const firstFetch = deferred<Response>();
     const secondFetch = deferred<Response>();
-    const fetchStyle = vi.fn((url: string) =>
-      url.endsWith('/one.json') ? firstFetch.promise : secondFetch.promise,
+    const fetchStyle = vi.fn((url: Parameters<typeof fetch>[0]) =>
+      String(url).endsWith('/one.json') ? firstFetch.promise : secondFetch.promise,
     );
     const { manager } = createManager([objectBasemap], { fetchStyle });
     const baseRequest = manager.setBasemap('light');
@@ -5067,7 +5083,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       id: 'dark',
       name: 'Dark',
       style: { ...objectBasemap.style, glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf' },
-    } as const;
+    } satisfies MapLibreService;
     const { manager } = createManager([objectBasemap, conflictingBasemap]);
     const initial = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -5346,7 +5362,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       ...brightStyle,
       sources: { second: { type: 'vector' as const, url: 'https://example.test/second.json' } },
       layers: [{ id: 'second', type: 'fill' as const, source: 'second' }],
-    } as const;
+    } satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([objectBasemap]);
     const baseRequest = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -5449,7 +5465,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
   it('aborts a deferred second style preparation when initial runtime failure resets the manager', async () => {
     const fetched = deferred<Response>();
     let signal: AbortSignal | undefined;
-    const fetchStyle = vi.fn((_url: string, options?: RequestInit) => {
+    const fetchStyle = vi.fn((_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
       signal = options?.signal ?? undefined;
       options?.signal?.addEventListener('abort', () =>
         fetched.reject(new DOMException('aborted', 'AbortError')),

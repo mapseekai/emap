@@ -1,5 +1,5 @@
 import type { ControlContext } from '../runtime/services/controls';
-import { Control } from './control';
+import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface NavigationOptions {

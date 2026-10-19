@@ -11,7 +11,7 @@ export function envelope(
   input: MapshaperDataset,
   options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runUnary('envelope', input, options, runtime);
 }
 export const envelopeTool = defineDuckDbTool({

@@ -2,11 +2,34 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { output } from '@mapseekai/tasklane/host';
 import { createEmapWorkerRuntime, SessionOwner, taskValue, workerError } from './runtime';
 import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import type { EmapWorkerPool } from './runtime';
 const runtimes: ReturnType<typeof createEmapWorkerRuntime>[] = [];
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((r) => r.dispose()));
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+it.each<[EmapWorkerPool, number]>([
+  ['mapshaper', 1],
+  ['geometry', 4],
+  ['msdf', 4],
+  ['geotiff', 8],
+  ['geopackage', 2],
+])('uses the default %s capacity when an optional size is undefined', (name, capacity) => {
+  const runtime = createEmapWorkerRuntime({ sizes: { [name]: undefined } });
+  runtimes.push(runtime);
+  expect(runtime.diagnostics().pools.find((pool) => pool.name === name)?.capacity).toBe(capacity);
+});
+
+it.each([
+  0,
+  -1,
+  1.5,
+  NaN,
+  Infinity,
+  Number.MAX_SAFE_INTEGER + 1,
+])('rejects invalid pool capacity %s', (geometry) => {
+  expect(() => createEmapWorkerRuntime({ sizes: { geometry } })).toThrow();
 });
 it('keeps fixed capacity by default and bounds opt-in adaptive GeoTIFF capacity without reclaiming primaries', async () => {
   TasklaneTestWorker.instances = [];

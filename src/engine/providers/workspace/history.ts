@@ -1,6 +1,6 @@
 import { EventDispatcher } from '../../core/events';
 import type { EditCommand } from '../../../domain/edit/edit-command';
-import { HistoryStateSnapshot } from '../../../domain/edit/edit-history';
+import type { HistoryStateSnapshot } from '../../../domain/edit/edit-history';
 import { Transaction } from '../../../domain/edit/transaction';
 import type { EmapHostInternal } from '../../map/emap-host';
 import type { CacheContract as WorkspaceCache } from '../../../runtime/services/contracts/cache';
@@ -56,7 +56,7 @@ export class HistoryServiceImpl {
 
   _publishCommand(command: EditCommand): void {
     if ('publish' in command && typeof command.publish === 'function') {
-      command.publish();
+      Reflect.apply(command.publish, command, []);
     }
   }
 

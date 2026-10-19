@@ -7,7 +7,10 @@ import { type MutableTopologySource } from '../../../domain/source/source';
 
 /** document implementation, wired through explicit service dependencies. */
 export class WorkspaceDocument {
-  _sources: globalThis.Map<string, MutableTopologySource> = new globalThis.Map();
+  _sources: globalThis.Map<string, MutableTopologySource> = new globalThis.Map<
+    string,
+    MutableTopologySource
+  >();
 
   _layersCache?: LayerRegistry;
 

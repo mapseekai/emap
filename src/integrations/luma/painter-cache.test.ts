@@ -16,7 +16,7 @@ function fixture(limit?: number) {
 describe('formal painter geometry cache', () => {
   it('reuses coordinates across frames and selector copies, but not changed selections or revisions', () => {
     const { cache, gpu } = fixture();
-    const shapes = [];
+    const shapes: unknown[] = [];
     const build = vi.fn(geometry);
     for (let i = 0; i < 2; i++) {
       cache.begin();

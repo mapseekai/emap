@@ -11,7 +11,7 @@ export function geometryType(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('geometryType', input, options, runtime);
 }
 export const geometryTypeTool = defineDuckDbTool({

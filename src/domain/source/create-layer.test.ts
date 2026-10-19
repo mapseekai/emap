@@ -1,3 +1,4 @@
+import { asMutableTopologySource } from './source';
 import { describe, expect, it } from 'vitest';
 import { TopologySource } from './topology-source';
 import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
@@ -14,7 +15,7 @@ describe('TopologySource.create', () => {
         crs: 'EPSG:4326',
         fields: [{ name: 'label', type: 'string', defaultValue: 'new' }],
       });
-      const dataset = source.getDataset()!;
+      const dataset = asMutableTopologySource(source).getDataset()!;
       if (populated) {
         dataset.layers[0].shapes!.push([[0, 0]]);
         dataset.layers[0].data!.getRecords!().push({ label: 'new' });
@@ -41,7 +42,10 @@ describe('TopologySource.create', () => {
       ],
     });
     const adapter = getDefaultMapshaperAdapter();
-    const packed = await adapter.exportDatasetsToPack([source.getDataset()!], { compact: false });
+    const packed = await adapter.exportDatasetsToPack(
+      [asMutableTopologySource(source).getDataset()!],
+      { compact: false },
+    );
     const restored = await adapter.restoreSessionData(packed);
     expect(restored.datasets[0].layers[0].fields).toEqual(source.getLayers()[0].fields);
     const renamed = await adapter.runOnDatasetParsed(
@@ -65,7 +69,7 @@ describe('TopologySource.create', () => {
       crs: 'EPSG:4326',
       fields: [{ name: 'label', type: 'string', defaultValue: 'new' }],
     });
-    const dataset = source.getDataset()!;
+    const dataset = asMutableTopologySource(source).getDataset()!;
     const layer = dataset.layers[0];
     const rename = new FieldRenameCommand({ layer, dataset, from: 'label', to: 'title' });
     rename.do();
@@ -105,7 +109,9 @@ describe('TopologySource.create', () => {
     expect(layer.data?.getFields?.()).toEqual(['label', 'count']);
     expect(source.getCRS()).toBe('EPSG:4326');
     if (geometryType !== 'point') expect(source.getArcs()?.size()).toBe(0);
-    const copy = getDefaultMapshaperAdapter().copyDataset(source.getDataset()!);
+    const copy = getDefaultMapshaperAdapter().copyDataset(
+      asMutableTopologySource(source).getDataset()!,
+    );
     await source.replaceDataset(copy);
     expect(source.getLayers()[0].data?.getFields?.()).toEqual(['label', 'count']);
   });

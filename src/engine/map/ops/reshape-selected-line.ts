@@ -141,7 +141,7 @@ export function collectLineContacts(
   }
 
   for (const linePoint of [line[0]!, line[line.length - 1]!]) {
-    let lineDist =
+    const lineDist =
       linePoint === line[0]
         ? 0
         : line.slice(1).reduce((sum, point, index) => sum + distance(line[index]!, point), 0);

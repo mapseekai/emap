@@ -206,7 +206,7 @@ describe('prepared dataset mutation runner', () => {
     ];
 
     try {
-      const result = await _runPreparedDatasetMutation(
+      const result = await _runPreparedDatasetMutation<{ count: number }>(
         host as never,
         'source',
         (value) => `Split ${value.count} features`,
@@ -429,7 +429,7 @@ describe('worker dataset command runner', () => {
         'Dissolve',
       );
       await workerStarted.promise;
-      original.attributeVersion += 1;
+      original.attributeVersion = (original.attributeVersion ?? 0) + 1;
       workerResult.resolve({});
 
       await expect(pending).resolves.toMatchObject({

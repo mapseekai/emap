@@ -44,8 +44,8 @@ export class AttributeOps {
     const record = records?.[ref.id];
     if (!record) return Err.notFound('field', `record#${ref.id}`);
 
-    const prev: Record<string, unknown> = Object.create(null);
-    const next: Record<string, unknown> = Object.create(null);
+    const prev: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    const next: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
     for (const key of Object.keys(props)) {
       const had = Object.hasOwn(record, key);

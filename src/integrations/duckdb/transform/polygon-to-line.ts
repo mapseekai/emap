@@ -11,7 +11,7 @@ export function polygonToLine(
   input: MapshaperDataset,
   options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return boundary(input, options, runtime);
 }
 export const polygonToLineTool = defineDuckDbTool({

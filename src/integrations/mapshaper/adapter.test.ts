@@ -11,9 +11,9 @@ import type {
 // plus retained interval / flatness so the batch APIs can be asserted against
 // real adapter behavior without importing mapshaper internals.
 function makeArcs(options?: { withZz?: boolean }) {
-  let nn = new Int32Array([2, 2]);
-  let xx = new Float64Array([0, 0, 1, 1]);
-  let yy = new Float64Array([0, 1, 1, 0]);
+  let nn: Int32Array = new Int32Array([2, 2]);
+  let xx: Float64Array = new Float64Array([0, 0, 1, 1]);
+  let yy: Float64Array = new Float64Array([0, 1, 1, 0]);
   let zz: Float64Array | null = options?.withZz ? new Float64Array([5, 5, 5, 5]) : null;
   let retained = 0;
   const arcs = {
@@ -285,6 +285,7 @@ describe('MapshaperAdapter.appendArcs / truncateArcs', () => {
       { xx: new Float64Array([4]), yy: new Float64Array([4]) },
     ]);
 
+    if (!arcs.getVertexData) throw new Error('Missing native vertex-data reader');
     const appended = arcs.getVertexData();
     expect(arcs.size()).toBe(3);
     expect(Array.from(appended.xx)).toEqual([0, 1, 2, 3, 4]);

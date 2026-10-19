@@ -626,11 +626,11 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
     if (mode === 'all-null') layer.shapes = layer.shapes!.map(() => null);
     if (mode === 'empty') {
       layer.shapes = [];
-      layer.data!.getRecords().splice(0);
+      layer.data!.getRecords?.().splice(0);
     }
-    const before = structuredClone(layer.data!.getRecords());
+    const before = structuredClone(layer.data!.getRecords?.());
     const result = await reproject(input, { targetCrs: 'EPSG:4326' }, rt);
-    expect(result.layers[0]?.data?.getRecords() ?? []).toEqual(before);
+    expect(result.layers[0]?.data?.getRecords?.() ?? []).toEqual(before);
     expect(result.layers[0]?.shapes ?? []).toHaveLength(layer.shapes!.length);
     expect(result.info?.crs_string).toBe('EPSG:4326');
     expect(result.layers[0]?.geometry_type).toBe('point');
@@ -663,27 +663,29 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
     const rt = await getRuntime();
     const input = await dataset(POINTS);
     const reference = await dataset(POINTS);
-    reference.layers[0]!.data!.getRecords().forEach((record, index) => {
+    reference.layers[0]!.data!.getRecords?.().forEach((record, index) => {
       record.__nearest_rowid = 777 + index;
       record.__NEAREST_ROWID_1 = 888 + index;
     });
     const result = await nearest(input, reference, {}, rt);
-    expect(result.layers[0]?.data?.getRecords().map((record) => record.nearest_id)).toEqual([
+    expect(result.layers[0]?.data?.getRecords?.().map((record) => record.nearest_id)).toEqual([
       0, 1, 2,
     ]);
-    expect(result.layers[0]?.data?.getRecords().map((record) => record.nearest_distance)).toEqual([
-      0, 0, 0,
-    ]);
+    expect(result.layers[0]?.data?.getRecords?.().map((record) => record.nearest_distance)).toEqual(
+      [0, 0, 0],
+    );
     reference.layers[0]!.shapes![1] = reference.layers[0]!.shapes![0];
     const tied = await nearest(input, reference, {}, rt);
-    expect(tied.layers[0]?.data?.getRecords()[0]?.nearest_id).toBe(0);
+    expect(tied.layers[0]?.data?.getRecords?.()[0]?.nearest_id).toBe(0);
   });
 
   it('nearest rejects colliding output columns instead of overwriting input attributes', async () => {
     const rt = await getRuntime();
     const input = await dataset(POINTS);
     const reference = await dataset(POINTS);
-    input.layers[0]!.data!.getRecords()[0]!.NEAREST_ID = 123;
+    const records = input.layers[0]!.data?.getRecords?.();
+    if (!records?.[0]) throw new Error('Expected input record');
+    records[0].NEAREST_ID = 123;
     await expect(
       Promise.resolve().then(() => nearest(input, reference, {}, rt)),
     ).rejects.toMatchObject({
@@ -711,7 +713,7 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
     const reference = await dataset(POINTS);
     input.layers[0]!.shapes![1] = null;
     const result = await nearest(input, reference, {}, rt);
-    expect(result.layers[0]?.data?.getRecords()[1]).toMatchObject({
+    expect(result.layers[0]?.data?.getRecords?.()[1]).toMatchObject({
       id: 2,
       nearest_id: null,
       nearest_distance: null,
@@ -730,14 +732,14 @@ describeDuckDbIntegration('DuckDB toolbox integration', () => {
     if (mode === 'null-reference') reference.layers[0]!.shapes = [null, null, null];
     if (mode === 'empty-reference') {
       reference.layers[0]!.shapes = [];
-      reference.layers[0]!.data!.getRecords().splice(0);
+      reference.layers[0]!.data!.getRecords?.().splice(0);
     }
     const result = await nearest(input, reference, {}, rt);
     expect(result.layers[0]?.geometry_type).toBe('point');
     expect(result.layers[0]?.shapes).toHaveLength(3);
     expect(
       result.layers[0]?.data
-        ?.getRecords()
+        ?.getRecords?.()
         .map((record) => [record.id, record.nearest_id, record.nearest_distance]),
     ).toEqual([
       [1, null, null],

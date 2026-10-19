@@ -123,8 +123,18 @@ export function parseGeoMetadata(metadata: Map<string, string>): GeoMetadata | n
   const raw = metadata.get('geo');
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.primary_column !== 'string' || !parsed.columns) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !('primary_column' in parsed) ||
+      typeof parsed.primary_column !== 'string' ||
+      !('columns' in parsed) ||
+      !parsed.columns ||
+      typeof parsed.columns !== 'object' ||
+      Array.isArray(parsed.columns)
+    )
+      return null;
     return parsed as GeoMetadata;
   } catch {
     console.warn('emap formats: ignoring malformed GeoParquet "geo" metadata');

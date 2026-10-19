@@ -1,3 +1,4 @@
+import { asMutableTopologySource } from '../../../src/domain/source/source';
 import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
@@ -159,8 +160,8 @@ describe('Emap camera facade (DX P9)', () => {
       await map.addSource('edited', source);
       const initialExtent = source.getExtent();
       map.setExtent(initialExtent);
-      const arcs = source.getDataset()?.arcs;
-      if (!arcs) throw new Error('Expected polygon arcs');
+      const arcs = asMutableTopologySource(source).getArcs();
+      if (!arcs?.getVertexData) throw new Error('Expected polygon vertex data');
       const vertexData = arcs.getVertexData();
       const vertexId = Array.from(vertexData.xx).findIndex((x) => x === initialExtent.xmax);
       if (vertexId < 0) throw new Error('Expected an eastern vertex');

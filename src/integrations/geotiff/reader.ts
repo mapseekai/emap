@@ -471,8 +471,8 @@ export class GeoTIFFReader implements RasterSource {
       if (!base || !baseTiff) throw new RasterError('INVALID_RASTER', 'Missing base TIFF image.');
       const fd = base.getFileDirectory(),
         keys = base.getGeoKeys();
-      const modelType = keys?.GTModelTypeGeoKey;
-      const epsg =
+      const modelType: unknown = keys?.GTModelTypeGeoKey;
+      const epsg: unknown =
         modelType === 1
           ? keys?.ProjectedCSTypeGeoKey
           : modelType === 2
@@ -480,7 +480,9 @@ export class GeoTIFFReader implements RasterSource {
             : (keys?.ProjectedCSTypeGeoKey ?? keys?.GeographicTypeGeoKey);
       const crs =
         options.crs?.trim() ||
-        (Number.isInteger(epsg) && epsg > 0 && epsg < 32767 ? `EPSG:${epsg}` : '');
+        (typeof epsg === 'number' && Number.isInteger(epsg) && epsg > 0 && epsg < 32767
+          ? `EPSG:${epsg}`
+          : '');
       if (!crs)
         throw new RasterError(
           'RASTER_CRS_REQUIRED',

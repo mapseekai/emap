@@ -134,7 +134,9 @@ export function buildMiniDataset(opts: {
   const layers = dataset.layers.map((layer, layerIndex) => {
     if (!isPathLayer(layer) || !layer.shapes) return layer;
     const ids = candidates.get(layerIndex);
-    const shapes: (PathShape | null)[] = new Array(layer.shapes.length).fill(null);
+    const shapes: (PathShape | null)[] = new Array<PathShape | null>(layer.shapes.length).fill(
+      null,
+    );
     if (ids) {
       for (const featureId of ids) {
         const shape = layer.shapes[featureId] as PathShape | null;

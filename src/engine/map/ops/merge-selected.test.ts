@@ -55,7 +55,15 @@ function createFixture(
       preparedCall = { sourceId, commands, label, prepare };
       return OK;
     },
-    runPreparedDatasetMutation: async () => OK,
+    runPreparedEditCommand: async () => {
+      throw new Error('Direct edit is not used by this fixture');
+    },
+    runPreparedEditCommandMany: async () => {
+      throw new Error('Multi-source edit is not used by this fixture');
+    },
+    runPreparedDatasetMutation: async () => {
+      throw new Error('Dataset mutation is not used by this direct-edit fixture');
+    },
   };
 
   return {
@@ -284,7 +292,15 @@ async function runRealMerge(
       current = await adapter.runOnDatasetParsed(commands, working);
       return OK;
     },
-    runPreparedDatasetMutation: async () => OK,
+    runPreparedEditCommand: async () => {
+      throw new Error('Direct edit is not used by this fixture');
+    },
+    runPreparedEditCommandMany: async () => {
+      throw new Error('Multi-source edit is not used by this fixture');
+    },
+    runPreparedDatasetMutation: async () => {
+      throw new Error('Dataset mutation is not used by this fixture');
+    },
   };
 
   const result = await mergeSelected(ctx, {

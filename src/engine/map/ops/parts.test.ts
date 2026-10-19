@@ -1,3 +1,6 @@
+import { isPathLayer } from '../../../shared/types/mapshaper-types';
+import { TopologySource } from '../../../domain/source/topology-source';
+import { asMutableTopologySource } from '../../../domain/source/source';
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type { EditCommand } from '../../../domain/edit/edit-command';
@@ -6,7 +9,7 @@ import { MapshaperOps } from '../mapshaper-ops';
 import type { MapshaperDataset, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import type { FeatureRef } from '../types';
 import type { OpContext } from './_context';
-import { Err, okValue, type OpResult } from '../op-result';
+import { Err, okValue } from '../op-result';
 import { Selection } from '../selection';
 import { addPart, deletePart } from './parts';
 import { shapeSegments, shoelaceArea, validatePolygon } from './geometry-2d';
@@ -38,12 +41,10 @@ async function createFixture(
   geometry: PathGeometry,
   refs: FeatureRef[] = [{ source: 'source', layer: 'parts', id: 0 }],
 ) {
-  let dataset = await importDataset(geometry);
+  const dataset = await importDataset(geometry);
   const entries: EditCommand[] = [];
-  const source = {
-    getDataset: () => dataset,
-    getArcs: () => dataset.arcs,
-  };
+  const source = asMutableTopologySource(new TopologySource('source'));
+  source.setDataset(dataset, false);
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'parts'
       ? (layers.find((layer) => layer.name === layerId) ?? null)
@@ -59,22 +60,24 @@ async function createFixture(
         layers.find((layer) => layer.name === layerId) ?? null,
     },
   } as unknown as EmapHostInternal;
-  const ctx = {
+  const ctx: OpContext = {
     host,
     runDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetCommandParsed: async () => okValue(undefined),
-    runPreparedEditCommand: async <T>(
-      _sourceId: string,
-      _label: string,
-      plan: (planned: MapshaperDataset, plannedSource: unknown) => any,
-    ): Promise<OpResult<T>> => {
+    runPreparedEditCommand: async (_sourceId, _label, plan) => {
       const outcome = plan(dataset, source);
       if ('ok' in outcome) return outcome;
       outcome.command.do();
       entries.push(outcome.command);
       return okValue(outcome.value);
     },
-  } as unknown as OpContext;
+    runPreparedDatasetMutation: async () => {
+      throw new Error('Dataset mutation is not used by this direct-edit fixture');
+    },
+    runPreparedEditCommandMany: async () => {
+      throw new Error('Multi-source runner is not used by this fixture');
+    },
+  };
   return { ctx, dataset: () => dataset, entries };
 }
 
@@ -145,7 +148,9 @@ describe('addPart', () => {
         ],
       }),
     ).resolves.toEqual({ ok: true, value: undefined });
-    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes?.[0]) throw new Error('Expected path fixture shape');
+    const shape = layer.shapes[0];
     expect(shape).toHaveLength(2);
     const first = shoelaceArea(
       shapeSegments([shape[0]!], fixture.dataset().arcs!).map(([start]) => start),
@@ -183,13 +188,12 @@ describe('addPart', () => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
     const before = exported(fixture.dataset());
     let historyEntries = 0;
-    fixture.ctx.runPreparedEditCommand = async <T>(
-      _sourceId,
-      _label,
-      plan,
-    ): Promise<OpResult<T>> => {
+    fixture.ctx.runPreparedEditCommand = async (_sourceId, _label, plan) => {
       const dataset = fixture.dataset();
-      const result = plan({ ...dataset } as MapshaperDataset, { getDataset: () => dataset });
+      const source = fixture.ctx.host._sources.get('source');
+      if (!source) throw new Error('Missing fixture source');
+      const result = plan({ ...dataset }, source);
+      if (!('ok' in result)) throw new Error('Stale preparation unexpectedly succeeded');
       if (result.ok) historyEntries++;
       return result;
     };
@@ -235,7 +239,9 @@ describe('addPart', () => {
         ],
       }),
     ).resolves.toMatchObject({ ok: true });
-    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes?.[0]) throw new Error('Expected path fixture shape');
+    const shape = layer.shapes[0];
     expect(shape).toHaveLength(3);
   });
 
@@ -269,7 +275,9 @@ describe('addPart', () => {
     ],
   ])('rejects a polygon part that %s', async (_name, coordinates) => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
-    await expect(addPart(fixture.ctx, { coordinates })).resolves.toMatchObject({
+    await expect(
+      addPart(fixture.ctx, { coordinates: coordinates.map(([x, y]): [number, number] => [x, y]) }),
+    ).resolves.toMatchObject({
       ok: false,
       error: { kind: 'validation', field: 'part' },
     });
@@ -332,7 +340,9 @@ describe('addPart', () => {
         [10, 0],
       ],
     });
-    await expect(addPart(fixture.ctx, { coordinates })).resolves.toMatchObject({
+    await expect(
+      addPart(fixture.ctx, { coordinates: coordinates.map(([x, y]): [number, number] => [x, y]) }),
+    ).resolves.toMatchObject({
       ok: false,
       error: { kind: 'validation', field: 'part' },
     });
@@ -403,17 +413,18 @@ describe('deletePart', () => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square, hole] });
     const before = exported(fixture.dataset());
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     const arcCount = fixture.dataset().arcs!.size();
 
     await expect(deletePart(fixture.ctx, { point: [1, 1] })).resolves.toMatchObject({ ok: true });
     expect(layer.shapes).toHaveLength(0);
-    expect(layer.data!.getRecords()).toHaveLength(0);
+    expect(layer.data!.getRecords?.()).toHaveLength(0);
     expect(fixture.ctx.host._selection.getAll()).toEqual([]);
     expect(fixture.dataset().arcs!.size()).toBe(arcCount);
 
     fixture.entries[0]!.undo();
     expect(exported(fixture.dataset())).toEqual(before);
-    expect(layer.data!.getRecords()).toHaveLength(1);
+    expect(layer.data!.getRecords?.()).toHaveLength(1);
     expect(fixture.ctx.host._selection.getAll()).toEqual([
       { source: 'source', layer: 'parts', id: 0 },
     ]);
@@ -439,7 +450,9 @@ describe('deletePart', () => {
       ],
     });
     const before = exported(fixture.dataset());
-    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes?.[0]) throw new Error('Expected path fixture shape');
+    const shape = layer.shapes[0];
     const expected = shape.slice(2);
 
     await expect(deletePart(fixture.ctx, { point: [1, 1] })).resolves.toMatchObject({ ok: true });
@@ -515,7 +528,9 @@ describe('deletePart', () => {
       }),
     ).resolves.toMatchObject({ ok: true });
     await expect(deletePart(fixture.ctx, { point: [4, 4] })).resolves.toMatchObject({ ok: true });
-    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes?.[0]) throw new Error('Expected path fixture shape');
+    const shape = layer.shapes[0];
     expect(shape).toHaveLength(2);
     const exteriorArea = shoelaceArea(
       shapeSegments([shape[0]!], fixture.dataset().arcs!).map(([start]) => start),
@@ -687,16 +702,17 @@ describe('deletePart direct edit', () => {
     const highlight = vi.fn();
     (fixture.ctx.host as any)._clearHighlightsForLayer = highlight;
     const layer = fixture.dataset().layers[0]!;
+    if (!isPathLayer(layer) || !layer.shapes) throw new Error('Expected path fixture shapes');
     const result = await deletePart(fixture.ctx, { point: [5, 5] });
     expect(result.ok).toBe(true);
     expect(layer.shapes).toHaveLength(0);
-    expect(layer.data!.getRecords()).toHaveLength(0);
+    expect(layer.data!.getRecords?.()).toHaveLength(0);
     expect(fixture.ctx.host._selection.getAll()).toEqual([]);
     expect(highlight).toHaveBeenCalledWith('source', expect.arrayContaining(['parts']));
 
     fixture.entries[0]!.undo();
     expect(layer.shapes).toHaveLength(1);
-    expect(layer.data!.getRecords()).toHaveLength(1);
+    expect(layer.data!.getRecords?.()).toHaveLength(1);
     expect(fixture.ctx.host._selection.getAll()).toEqual([
       { source: 'source', layer: 'parts', id: 0 },
     ]);

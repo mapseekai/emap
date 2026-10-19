@@ -36,7 +36,7 @@ function float16Bits(value: number): number {
   }
   return sign | ((exponent + 15) << 10) | fraction;
 }
-export function makeRasterFixture(options: RasterFixtureOptions = {}): Uint8Array {
+export function makeRasterFixture(options: RasterFixtureOptions = {}): Uint8Array<ArrayBuffer> {
   const width = options.width ?? 8,
     height = options.height ?? 8,
     big = options.bigTiff ?? false;

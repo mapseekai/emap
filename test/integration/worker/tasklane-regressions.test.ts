@@ -157,7 +157,7 @@ it('reports whether ordinary Mapshaper date fields are already packed as binary'
   };
   const packed = await a.exportDatasetsToPack([dataset] as any, { compact: false });
   const result = await a.restoreSessionData(await decodeWorkerData(encodeWorkerData(packed)));
-  expect(result.datasets[0].layers[0].data.getRecords()[0].when).toEqual(
+  expect(result.datasets[0].layers[0].data?.getRecords?.()[0].when).toEqual(
     new Date('2026-09-25T00:00:00Z'),
   );
 });
@@ -178,7 +178,7 @@ it('pre-migration structured-clone path preserves Mapshaper Date values', async 
   };
   const packed = await a.exportDatasetsToPack([dataset] as any, { compact: false });
   const restored = await a.restoreSessionData(structuredClone(packed));
-  expect(restored.datasets[0].layers[0].data.getRecords()[0].when).toEqual(when);
+  expect(restored.datasets[0].layers[0].data?.getRecords?.()[0].when).toEqual(when);
 });
 it('GeometryWorker recovers after an idle worker failure', async () => {
   const { GeometryWorker } = await import('../../../src/integrations/luma/geometry-worker');
@@ -261,6 +261,7 @@ it('SessionOwner retries failed cleanup instead of retaining an unreachable scop
     () => ({ ok: true }),
     (error) => ({ ok: false, message: error.message }),
   );
+  expect(first.ok).toBe(false);
   const second = await owner.close().then(
     () => ({ ok: true }),
     (error) => ({ ok: false, message: error.message }),

@@ -29,7 +29,11 @@ function exportLineCoordinates(dataset: MapshaperDataset): unknown[] {
   const collection = JSON.parse(String(file.content)) as GeoJSON.FeatureCollection;
   return collection.features
     .filter((feature) => feature.properties?.id !== undefined)
-    .map((feature) => feature.geometry!.coordinates);
+    .map((feature) => {
+      if (feature.geometry.type === 'GeometryCollection')
+        throw new Error('Unexpected geometry collection in line fixture');
+      return feature.geometry.coordinates;
+    });
 }
 
 function reshape(

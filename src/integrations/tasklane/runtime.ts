@@ -40,7 +40,13 @@ export function createEmapWorkerRuntime(options: EmapWorkerRuntimeOptions = {}):
     geotiff: 'emap-geotiff-worker.js',
     geopackage: 'emap-geopackage-worker.js',
   };
-  const sizes = { mapshaper: 1, geometry: 4, msdf: 4, geotiff: 8, geopackage: 2, ...options.sizes };
+  const sizes = {
+    mapshaper: options.sizes?.mapshaper ?? 1,
+    geometry: options.sizes?.geometry ?? 4,
+    msdf: options.sizes?.msdf ?? 4,
+    geotiff: options.sizes?.geotiff ?? 8,
+    geopackage: options.sizes?.geopackage ?? 2,
+  };
   const pools: Record<string, PoolOptions> = {};
   const urls: Partial<Record<EmapWorkerPool, string | URL>> = {};
   for (const name of Object.keys(assets) as EmapWorkerPool[]) {

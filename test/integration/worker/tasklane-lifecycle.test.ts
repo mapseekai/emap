@@ -160,7 +160,7 @@ it('a full primary-only raster pool fails without queuing behind unrelated idle 
   const pending = open(r, 1).catch((error) => error);
   await flushTasks();
   expect(r.stats.queued).toBe(0);
-  expect(r.diagnostics().pools.find((pool) => pool.name === 'geotiff').waitingSessions).toBe(0);
+  expect(r.diagnostics().pools.find((pool) => pool.name === 'geotiff')?.waitingSessions).toBe(0);
   expect(await pending).toMatchObject({ code: 'RASTER_WORKER_CAPACITY' });
   await scope.dispose();
 });
@@ -169,14 +169,14 @@ it('rebuilds an optional reader after native reclamation and returns resident cr
   const first = await open(r, 2);
   const second = await open(r, 1);
   expect(r.stats.sessionsReclaimed).toBe(1);
-  expect(first.getProcessingStats().workers).toBe(1);
+  expect(first.getProcessingStats?.().workers).toBe(1);
   second.dispose();
   await second.settled;
   await Promise.all(
     [0, 256].map((x) => first.readWindow({ level: 0, window: [x, 0, x + 1, 1], samples: [0] })),
   );
   await flushTasks();
-  expect(first.getProcessingStats().workers).toBe(2);
+  expect(first.getProcessingStats?.().workers).toBe(2);
   expect(r.stats.workers).toBe(2);
   expect(r.stats.reserved.residentBytes).toBeGreaterThan(0);
   first.dispose();
@@ -213,7 +213,7 @@ it('failed replica cleanup must not strand affinity reads of the existing source
     newcomer,
     result,
     cleanupCalls,
-    processing: original.getProcessingStats(),
+    processing: original.getProcessingStats?.(),
   });
   ctl.abort();
   await read;

@@ -34,7 +34,7 @@ const metadata: RasterMetadata = {
   ],
 };
 class FakeWorker extends TasklaneTestWorker {
-  static instances: FakeWorker[] = [];
+  static override instances: FakeWorker[] = [];
   onmessage = null;
   onerror = (event: { message: string }) => this.crash(event.message);
   onmessageerror = () => this.dispatchEvent(new Event('messageerror'));
@@ -217,7 +217,7 @@ describe('Worker-backed external raster sources', () => {
   });
   it('passes a File reference into a classic Worker and returns only external references', async () => {
     const { worker, source } = await opened();
-    expect(worker.options.type).toBe('classic');
+    expect(worker.options?.type).toBe('classic');
     await flushTasks();
     expect(worker.messages[0]).toMatchObject({ type: 'open', file: expect.any(File) });
     expect(source.toReference()).toEqual({

@@ -23,7 +23,7 @@ function arcs(paths: number[][][]) {
     i = a.createPathImporter();
   for (const p of paths) {
     i.startShape();
-    i.importLine(p);
+    i.importLine(p.map(([x, y]) => [x, y]));
   }
   return i.done().arcs!;
 }

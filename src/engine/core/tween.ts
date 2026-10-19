@@ -1,5 +1,13 @@
 import { EventDispatcher } from './events';
 
+export interface TimerTick {
+  elapsed: number;
+  pct: number;
+  done: boolean;
+  time: number;
+  tickTime: number;
+}
+
 function scheduleFrame(cb: FrameRequestCallback): number {
   return typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame(cb)
@@ -93,7 +101,7 @@ export class Tween extends EventDispatcher {
   constructor(ease?: EaseFunction) {
     super();
     this._ease = ease || null;
-    this._timer.on('tick', (e: any) => this._onTick(e));
+    this._timer.on<TimerTick>('tick', (e) => this._onTick(e));
   }
 
   start(a: number, b: number, duration?: number): void {
@@ -106,17 +114,17 @@ export class Tween extends EventDispatcher {
     this._timer.stop();
   }
 
-  private _onTick(e: any): void {
+  private _onTick(e: TimerTick): void {
     const pct = this._ease ? this._ease(e.pct) : e.pct;
     const val = this._endValue * pct + this._startValue * (1 - pct);
     this.fire('change', { value: val });
   }
 
-  static sineInOut(n: number): number {
+  static sineInOut(this: void, n: number): number {
     return 0.5 - Math.cos(n * Math.PI) / 2;
   }
 
-  static quadraticOut(n: number): number {
+  static quadraticOut(this: void, n: number): number {
     return 1 - Math.pow(1 - n, 2);
   }
 }

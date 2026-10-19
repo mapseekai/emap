@@ -28,6 +28,7 @@ function operationPlugins(
     inject: ['capabilities', key],
     apply(ctx) {
       ctx.effect(function* () {
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- The Cordis proxy forwards members with Reflect.apply below.
         const service = ctx[key] as unknown as Record<string, (...args: unknown[]) => unknown>;
         const readOnly =
           name === 'checkGeometry' ||

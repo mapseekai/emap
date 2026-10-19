@@ -36,7 +36,9 @@ function packet(key = 'a'): PointLodPacket[] {
     },
   ];
 }
-function setup(query = vi.fn(async () => packet())) {
+function setup(
+  query = vi.fn<NonNullable<ChunkGeometryAccess['queryPointLod']>>(async () => packet()),
+) {
   const gpu = { createMesh: vi.fn(() => ({ bytes: 16 })), destroyMesh: vi.fn() },
     invalidate = vi.fn(),
     report = vi.fn();

@@ -44,7 +44,7 @@ function fixture() {
   const channel = (
     kind: 'fill' | 'path',
     entries: GeometryEntry[],
-    key = kind,
+    key: string = kind,
     order = kind === 'fill' ? 0 : 100,
   ): PolygonChannel => {
     const request = {

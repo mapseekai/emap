@@ -18,7 +18,7 @@ export function clip(
   mask: MapshaperDataset,
   options: ClipOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return intersect(input, mask, options, runtime);
 }
 

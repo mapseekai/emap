@@ -37,7 +37,14 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Data',
-      items: ['data/formats', 'data/geotiff', 'data/geopackage', 'data/attributes', 'data/operations', 'data/duckdb'],
+      items: [
+        'data/formats',
+        'data/geotiff',
+        'data/geopackage',
+        'data/attributes',
+        'data/operations',
+        'data/duckdb',
+      ],
     },
     {
       type: 'category',
@@ -54,12 +61,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Reference',
-      items: [
-        'reference/events',
-        'reference/errors',
-        'reference/compatibility',
-        'reference/faq',
-      ],
+      items: ['reference/events', 'reference/errors', 'reference/compatibility', 'reference/faq'],
     },
   ],
 };

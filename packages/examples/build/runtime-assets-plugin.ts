@@ -22,18 +22,40 @@ const examplesBuildRoot = resolve(examplesRoot, 'dist');
 function msdfAssets(): RuntimeAssetEntry[] {
   const paths = ['emap-msdf-worker.js', 'emap-geometry-worker.js'];
   if (existsSync(resolve(sourceRoot, 'msdf'))) {
-    paths.push(...readdirSync(resolve(sourceRoot, 'msdf'), { recursive: true, withFileTypes: true })
-      .filter(e => e.isFile()).map(e => relative(sourceRoot, resolve(e.parentPath, e.name)).replaceAll('\\', '/')));
+    paths.push(
+      ...readdirSync(resolve(sourceRoot, 'msdf'), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => relative(sourceRoot, resolve(e.parentPath, e.name)).replaceAll('\\', '/')),
+    );
   }
-  return paths.map(path => ({ requestPath:path, buildPath:path, developmentSource:path, productionSource:path,
-    contentType:path.endsWith('.wasm')?'application/wasm':path.endsWith('.woff')?'font/woff':path.endsWith('.json')?'application/json':path.endsWith('.txt')?'text/plain; charset=utf-8':'application/javascript; charset=utf-8' }));
+  return paths.map((path) => ({
+    requestPath: path,
+    buildPath: path,
+    developmentSource: path,
+    productionSource: path,
+    contentType: path.endsWith('.wasm')
+      ? 'application/wasm'
+      : path.endsWith('.woff')
+        ? 'font/woff'
+        : path.endsWith('.json')
+          ? 'application/json'
+          : path.endsWith('.txt')
+            ? 'text/plain; charset=utf-8'
+            : 'application/javascript; charset=utf-8',
+  }));
 }
 const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
   ...msdfAssets(),
-  ...msdfAssets().map(entry => ({ ...entry, requestPath: 'vendor/' + entry.requestPath, buildPath: 'vendor/' + entry.buildPath })),
+  ...msdfAssets().map((entry) => ({
+    ...entry,
+    requestPath: 'vendor/' + entry.requestPath,
+    buildPath: 'vendor/' + entry.buildPath,
+  })),
   {
-    requestPath: 'emap-geotiff-worker.js', buildPath: 'emap-geotiff-worker.js',
-    developmentSource: 'emap-geotiff-worker.js', productionSource: 'emap-geotiff-worker.js',
+    requestPath: 'emap-geotiff-worker.js',
+    buildPath: 'emap-geotiff-worker.js',
+    developmentSource: 'emap-geotiff-worker.js',
+    productionSource: 'emap-geotiff-worker.js',
     contentType: 'application/javascript; charset=utf-8',
   },
   {
@@ -75,13 +97,17 @@ const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
     contentType: 'application/javascript; charset=utf-8',
   },
   {
-    requestPath: 'emap-geopackage-worker.js', buildPath: 'emap-geopackage-worker.js',
-    developmentSource: 'emap-geopackage-worker.js', productionSource: 'emap-geopackage-worker.js',
+    requestPath: 'emap-geopackage-worker.js',
+    buildPath: 'emap-geopackage-worker.js',
+    developmentSource: 'emap-geopackage-worker.js',
+    productionSource: 'emap-geopackage-worker.js',
     contentType: 'application/javascript; charset=utf-8',
   },
   {
-    requestPath: 'sql-wasm.wasm', buildPath: 'sql-wasm.wasm',
-    developmentSource: 'sql-wasm.wasm', productionSource: 'sql-wasm.wasm',
+    requestPath: 'sql-wasm.wasm',
+    buildPath: 'sql-wasm.wasm',
+    developmentSource: 'sql-wasm.wasm',
+    productionSource: 'sql-wasm.wasm',
     contentType: 'application/wasm',
   },
 ] as const;

@@ -199,7 +199,7 @@ export class Emap extends EventDispatcher {
         () => {
           this._retryResourceDisposal = undefined;
         },
-        (error) => {
+        (error: unknown) => {
           this._disposalFailed = true;
           events?.fire('error', { error });
         },
@@ -264,6 +264,7 @@ export class Emap extends EventDispatcher {
   override on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
   override on(type: string, filterOrListener: unknown, listener?: unknown): this {
     const target = this._eventTarget(type);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
     Reflect.apply(target.on, target, [type, filterOrListener, listener]);
     return this;
   }
@@ -280,6 +281,7 @@ export class Emap extends EventDispatcher {
   override off(type: string, listener: (e: FeatureEvent) => void): this;
   override off(type: string, listener: unknown): this {
     const target = this._eventTarget(type);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
     Reflect.apply(target.off, target, [type, listener]);
     return this;
   }
@@ -301,6 +303,7 @@ export class Emap extends EventDispatcher {
   ): this;
   override once(type: string, filterOrListener: unknown, listener?: unknown): this {
     const target = this._eventTarget(type);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
     Reflect.apply(target.once, target, [type, filterOrListener, listener]);
     return this;
   }
@@ -341,7 +344,12 @@ export class Emap extends EventDispatcher {
     answers: SourceLoadAnswers = {},
   ): Promise<SourcePreflightResult> {
     const service = this.ctx.source;
-    return Reflect.apply(service.preflightSource, service, [requestOrDraft, answers]);
+    // Both overloads share this result contract; Reflect preserves the provider receiver.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the owning receiver.
+    return Reflect.apply(service.preflightSource, service, [
+      requestOrDraft,
+      answers,
+    ]) as Promise<SourcePreflightResult>;
   }
   public async addSource(
     id: string,

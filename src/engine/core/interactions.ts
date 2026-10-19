@@ -1,5 +1,5 @@
 import { EventDispatcher } from './events';
-import { Timer, Tween } from './tween';
+import { Timer, Tween, type TimerTick } from './tween';
 
 function MouseWheelDirection() {
   let prevTime = 0;
@@ -42,7 +42,7 @@ export class MouseWheel extends EventDispatcher {
 
   constructor(private _element: HTMLElement) {
     super();
-    this._timer.on('tick', (e: any) => this._onTick(e));
+    this._timer.on<TimerTick>('tick', (e) => this._onTick(e));
     this._element.addEventListener('wheel', this._wheelHandler, { passive: false });
   }
 
@@ -81,7 +81,7 @@ export class MouseWheel extends EventDispatcher {
     this._timer.start(this._sustainInterval);
   }
 
-  private _onTick(evt: any) {
+  private _onTick(evt: TimerTick): void {
     const tickInterval = evt.time - this._eventTime;
     // A slow geometry frame must not become one large catch-up zoom. Preserve
     // normal frame pacing, but discard time beyond one nominal wheel tick.

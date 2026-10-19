@@ -1,3 +1,9 @@
+declare module 'cordis' {
+  interface Context {
+    testNumber: number;
+    testService: { value: number };
+  }
+}
 import { Context, Fiber, Service } from 'cordis';
 import { describe, expect, it, vi } from 'vitest';
 import { Emap } from '../../../src/engine/map/map';

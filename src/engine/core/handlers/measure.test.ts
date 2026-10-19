@@ -1,3 +1,4 @@
+import type { MeasurementOverlayState as EditMeasurementState } from '../../rendering/painter';
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { NormalizedPointerEvent } from '../handler';

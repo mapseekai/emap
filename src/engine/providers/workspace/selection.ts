@@ -1,5 +1,5 @@
 import { EventDispatcher } from '../../core/events';
-import { SelectionDiff, type SelectMode } from '../../map/selection';
+import type { SelectionDiff, SelectMode } from '../../map/selection';
 import { type FeatureRef, type HighlightStyle, type QueriedFeature } from '../../map/types';
 import type { DocumentContract as WorkspaceDocument } from '../../../runtime/services/contracts/document';
 import type { RenderSignalsContract as RenderSignals } from '../../../runtime/services/contracts/signals';

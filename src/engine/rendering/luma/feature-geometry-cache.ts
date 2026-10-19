@@ -64,9 +64,13 @@ export class FeatureGeometryCache {
       this.stats.evictions++;
     }
     let namespaces = this.sources.get(source);
-    if (!namespaces) this.sources.set(source, (namespaces = new Map()));
+    if (!namespaces) this.sources.set(source, (namespaces = new Map<string, Bucket>()));
     let bucket = namespaces.get(namespace);
-    if (!bucket) namespaces.set(namespace, (bucket = { source, namespace, entries: new Map() }));
+    if (!bucket)
+      namespaces.set(
+        namespace,
+        (bucket = { source, namespace, entries: new Map<number, Entry>() }),
+      );
     const entry: Entry = {
       bucket,
       id,

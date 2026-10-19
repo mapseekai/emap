@@ -23,7 +23,7 @@ export function attributeJoin(
   join: MapshaperDataset,
   options: AttributeJoinOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runTwoInputTool(
     input,
     join,

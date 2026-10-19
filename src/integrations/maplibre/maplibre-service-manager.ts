@@ -485,8 +485,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       },
       definitionRevision: ++this._definitionRevision,
       operationRevision: record.operationRevision,
-      ownedSources: new Map(record.ownedSources),
-      ownedLayers: new Map(record.ownedLayers),
+      ownedSources: new Map<string, OwnedResource>(record.ownedSources),
+      ownedLayers: new Map<string, OwnedResource>(record.ownedLayers),
       installedDefinition: record.installedDefinition,
     };
     this._registry.set(id, replacement);
@@ -711,11 +711,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     void promise.catch(() => undefined);
     return {
       resourceOwners: {
-        sourceIds: new Map(),
-        spriteIds: new Map(),
-        glyphUrls: new Map(),
-        resourceUrls: new Map(),
-        runtimeUrls: new Map(),
+        sourceIds: new Map<string, string>(),
+        spriteIds: new Map<string, string>(),
+        glyphUrls: new Map<string, string>(),
+        resourceUrls: new Map<string, string>(),
+        runtimeUrls: new Map<string, string>(),
       },
       revision: ++this._styleRevision,
       basemapId,
@@ -1258,8 +1258,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       },
       definitionRevision: ++this._definitionRevision,
       operationRevision: 0,
-      ownedSources: new Map(),
-      ownedLayers: new Map(),
+      ownedSources: new Map<string, OwnedResource>(),
+      ownedLayers: new Map<string, OwnedResource>(),
     };
     this._registry.set(definition.id, record);
     return record;
@@ -2712,7 +2712,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       'then' in parameters &&
       typeof parameters.then === 'function'
     ) {
-      void parameters.then(record, () => undefined);
+      Reflect.apply(parameters.then, parameters, [record, () => undefined]);
       return;
     }
     record(parameters);

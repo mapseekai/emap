@@ -7,7 +7,10 @@ export class SurfaceServiceImpl {
 
   _canvasContainer!: HTMLElement;
 
-  _controlContainers: globalThis.Map<ControlPosition, HTMLElement> = new globalThis.Map();
+  _controlContainers: globalThis.Map<ControlPosition, HTMLElement> = new globalThis.Map<
+    ControlPosition,
+    HTMLElement
+  >();
 
   public getCanvasContainer(): HTMLElement {
     return this._canvasContainer;

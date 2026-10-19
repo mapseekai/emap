@@ -3,7 +3,11 @@ import type { DrawOverlaySnapKind } from '../../rendering/painter';
 import { getLayerId } from '../../../domain/source/layer-utils';
 import { createLayerRecord } from '../../../domain/source/create-layer';
 import { FeatureCreateCommand } from '../../../domain/edit/commands/feature-create';
-import type { MapshaperLayer, ArcCollection } from '../../../shared/types/mapshaper-types';
+import type {
+  MapshaperLayer,
+  ArcCollection,
+  FeatureShape,
+} from '../../../shared/types/mapshaper-types';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type { EditHandlerHost } from './edit-handler-host';
 import { EMAP_THEME_COLORS } from '../../../ui/theme/colors';
@@ -355,7 +359,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       layer.shapes = [];
     }
 
-    let appendedShape: any[];
+    let appendedShape: FeatureShape;
     let arcVertices: [number, number][] | undefined;
     let arcs: ArcCollection | undefined;
 

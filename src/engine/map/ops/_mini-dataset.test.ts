@@ -107,7 +107,9 @@ describe('buildMiniDataset', () => {
       candidates: new Map([[0, new Set([2])]]),
       adapter,
     });
-    const liveXx = live.arcs!.getVertexData().xx;
+    if (!live.arcs?.getVertexData || !mini.arcs.getVertexData)
+      throw new Error('Missing fixture vertex data');
+    const liveXx = live.arcs.getVertexData().xx;
     const miniXx = mini.arcs.getVertexData().xx;
     expect(miniXx).not.toBe(liveXx);
     expect(Array.from(miniXx)).toEqual([0, 1]);

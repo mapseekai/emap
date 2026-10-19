@@ -1093,7 +1093,10 @@ export class RasterRenderService implements RasterContract {
     this.displayed.delete(id);
     this.pendingBatches.delete(id);
     for (const tile of this.cache.values()) if (tile.layer === id) this.evict(tile.key);
-    for (const [key, controller] of this.active) if (JSON.parse(key)[0] === id) controller.abort();
+    for (const [key, controller] of this.active) {
+      const parts: unknown = JSON.parse(key);
+      if (Array.isArray(parts) && parts[0] === id) controller.abort();
+    }
     this.queue = this.queue.filter((task) => task.layer.id !== id);
     try {
       this.closeSource(layer.source);

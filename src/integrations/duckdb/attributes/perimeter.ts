@@ -11,7 +11,7 @@ export function perimeter(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('perimeter', input, options, runtime);
 }
 export const perimeterTool = defineDuckDbTool({

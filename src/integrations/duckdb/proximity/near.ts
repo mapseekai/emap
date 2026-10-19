@@ -25,7 +25,7 @@ export function near(
   reference: MapshaperDataset,
   options: NearOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return distanceRelation(
     input,
     reference,

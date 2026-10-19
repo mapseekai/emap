@@ -251,7 +251,7 @@ const EPSILON = 1e-9;
 export function dedupeRefs(
   features: ReadonlyArray<{ source: string; layer: string; id: number }>,
 ): FeatureRef[] {
-  const seen: FeatureIdentityIndex = new globalThis.Map();
+  const seen: FeatureIdentityIndex = new globalThis.Map<string, Map<string, Set<number>>>();
   const out: FeatureRef[] = [];
   for (const f of features) {
     if (!addFeatureIdentity(seen, f)) continue;

@@ -19,7 +19,7 @@ export function difference(
   mask: MapshaperDataset,
   options: DifferenceOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runOverlayTool(input, mask, options, OVERLAY_OPERATIONS.difference, runtime);
 }
 export const differenceTool = defineDuckDbTool({

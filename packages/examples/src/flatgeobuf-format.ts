@@ -19,7 +19,10 @@ function epsgCode(crs: string | undefined): number | undefined {
   return code ? Number(code) : undefined;
 }
 
-export function installFlatGeobufFormat(emap: FlatGeobufExampleRuntime, formats: FormatRegistryContract): () => void {
+export function installFlatGeobufFormat(
+  emap: FlatGeobufExampleRuntime,
+  formats: FormatRegistryContract,
+): () => void {
   return formats.register({
     name: 'flatgeobuf',
     extensions: ['fgb'],
@@ -48,13 +51,13 @@ export function installFlatGeobufFormat(emap: FlatGeobufExampleRuntime, formats:
           .exportFileContent(dataset, { format: 'geojson' })[0];
         if (!file) throw new Error('FlatGeobuf export produced no GeoJSON');
         const json =
-          typeof file.content === 'string'
-            ? file.content
-            : new TextDecoder().decode(file.content);
+          typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content);
+        // The adapter produced this FeatureCollection through its GeoJSON export contract.
+        const collection = JSON.parse(json) as GeoJSON.FeatureCollection;
         return [
           {
             filename: 'export.fgb',
-            content: geojson.serialize(JSON.parse(json), epsgCode(dataset.info?.crs_string)),
+            content: geojson.serialize(collection, epsgCode(dataset.info?.crs_string)),
           },
         ];
       },

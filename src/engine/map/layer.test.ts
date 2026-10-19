@@ -90,6 +90,7 @@ describe('cloneLayerSpecification', () => {
     };
 
     const clone = cloneLayerSpecification(layer);
+    if (clone.type !== 'line') throw new Error('Expected cloned line layer');
 
     expect(clone.paint?.['line-dasharray']).toEqual([8, 4]);
     expect(clone.paint?.['line-dasharray']).not.toBe(layer.paint?.['line-dasharray']);

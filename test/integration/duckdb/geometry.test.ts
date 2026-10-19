@@ -2,7 +2,7 @@ import type { Table } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../../../src/integrations/arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../../src/integrations/arrow/test-utils';
-import type { MapshaperDataset } from '../../../types/mapshaper-types';
+import type { MapshaperDataset } from '../../../src/shared/types/mapshaper-types';
 import { DuckDbOperationError } from '../../../src/integrations/duckdb/errors';
 import type { DuckDbConnection, DuckDbRuntime } from '../../../src/integrations/duckdb/runtime';
 import {

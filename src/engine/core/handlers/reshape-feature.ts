@@ -198,7 +198,7 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     for (const part of shape) {
       if (!Array.isArray(part) || part.length === 0) return false;
       for (const raw of part) {
-        if (!Number.isSafeInteger(raw)) return false;
+        if (typeof raw !== 'number' || !Number.isSafeInteger(raw)) return false;
         const arcId = raw < 0 ? -raw - 1 : raw;
         if (arcId < 0 || arcId >= vertexData.nn.length) return false;
         arcIds.add(arcId);

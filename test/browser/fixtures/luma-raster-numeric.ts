@@ -49,7 +49,7 @@ import { readNumericWindow } from '../../../src/integrations/geotiff/read-window
       y0 = cy - size / 2;
     const locate = (x: number, y: number) => {
       const p = v.unproject((x0 + x) / ratioX, (y0 + y) / ratioY);
-      return toSource.unproject(...p);
+      return toSource.unproject(p[0], p[1]);
     };
     const a = locate(0, 0),
       b = locate(size, size);

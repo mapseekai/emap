@@ -151,7 +151,7 @@ export class LassoSelectHandler
       );
       const includeIntersecting = this._opts.includeIntersecting !== false;
       const refs: FeatureRef[] = [];
-      const seen: FeatureIdentityIndex = new globalThis.Map();
+      const seen: FeatureIdentityIndex = new globalThis.Map<string, Map<string, Set<number>>>();
       for (const f of candidates) {
         if (!featureMatchesLasso(this._map, f, closed, includeIntersecting)) continue;
         if (!addFeatureIdentity(seen, f)) continue;

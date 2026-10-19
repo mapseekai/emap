@@ -85,7 +85,7 @@ it('never lets stale directives bypass cache isolation or mandatory revalidation
     value._responseTime -= 1000;
     return value;
   };
-  for (const headers of [
+  const cases: Record<string, string>[] = [
     { 'cache-control': `max-age=0${stale}`, 'set-cookie': 'session=alice' },
     ...[
       'no-cache',
@@ -102,7 +102,8 @@ it('never lets stale directives bypass cache isolation or mandatory revalidation
       'S-Maxage=0',
     ].map((directive) => ({ 'cache-control': `max-age=0, ${directive}${stale}` })),
     { 'cache-control': `max-age=0${stale}`, vary: '*' },
-  ]) {
+  ];
+  for (const headers of cases) {
     const original = policy(headers);
     const legacy = original.toObject();
     legacy.rescc = Object.fromEntries(

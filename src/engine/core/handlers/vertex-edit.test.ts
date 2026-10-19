@@ -1,8 +1,11 @@
+import { EventDispatcher } from '../events';
+import { createEditHandlerFixture } from '../../../../test/utils/edit-handler-host';
+import type { MapshaperLayer } from '../../../shared/types/mapshaper-types';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
-import type { Emap } from '../../map/map';
+import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import { EMAP_THEME_COLORS } from '../../../ui/theme/colors';
 import type { NormalizedPointerEvent } from '../handler';
 
@@ -54,6 +57,82 @@ function makeArcIter(points: Array<[number, number]>): {
 }
 
 describe('VertexEditHandler', () => {
+  it('leaves render-only arc collections untouched when vertex access is unavailable', () => {
+    const arcs = {
+      size: () => 1,
+      getArcIter: () =>
+        makeArcIter([
+          [0, 0],
+          [1, 1],
+        ]),
+    };
+    const layer = { geometry_type: 'polyline', shapes: [[[0]]] } satisfies MapshaperLayer;
+    const setEditVertexState = vi.fn();
+    const host = createEditHandlerFixture({
+      queryFeatures: () => [{ id: 0, source: 's', layer: 'line', geometryType: 'polyline' }],
+      getSource: () => ({ getArcs: () => arcs, getLayers: () => [layer] }),
+      layers: { resolve: () => layer },
+      setEditVertexState,
+    });
+    const handler = new VertexEditHandler(host);
+    setPrivate(handler, '_enabled', true);
+    expect(() =>
+      handler.handlePointer({
+        kind: 'move',
+        point: { x: 0, y: 0 },
+        button: 0,
+        modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+        originalEvent: new Event('mousemove'),
+      }),
+    ).not.toThrow();
+    expect(setEditVertexState).not.toHaveBeenCalled();
+  });
+  it.each([
+    Int32Array,
+    Uint32Array,
+  ])('edits shared arc buffers using %s and ignores point-layer neighbors', (Indices) => {
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      {
+        xx: Float64Array.from([0, 100]),
+        yy: Float64Array.from([0, 0]),
+      },
+    ]);
+    const data = arcs.getVertexData?.();
+    if (!data) throw new Error('Expected native arc vertex storage');
+    arcs.getVertexData = () => ({ ...data, nn: new Indices([2]), ii: new Indices([0]) });
+    const polygon = {
+      name: 'areas',
+      geometry_type: 'polygon',
+      shapes: [[[0]]],
+    } satisfies MapshaperLayer;
+    const points = {
+      name: 'points',
+      geometry_type: 'point',
+      shapes: [[[0, 0]]],
+    } satisfies MapshaperLayer;
+    const setEditVertexState = vi.fn();
+    const host = createEditHandlerFixture({
+      queryFeatures: () => [{ id: 0, source: 's', layer: 'areas', geometryType: 'polygon' }],
+      getSource: () => ({ getArcs: () => arcs, getLayers: () => [points, polygon] }),
+      layers: { resolve: () => polygon },
+      project: (x, y) => [x, y],
+      unproject: (x, y) => [x, y],
+      setEditVertexState,
+    });
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', () => [0]);
+    const handler = new VertexEditHandler(host);
+    setPrivate(handler, '_enabled', true);
+    handler.handlePointer({
+      kind: 'move',
+      point: { x: 0, y: 0 },
+      button: 0,
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      originalEvent: new Event('mousemove'),
+    });
+    expect(setEditVertexState).toHaveBeenCalledWith(
+      expect.objectContaining({ shapes: polygon.shapes, neighborShapes: undefined }),
+    );
+  });
   const originalFindNearestVertices = Reflect.get(
     mapshaper.internal as object,
     'findNearestVertices',
@@ -142,14 +221,14 @@ describe('VertexEditHandler', () => {
     const mapMock = {
       editSession: { splitSharedNode },
       layers: {
-        resolve: () => ({ geometry_type: 'polyline', shapes: [null, null, [[4, 2]]] }),
+        resolve: () => ({ geometry_type: 'polyline' as const, shapes: [null, null, [[4, 2]]] }),
       },
       unproject: () => [3, 4] as [number, number],
       setEditVertexState: vi.fn(),
       render: vi.fn(),
       fire: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
     const hoveredFeature = {
@@ -179,7 +258,7 @@ describe('VertexEditHandler', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [null, neighborShape, detachedShape],
-    };
+    } satisfies MapshaperLayer;
     const arcs = {
       getVertexData: () => ({
         xx: new Float64Array(10),
@@ -206,7 +285,7 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
       fire: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
     const hoveredFeature = {
@@ -243,12 +322,10 @@ describe('VertexEditHandler', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [null, null, detachedShape],
-    };
+    } satisfies MapshaperLayer;
     const xx = new Float64Array(10);
     const yy = new Float64Array(10);
-    const arcs = {
-      getVertexData: () => ({ xx, yy, nn: new Int32Array([10]), ii: new Int32Array([0]) }),
-    };
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([{ xx, yy }]);
     const splitSharedNode = vi.fn(() => [8, 9]);
     const mapMock = {
       editSession: { splitSharedNode },
@@ -264,7 +341,7 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
       fire: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     const hoveredFeature = {
       id: 2,
       source: 'src-a',
@@ -299,17 +376,21 @@ describe('VertexEditHandler', () => {
       ]),
       getSource: vi.fn(() => ({
         getLayers: () => [
-          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+          {
+            name: 'roads',
+            geometry_type: 'polyline',
+            shapes: [movingShape, targetShape],
+          } satisfies MapshaperLayer,
         ],
-        getArcs: () => ({
-          getVertex2: () => [0, 0],
-          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
-            bbox[0] = 0;
-            bbox[1] = 0;
-            bbox[2] = 20;
-            bbox[3] = 0;
-          },
-        }),
+        getArcs: () =>
+          Object.assign(getDefaultMapshaperAdapter().createArcCollection([{ xx, yy }]), {
+            getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
+              bbox[0] = 0;
+              bbox[1] = 0;
+              bbox[2] = 20;
+              bbox[3] = 0;
+            },
+          }),
       })),
       setEditVertexState: vi.fn(),
       render: vi.fn(),
@@ -325,8 +406,10 @@ describe('VertexEditHandler', () => {
       }),
     );
 
-    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
-    setPrivate(handler, '_map', mapMock);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock), {
+      snapThreshold: 5,
+      snapToEdge: false,
+    });
     setPrivate(handler, '_hoverVertexIds', [0]);
     setPrivate(handler, '_hoveredFeature', {
       id: 0,
@@ -365,7 +448,7 @@ describe('VertexEditHandler', () => {
       fire: fireSpy,
       getSource: () => ({ refreshDisplayArcs }),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap, {
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock), {
       snapToVertex: false,
       snapToEdge: false,
     });
@@ -409,7 +492,7 @@ describe('VertexEditHandler', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [movingShape, targetShape],
-    };
+    } satisfies MapshaperLayer;
     const source = {
       getArcs: () => arcs,
       getLayers: () => [layer],
@@ -438,7 +521,7 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
       fire: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap, {
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock), {
       snapToVertex: false,
       snapToEdge: false,
     });
@@ -486,24 +569,24 @@ describe('VertexEditHandler', () => {
             name: 'roads',
             geometry_type: 'polyline',
             shapes: [movingShape, farShape, targetShape],
-          },
+          } satisfies MapshaperLayer,
         ],
-        getArcs: () => ({
-          getVertex2: () => [0, 0],
-          getSimpleShapeBbox: (part: number[], bbox: number[]) => {
-            if (part === targetShape[0]) {
-              bbox[0] = 10;
-              bbox[1] = 0;
-              bbox[2] = 20;
-              bbox[3] = 0;
-            } else {
-              bbox[0] = 1000;
-              bbox[1] = 1000;
-              bbox[2] = 1010;
-              bbox[3] = 1010;
-            }
-          },
-        }),
+        getArcs: () =>
+          Object.assign(getDefaultMapshaperAdapter().createArcCollection([{ xx, yy }]), {
+            getSimpleShapeBbox: (part: number[], bbox: number[]) => {
+              if (part === targetShape[0]) {
+                bbox[0] = 10;
+                bbox[1] = 0;
+                bbox[2] = 20;
+                bbox[3] = 0;
+              } else {
+                bbox[0] = 1000;
+                bbox[1] = 1000;
+                bbox[2] = 1010;
+                bbox[3] = 1010;
+              }
+            },
+          }),
       })),
       setEditVertexState: vi.fn(),
       render: vi.fn(),
@@ -516,8 +599,10 @@ describe('VertexEditHandler', () => {
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
     Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', segmentSpy);
 
-    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
-    setPrivate(handler, '_map', mapMock);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock), {
+      snapThreshold: 5,
+      snapToEdge: false,
+    });
     setPrivate(handler, '_hoverVertexIds', [0]);
     setPrivate(handler, '_hoveredFeature', {
       id: 0,
@@ -787,26 +872,22 @@ describe('VertexEditHandler', () => {
   });
 
   it('clears detached hover state when edit history changes', () => {
-    const listeners = new Map<string, (state: { canRedo: boolean }) => void>();
+    const events = new EventDispatcher();
     const mapMock = {
       setEditMode: vi.fn(),
-      on: vi.fn((type: string, listener: (state: { canRedo: boolean }) => void) => {
-        listeners.set(type, listener);
-      }),
+      on: events.on.bind(events),
       off: vi.fn(),
       clearEditVertexState: vi.fn(),
       render: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     handler.enable();
     setPrivate(handler, '_hoveredFeature', { id: 0 });
     setPrivate(handler, '_hoverVertexCoords', [1, 2]);
     setPrivate(handler, '_hoverVertexIds', [8, 9]);
     setPrivate(handler, '_detachedNode', { id: 0 });
 
-    const historyListener = listeners.get('historychange');
-    if (!historyListener) throw new Error('historychange listener was not registered');
-    historyListener({ canRedo: true });
+    events.fire('historychange', { canRedo: true });
 
     expect(Reflect.get(handler, '_hoveredFeature')).toBeNull();
     expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([]);
@@ -842,24 +923,25 @@ describe('VertexEditHandler', () => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
     Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
     const shape = [[0]];
-    const arcs = {
-      getArcIter: () =>
-        makeArcIter([
-          [0, 0],
-          [100, 0],
-        ]),
-      getVertex2: () => [0, 0] as [number, number],
-    };
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      {
+        xx: Float64Array.from([0, 100]),
+        yy: Float64Array.from([0, 0]),
+      },
+    ]);
     const mapMock = {
       queryFeatures: vi.fn(() => [
         { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
       ]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [shape] } satisfies MapshaperLayer,
+        ],
         getArcs: () => arcs,
       })),
       layers: {
-        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+        resolve: () =>
+          ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }) satisfies MapshaperLayer,
       },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
@@ -868,7 +950,7 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
     };
 
-    const handler = new VertexEditHandler(mapMock as any);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     setPrivate(handler, '_enabled', true);
 
     handler.handlePointer({
@@ -876,7 +958,7 @@ describe('VertexEditHandler', () => {
       point: { x: 50, y: 50 },
       modifiers: { shift: false, ctrl: false, alt: false, meta: false },
       button: 0,
-      originalEvent: { type: 'move' } as unknown as Event,
+      originalEvent: new Event('mousemove'),
     });
 
     expect(findNearestSpy).not.toHaveBeenCalled();
@@ -887,24 +969,25 @@ describe('VertexEditHandler', () => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
     Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
     const shape = [[0]];
-    const arcs = {
-      getArcIter: () =>
-        makeArcIter([
-          [0, 0],
-          [100, 0],
-        ]),
-      getVertex2: () => [0, 0] as [number, number],
-    };
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      {
+        xx: Float64Array.from([0, 100]),
+        yy: Float64Array.from([0, 0]),
+      },
+    ]);
     const mapMock = {
       queryFeatures: vi.fn(() => [
         { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
       ]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [shape] } satisfies MapshaperLayer,
+        ],
         getArcs: () => arcs,
       })),
       layers: {
-        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+        resolve: () =>
+          ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }) satisfies MapshaperLayer,
       },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
@@ -913,7 +996,7 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
     };
 
-    const handler = new VertexEditHandler(mapMock as any);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     setPrivate(handler, '_enabled', true);
 
     handler.handlePointer({
@@ -921,7 +1004,7 @@ describe('VertexEditHandler', () => {
       point: { x: 3, y: 4 },
       modifiers: { shift: false, ctrl: false, alt: false, meta: false },
       button: 0,
-      originalEvent: { type: 'move' } as unknown as Event,
+      originalEvent: new Event('mousemove'),
     });
 
     expect(findNearestSpy).toHaveBeenCalledTimes(1);
@@ -932,24 +1015,25 @@ describe('VertexEditHandler', () => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
     Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
     const shape = [[0]];
-    const arcs = {
-      getArcIter: () =>
-        makeArcIter([
-          [0, 0],
-          [100, 0],
-        ]),
-      getVertex2: () => [0, 0] as [number, number],
-    };
+    const arcs = getDefaultMapshaperAdapter().createArcCollection([
+      {
+        xx: Float64Array.from([0, 100]),
+        yy: Float64Array.from([0, 0]),
+      },
+    ]);
     const mapMock = {
       queryFeatures: vi.fn(() => [
         { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
       ]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [shape] } satisfies MapshaperLayer,
+        ],
         getArcs: () => arcs,
       })),
       layers: {
-        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+        resolve: () =>
+          ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }) satisfies MapshaperLayer,
       },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
@@ -958,14 +1042,14 @@ describe('VertexEditHandler', () => {
       render: vi.fn(),
     };
 
-    const handler = new VertexEditHandler(mapMock as any);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     setPrivate(handler, '_enabled', true);
     const event = {
       kind: 'move' as const,
       point: { x: 3, y: 4 },
       modifiers: { shift: false, ctrl: false, alt: false, meta: false },
       button: 0,
-      originalEvent: { type: 'move' } as unknown as Event,
+      originalEvent: new Event('mousemove'),
     };
 
     handler.handlePointer(event);
@@ -1007,7 +1091,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [[[0]], [[0]]],
-    };
+    } satisfies MapshaperLayer;
     const arcs = {
       size: () => 1,
       getVertexData: () => ({
@@ -1021,10 +1105,12 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       getArcs: () => arcs,
       getLayers: () => [layer],
     };
-    const handler = new VertexEditHandler({
-      getSource: () => source,
-      layers: { resolve: () => layer },
-    } as unknown as Emap);
+    const handler = new VertexEditHandler(
+      createEditHandlerFixture({
+        getSource: () => source,
+        layers: { resolve: () => layer },
+      }),
+    );
     const deleteSpy = vi.fn();
     const splitSpy = vi.fn();
     const hoveredFeature = {
@@ -1062,7 +1148,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [targetShape, [[0]]],
-    };
+    } satisfies MapshaperLayer;
     const arcs = {
       size: () => 2,
       getVertexData: () => ({
@@ -1076,10 +1162,12 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       getArcs: () => arcs,
       getLayers: () => [layer],
     };
-    const handler = new VertexEditHandler({
-      getSource: () => source,
-      layers: { resolve: () => layer },
-    } as unknown as Emap);
+    const handler = new VertexEditHandler(
+      createEditHandlerFixture({
+        getSource: () => source,
+        layers: { resolve: () => layer },
+      }),
+    );
     const splitSpy = vi.fn();
     const hoveredFeature = {
       id: 0,
@@ -1114,7 +1202,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [shape, [[0]]],
-    };
+    } satisfies MapshaperLayer;
     const arcs = {
       size: () => 1,
       getVertexData: () => ({
@@ -1136,7 +1224,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       setEditVertexState: vi.fn(),
       render: vi.fn(),
     };
-    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const handler = new VertexEditHandler(createEditHandlerFixture(mapMock));
     const hoveredFeature = {
       id: 0,
       source: 'src-a',
@@ -1182,7 +1270,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     const layer = {
       geometry_type: 'polyline',
       shapes: [[[0, 1]]],
-    };
+    } satisfies MapshaperLayer;
     const arcs = {
       size: () => 2,
       getVertexData: () => ({
@@ -1196,10 +1284,12 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       getArcs: () => arcs,
       getLayers: () => [layer],
     };
-    const handler = new VertexEditHandler({
-      getSource: () => source,
-      layers: { resolve: () => layer },
-    } as unknown as Emap);
+    const handler = new VertexEditHandler(
+      createEditHandlerFixture({
+        getSource: () => source,
+        layers: { resolve: () => layer },
+      }),
+    );
     const deleteSpy = vi.fn();
     const splitSpy = vi.fn();
     const hoveredFeature = {
@@ -1329,7 +1419,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         setEditVertexState,
         render: vi.fn(),
       };
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_enabled', true);
 
       expect(handler.handlePointer(pointer('down', 10, 20))).toBe('exclusive');
@@ -1339,10 +1429,10 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       );
     });
     it('deletes two selected nodes in one source atomically and undo restores both', () => {
-      let nn = Int32Array.from([3, 3]);
-      let xx = Float64Array.from([0, 1, 2, 3, 4, 5]);
-      let yy = Float64Array.from([0, 0, 0, 0, 0, 0]);
-      let ii = Int32Array.from([0, 3]);
+      let nn: Int32Array = Int32Array.from([3, 3]);
+      let xx: Float64Array = Float64Array.from([0, 1, 2, 3, 4, 5]);
+      let yy: Float64Array = Float64Array.from([0, 0, 0, 0, 0, 0]);
+      let ii: Int32Array = Int32Array.from([0, 3]);
       const arcs = {
         size: () => nn.length,
         getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
@@ -1353,7 +1443,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
           ii = Int32Array.from([0, nextNn[0]]);
         },
       };
-      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] } satisfies MapshaperLayer;
       const source = {
         getArcs: () => arcs,
         getLayers: () => [layer],
@@ -1369,7 +1459,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         render: vi.fn(),
         fire: vi.fn(),
       };
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_selectedNodes', [
         { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
         { source: 'source', layer: 'layer', vertexIds: [4], coords: [4, 0] },
@@ -1392,9 +1482,9 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         }
         return offsets;
       };
-      let nn = Int32Array.from([2, 2, 3]);
-      let xx = Float64Array.from([0, 1, 1, 2, 10, 11, 12]);
-      let yy = Float64Array.from([0, 0, 0, 0, 0, 0, 0]);
+      let nn: Int32Array = Int32Array.from([2, 2, 3]);
+      let xx: Float64Array = Float64Array.from([0, 1, 1, 2, 10, 11, 12]);
+      let yy: Float64Array = Float64Array.from([0, 0, 0, 0, 0, 0, 0]);
       let ii = buildOffsets(nn);
       const arcs = {
         size: () => nn.length,
@@ -1406,7 +1496,10 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
           ii = buildOffsets(nextNn);
         },
       };
-      const layer = { geometry_type: 'polyline', shapes: [[[0, 1]], [[~1, ~0]], [[2]]] };
+      const layer = {
+        geometry_type: 'polyline',
+        shapes: [[[0, 1]], [[~1, ~0]], [[2]]],
+      } satisfies MapshaperLayer;
       const source = {
         getArcs: () => arcs,
         getLayers: () => [layer],
@@ -1422,7 +1515,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         render: vi.fn(),
         fire: vi.fn(),
       };
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_selectedNodes', [
         { source: 'source', layer: 'layer', vertexIds: [1, 2], coords: [1, 0] },
         { source: 'source', layer: 'layer', vertexIds: [5], coords: [11, 0] },
@@ -1442,6 +1535,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     });
     it('selects enclosed nodes and adds to that set with Shift', () => {
       const arcs = {
+        getVertex2: (id: number): [number, number] => (id === 0 ? [1, 1] : [5, 5]),
         getArcIter: (arcId: number) => makeArcIter(arcId === 0 ? [[1, 1]] : [[5, 5]]),
         getVertexData: () => ({
           xx: Float64Array.from([1, 5]),
@@ -1450,7 +1544,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
           ii: Int32Array.from([0, 1]),
         }),
       };
-      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] } satisfies MapshaperLayer;
       const queryFeatures = vi.fn(() => [
         { id: 0, source: 'source', layer: 'layer', geometryType: 'polyline' },
       ]);
@@ -1467,7 +1561,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         'findNearestVertices',
         vi.fn((coord: [number, number]) => (coord[0] === 1 ? [0] : [1])),
       );
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_bandStart', { x: 0, y: 0 });
       setPrivate(handler, '_bandAdditive', false);
       callPrivate(handler, '_finishBand', 3, 3);
@@ -1499,7 +1593,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       };
       const snapVertices = vi.fn();
       Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_selectedNodes', [
         { source: 'source', layer: 'layer', vertexIds: [1, 4], coords: [1, 1] },
       ]);
@@ -1516,7 +1610,10 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     });
     it('moves a shared feature edge node once across both feature references', () => {
       const sharedEdge = [[0]];
-      const layer = { geometry_type: 'polygon', shapes: [sharedEdge, sharedEdge] };
+      const layer = {
+        geometry_type: 'polygon',
+        shapes: [sharedEdge, sharedEdge],
+      } satisfies MapshaperLayer;
       const arcs = {};
       const source = { getArcs: () => arcs };
       const map = {
@@ -1527,7 +1624,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       };
       const snapVertices = vi.fn();
       Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_selectedNodes', [
         { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
       ]);
@@ -1546,7 +1643,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
         render: vi.fn(),
         getSource: vi.fn(),
       };
-      const handler = new VertexEditHandler(map as unknown as Emap);
+      const handler = new VertexEditHandler(createEditHandlerFixture(map));
       setPrivate(handler, '_selectedNodes', [
         { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
       ]);

@@ -67,7 +67,7 @@ export async function findEpsgProjjsonAsync(
   }
 
   try {
-    const projjson = await response.json();
+    const projjson: unknown = await response.json();
     projjsonCache.set(url, projjson);
     return projjson;
   } catch (cause) {

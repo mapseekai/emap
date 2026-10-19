@@ -2,7 +2,10 @@
 export type EventListener<T = Record<string, unknown>> = (event: { type: string } & T) => void;
 
 export class EventDispatcher {
-  private _listeners: Record<string, EventListener[]> = Object.create(null);
+  private _listeners: Record<string, EventListener[]> = Object.create(null) as Record<
+    string,
+    EventListener[]
+  >;
 
   on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this {
     if (!this._listeners[type]) {

@@ -22,7 +22,7 @@ describe('wheel zoom frame pacing', () => {
     element = document.createElement('div');
     wheel = new MouseWheel(element);
     samples = [];
-    wheel.on('mousewheel', (event) => samples.push(event));
+    wheel.on<(typeof samples)[number]>('mousewheel', (event) => samples.push(event));
   });
 
   afterEach(() => {

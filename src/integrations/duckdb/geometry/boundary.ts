@@ -11,7 +11,7 @@ export function boundary(
   input: MapshaperDataset,
   options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runUnary('boundary', input, options, runtime);
 }
 export const boundaryTool = defineDuckDbTool({

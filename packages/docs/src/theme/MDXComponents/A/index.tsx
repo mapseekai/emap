@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useLocation } from '@docusaurus/router';
 import MDXA from '@theme-original/MDXComponents/A';
 import type { Props } from '@theme/MDXComponents/A';

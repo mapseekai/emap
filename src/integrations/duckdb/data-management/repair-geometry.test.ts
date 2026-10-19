@@ -58,7 +58,7 @@ class CaptureRuntime implements DuckDbRuntime {
 
 describe('repairGeometry', () => {
   it('runs ST_MakeValid through the shared geometry runner', async () => {
-    const dataset = await datasetFromGeoJSON(POLYGON_FC, { crs: 'EPSG:4326' });
+    const dataset = await datasetFromGeoJSON(POLYGON_FC);
     const runtime = new CaptureRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
 
     const result = await repairGeometry(dataset, { outputLayer: 'repaired' }, runtime);

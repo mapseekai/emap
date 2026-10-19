@@ -3,7 +3,11 @@ import { SqljsAdapter } from '@ngageoint/geopackage/dist/lib/db/sqljsAdapter.js'
 
 export function wkb(type: number, values: number[] | Uint8Array[], little = true): Uint8Array {
   const bytes = new Uint8Array(
-    5 + values.reduce((size, item) => size + (item instanceof Uint8Array ? item.byteLength : 8), 0),
+    5 +
+      values.reduce<number>(
+        (size, item) => size + (item instanceof Uint8Array ? item.byteLength : 8),
+        0,
+      ),
   );
   const view = new DataView(bytes.buffer);
   bytes[0] = Number(little);

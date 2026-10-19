@@ -43,7 +43,7 @@ describe('shared path member ranges', () => {
   it('preserves original member IDs through empty and half-pixel collapsed screen paths', () => {
     const positions = Float64Array.from([0, 0, 0.1, 0, 2, 2, 3, 2]);
     const screen = {
-      view: [1, -1, 0, 0] as const,
+      view: [1, -1, 0, 0] as [number, number, number, number],
       width: 100,
       height: 100,
       pixelRatio: 1,

@@ -1,4 +1,8 @@
-import { getExampleRenderer, installExampleRendererToolbar, syncExampleRendererToolbar } from '../renderer-choice';
+import {
+  getExampleRenderer,
+  installExampleRendererToolbar,
+  syncExampleRendererToolbar,
+} from '../renderer-choice';
 import { rasterFileSelections, type RasterFileSelection } from './files';
 import { loadExampleRuntime } from '../example-runtime';
 import { monitorExampleMap } from '../performance-render-source';
@@ -190,7 +194,9 @@ async function load(nextFile: File, nextOverview?: File, fit = true): Promise<vo
   file = nextFile;
   overview = nextOverview;
   backend = backendInput.value;
-  syncExampleRendererToolbar(backend === 'canvas' ? 'canvas2d' : backend === 'webgpu' ? 'webgpu' : 'webgl2');
+  syncExampleRendererToolbar(
+    backend === 'canvas' ? 'canvas2d' : backend === 'webgpu' ? 'webgpu' : 'webgl2',
+  );
   loadingStarted = performance.now();
   firstReadyMs = 0;
   openMs = 0;
@@ -363,7 +369,13 @@ $('native').onclick = () => {
     });
 };
 backendInput.onchange = () => {
-  syncExampleRendererToolbar(backendInput.value === 'canvas' ? 'canvas2d' : backendInput.value === 'webgpu' ? 'webgpu' : 'webgl2');
+  syncExampleRendererToolbar(
+    backendInput.value === 'canvas'
+      ? 'canvas2d'
+      : backendInput.value === 'webgpu'
+        ? 'webgpu'
+        : 'webgl2',
+  );
   if (file) void load(file, overview, false);
 };
 $<HTMLSelectElement>('stretch').onchange = () =>

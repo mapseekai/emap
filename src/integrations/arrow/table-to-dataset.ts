@@ -30,7 +30,7 @@ export function recordsFromArrowTable(
 ): Array<Record<string, unknown>> {
   const fields = table.schema.fields;
   const skipColumns = new Set(opts.skipColumns ?? []);
-  const records: Array<Record<string, unknown>> = new Array(table.numRows);
+  const records: Array<Record<string, unknown>> = new Array<Record<string, unknown>>(table.numRows);
 
   for (let row = 0; row < table.numRows; row++) {
     const record: Record<string, unknown> = {};
@@ -194,7 +194,7 @@ function readCoord(value: unknown): [number, number] {
 }
 
 function readCoordList(list: Vector): Array<[number, number]> {
-  const out: Array<[number, number]> = new Array(list.length);
+  const out: Array<[number, number]> = new Array<[number, number]>(list.length);
   for (let i = 0; i < list.length; i++) {
     out[i] = readCoord(list.get(i));
   }
@@ -211,7 +211,7 @@ function buildRecords(
   skipIndexes = new Set<number>(),
 ): Array<Record<string, unknown>> {
   const fields = table.schema.fields;
-  const records: Array<Record<string, unknown>> = new Array(table.numRows);
+  const records: Array<Record<string, unknown>> = new Array<Record<string, unknown>>(table.numRows);
   for (let i = 0; i < table.numRows; i++) records[i] = {};
 
   for (let col = 0; col < fields.length; col++) {

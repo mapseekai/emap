@@ -51,7 +51,7 @@ export async function densify(
   input: MapshaperDataset,
   options: DensifyOptions,
   _runtime?: DuckDbRuntime | null,
-) {
+): Promise<MapshaperDataset> {
   const distance = finitePositive('densify', 'maxSegmentLength', options.maxSegmentLength);
   const adapter = getDefaultMapshaperAdapter();
   const copy = adapter.copyDataset(input);

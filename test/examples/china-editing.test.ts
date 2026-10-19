@@ -58,8 +58,8 @@ async function executeChinaEditingExample() {
   };
   const runtime = {
     Emap: class {
-      static async create(...args: any[]) {
-        return new this(...args);
+      static async create() {
+        return new this();
       }
       constructor() {
         return map;

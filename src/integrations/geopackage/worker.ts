@@ -45,8 +45,7 @@ export async function importGeoPackageInWorker(
   let progressError: unknown;
   try {
     const session = owner.session;
-    let handle: TaskHandle<unknown>;
-    handle = session.enqueue('import', {
+    const handle: TaskHandle<unknown> = session.enqueue('import', {
       // SQLite/WKB conversion and topology can exceed the runtime's two-minute
       // default for supported multi-million-feature files. Keep a finite bulk
       // deadline; AbortSignal still terminates the Worker immediately.

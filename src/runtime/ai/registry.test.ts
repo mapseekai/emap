@@ -26,6 +26,16 @@ const definition = (overrides: Partial<CapabilityDefinition> = {}): CapabilityDe
   ...overrides,
 });
 describe('capability registry', () => {
+  it('executes ordinary methods with the registered definition as their receiver', async () => {
+    const registry = new CapabilityRegistry();
+    const tool = definition();
+    tool.execute = function () {
+      return this.id;
+    };
+    registry.register(tool);
+    await expect(registry.execute(tool.id, { value: 1 })).resolves.toBe(tool.id);
+    registry.dispose();
+  });
   it('isolates definitions and freezes published metadata', () => {
     const first = new CapabilityRegistry();
     const second = new CapabilityRegistry();

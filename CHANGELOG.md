@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-10-19
+
+### Fixed
+
+- Validate selection snapshots before restoring state and reject invalid feature IDs.
+- Report asynchronous after-commit validation errors and preserve DuckDB initialization
+  failures during disposal.
+- Validate AI capability summaries and retain default Worker pool sizes when optional
+  configuration values are undefined.
+
+### Build
+
+- Add type-aware linting and dedicated test, documentation, and tooling type checks;
+  update source, examples, and test fixtures to satisfy the stricter contracts.
+- Upgrade luma.gl to 10.0.0-alpha.4 and pin fflate to 0.8.3.
+- Install Firefox and WebKit before checking an existing system Chrome installation.
+- Update documentation toolchain dependencies to fix newly blocking audit advisories.
+
 ## [0.14.2] - 2026-10-05
 
 ### Fixed
@@ -1692,7 +1710,10 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.14.3...HEAD
+[0.14.3]: https://github.com/mapseekai/emap/compare/v0.14.2...v0.14.3
+[0.14.2]: https://github.com/mapseekai/emap/compare/v0.14.1...v0.14.2
+[0.14.1]: https://github.com/mapseekai/emap/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mapseekai/emap/compare/v0.13.1...v0.14.0
 [0.11.2]: https://github.com/mapseekai/emap/compare/v0.11.1...v0.11.2
 [0.10.0]: https://github.com/mapseekai/emap/compare/v0.9.2...v0.10.0

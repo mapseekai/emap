@@ -37,13 +37,21 @@ describe('ZIP Shapefile import', () => {
     await source.setData(arrayInput ? [input] : input);
     const dataset = source.getDataset()!;
     expect(dataset.layers.map((layer) => layer.name)).toEqual(['roads', 'rivers']);
-    expect(dataset.layers.map((layer) => layer.data?.getRecords())).toEqual([
+    expect(dataset.layers.map((layer) => layer.data?.getRecords?.())).toEqual([
       [{ label: 'roads' }],
       [{ label: 'rivers' }],
     ]);
     expect(dataset.layers.map((layer) => layer.shapes?.length)).toEqual([1, 1]);
     expect(dataset.arcs!.size()).toBe(2);
-    expect(dataset.arcs!.toArray()).toEqual([
+    const arcs = dataset.arcs;
+    if (!arcs) throw new Error('Expected imported path arcs');
+    const coordinates = Array.from({ length: arcs.size() }, (_, id) => {
+      const iterator = arcs.getArcIter(id),
+        points: number[][] = [];
+      while (iterator.hasNext()) points.push([iterator.x, iterator.y]);
+      return points;
+    });
+    expect(coordinates).toEqual([
       [
         [0, 0],
         [1, 1],

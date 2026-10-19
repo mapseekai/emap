@@ -5,7 +5,7 @@ import { FastNavPreview } from '../../packages/examples/src/luma-benchmark/fast-
 import { AffineTransform } from '../../src/domain/geo/transform';
 
 describe('luma snapshot navigation lifecycle', () => {
-  let nav: FastNavPreview, source: HTMLCanvasElement, redraw: ReturnType<typeof vi.fn>;
+  let nav: FastNavPreview, source: HTMLCanvasElement, redraw: ReturnType<typeof vi.fn<() => void>>;
   let resolve: (b: ImageBitmap) => void;
   const bitmap = () => ({ width: 400, height: 200, close: vi.fn() }) as unknown as ImageBitmap;
   beforeEach(() => {

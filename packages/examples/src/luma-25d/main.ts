@@ -1,4 +1,8 @@
-import { getExampleGpuBackend, installExampleRendererToolbar, navigateExampleRenderer } from '../renderer-choice';
+import {
+  getExampleGpuBackend,
+  installExampleRendererToolbar,
+  navigateExampleRenderer,
+} from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from '../luma-benchmark/icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
@@ -107,8 +111,16 @@ renderers.setPointLod(true);
 renderers.navigation.setEnabled(true);
 renderers.setPointStyle(3, 1);
 renderers.show('luma');
-labelControls = installLabelControls(document.querySelector<HTMLElement>('.layout > aside')!, renderers, request);
-iconControls = installIconControls(document.querySelector<HTMLElement>('.layout > aside')!, renderers, request);
+labelControls = installLabelControls(
+  document.querySelector<HTMLElement>('.layout > aside')!,
+  renderers,
+  request,
+);
+iconControls = installIconControls(
+  document.querySelector<HTMLElement>('.layout > aside')!,
+  renderers,
+  request,
+);
 renderers.resize(width, height, dpr);
 function syncControls(): void {
   el<HTMLInputElement>('pitch').value = String(view.pitch);
@@ -565,7 +577,9 @@ el('clear').addEventListener(
 el('backend').addEventListener(
   'change',
   () => {
-    navigateExampleRenderer(el<HTMLSelectElement>('backend').value === 'webgpu' ? 'webgpu' : 'webgl2');
+    navigateExampleRenderer(
+      el<HTMLSelectElement>('backend').value === 'webgpu' ? 'webgpu' : 'webgl2',
+    );
   },
   events,
 );
@@ -582,8 +596,10 @@ for (const [x, y, color] of [
   bitmapContext.fillRect(x, y, 32, 32);
 }
 function dispose(): void {
-  labelControls?.dispose(); labelControls = null;
-  iconControls?.dispose(); iconControls = null;
+  labelControls?.dispose();
+  labelControls = null;
+  iconControls?.dispose();
+  iconControls = null;
   if (disposed) return;
   disposed = true;
   loading?.abort();
@@ -603,18 +619,37 @@ window.addEventListener('pagehide', dispose, { once: true });
 // Diagnostics for browser regression tests and interactive inspection, not the production Emap API.
 Object.assign(window, {
   luma25d: {
-    get labelStats(){return renderers.labelStats;},
-    get labelPlacements(){return renderers.labelPlacements;},
-    get layers(){return renderers.getLayers();},
-    setLayerSymbol:(id:string,symbol:SymbolStyle|null)=>renderers.setLayerSymbol(id,symbol),
-    setSymbolLayoutProperty:<K extends keyof SymbolLayout>(id:string,name:K,value:SymbolLayout[K]|null)=>renderers.setSymbolLayoutProperty(id,name,value),
-    setSymbolPaintProperty:<K extends keyof SymbolPaint>(id:string,name:K,value:SymbolPaint[K]|null)=>renderers.setSymbolPaintProperty(id,name,value),
-    setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
-    setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
-    get iconStats(){return renderers.iconStats;},
-    settleIcons:()=>renderers.settleIcons(),
-    setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
-    settleLabels:()=>renderers.settleLabels(),
+    get labelStats() {
+      return renderers.labelStats;
+    },
+    get labelPlacements() {
+      return renderers.labelPlacements;
+    },
+    get layers() {
+      return renderers.getLayers();
+    },
+    setLayerSymbol: (id: string, symbol: SymbolStyle | null) =>
+      renderers.setLayerSymbol(id, symbol),
+    setSymbolLayoutProperty: <K extends keyof SymbolLayout>(
+      id: string,
+      name: K,
+      value: SymbolLayout[K] | null,
+    ) => renderers.setSymbolLayoutProperty(id, name, value),
+    setSymbolPaintProperty: <K extends keyof SymbolPaint>(
+      id: string,
+      name: K,
+      value: SymbolPaint[K] | null,
+    ) => renderers.setSymbolPaintProperty(id, name, value),
+    setLayerLabel: (id: string, options: LabelOptions | null) =>
+      renderers.setLayerLabel(id, options),
+    setLayerIcon: (id: string, options: IconOptions | null) => renderers.setLayerIcon(id, options),
+    get iconStats() {
+      return renderers.iconStats;
+    },
+    settleIcons: () => renderers.settleIcons(),
+    setLayerVisibility: (id: string, value: 'visible' | 'none') =>
+      renderers.setLayerVisibility(id, value),
+    settleLabels: () => renderers.settleLabels(),
 
     get state() {
       return phase;

@@ -1,52 +1,53 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Selection } from '../../../engine/map/selection';
-import type { MapshaperLayer } from '../../../shared/types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import type {
+  DataTable,
+  MapshaperDataset,
+  MapshaperLayer,
+} from '../../../shared/types/mapshaper-types';
+import { asMutableTopologySource } from '../../source/source';
+import { TopologySource } from '../../source/topology-source';
 import {
   BulkFeatureDeleteCommand,
   FeatureDeleteCommand,
   FeatureDeleteWithSelectionCommand,
 } from './feature-delete';
 
-function makeSource(): TopologySource {
-  const dataset = { layers: [] };
-  const source = {
-    getDataset: () => dataset,
-    markDisplayArcsDirty: () => {},
-  };
-  // The command only consumes this tested TopologySource surface.
-  return source as unknown as TopologySource;
+function makeSource(dataset: MapshaperDataset = { layers: [] }) {
+  const source = asMutableTopologySource(new TopologySource('s'));
+  source.setDataset(dataset, false);
+  return source;
 }
 
 describe('FeatureDeleteCommand', () => {
   it('do() splices out the shape and data record', () => {
     const records: Record<string, unknown>[] = [{ a: 0 }, { a: 1 }, { a: 2 }];
     const layer = {
-      shapes: [['s0'], ['s1'], ['s2']] as any[],
+      shapes: [[[0]], [[1]], [[2]]],
       data: { getRecords: () => records },
     };
     const cmd = new FeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       featureId: 1,
       shape: layer.shapes[1],
       record: records[1],
       source: makeSource(),
     });
     cmd.do();
-    expect(layer.shapes).toEqual([['s0'], ['s2']]);
+    expect(layer.shapes).toEqual([[[0]], [[2]]]);
     expect(records).toEqual([{ a: 0 }, { a: 2 }]);
   });
 
   it('undo() restores the feature at the original index', () => {
     const records: Record<string, unknown>[] = [{ a: 0 }, { a: 2 }];
-    const originalShape = ['s1'];
+    const originalShape = [[1]];
     const originalRecord = { a: 1 };
     const layer = {
-      shapes: [['s0'], ['s2']] as any[],
+      shapes: [[[0]], [[2]]],
       data: { getRecords: () => records },
     };
     const cmd = new FeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       featureId: 1,
       shape: originalShape,
       record: originalRecord,
@@ -60,11 +61,11 @@ describe('FeatureDeleteCommand', () => {
   it('round-trip do() then undo() yields the original arrays', () => {
     const records: Record<string, unknown>[] = [{ a: 0 }, { a: 1 }, { a: 2 }];
     const layer = {
-      shapes: [['s0'], ['s1'], ['s2']] as any[],
+      shapes: [[[0]], [[1]], [[2]]],
       data: { getRecords: () => records },
     };
     const cmd = new FeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       featureId: 1,
       shape: layer.shapes[1],
       record: records[1],
@@ -72,7 +73,7 @@ describe('FeatureDeleteCommand', () => {
     });
     cmd.do();
     cmd.undo();
-    expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2']]);
+    expect(layer.shapes).toEqual([[[0]], [[1]], [[2]]]);
     expect(records).toEqual([{ a: 0 }, { a: 1 }, { a: 2 }]);
   });
 
@@ -85,7 +86,7 @@ describe('FeatureDeleteCommand', () => {
       data: { getRecords: () => records },
     };
     const cmd = new FeatureDeleteCommand({
-      layer: layer as unknown as MapshaperLayer,
+      layer: layer,
       featureId: 0,
       shape: originalShape,
       record: originalRecord,
@@ -103,26 +104,26 @@ describe('FeatureDeleteCommand', () => {
 
   it('layers without a data table are handled', () => {
     const layer = {
-      shapes: [['s0'], ['s1']] as any[],
+      shapes: [[[0]], [[1]]],
       data: undefined,
     };
     const cmd = new FeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       featureId: 0,
       shape: layer.shapes[0],
       record: null,
       source: makeSource(),
     });
     expect(() => cmd.do()).not.toThrow();
-    expect(layer.shapes).toEqual([['s1']]);
+    expect(layer.shapes).toEqual([[[1]]]);
     expect(() => cmd.undo()).not.toThrow();
-    expect(layer.shapes).toEqual([['s0'], ['s1']]);
+    expect(layer.shapes).toEqual([[[0]], [[1]]]);
   });
 });
 
 describe('BulkFeatureDeleteCommand', () => {
   function makeLayer(n: number) {
-    const shapes = Array.from({ length: n }, (_, i) => [`s${i}`]);
+    const shapes = Array.from({ length: n }, (_, i) => [[i]]);
     const records: Record<string, unknown>[] = Array.from({ length: n }, (_, i) => ({ a: i }));
     return {
       layer: { shapes, data: { getRecords: () => records } },
@@ -133,7 +134,7 @@ describe('BulkFeatureDeleteCommand', () => {
   it('do() removes all snapshotted ids in one pass', () => {
     const { layer, records } = makeLayer(5);
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: [
         { id: 1, shape: layer.shapes[1], record: records[1] },
         { id: 3, shape: layer.shapes[3], record: records[3] },
@@ -141,14 +142,14 @@ describe('BulkFeatureDeleteCommand', () => {
       source: makeSource(),
     });
     cmd.do();
-    expect(layer.shapes).toEqual([['s0'], ['s2'], ['s4']]);
+    expect(layer.shapes).toEqual([[[0]], [[2]], [[4]]]);
     expect(records).toEqual([{ a: 0 }, { a: 2 }, { a: 4 }]);
   });
 
   it('do() accepts ids in any order, with duplicates deduped by Set', () => {
     const { layer, records } = makeLayer(5);
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: [
         { id: 4, shape: layer.shapes[4], record: records[4] },
         { id: 0, shape: layer.shapes[0], record: records[0] },
@@ -157,7 +158,7 @@ describe('BulkFeatureDeleteCommand', () => {
       source: makeSource(),
     });
     cmd.do();
-    expect(layer.shapes).toEqual([['s1'], ['s3']]);
+    expect(layer.shapes).toEqual([[[1]], [[3]]]);
     expect(records).toEqual([{ a: 1 }, { a: 3 }]);
   });
 
@@ -165,7 +166,7 @@ describe('BulkFeatureDeleteCommand', () => {
     const { layer, records } = makeLayer(4);
     const beforeRef = records;
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: [{ id: 0, shape: layer.shapes[0], record: records[0] }],
       source: makeSource(),
     });
@@ -182,24 +183,24 @@ describe('BulkFeatureDeleteCommand', () => {
       { id: 4, shape: layer.shapes[4], record: { ...records[4] } },
     ];
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: snap,
       source: makeSource(),
     });
     cmd.do();
-    expect(layer.shapes).toEqual([['s1'], ['s3']]);
+    expect(layer.shapes).toEqual([[[1]], [[3]]]);
     cmd.undo();
-    expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2'], ['s3'], ['s4']]);
+    expect(layer.shapes).toEqual([[[0]], [[1]], [[2]], [[3]], [[4]]]);
     expect(records).toEqual([{ a: 0 }, { a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }]);
   });
 
   it('layers without a data table are handled', () => {
     const layer = {
-      shapes: [['s0'], ['s1'], ['s2']] as any[],
+      shapes: [[[0]], [[1]], [[2]]],
       data: undefined,
     };
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: [
         { id: 0, shape: layer.shapes[0], record: null },
         { id: 2, shape: layer.shapes[2], record: null },
@@ -207,24 +208,24 @@ describe('BulkFeatureDeleteCommand', () => {
       source: makeSource(),
     });
     expect(() => cmd.do()).not.toThrow();
-    expect(layer.shapes).toEqual([['s1']]);
+    expect(layer.shapes).toEqual([[[1]]]);
     expect(() => cmd.undo()).not.toThrow();
-    expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2']]);
+    expect(layer.shapes).toEqual([[[0]], [[1]], [[2]]]);
   });
 
   it('label reflects the snapshot count', () => {
     const single = new BulkFeatureDeleteCommand({
-      layer: { shapes: [['x']] } as any,
-      snapshots: [{ id: 0, shape: ['x'], record: null }],
+      layer: { shapes: [[[9]]] },
+      snapshots: [{ id: 0, shape: [[9]], record: null }],
       source: makeSource(),
     });
     expect(single.label).toBe('Delete 1 feature');
     const many = new BulkFeatureDeleteCommand({
-      layer: { shapes: [['a'], ['b'], ['c']] } as any,
+      layer: { shapes: [[[0]], [[1]], [[2]]] },
       snapshots: [
-        { id: 0, shape: ['a'], record: null },
-        { id: 1, shape: ['b'], record: null },
-        { id: 2, shape: ['c'], record: null },
+        { id: 0, shape: [[0]], record: null },
+        { id: 1, shape: [[1]], record: null },
+        { id: 2, shape: [[2]], record: null },
       ],
       source: makeSource(),
     });
@@ -235,7 +236,7 @@ describe('BulkFeatureDeleteCommand', () => {
     const { layer } = makeLayer(3);
     const before = [...layer.shapes];
     const cmd = new BulkFeatureDeleteCommand({
-      layer: layer as any,
+      layer: layer,
       snapshots: [],
       source: makeSource(),
     });
@@ -253,10 +254,14 @@ describe('nullable feature records', () => {
     const records: Array<Record<string, unknown> | null> = [null, { a: 1 }, null];
     const originalRecords = records.slice();
     const originalShapes = [[[0, 0]], [[1, 1]], [[2, 2]]];
+    const data: DataTable = {
+      // @ts-expect-error Exercise legacy nullable rows beyond the declared table contract.
+      getRecords: () => records,
+    };
     const layer = {
       shapes: originalShapes.slice(),
-      data: { getRecords: () => records },
-    } as unknown as MapshaperLayer;
+      data,
+    } satisfies MapshaperLayer;
     const source = makeSource();
     const command =
       kind === 'single'
@@ -320,20 +325,17 @@ describe('nullable feature records', () => {
 
 describe('FeatureDeleteWithSelectionCommand', () => {
   function makeSetup() {
+    const records = [{ name: 'a' }, { name: 'b' }];
     const layer = {
       name: 'l',
       geometry_type: 'polygon',
       shapes: [[[0]], [[1]]],
       data: { getRecords: () => records },
-    } as any;
-    const records = [{ name: 'a' }, { name: 'b' }];
-    const dataset = { layers: [layer], arcs: null, editVersion: 0, attributeVersion: 0 };
-    const source = {
-      getArcs: () => null,
-      getDataset: () => dataset,
-      markDisplayArcsDirty: vi.fn(),
-      fire: vi.fn(),
-    } as any;
+    } satisfies MapshaperLayer;
+    const dataset = { layers: [layer], editVersion: 0, attributeVersion: 0 };
+    const source = makeSource(dataset);
+    const onData = vi.fn();
+    source.on('data', onData);
     const selection = new Selection();
     selection.apply(
       [
@@ -355,7 +357,7 @@ describe('FeatureDeleteWithSelectionCommand', () => {
       publishSelection,
       label: 'Delete part',
     });
-    return { layer, records, source, selection, publishSelection, command };
+    return { layer, records, source, dataset, onData, selection, publishSelection, command };
   }
 
   it('do splices the feature row + record and applies the remapped selection', () => {
@@ -376,8 +378,7 @@ describe('FeatureDeleteWithSelectionCommand', () => {
   });
 
   it('bumps both revisions once per do and undo', () => {
-    const { source, command } = makeSetup();
-    const dataset = source.getDataset();
+    const { dataset, command } = makeSetup();
     command.do();
     expect(dataset.editVersion).toBe(1);
     expect(dataset.attributeVersion).toBe(1);
@@ -387,10 +388,10 @@ describe('FeatureDeleteWithSelectionCommand', () => {
   });
 
   it('publish fires data(edit) and the selection diff once', () => {
-    const { source, publishSelection, command } = makeSetup();
+    const { onData, publishSelection, command } = makeSetup();
     command.do();
     command.publish();
-    expect(source.fire).toHaveBeenCalledWith('data', { reason: 'edit' });
+    expect(onData).toHaveBeenCalledWith(expect.objectContaining({ reason: 'edit' }));
     expect(publishSelection).toHaveBeenCalledTimes(1);
     expect(publishSelection.mock.calls[0]![0]).toMatchObject({
       added: [],

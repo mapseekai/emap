@@ -122,7 +122,9 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     const del = this.deletedIds;
 
     const oldShapes = layer.shapes;
-    const newShapes: (FeatureShape | null)[] = new Array(oldShapes.length - del.size);
+    const newShapes: (FeatureShape | null)[] = new Array<FeatureShape | null>(
+      oldShapes.length - del.size,
+    );
     let dst = 0;
     for (let i = 0; i < oldShapes.length; i++) {
       if (!del.has(i)) newShapes[dst++] = oldShapes[i];

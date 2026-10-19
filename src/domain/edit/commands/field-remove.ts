@@ -19,7 +19,7 @@ export interface FieldRemoveCommandOptions {
  */
 export class FieldRemoveCommand implements EditCommand {
   readonly label: string;
-  private _snapshot: globalThis.Map<number, unknown> = new globalThis.Map();
+  private _snapshot: globalThis.Map<number, unknown> = new globalThis.Map<number, unknown>();
   private _previousFields: MapshaperLayer['fields'];
 
   constructor(private readonly opts: FieldRemoveCommandOptions) {

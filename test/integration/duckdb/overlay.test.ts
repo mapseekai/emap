@@ -202,7 +202,7 @@ async function createDuckDbTestRuntime(): Promise<DuckDbRuntime> {
       mainModule: integrationRequire.resolve('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm'),
       mainWorker: '',
     },
-  } satisfies DuckDBBundles.DuckDBBundles;
+  } satisfies import('@duckdb/duckdb-wasm/blocking').DuckDBBundles;
   const db = await duckdb.createDuckDB(bundles, new duckdb.ConsoleLogger(), duckdb.NODE_RUNTIME);
   await db.instantiate();
   let spatialReady: Promise<void> | null = null;

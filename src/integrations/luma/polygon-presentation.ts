@@ -174,7 +174,10 @@ export class PolygonPresentation {
       for (const part of group) {
         let draw = draws.get(part.channel.key);
         if (!draw) {
-          draw = { channel: latest.get(part.channel.key) ?? part.channel, entries: new Map() };
+          draw = {
+            channel: latest.get(part.channel.key) ?? part.channel,
+            entries: new Map<GeometryEntry, Set<number> | undefined>(),
+          };
           draws.set(part.channel.key, draw);
         }
         if (!draw.entries.has(part.entry))

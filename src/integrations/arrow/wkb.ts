@@ -151,7 +151,7 @@ class WkbReader {
 
   private _coordSeq(littleEndian: boolean, dims: number): Array<[number, number]> {
     const n = this._u32(littleEndian);
-    const out: Array<[number, number]> = new Array(n);
+    const out: Array<[number, number]> = new Array<[number, number]>(n);
     for (let i = 0; i < n; i++) {
       out[i] = this._coord(littleEndian, dims);
     }
@@ -160,7 +160,7 @@ class WkbReader {
 
   private _rings(littleEndian: boolean, dims: number): Array<Array<[number, number]>> {
     const n = this._u32(littleEndian);
-    const rings: Array<Array<[number, number]>> = new Array(n);
+    const rings: Array<Array<[number, number]>> = new Array<[number, number][]>(n);
     for (let i = 0; i < n; i++) {
       rings[i] = this._coordSeq(littleEndian, dims);
     }

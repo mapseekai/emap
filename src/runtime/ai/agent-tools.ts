@@ -28,11 +28,31 @@ export function summarizeCapabilityResult(value: unknown): Readonly<Record<strin
     return { kind: 'file', bytes: value.size, mimeType: value.type };
   if (Array.isArray(value)) return { kind: 'array', count: value.length };
   if (value && typeof value === 'object' && 'layers' in value && Array.isArray(value.layers)) {
-    const layers = value.layers.slice(0, 100).map((layer) => ({
-      name: layer.name,
-      geometry: layer.geometry_type,
-      features: layer.shapes?.length ?? layer.data?.size?.() ?? 0,
-    }));
+    const layers = value.layers.slice(0, 100).map((layer: unknown) => {
+      if (!layer || typeof layer !== 'object') return {};
+      let features = 0;
+      if ('shapes' in layer && Array.isArray(layer.shapes)) features = layer.shapes.length;
+      else if (
+        'data' in layer &&
+        layer.data &&
+        typeof layer.data === 'object' &&
+        'size' in layer.data &&
+        typeof layer.data.size === 'function'
+      ) {
+        const count: unknown = Reflect.apply(layer.data.size, layer.data, []);
+        if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0)
+          features = count;
+      }
+      return {
+        name: 'name' in layer && typeof layer.name === 'string' ? layer.name : undefined,
+        geometry:
+          'geometry_type' in layer &&
+          (typeof layer.geometry_type === 'string' || layer.geometry_type === null)
+            ? layer.geometry_type
+            : undefined,
+        features,
+      };
+    });
     return { kind: 'dataset', layerCount: value.layers.length, layers };
   }
   if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string')

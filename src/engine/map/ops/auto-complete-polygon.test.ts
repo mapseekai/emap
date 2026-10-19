@@ -128,7 +128,7 @@ describe('autoCompletePolygon', () => {
     );
     const boundary = new Set((layer.shapes![0] as PathShape).flat());
     expect((layer.shapes![1] as PathShape).flat().some((id) => boundary.has(~id))).toBe(true);
-    expect(layer.data!.getRecords()).toEqual([{ name: 'original-0' }, {}]);
+    expect(layer.data!.getRecords?.()).toEqual([{ name: 'original-0' }, {}]);
     expect(f.selection.getAll()).toEqual(refs);
     expect(f.entries).toHaveLength(1);
     f.entries[0]!.undo();

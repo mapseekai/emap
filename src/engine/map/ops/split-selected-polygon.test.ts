@@ -10,7 +10,7 @@ type Position = [number, number];
 type PolygonCoordinates = Position[][];
 
 async function importPolygons(
-  geometries: GeoJSON.Polygon[] | GeoJSON.MultiPolygon[],
+  geometries: Array<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
 ): Promise<MapshaperDataset> {
   const dataset = await adapter.runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
@@ -30,8 +30,8 @@ function polygon(rings: PolygonCoordinates): GeoJSON.Polygon {
   return { type: 'Polygon', coordinates: rings };
 }
 
-function canonicalRing(ring: Position[]): Position[] {
-  const open = ring.slice(0, -1);
+function canonicalRing(ring: GeoJSON.Position[]): Position[] {
+  const open = ring.slice(0, -1).map(([x, y]): Position => [x, y]);
   const rotations = open.map((_, start) => [...open.slice(start), ...open.slice(0, start)]);
   const reverse = [...open].reverse();
   rotations.push(
@@ -114,9 +114,15 @@ async function expectConserved(
 function split(
   dataset: MapshaperDataset,
   selectedIds: ReadonlySet<number>,
-  coordinates: Position[],
+  coordinates: readonly (readonly [number, number])[],
 ) {
-  return splitSelectedPolygons(dataset, 0, selectedIds, { type: 'polyline', coordinates }, adapter);
+  return splitSelectedPolygons(
+    dataset,
+    0,
+    selectedIds,
+    { type: 'polyline', coordinates: coordinates.map(([x, y]): Position => [x, y]) },
+    adapter,
+  );
 }
 
 describe('splitSelectedPolygons', () => {
@@ -843,7 +849,7 @@ describe('splitSelectedPolygons', () => {
         ],
       ]),
     ]);
-    dataset.layers[0]!.shapes![0] = shape;
+    dataset.layers[0]!.shapes![0] = shape.map((part) => [...part]);
     const beforeArcCount = dataset.arcs!.size();
     const beforeLayers = dataset.layers.length;
 
@@ -887,7 +893,7 @@ describe('splitSelectedPolygons', () => {
         data.yy[start + index]!,
       ];
     }
-    dataset.layers[0]!.shapes![0] = shape;
+    dataset.layers[0]!.shapes![0] = shape.map((part) => [...part]);
     const beforeArcCount = dataset.arcs!.size();
     const beforeLayers = dataset.layers.length;
 

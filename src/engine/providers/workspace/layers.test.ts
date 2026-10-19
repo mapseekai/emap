@@ -142,7 +142,9 @@ describe('attached symbol style API', () => {
     symbol.layout['text-field'][1][1] = 'broken';
     const copy = service.getLayer('p')!;
     expect(copy.symbol!.images!.i.size).toEqual([20, 30]);
-    (copy.symbol!.images!.i.size as number[])[0] = 500;
+    const coordinates = copy.symbol!.images!.i.size;
+    if (!Array.isArray(coordinates)) throw new Error('Expected cloned coordinate tuple');
+    Reflect.set(coordinates, 0, 500);
     expect((service.getLayer('p') as any).icon.size).toEqual([20, 30]);
     expect((service.getLayer('p')!.symbol!.layout!['text-field'] as any[])[1][1]).toBe('kind');
   });

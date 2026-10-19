@@ -275,12 +275,12 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       return false;
     for (let partIndex = 0; partIndex < shape.length; partIndex++) {
       if (!(partIndex in shape)) return false;
-      const part = shape[partIndex];
+      const part: unknown = shape[partIndex];
       if (!Array.isArray(part) || part.length === 0) return false;
       for (let arcIndex = 0; arcIndex < part.length; arcIndex++) {
         if (!(arcIndex in part)) return false;
-        const raw = part[arcIndex];
-        if (!Number.isSafeInteger(raw)) return false;
+        const raw: unknown = part[arcIndex];
+        if (typeof raw !== 'number' || !Number.isSafeInteger(raw)) return false;
         const arcId = raw < 0 ? -raw - 1 : raw;
         if (arcId < 0 || arcId >= vertexData.nn.length) return false;
         arcIds.add(arcId);

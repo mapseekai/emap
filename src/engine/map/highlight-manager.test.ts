@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { HighlightManager } from './highlight-manager';
 import { AffineTransform } from '../../domain/geo/transform';
 import type { CorePainter } from '../rendering/painter';
-import type { TopologySource } from '../../domain/source/source';
+import { TopologySource } from '../../domain/source/topology-source';
+import { asMutableTopologySource, type MutableTopologySource } from '../../domain/source/source';
+import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
+import { isPathLayer } from '../../shared/types/mapshaper-types';
 import type { MapshaperLayer } from '../../shared/types/mapshaper-types';
 import { EMAP_THEME_COLORS } from '../../ui/theme/colors';
 
@@ -22,12 +25,23 @@ function makePainterStub() {
   } as unknown as CorePainter & { drawPoints: any; drawPaths: any };
 }
 
-function makeSource(layers: MapshaperLayer[]): TopologySource {
-  return {
-    getLayers: () => layers,
-    getDisplayArcs: () => null,
-    getArcs: () => ({}) as any, // truthy stub — drawPaths only checks truthiness
-  } as unknown as TopologySource;
+function makeSource(layers: MapshaperLayer[]): MutableTopologySource {
+  const references = layers
+    .filter(isPathLayer)
+    .flatMap(
+      (layer) => layer.shapes?.flat(2).filter((id): id is number => typeof id === 'number') ?? [],
+    );
+  const count = Math.max(-1, ...references.map((id) => (id < 0 ? ~id : id))) + 1;
+  const arcs = getDefaultMapshaperAdapter().createArcCollection(
+    Array.from({ length: count }, () => ({
+      xx: new Float64Array([0, 1]),
+      yy: new Float64Array([0, 1]),
+    })),
+  );
+  const source = asMutableTopologySource(new TopologySource('highlight-fixture'));
+  source.setDataset({ layers, arcs }, false);
+  vi.spyOn(source, 'getDisplayArcs').mockReturnValue(null);
+  return source;
 }
 
 describe('HighlightManager state', () => {
@@ -140,7 +154,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]], [[1]], [[2]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
     ]);
@@ -162,7 +178,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]], [[1]], [[2]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures(
       [{ source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} }],
       { color: '#1e88e5', fillOpacity: 0.3 },
@@ -186,7 +204,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]], [[1]], [[2]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
     ]);
@@ -203,7 +223,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'point',
       shapes: [[[0, 0]], [[1, 1]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'cities', id: 0, geometryType: 'point', properties: {} },
     ]);
@@ -223,7 +245,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 0, geometryType: 'polygon', properties: {} },
     ]);
@@ -255,7 +279,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]], [[1]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 0, geometryType: 'polygon', properties: {} },
       { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
@@ -265,7 +291,7 @@ describe('HighlightManager.renderHighlights', () => {
       Uint8Array.from([0, 1]),
     );
     expect(painter.drawPaths).toHaveBeenCalledWith(
-      [layer.shapes[1]],
+      [layer.shapes?.[1]],
       expect.anything(),
       expect.anything(),
     );
@@ -283,7 +309,7 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polyline',
       shapes: [[[0]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([
+    const sources = new globalThis.Map<string, MutableTopologySource>([
       ['src1', makeSource([parks, roads])],
     ]);
     // Highlight only roads.
@@ -303,7 +329,9 @@ describe('HighlightManager.renderHighlights', () => {
       geometry_type: 'polygon',
       shapes: [[[0]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    const sources = new globalThis.Map<string, MutableTopologySource>([
+      ['src1', makeSource([layer])],
+    ]);
     // Highlight an out-of-range id.
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 99, geometryType: 'polygon', properties: {} },

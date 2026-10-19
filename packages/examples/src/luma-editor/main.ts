@@ -1,4 +1,8 @@
-import { getExampleGpuBackend, installExampleRendererToolbar, navigateExampleRenderer } from '../renderer-choice';
+import {
+  getExampleGpuBackend,
+  installExampleRendererToolbar,
+  navigateExampleRenderer,
+} from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
 import { installIconControls } from '../luma-benchmark/icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
@@ -48,7 +52,7 @@ let drag: {
 } | null = null;
 let overlay: EditorOverlay | null = null;
 let backdrop: EditorBackdrop | null = null;
-let paintedRevision=0;
+let paintedRevision = 0;
 let lastPatch: CoordinatePatch | null = null,
   lastChunks: number[] = [];
 function state(message: string, next = phase): void {
@@ -61,7 +65,9 @@ function controls(): void {
   const ready = !!session && phase === 'ready',
     selected = ready && !!session?.selected;
   document
-    .querySelectorAll<HTMLButtonElement | HTMLSelectElement | HTMLInputElement>('[data-ready],[data-lock]')
+    .querySelectorAll<HTMLButtonElement | HTMLSelectElement | HTMLInputElement>(
+      '[data-ready],[data-lock]',
+    )
     .forEach((e) => (e.disabled = !ready));
   document
     .querySelectorAll<HTMLButtonElement>('[data-selected]')
@@ -91,51 +97,87 @@ const renderers = await BenchmarkRenderers.create(
   requestDraw,
   requestedGpu,
 );
-if (renderers.gpu) {overlay = new EditorOverlay(renderers.gpu);backdrop=new EditorBackdrop(renderers.gpu,renderers.glCanvas,requestDraw);}
-el('renderer').textContent=renderers.gpu?.label ?? '所选 GPU 后端不可用';
-const gpuSelector=el<HTMLSelectElement>('gpu-backend');gpuSelector.value=requestedGpu;
-gpuSelector.addEventListener('change',()=>navigateExampleRenderer(gpuSelector.value === 'webgpu' ? 'webgpu' : 'webgl2'));
-const pointLodToggle=el<HTMLInputElement>('point-lod-enabled');
-const pointLodCell=el<HTMLInputElement>('point-lod-cell');
-async function setPointLod(enabled:boolean,cellSize=3):Promise<void>{
-  if(phase==='loading'||phase==='updating')throw new Error('请等待当前任务结束。');
-  renderers.setPointLod(enabled,cellSize);pointLodToggle.checked=enabled;pointLodCell.value=String(cellSize);
-  if(!scene)return;
-  const epoch=generation;state('更新点聚合显示缓存…','updating');
-  try{await renderers.warmViews([view],new AbortController().signal);if(disposed||epoch!==generation)return;draw();state('点聚合已更新；选择与编辑仍使用原始坐标。','ready');}
-  catch(error){if(!disposed&&epoch===generation)fail(error);}
+if (renderers.gpu) {
+  overlay = new EditorOverlay(renderers.gpu);
+  backdrop = new EditorBackdrop(renderers.gpu, renderers.glCanvas, requestDraw);
 }
-for(const control of [pointLodToggle,pointLodCell])control.addEventListener('change',()=>{
-  void setPointLod(pointLodToggle.checked,Number(pointLodCell.value)).catch(fail);
-});
+el('renderer').textContent = renderers.gpu?.label ?? '所选 GPU 后端不可用';
+const gpuSelector = el<HTMLSelectElement>('gpu-backend');
+gpuSelector.value = requestedGpu;
+gpuSelector.addEventListener('change', () =>
+  navigateExampleRenderer(gpuSelector.value === 'webgpu' ? 'webgpu' : 'webgl2'),
+);
+const pointLodToggle = el<HTMLInputElement>('point-lod-enabled');
+const pointLodCell = el<HTMLInputElement>('point-lod-cell');
+async function setPointLod(enabled: boolean, cellSize = 3): Promise<void> {
+  if (phase === 'loading' || phase === 'updating') throw new Error('请等待当前任务结束。');
+  renderers.setPointLod(enabled, cellSize);
+  pointLodToggle.checked = enabled;
+  pointLodCell.value = String(cellSize);
+  if (!scene) return;
+  const epoch = generation;
+  state('更新点聚合显示缓存…', 'updating');
+  try {
+    await renderers.warmViews([view], new AbortController().signal);
+    if (disposed || epoch !== generation) return;
+    draw();
+    state('点聚合已更新；选择与编辑仍使用原始坐标。', 'ready');
+  } catch (error) {
+    if (!disposed && epoch === generation) fail(error);
+  }
+}
+for (const control of [pointLodToggle, pointLodCell])
+  control.addEventListener('change', () => {
+    void setPointLod(pointLodToggle.checked, Number(pointLodCell.value)).catch(fail);
+  });
 
-invalidatePreviewOnError=()=>{renderers.navigation.reset();renderers.setInteracting(false);};
-const smallArcToggle=el<HTMLInputElement>('small-arc-filter'),halfPixelToggle=el<HTMLInputElement>('half-pixel-filter');
-const filterParams=new URLSearchParams(location.search);
-renderers.setScreenFilters(filterParams.get('screenFilter')!=='off'&&filterParams.get('smallArcs')!=='off',
- filterParams.get('screenFilter')!=='off'&&filterParams.get('halfPixel')!=='off');
-smallArcToggle.checked=renderers.smallArcFilterEnabled;halfPixelToggle.checked=renderers.halfPixelFilterEnabled;
-for(const control of [smallArcToggle,halfPixelToggle])control.addEventListener('change',()=>{
- renderers.setScreenFilters(smallArcToggle.checked,halfPixelToggle.checked);requestDraw();
-});
-const fastNavToggle=el<HTMLInputElement>('fast-nav'), pathCullingToggle=el<HTMLInputElement>('path-culling');
+invalidatePreviewOnError = () => {
+  renderers.navigation.reset();
+  renderers.setInteracting(false);
+};
+const smallArcToggle = el<HTMLInputElement>('small-arc-filter'),
+  halfPixelToggle = el<HTMLInputElement>('half-pixel-filter');
+const filterParams = new URLSearchParams(location.search);
+renderers.setScreenFilters(
+  filterParams.get('screenFilter') !== 'off' && filterParams.get('smallArcs') !== 'off',
+  filterParams.get('screenFilter') !== 'off' && filterParams.get('halfPixel') !== 'off',
+);
+smallArcToggle.checked = renderers.smallArcFilterEnabled;
+halfPixelToggle.checked = renderers.halfPixelFilterEnabled;
+for (const control of [smallArcToggle, halfPixelToggle])
+  control.addEventListener('change', () => {
+    renderers.setScreenFilters(smallArcToggle.checked, halfPixelToggle.checked);
+    requestDraw();
+  });
+const fastNavToggle = el<HTMLInputElement>('fast-nav'),
+  pathCullingToggle = el<HTMLInputElement>('path-culling');
 renderers.navigation.setEnabled(new URLSearchParams(location.search).get('nav') !== 'off');
-renderers.pathCullingEnabled=new URLSearchParams(location.search).get('cull') !== 'off';
-fastNavToggle.checked=renderers.navigation.enabled;pathCullingToggle.checked=renderers.pathCullingEnabled;
-function refreshNavigation():void {
-  const n=renderers.navigation.stats,g=renderers.lodStats;
-  el('navigation-info').textContent=`${n.active?'快照导航 / 等待新画面':n.pending?'等待几何重绘画面':renderers.screenFilterApplied?'几何重绘 / Canvas 描边过滤':'原始几何画面'} · 快照帧 ${n.previewFrames} · 完整更新 ${n.fullRedraws} · 最近提交 ${n.lastSubmitMs.toFixed(1)} ms / 更新就绪 ${n.lastRefreshMs.toFixed(1)} ms · 路径候选 ${g.candidateSegments.toLocaleString()} / 提交 ${g.submittedSegments.toLocaleString()} / 屏幕外过滤 ${g.culledSegments.toLocaleString()} 条线段${n.captureErrors?' · 快照不可用，已停止快照复用':''}`;
+renderers.pathCullingEnabled = new URLSearchParams(location.search).get('cull') !== 'off';
+fastNavToggle.checked = renderers.navigation.enabled;
+pathCullingToggle.checked = renderers.pathCullingEnabled;
+function refreshNavigation(): void {
+  const n = renderers.navigation.stats,
+    g = renderers.lodStats;
+  el('navigation-info').textContent =
+    `${n.active ? '快照导航 / 等待新画面' : n.pending ? '等待几何重绘画面' : renderers.screenFilterApplied ? '几何重绘 / Canvas 描边过滤' : '原始几何画面'} · 快照帧 ${n.previewFrames} · 完整更新 ${n.fullRedraws} · 最近提交 ${n.lastSubmitMs.toFixed(1)} ms / 更新就绪 ${n.lastRefreshMs.toFixed(1)} ms · 路径候选 ${g.candidateSegments.toLocaleString()} / 提交 ${g.submittedSegments.toLocaleString()} / 屏幕外过滤 ${g.culledSegments.toLocaleString()} 条线段${n.captureErrors ? ' · 快照不可用，已停止快照复用' : ''}`;
 }
-renderers.navigation.onChange=refreshNavigation;
-fastNavToggle.addEventListener('change',()=>{renderers.navigation.setEnabled(fastNavToggle.checked);requestDraw();});
-pathCullingToggle.addEventListener('change',()=>{renderers.pathCullingEnabled=pathCullingToggle.checked;renderers.navigation.reset();requestDraw();});
+renderers.navigation.onChange = refreshNavigation;
+fastNavToggle.addEventListener('change', () => {
+  renderers.navigation.setEnabled(fastNavToggle.checked);
+  requestDraw();
+});
+pathCullingToggle.addEventListener('change', () => {
+  renderers.pathCullingEnabled = pathCullingToggle.checked;
+  renderers.navigation.reset();
+  requestDraw();
+});
 
 renderers.show('luma');
 labelControls = installLabelControls(el('editor'), renderers, requestDraw);
 iconControls = installIconControls(el('editor'), renderers, requestDraw);
-const pathStrategy=el<HTMLSelectElement>('path-strategy');
-pathStrategy.addEventListener('change',()=>{
-  if(renderers.gpu)renderers.gpu.pathMode=pathStrategy.value as 'auto'|'reference'|'legacy';
+const pathStrategy = el<HTMLSelectElement>('path-strategy');
+pathStrategy.addEventListener('change', () => {
+  if (renderers.gpu) renderers.gpu.pathMode = pathStrategy.value as 'auto' | 'reference' | 'legacy';
   requestDraw();
 });
 
@@ -165,19 +207,34 @@ function draw(): void {
   try {
     session.setView(view, width, height);
     overlay?.update(session, view, width, height, mode.value === 'vertex');
-    const paintOverlay=()=>overlay?.draw(mode.value === 'vertex', session?.layer?.geometry_type === 'point');
-    let ms:number;
-    if(session.selected&&backdrop){
-      renderers.navigation.reset();renderers.requestView(view);
-      ms=backdrop.draw(renderers.editorFrameKey(view),view,width,height,renderers.editorFrameReady(view),
-        (paint)=>renderers.drawScreenFrame('luma',view,paint),paintOverlay);
-    }else {backdrop?.clear();ms=renderers.drawInteractive('luma',view,paintOverlay);}
-    paintedRevision=session.dataset.editVersion??0;
+    const paintOverlay = () =>
+      overlay?.draw(mode.value === 'vertex', session?.layer?.geometry_type === 'point');
+    let ms: number;
+    if (session.selected && backdrop) {
+      renderers.navigation.reset();
+      renderers.requestView(view);
+      ms = backdrop.draw(
+        renderers.editorFrameKey(view),
+        view,
+        width,
+        height,
+        renderers.editorFrameReady(view),
+        (paint) => renderers.drawScreenFrame('luma', view, paint),
+        paintOverlay,
+      );
+    } else {
+      backdrop?.clear();
+      ms = renderers.drawInteractive('luma', view, paintOverlay);
+    }
+    paintedRevision = session.dataset.editVersion ?? 0;
     refreshNavigation();
-    const filtered=renderers.screenFilterStats;
-    el('screen-filter-info').textContent=`背景描边 ${filtered.applied?'Canvas 屏幕过滤':'原始几何'} · 微小 arc ${filtered.tinyArcs.toLocaleString()} · 连续重复顶点 ${filtered.duplicateVertices.toLocaleString()} · 待准备 ${filtered.pending} · 面缓存 ${(renderers.cacheDiagnostics.fillBytes/1024**2).toFixed(1)} MiB · 选择/编辑始终原始坐标`;
+    const filtered = renderers.screenFilterStats;
+    el('screen-filter-info').textContent =
+      `背景描边 ${filtered.applied ? 'Canvas 屏幕过滤' : '原始几何'} · 微小 arc ${filtered.tinyArcs.toLocaleString()} · 连续重复顶点 ${filtered.duplicateVertices.toLocaleString()} · 待准备 ${filtered.pending} · 面缓存 ${(renderers.cacheDiagnostics.fillBytes / 1024 ** 2).toFixed(1)} MiB · 选择/编辑始终原始坐标`;
     const s = renderers.lodStats;
-    el('render-time').textContent = renderers.navigation.stats.active ? '快照变换 · 本帧未提交原始几何' : `${ms.toFixed(2)} ms JS 提交 · ${requestedGpu}`;
+    el('render-time').textContent = renderers.navigation.stats.active
+      ? '快照变换 · 本帧未提交原始几何'
+      : `${ms.toFixed(2)} ms JS 提交 · ${requestedGpu}`;
     el('lod-info').textContent =
       `${filtered.applied ? '描边屏幕过滤背景' : s.geometryMode === 'point-lod' ? '点聚合背景' : '原始几何背景'} · 点网格 ${renderers.pointLodEnabled ? renderers.pointLodCellSize + ' CSS px' : '关闭'} · 聚合待更新 ${renderers.pointLodStats.pending} · 可见分块 ${s.visibleChunks}/${s.totalChunks} · 可见块顶点 ${s.displayVertices.toLocaleString()} · 原始编辑顶点 ${overlay?.visibleHandles ?? 0} · 等待细节 ${s.pending}`;
   } catch (error) {
@@ -219,7 +276,8 @@ const observer = new ResizeObserver(resize);
 observer.observe(stage);
 resize();
 function clearScene(): void {
-  backdrop?.clear();paintedRevision=0;
+  backdrop?.clear();
+  paintedRevision = 0;
   overlay?.clear();
   session?.dispose();
   session = null;
@@ -328,7 +386,8 @@ function cancelDrag(): void {
 }
 stage.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || phase !== 'ready' || !session || drag) return;
-  clearTimeout(wheelTimer);wheelTimer=undefined;
+  clearTimeout(wheelTimer);
+  wheelTimer = undefined;
   // Focusing a partly off-screen stage must not scroll it between pointer hit-testing and drag.
   stage.focus({ preventScroll: true });
   const p = coordinate(e);
@@ -375,7 +434,7 @@ stage.addEventListener('pointerup', (e) => {
   requestDraw();
 });
 stage.addEventListener('pointercancel', cancelDrag);
-window.addEventListener('blur',cancelDrag);
+window.addEventListener('blur', cancelDrag);
 stage.addEventListener('lostpointercapture', () => {
   if (drag) cancelDrag();
 });
@@ -390,7 +449,13 @@ stage.addEventListener(
     view.scale(Math.exp(Math.max(-0.4, Math.min(0.4, -delta * 0.002))), ...p);
     requestDraw();
     clearTimeout(wheelTimer);
-    wheelTimer = setTimeout(() => {wheelTimer=undefined;if(!drag){renderers.setInteracting(false);requestDraw();}}, 140);
+    wheelTimer = setTimeout(() => {
+      wheelTimer = undefined;
+      if (!drag) {
+        renderers.setInteracting(false);
+        requestDraw();
+      }
+    }, 140);
   },
   { passive: false },
 );
@@ -473,7 +538,8 @@ el('cancel-load').addEventListener('click', () => loading?.abort());
 async function restore(): Promise<void> {
   if (!scene || disposed) return;
   cancelDrag();
-  overlay?.clear();backdrop?.clear();
+  overlay?.clear();
+  backdrop?.clear();
   const controller = new AbortController();
   loading?.abort();
   loading = controller;
@@ -489,8 +555,10 @@ async function restore(): Promise<void> {
   }
 }
 function dispose(): void {
-  labelControls?.dispose(); labelControls = null;
-  iconControls?.dispose(); iconControls = null;
+  labelControls?.dispose();
+  labelControls = null;
+  iconControls?.dispose();
+  iconControls = null;
   if (disposed) return;
   disposed = true;
   generation++;
@@ -498,7 +566,7 @@ function dispose(): void {
   clearTimeout(wheelTimer);
   cancelAnimationFrame(scheduled);
   observer.disconnect();
-  window.removeEventListener('blur',cancelDrag);
+  window.removeEventListener('blur', cancelDrag);
   clearScene();
   backdrop?.dispose();
   renderers.dispose();
@@ -508,29 +576,71 @@ async function start(): Promise<void> {
   await loadExampleRuntime({ mode: 'local' });
   Object.assign(window, {
     lumaEditor: {
-    get labelStats(){return renderers.labelStats;},
-    get labelPlacements(){return renderers.labelPlacements;},
-    get layers(){return renderers.getLayers();},
-    setLayerSymbol:(id:string,symbol:SymbolStyle|null)=>renderers.setLayerSymbol(id,symbol),
-    setSymbolLayoutProperty:<K extends keyof SymbolLayout>(id:string,name:K,value:SymbolLayout[K]|null)=>renderers.setSymbolLayoutProperty(id,name,value),
-    setSymbolPaintProperty:<K extends keyof SymbolPaint>(id:string,name:K,value:SymbolPaint[K]|null)=>renderers.setSymbolPaintProperty(id,name,value),
-    setLayerLabel:(id:string,options:LabelOptions|null)=>renderers.setLayerLabel(id,options),
-    setLayerIcon:(id:string,options:IconOptions|null)=>renderers.setLayerIcon(id,options),
-    get iconStats(){return renderers.iconStats;},
-    settleIcons:()=>renderers.settleIcons(),
-    setLayerVisibility:(id:string,value:'visible'|'none')=>renderers.setLayerVisibility(id,value),
-    settleLabels:()=>renderers.settleLabels(),
+      get labelStats() {
+        return renderers.labelStats;
+      },
+      get labelPlacements() {
+        return renderers.labelPlacements;
+      },
+      get layers() {
+        return renderers.getLayers();
+      },
+      setLayerSymbol: (id: string, symbol: SymbolStyle | null) =>
+        renderers.setLayerSymbol(id, symbol),
+      setSymbolLayoutProperty: <K extends keyof SymbolLayout>(
+        id: string,
+        name: K,
+        value: SymbolLayout[K] | null,
+      ) => renderers.setSymbolLayoutProperty(id, name, value),
+      setSymbolPaintProperty: <K extends keyof SymbolPaint>(
+        id: string,
+        name: K,
+        value: SymbolPaint[K] | null,
+      ) => renderers.setSymbolPaintProperty(id, name, value),
+      setLayerLabel: (id: string, options: LabelOptions | null) =>
+        renderers.setLayerLabel(id, options),
+      setLayerIcon: (id: string, options: IconOptions | null) =>
+        renderers.setLayerIcon(id, options),
+      get iconStats() {
+        return renderers.iconStats;
+      },
+      settleIcons: () => renderers.settleIcons(),
+      setLayerVisibility: (id: string, value: 'visible' | 'none') =>
+        renderers.setLayerVisibility(id, value),
+      settleLabels: () => renderers.settleLabels(),
 
       load: loadFile,
-      get screenFilterStats(){return renderers.screenFilterStats;},
-    get cacheDiagnostics(){return renderers.cacheDiagnostics;},
-      get editStats(){return {...renderers.editStats};},
-      get presentation(){return {paintedRevision,backdrop:backdrop?.stats};},
-      get displayRevision(){return renderers.displayRevision;},
-      get navigationStats(){return renderers.navigation.stats;},
+      get screenFilterStats() {
+        return renderers.screenFilterStats;
+      },
+      get cacheDiagnostics() {
+        return renderers.cacheDiagnostics;
+      },
+      get editStats() {
+        return { ...renderers.editStats };
+      },
+      get presentation() {
+        return { paintedRevision, backdrop: backdrop?.stats };
+      },
+      get displayRevision() {
+        return renderers.displayRevision;
+      },
+      get navigationStats() {
+        return renderers.navigation.stats;
+      },
       setPointLod,
-      get pointLodStats(){return renderers.pointLodStats;},
-      async settle(){clearTimeout(wheelTimer);wheelTimer=undefined;renderers.setInteracting(false);renderers.navigation.reset();await renderers.warmViews([view],new AbortController().signal);await renderers.warmScreenPaths(view,new AbortController().signal);draw();},
+      get pointLodStats() {
+        return renderers.pointLodStats;
+      },
+      async settle() {
+        clearTimeout(wheelTimer);
+        wheelTimer = undefined;
+        renderers.setInteracting(false);
+        renderers.navigation.reset();
+        await renderers.warmViews([view], new AbortController().signal);
+        await renderers.warmScreenPaths(view, new AbortController().signal);
+        draw();
+      },
       dispose,
       get session() {
         return session;
@@ -556,15 +666,32 @@ async function start(): Promise<void> {
       get lod() {
         return { ...renderers.lodStats };
       },
-      async capturePixels(direct=false, includePixels=false) {
-        if(direct&&session){overlay?.update(session,view,width,height,mode.value==='vertex');renderers.drawScreenFrame('luma',view,()=>overlay?.draw(mode.value==='vertex',session?.layer?.geometry_type==='point'));}
-        else draw();const snapshot=createImageBitmap(renderers.glCanvas);await renderers.gpu?.waitForIdle();
-        const bitmap=await snapshot;
-        const copy=document.createElement('canvas');copy.width=bitmap.width;copy.height=bitmap.height;
-        const ctx=copy.getContext('2d')!;ctx.drawImage(bitmap,0,0);bitmap.close();
-        const p=ctx.getImageData(0,0,copy.width,copy.height).data;let painted=0;
-        for(let i=3;i<p.length;i+=4)if(p[i])painted++;
-        return {painted,backend:requestedGpu,width:copy.width,height:copy.height,pixels:includePixels?p:undefined};
+      async capturePixels(direct = false, includePixels = false) {
+        if (direct && session) {
+          overlay?.update(session, view, width, height, mode.value === 'vertex');
+          renderers.drawScreenFrame('luma', view, () =>
+            overlay?.draw(mode.value === 'vertex', session?.layer?.geometry_type === 'point'),
+          );
+        } else draw();
+        const snapshot = createImageBitmap(renderers.glCanvas);
+        await renderers.gpu?.waitForIdle();
+        const bitmap = await snapshot;
+        const copy = document.createElement('canvas');
+        copy.width = bitmap.width;
+        copy.height = bitmap.height;
+        const ctx = copy.getContext('2d')!;
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const p = ctx.getImageData(0, 0, copy.width, copy.height).data;
+        let painted = 0;
+        for (let i = 3; i < p.length; i += 4) if (p[i]) painted++;
+        return {
+          painted,
+          backend: requestedGpu,
+          width: copy.width,
+          height: copy.height,
+          pixels: includePixels ? p : undefined,
+        };
       },
       project(x: number, y: number) {
         return view.project(x, y);

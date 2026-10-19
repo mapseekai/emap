@@ -13,7 +13,7 @@ function assertJson(
   if (!value || typeof value !== 'object')
     throw new TypeError('Capability arguments must contain finite JSON values');
   if (seen.has(value)) throw new TypeError('Capability arguments must not contain cycles');
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null)
     throw new TypeError('Capability arguments must be plain objects');
   seen.add(value);

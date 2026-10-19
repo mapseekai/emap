@@ -205,7 +205,9 @@ function collectGeometry(
   adapter: MapshaperAdapter,
 ): CollectedGeometry {
   const grow = new GrowableCoords();
-  const features: CollectedGeometry['features'] = new Array(shapes.length);
+  const features: CollectedGeometry['features'] = new Array<
+    CoordRun | CoordRun[] | CoordRun[][] | null
+  >(shapes.length);
   let maxParts = 0;
   const geometryTypes = new Set<string>();
 
@@ -656,7 +658,7 @@ function buildAttributeColumn(
   records: Array<Record<string, unknown>>,
   rowCount: number,
 ): { field: Field; data: Data } {
-  const values: unknown[] = new Array(rowCount);
+  const values: unknown[] = new Array<unknown>(rowCount);
   let sample: unknown = null;
   for (let i = 0; i < rowCount; i++) {
     const v = records[i]?.[name];

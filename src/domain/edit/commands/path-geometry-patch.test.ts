@@ -7,9 +7,9 @@ import {
 } from '../../../integrations/mapshaper/adapter';
 
 function makeArcs() {
-  let nn = new Int32Array([2]);
-  let xx = new Float64Array([0, 1]);
-  let yy = new Float64Array([0, 1]);
+  let nn: Int32Array = new Int32Array([2]);
+  let xx: Float64Array = new Float64Array([0, 1]);
+  let yy: Float64Array = new Float64Array([0, 1]);
   const arcs = {
     size: () => nn.length,
     isFlat: () => true,
@@ -45,7 +45,7 @@ function makeSource(arcs: any) {
 
 const REF = { source: 's', layer: 'l', id: 0 };
 
-function makeCommand(arcs: any, source: any, layer: any, selection: Selection) {
+function makeCommand(_arcs: any, source: any, layer: any, selection: Selection) {
   const publishSelection = vi.fn();
   const command = new PathGeometryPatchCommand({
     source,

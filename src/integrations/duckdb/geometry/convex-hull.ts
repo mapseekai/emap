@@ -11,7 +11,7 @@ export function convexHull(
   input: MapshaperDataset,
   options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runUnary('convexHull', input, options, runtime);
 }
 export const convexHullTool = defineDuckDbTool({

@@ -33,7 +33,7 @@ export function restoreGeoPackageDataset(payload: GeoPackageTransfer): GeoPackag
         let point = 0;
         shape.shapes = Array.from(pointCounts, (count) => {
           if (count < 0) return null;
-          const points: PointShape = new Array(count);
+          const points: PointShape = new Array<PointShape[number]>(count);
           for (let i = 0; i < count; i++)
             points[i] = [pointCoordinates[point++], pointCoordinates[point++]];
           return points;
@@ -46,7 +46,7 @@ export function restoreGeoPackageDataset(payload: GeoPackageTransfer): GeoPackag
           if (count === -1) return null;
           if (count < 0 || part + count > partCounts.length)
             throw new Error('Invalid packed GeoPackage path counts');
-          const paths: PathShape = new Array(count);
+          const paths: PathShape = new Array<PathShape[number]>(count);
           for (let i = 0; i < count; i++) {
             const length = partCounts[part++];
             if (arc + length > arcIds.length)

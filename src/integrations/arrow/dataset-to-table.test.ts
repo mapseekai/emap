@@ -106,11 +106,8 @@ describe('toArrowTable', () => {
     dataset.info = { ...dataset.info, crs_string: '+proj=utm +zone=10' };
 
     const table = toArrowTable(dataset, { encoding: 'wkb' });
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
-    expect(column.crs).toBeNull();
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    expect(column?.crs).toBeNull();
     expect(
       JSON.parse(table.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!),
     ).toEqual({ crs: null });
@@ -124,11 +121,8 @@ describe('toArrowTable', () => {
     delete dataset.info?.crs;
 
     const table = toArrowTable(dataset, { encoding: 'wkb' });
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
-    expect(column.crs).toBeNull();
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    expect(column?.crs).toBeNull();
   });
 
   it('omits CRS for GeoParquet default WGS84 lon/lat data', async () => {
@@ -136,10 +130,7 @@ describe('toArrowTable', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
 
     const table = toArrowTable(dataset, { encoding: 'wkb' });
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
     expect(column).not.toHaveProperty('crs');
   });
 
@@ -209,15 +200,9 @@ describe('toArrowTable', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
 
     const table = toArrowTable(dataset, { encoding: 'wkb' });
-    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
-      string,
-      unknown
-    >;
-    const crs = column.crs as Record<string, unknown>;
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    const crs = column?.crs;
     const crsJson = JSON.stringify(crs);
-    const baseCrs = crs.base_crs as Record<string, unknown>;
-    const datum = baseCrs.datum as Record<string, unknown>;
-    const axis = (crs.coordinate_system as { axis: Array<Record<string, unknown>> }).axis;
 
     expect(crs).toMatchObject({
       $schema: 'https://proj.org/schemas/v0.7/projjson.schema.json',
@@ -225,10 +210,10 @@ describe('toArrowTable', () => {
       id: { authority: 'EPSG', code: 3857 },
     });
     expect(crsJson).not.toContain('datum_ensemble');
-    expect(datum.name).toBe('World Geodetic System 1984');
-    expect(axis.map((a) => [a.abbreviation, a.direction, a.unit])).toEqual([
-      ['X', 'east', 'metre'],
-      ['Y', 'north', 'metre'],
+    expect(crs).toHaveProperty('base_crs.datum.name', 'World Geodetic System 1984');
+    expect(crs).toHaveProperty('coordinate_system.axis', [
+      expect.objectContaining({ abbreviation: 'X', direction: 'east', unit: 'metre' }),
+      expect.objectContaining({ abbreviation: 'Y', direction: 'north', unit: 'metre' }),
     ]);
   });
 
@@ -370,6 +355,7 @@ describe('toArrowTable', () => {
     const back = fromArrowTable(table);
     expect(back.info?.crs_string).toBe('EPSG:4326');
     const importedPoint = back.layers[0].shapes?.[0]?.[0];
+    if (!Array.isArray(importedPoint)) throw new Error('Expected imported point coordinates');
     expect(importedPoint?.[0]).toBeCloseTo(lon, 8);
     expect(importedPoint?.[1]).toBeCloseTo(lat, 8);
   });

@@ -71,7 +71,7 @@ export class ValidatorRegistry {
     for (const v of this._all) if (v.phase === phase) candidates.push(v);
     if (candidates.length === 0) return [];
 
-    const settled = await Promise.allSettled(candidates.map((v) => v.run(host, change)));
+    const settled = await Promise.allSettled(candidates.map(async (v) => v.run(host, change)));
     const out: ValidatorResult[] = [];
     for (let i = 0; i < candidates.length; i++) {
       const v = candidates[i];

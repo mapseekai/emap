@@ -53,7 +53,7 @@ describe('point LOD data and editing contracts', () => {
     const restored = await unpackSnapshot(snapshot);
     expect(restored.resolvedIds).toEqual(['s']);
     expect(JSON.stringify(restored.datasets[0].layers[0].shapes)).toBe(before);
-    expect(restored.datasets[0].layers[0].data!.getRecords()[1].id).toBe(1);
+    expect(restored.datasets[0].layers[0].data!.getRecords?.()[1].id).toBe(1);
     expect(JSON.stringify(dataset.layers[0].shapes)).toBe(before);
   });
 

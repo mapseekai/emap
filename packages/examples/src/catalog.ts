@@ -101,7 +101,6 @@ function renderCatalogLocale(
   totalCount.className = 'catalog-total-count';
   totalCount.textContent = copy.resultCount(examples.length);
 
-
   const languageField = document.createElement('label');
   languageField.className = 'catalog-language';
   const languageText = document.createElement('span');
@@ -229,13 +228,7 @@ function renderCatalogLocale(
   results.append(resultSummary, resultGroups);
 
   function updateResults(): void {
-    const resultCount = renderCatalogResults(
-      resultGroups,
-      examples,
-      categories,
-      state,
-      clearQuery,
-    );
+    const resultCount = renderCatalogResults(resultGroups, examples, categories, state, clearQuery);
     resultSummary.textContent = copy.resultCount(resultCount);
     clearSearch.hidden = state.query.trim().length === 0;
   }
@@ -339,7 +332,8 @@ function renderCatalogResults(
     group.append(groupHeader);
 
     const directExamples = groupExamples.filter(
-      (example) => example.topic === undefined || exampleTopics[example.topic.id].category !== category,
+      (example) =>
+        example.topic === undefined || exampleTopics[example.topic.id].category !== category,
     );
     if (directExamples.length > 0) {
       group.append(renderExampleGrid(directExamples, state.locale, 'catalog-direct-examples'));
@@ -348,12 +342,7 @@ function renderCatalogResults(
     for (const [topicId, topic] of Object.entries(exampleTopics)) {
       if (topic.category !== category) continue;
 
-      const topicElement = renderCatalogTopic(
-        topicId,
-        topic,
-        groupExamples,
-        state.locale,
-      );
+      const topicElement = renderCatalogTopic(topicId, topic, groupExamples, state.locale);
       if (topicElement) group.append(topicElement);
     }
 
@@ -400,7 +389,9 @@ function renderCatalogTopic(
   element.append(header);
 
   for (const section of topic.sections) {
-    const sectionExamples = topicExamples.filter((example) => example.topic?.section === section.id);
+    const sectionExamples = topicExamples.filter(
+      (example) => example.topic?.section === section.id,
+    );
     if (sectionExamples.length === 0) continue;
 
     const sectionElement = document.createElement('section');
@@ -420,7 +411,6 @@ function renderCatalogTopic(
 
   return element;
 }
-
 
 function matchesCatalogQuery(example: ExampleDefinition, state: CatalogState): boolean {
   const query = state.query.trim().toLocaleLowerCase();

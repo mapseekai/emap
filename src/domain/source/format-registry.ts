@@ -49,7 +49,7 @@ export class FormatRegistry implements FormatRegistryContract {
     }
     const controller = new AbortController();
     const exportFormats: Record<string, DatasetFormatPlugin['exportFormats'][string]> =
-      Object.create(null);
+      Object.create(null) as Record<string, DatasetFormatPlugin['exportFormats'][string]>;
     for (const [format, handler] of handlers) {
       exportFormats[format] = (dataset, options) =>
         this.run(controller.signal, () => handler(dataset, options));

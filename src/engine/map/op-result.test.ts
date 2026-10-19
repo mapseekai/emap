@@ -160,6 +160,8 @@ describe('discriminated narrowing in TypeScript flow', () => {
           return `ddb:${r.error.operation}:${r.error.duckDbKind}`;
         case 'mapshaper':
           return `ms:${r.error.cmd ?? ''}`;
+        case 'stale-operation':
+          return `stale:${r.error.sourceId}:${r.error.operation}`;
         case 'host-removed':
           return 'hr';
       }

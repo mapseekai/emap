@@ -16,7 +16,16 @@ function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
   const transport = {
     build: vi.fn(async (packet) => buildGeometryPacket(packet)),
     dispose: vi.fn(),
-    stats: { workers: 0, jobs: 0, workerMs: 0, inputBytes: 0, peakInputBytes: 0 },
+    stats: {
+      messages: 0,
+      batchedJobs: 0,
+      maxBatchJobs: 0,
+      workers: 0,
+      jobs: 0,
+      workerMs: 0,
+      inputBytes: 0,
+      peakInputBytes: 0,
+    },
   };
   const report = vi.fn(),
     invalidate = vi.fn();

@@ -214,7 +214,7 @@ export async function loadMapLibreStyle(
     const response = await Promise.race([
       options.fetch(request.url, {
         signal: controller.signal,
-        headers: request.headers,
+        headers: request.headers as HeadersInit | undefined,
         method: request.method,
         body: request.body,
         credentials: request.credentials,

@@ -125,7 +125,7 @@ it('streams split UTF-8 input through the real parser without changing propertie
   });
   const bytes = new TextEncoder().encode(content);
   let i = 0;
-  const stream = new ReadableStream<Uint8Array>({
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
     pull(controller) {
       if (i === bytes.length) controller.close();
       else controller.enqueue(bytes.subarray(i, ++i));
@@ -143,7 +143,7 @@ it('streams split UTF-8 input through the real parser without changing propertie
 });
 
 it('releases the stream after a UTF-8 decoding failure and respects cancellation at a progress yield', async () => {
-  const malformed = new ReadableStream<Uint8Array>({
+  const malformed = new ReadableStream<Uint8Array<ArrayBuffer>>({
     start(c) {
       c.enqueue(new Uint8Array([0xff]));
     },
@@ -165,7 +165,7 @@ it('releases the stream after a UTF-8 decoding failure and respects cancellation
     }),
   );
   const cancelled = vi.fn();
-  const stream = new ReadableStream<Uint8Array>({
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
     start(c) {
       c.enqueue(bytes);
     },

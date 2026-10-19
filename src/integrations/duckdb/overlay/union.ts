@@ -19,7 +19,7 @@ export function union(
   overlay: MapshaperDataset,
   options: UnionOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runTwoInputTool(
     input,
     overlay,

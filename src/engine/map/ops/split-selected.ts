@@ -157,7 +157,7 @@ export async function splitSelected(
         }
         const mini = buildMiniDataset({
           dataset: planned,
-          candidates: new Map([[liveLayerIndex, selectedIds]]),
+          candidates: new Map<number, ReadonlySet<number>>([[liveLayerIndex, selectedIds]]),
           adapter,
         });
         materializeRetainedMiniArcs(mini);

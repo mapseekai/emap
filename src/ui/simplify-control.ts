@@ -11,7 +11,7 @@
 
 import type { SimplifyMethod } from '../engine/map/types';
 import type { ControlContext } from '../runtime/services/controls';
-import { Control } from './control';
+import type { Control } from './control';
 import { createControlButton, createControlIcon } from './control-icons';
 
 export interface SimplifyControlOptions {
@@ -36,7 +36,7 @@ const METHODS: Array<{ value: '' | SimplifyMethod; label: string }> = [
 
 export class SimplifyControl implements Control {
   private _opts: SimplifyControlOptions;
-  private _map: ControlContext | null = null;
+  private _map: Pick<ControlContext, 'ops'> | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
   private _popup: HTMLElement | null = null;
@@ -54,7 +54,7 @@ export class SimplifyControl implements Control {
     this._opts = opts;
   }
 
-  onAdd(map: ControlContext): HTMLElement {
+  onAdd(map: Pick<ControlContext, 'ops'>): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group emap-ctrl-simplify-wrap';
@@ -189,7 +189,7 @@ export class SimplifyControl implements Control {
       }
     };
 
-    applyButton.onclick = () => this._apply();
+    applyButton.onclick = () => void this._apply();
 
     return popup;
   }
@@ -236,9 +236,9 @@ export class SimplifyControl implements Control {
     if (!this._map || !this._percentageInput || !this._methodSel) return;
 
     const percentage = Number(this._percentageInput.value);
-    const method = this._methodSel.value;
+    const method = METHODS.find((option) => option.value === this._methodSel?.value)?.value;
 
-    const opts: Record<string, unknown> = {
+    const opts: Parameters<ControlContext['ops']['simplifyLayer']>[0] = {
       source: this._opts.source,
       percentage,
     };
@@ -251,16 +251,18 @@ export class SimplifyControl implements Control {
     this._setStatus('Running…');
 
     try {
-      const result = await (this._map.ops as any).simplifyLayer(opts);
+      const result = await this._map.ops.simplifyLayer(opts);
       if (result?.ok) {
         this._setStatus(`Simplified at ${percentage}%`);
       } else {
         const e = result?.error;
-        const detail = e ? `${e.kind}${e.field ? ' field=' + e.field : ''}` : 'unknown';
+        const detail = e
+          ? `${e.kind}${'field' in e && e.field ? ' field=' + e.field : ''}`
+          : 'unknown';
         this._setStatus(`Failed: ${detail}`);
       }
-    } catch (err: any) {
-      this._setStatus(`Error: ${err?.message ?? err}`);
+    } catch (err: unknown) {
+      this._setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       if (this._applyBtn) this._applyBtn.disabled = false;
     }

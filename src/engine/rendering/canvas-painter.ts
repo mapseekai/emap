@@ -2,8 +2,8 @@ import { CanvasPointIcons } from './icons/canvas';
 import type { PointIcon } from './icons/images';
 import { drawCanvasLabels, type LabelFrame } from './labels/manager';
 import {
-  EditPainter,
-  DrawOverlayState,
+  type EditPainter,
+  type DrawOverlayState,
   type ArrowDotPathOptions,
   type MeasurementOverlayState,
   type PolygonFillOptions,
@@ -1165,7 +1165,7 @@ export class CanvasPainter implements EditPainter {
     viewBBox: readonly [number, number, number, number] | number[] | null,
   ): void {
     const ctx = this._ctx;
-    const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
+    const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox?.bind(arcs) : undefined;
     const cache = this._fillPathCache(shapes, arcs, viewBBox, filter);
     const bbox = [0, 0, 0, 0];
     const point = cache ? new Int32Array(2) : undefined;

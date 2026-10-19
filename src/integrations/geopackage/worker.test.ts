@@ -125,7 +125,7 @@ it('pulls final arcs as data before the done sentinel and returns a complete dat
   };
   const result = await importGeoPackageInWorker(new Uint8Array(1), options);
   expect(result.layers[0].shapes).toEqual([]);
-  expect(result.arcs!.getPointCount()).toBe(2);
+  expect(result.arcs!.getPointCount?.()).toBe(2);
   expect(TasklaneTestWorker.instances[0].requests.map((r) => r.name)).toEqual([
     'import',
     'next',

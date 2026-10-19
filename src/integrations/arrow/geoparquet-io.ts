@@ -112,7 +112,9 @@ export async function exportGeoParquet(
   let propertiesBuilder = new wasm.WriterPropertiesBuilder();
   const geoMetadata = table.schema.metadata.get('geo');
   if (geoMetadata) {
-    propertiesBuilder = propertiesBuilder.setKeyValueMetadata(new Map([['geo', geoMetadata]]));
+    propertiesBuilder = propertiesBuilder.setKeyValueMetadata(
+      new Map<string, string>([['geo', geoMetadata]]),
+    );
   }
 
   const properties = propertiesBuilder.setCompression(compression).build();

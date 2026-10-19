@@ -24,10 +24,10 @@ function replaceFixtureShapeWithPieces(
   pieces: PathShape[],
 ): void {
   const shapeIndex = layer.shapes!.findIndex((shape) => shape !== null);
-  const sourceRecord = layer.data!.getRecordAt(shapeIndex)!;
+  const sourceRecord = layer.data?.getRecordAt?.(shapeIndex) ?? {};
   layer.shapes!.splice(shapeIndex, 1, ...pieces);
   const records = pieces.map(() => ({ ...sourceRecord }));
-  layer.data!.getRecords().splice(shapeIndex, 1, ...records);
+  layer.data!.getRecords?.().splice(shapeIndex, 1, ...records);
 }
 
 function exportLineCoordinates(dataset: MapshaperDataset): unknown[] {
@@ -35,7 +35,11 @@ function exportLineCoordinates(dataset: MapshaperDataset): unknown[] {
   const collection = JSON.parse(String(file.content)) as GeoJSON.FeatureCollection;
   return collection.features
     .filter((feature) => feature.properties?.id !== undefined)
-    .map((feature) => feature.geometry!.coordinates);
+    .map((feature) => {
+      if (feature.geometry.type === 'GeometryCollection')
+        throw new Error('Unexpected geometry collection in line fixture');
+      return feature.geometry.coordinates;
+    });
 }
 
 describe('splitSelectedPolylines', () => {
@@ -120,7 +124,7 @@ describe('splitSelectedPolylines', () => {
       dataset,
       0,
       new Set([0]),
-      { type: 'point', coordinates },
+      { type: 'point', coordinates: [coordinates[0], coordinates[1]] },
       adapter,
     );
 
@@ -202,7 +206,7 @@ describe('splitSelectedPolylines', () => {
       [...(layer.shapes![1] as PathShape)[0]!],
     ];
     layer.shapes!.splice(1, 1);
-    layer.data!.getRecords().splice(1, 1);
+    layer.data!.getRecords?.().splice(1, 1);
 
     const result = splitSelectedPolylines(
       dataset,
@@ -353,8 +357,13 @@ describe('splitSelectedPolylines', () => {
     ]);
 
     expect(
-      splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'polyline', coordinates }, adapter)
-        .pieces,
+      splitSelectedPolylines(
+        dataset,
+        0,
+        new Set([0]),
+        { type: 'polyline', coordinates: coordinates.map(([x, y]): [number, number] => [x, y]) },
+        adapter,
+      ).pieces,
     ).toEqual([]);
   });
 
@@ -402,7 +411,7 @@ describe('splitSelectedPolylines', () => {
       dataset,
       0,
       new Set([0]),
-      { type: 'polyline', coordinates },
+      { type: 'polyline', coordinates: coordinates.map(([x, y]): [number, number] => [x, y]) },
       adapter,
     );
 
@@ -435,8 +444,13 @@ describe('splitSelectedPolylines', () => {
     ]);
 
     expect(
-      splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'polyline', coordinates }, adapter)
-        .pieces,
+      splitSelectedPolylines(
+        dataset,
+        0,
+        new Set([0]),
+        { type: 'polyline', coordinates: coordinates.map(([x, y]): [number, number] => [x, y]) },
+        adapter,
+      ).pieces,
     ).toEqual([]);
   });
 
@@ -739,7 +753,7 @@ describe('splitSelectedPolylines', () => {
       [...(layer.shapes![1] as PathShape)[0]!],
     ];
     layer.shapes!.splice(1, 1);
-    layer.data!.getRecords().splice(1, 1);
+    layer.data!.getRecords?.().splice(1, 1);
 
     const result = splitSelectedPolylines(
       dataset,

@@ -4,7 +4,7 @@ import {
   rotateMatrix,
   scaleMatrix,
   invertMatrix,
-  AffineMatrix,
+  type AffineMatrix,
 } from './feature-affine';
 import type { ArcCollection, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import type { TopologySource } from '../../source/source';

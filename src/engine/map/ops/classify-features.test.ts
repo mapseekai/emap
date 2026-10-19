@@ -147,6 +147,7 @@ describe('classifyFeatures validation', () => {
     categories[0] = 'changed';
     colors[0] = '#ffffff';
 
+    if (res.value.kind !== 'categorical') throw new Error('Expected categorical classification');
     expect(res.value.categories).toEqual(['a', 'b']);
     expect(res.value.colors).toEqual(['#111111', '#999999']);
   });

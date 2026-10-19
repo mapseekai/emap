@@ -8,6 +8,17 @@ import { verifyCdnAssets } from './check-example-cdn.mjs';
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = resolve(dirname(scriptPath), '..');
 
+/**
+ * @param {{
+ *   root?: string,
+ *   fetchImpl?: typeof fetch,
+ *   spawnImpl?: (command: string, args: string[], options: {
+ *     cwd: string,
+ *     env: NodeJS.ProcessEnv & { EMAP_EXAMPLES_ASSET_MODE: string, EMAP_EXAMPLES_ASSET_INTEGRITY: string },
+ *     stdio: 'inherit'
+ *   }) => { status: number | null, signal?: string | null }
+ * }} options
+ */
 export async function buildExamplesCdn({
   root = defaultRoot,
   fetchImpl = globalThis.fetch,

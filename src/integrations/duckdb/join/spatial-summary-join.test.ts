@@ -23,7 +23,7 @@ import * as datasetToTable from '../../arrow/dataset-to-table';
 import * as tableToDataset from '../../arrow/table-to-dataset';
 import type * as DuckDBBundles from '@duckdb/duckdb-wasm/blocking';
 import { datasetFromGeoJSON } from '../../arrow/test-utils';
-import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import * as datasetCrs from '../core/dataset-crs';
 import { DuckDbOperationError } from '../errors';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
@@ -722,7 +722,7 @@ describe('spatialSummaryJoin', () => {
       'max',
       new Field(
         'sales',
-        new Map_(
+        new Map_<Utf8, Int32>(
           new Field(
             'entries',
             new Struct([

@@ -12,7 +12,11 @@ const fileSelectorIds: Record<string, true> = {
   'duckdb-query': true,
 };
 
-function splitTwoInputs(inputSelector: string, maskSelector: string, filePaths: readonly string[]): readonly FixtureBinding[] {
+function splitTwoInputs(
+  inputSelector: string,
+  maskSelector: string,
+  filePaths: readonly string[],
+): readonly FixtureBinding[] {
   return [
     { selector: inputSelector, paths: filePaths.slice(0, 1) },
     { selector: maskSelector, paths: filePaths.slice(1, 2) },
@@ -40,11 +44,10 @@ function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureB
   ];
 }
 
-export const fixtureManifest: Readonly<
-  Record<string, readonly FixtureBinding[]>
-> = Object.fromEntries(
-  examples.map((example) => [example.id, bindingsFor(example.id, example.fixtures)]),
-);
+export const fixtureManifest: Readonly<Record<string, readonly FixtureBinding[]>> =
+  Object.fromEntries(
+    examples.map((example) => [example.id, bindingsFor(example.id, example.fixtures)]),
+  );
 
 export function fixtureUrl(path: string, baseUrl = import.meta.env.BASE_URL): string {
   const base = `/${baseUrl.replace(/^\/+|\/+$/g, '')}/`;

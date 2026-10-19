@@ -190,7 +190,7 @@ function compile(
     }
     if (j === i + 1) result.push(a);
     else {
-      const span: GpuMesh = Object.create(first);
+      const span = Object.create(first) as GpuMesh;
       span.count =
         first.kind === 'fill'
           ? last.firstIndex! + last.count - first.firstIndex!

@@ -354,7 +354,7 @@ export class SourceServiceImpl {
     if (this.deps.document._removed || this.deps.signal.aborted) {
       throw sourceLoadError('source-load-cancelled', 'Cannot confirm a source after map removal');
     }
-    const pending = (this._pendingSourceCommits ??= new globalThis.Map());
+    const pending = (this._pendingSourceCommits ??= new globalThis.Map<string, symbol>());
     if (this.deps.document._sources.has(state.id) || pending.has(state.id)) {
       throw sourceLoadError(
         'source-id-conflict',

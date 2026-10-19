@@ -11,7 +11,7 @@ export function length(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('length', input, options, runtime);
 }
 export const lengthTool = defineDuckDbTool({

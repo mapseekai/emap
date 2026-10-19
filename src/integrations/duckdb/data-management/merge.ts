@@ -18,7 +18,7 @@ export function merge(
   incoming: MapshaperDataset,
   options: MergeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runTwoInputTool(
     input,
     incoming,

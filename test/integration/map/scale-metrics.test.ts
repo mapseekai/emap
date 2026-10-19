@@ -11,8 +11,10 @@ const rootExportedMetricTypes: [GetScaleMetricsOptions, ScaleMetrics] = [
 ];
 void rootExportedMetricTypes;
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = () =>
-    ({
+  // jsdom's integration host implements the 2D methods used by this suite.
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: () => ({
       scale: () => {},
       clearRect: () => {},
       fillRect: () => {},
@@ -29,7 +31,8 @@ beforeAll(() => {
       setTransform: () => {},
       drawImage: () => {},
       measureText: () => ({ width: 0 }),
-    }) as CanvasRenderingContext2D;
+    }),
+  });
 });
 function container(width = 800, height = 600): HTMLElement {
   const element = document.createElement('div');

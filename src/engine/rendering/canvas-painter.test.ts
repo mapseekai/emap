@@ -15,6 +15,50 @@ import { createCanvasPainterHarness } from '../../../test/utils/canvas-painter';
 
 type Segment = readonly [number, number, number, number];
 
+it('preserves the arc receiver while culling polygon parts outside the viewport', () => {
+  const ctx = { beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), fill: vi.fn() };
+  const { painter } = createCanvasPainterHarness(ctx);
+  const arcs = {
+    points: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [0, 0],
+    ],
+    size: () => 1,
+    getArcIter() {
+      let index = -1;
+      const points = this.points;
+      return {
+        hasNext: () => ++index < points.length,
+        get x() {
+          return points[index][0];
+        },
+        get y() {
+          return points[index][1];
+        },
+      };
+    },
+    getShapeIter() {
+      return this.getArcIter(0);
+    },
+    getSimpleShapeBbox(_part: number[], bbox: number[]) {
+      bbox[0] = Math.min(...this.points.map(([x]) => x));
+      bbox[1] = Math.min(...this.points.map(([, y]) => y));
+      bbox[2] = Math.max(...this.points.map(([x]) => x));
+      bbox[3] = Math.max(...this.points.map(([, y]) => y));
+    },
+  } satisfies ArcCollection & { points: number[][] };
+  painter.drawPolygonFill([[[0]]], arcs, '#123456', undefined, undefined, {
+    viewBBox: [-1, -1, 2, 2],
+  });
+  expect(ctx.fill).toHaveBeenCalledOnce();
+  painter.drawPolygonFill([[[0]]], arcs, '#123456', undefined, undefined, {
+    viewBBox: [10, 10, 20, 20],
+  });
+  expect(ctx.fill).toHaveBeenCalledOnce();
+});
+
 function makeArrowPainter(width = 100, height = 100, pixelRatio = 1) {
   const segments: Segment[] = [];
   const strokes: number[] = [];
@@ -1376,9 +1420,9 @@ function makeArcIterator(points: Array<[number, number]>) {
 }
 
 function mockMissingThemeVariables() {
-  return vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-    getPropertyValue: () => '',
-  } as CSSStyleDeclaration);
+  const style = document.createElement('div').style;
+  vi.spyOn(style, 'getPropertyValue').mockReturnValue('');
+  return vi.spyOn(window, 'getComputedStyle').mockReturnValue(style);
 }
 
 function makeThemePainter() {

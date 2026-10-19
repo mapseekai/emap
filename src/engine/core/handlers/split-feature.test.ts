@@ -476,6 +476,7 @@ describe('SplitFeatureHandler', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
     handler.enable();
     handler.handlePointer(event('move', 5, 2));
+    // @ts-expect-error Exercise the runtime guard against a malformed JavaScript selection provider.
     map.getSelection.mockReturnValue([undefined]);
 
     expect(() => handler.handlePointer(event('move', 5, 2))).not.toThrow();

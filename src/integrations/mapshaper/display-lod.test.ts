@@ -5,11 +5,11 @@ import { prepareDisplayLod } from './display-lod';
 it('matches radial filtering for empty, collapsed, repeated and closed arcs', async () => {
   const adapter = getDefaultMapshaperAdapter();
   const arcs = adapter.createArcCollection([
-    { xx: [], yy: [] },
-    { xx: [1], yy: [2] },
-    { xx: [1, 1, 1], yy: [2, 2, 2] },
-    { xx: [0, 1, 2, 10, 0], yy: [0, 0, 2, 10, 0] },
-    { xx: [0, 100, 101], yy: [0, 100, 101] },
+    { xx: Float64Array.from([]), yy: Float64Array.from([]) },
+    { xx: Float64Array.from([1]), yy: Float64Array.from([2]) },
+    { xx: Float64Array.from([1, 1, 1]), yy: Float64Array.from([2, 2, 2]) },
+    { xx: Float64Array.from([0, 1, 2, 10, 0]), yy: Float64Array.from([0, 0, 2, 10, 0]) },
+    { xx: Float64Array.from([0, 100, 101]), yy: Float64Array.from([0, 100, 101]) },
   ]);
   const distance = adapter.getAvgSegment(arcs) * 4;
   const expected = adapter.simplifyArcsFast(arcs, distance);

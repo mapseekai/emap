@@ -1,10 +1,10 @@
-import type Table from 'apache-arrow';
+import type { Table } from 'apache-arrow';
 import { tableFromArrays } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../../../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../../arrow/test-utils';
 import { parseGeoMetadata } from '../../../arrow/geoparquet-metadata';
-import type MapshaperDataset from '../../../../shared/types/mapshaper-types';
+import type { MapshaperDataset } from '../../../../shared/types/mapshaper-types';
 import { runRelationTool, resolveRelationOutputColumn, type RelationOperation } from './relation';
 import type { DuckDbConnection, DuckDbRuntime } from '../../runtime';
 
@@ -145,10 +145,7 @@ class FakeRuntime implements DuckDbRuntime {
   readonly events: string[] = [];
   readonly connection: FakeConnection;
 
-  constructor(
-    resultTable: Table,
-    private readonly options: FakeRuntimeOptions = {},
-  ) {
+  constructor(resultTable: Table, options: FakeRuntimeOptions = {}) {
     this.connection = new FakeConnection(resultTable, this.events, options);
   }
 

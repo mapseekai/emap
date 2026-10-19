@@ -22,7 +22,7 @@ export function spatialRelation(
   reference: MapshaperDataset,
   options: SpatialRelationOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runNamedRelationOperation(
     options.mode ?? 'filter',
     options.predicate,

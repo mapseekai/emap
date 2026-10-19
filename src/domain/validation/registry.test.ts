@@ -1,20 +1,20 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ValidatorRegistry } from './registry';
 import type { Validator, ValidationReport } from './validator';
-import type { EmapHostInternal } from '../../engine/map/emap-host';
+import { makeStubCtx } from '../../engine/map/ops/_test-helpers';
 
-const fakeHost = {} as EmapHostInternal;
+const fakeHost = makeStubCtx().ctx.host;
 
 function makeValidator(
   name: string,
   result: ValidationReport | (() => Promise<ValidationReport>) | (() => never),
   phase: 'after-commit' = 'after-commit',
-): Validator & { run: ReturnType<typeof vi.fn> } {
-  const run = vi.fn(async () => {
-    if (typeof result === 'function') return (result as () => Promise<ValidationReport>)();
-    return result;
+): Validator & { run: Mock<Validator['run']> } {
+  const run = vi.fn<Validator['run']>(() => {
+    if (typeof result === 'function') return result();
+    return Promise.resolve(result);
   });
-  return { name, phase, run } as Validator & { run: ReturnType<typeof vi.fn> };
+  return { name, phase, run };
 }
 
 const okReport: ValidationReport = { ok: true, issues: [] };

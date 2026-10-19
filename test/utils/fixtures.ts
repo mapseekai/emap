@@ -14,9 +14,18 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TopologySource } from '../../src/domain/source/topology-source';
 import type { MapshaperDataset } from '../../src/shared/types/mapshaper-types';
-import { getDefaultMapshaperAdapter } from '../../src/integrations/mapshaper/adapter';
+import {
+  DefaultMapshaperAdapter,
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../../src/integrations/mapshaper/adapter';
 
 const FIXTURES_DIR = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'fixtures');
+
+/** Keep unmocked adapter methods real so focused overrides still satisfy the full contract. */
+export function createTestAdapter(overrides: Partial<MapshaperAdapter>): MapshaperAdapter {
+  return Object.assign(new DefaultMapshaperAdapter(), overrides);
+}
 
 /** Read raw fixture bytes from `test/fixtures/<name>`. Synchronous; tests
  *  are sync-friendly. */
@@ -61,22 +70,20 @@ export async function buildFixtureSource(
 ): Promise<TopologySource> {
   const source = new TopologySource(sourceId);
   return new Promise<TopologySource>((resolveCb, reject) => {
-    let onData: () => void;
-    let onError: (e: { error?: unknown }) => void;
     const cleanup = () => {
       source.off('data', onData);
       source.off('error', onError);
     };
-    onData = () => {
+    const onData = () => {
       cleanup();
       resolveCb(source);
     };
-    onError = (e) => {
+    const onError = (e: { error?: unknown }) => {
       cleanup();
       reject(e?.error ?? e);
     };
     source.on('data', onData);
     source.on('error', onError);
-    source.setData({ filename: fixtureName, content: loadFixtureBytes(fixtureName) });
+    void source.setData({ filename: fixtureName, content: loadFixtureBytes(fixtureName) });
   });
 }

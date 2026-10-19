@@ -19,7 +19,7 @@ export function symmetricDifference(
   overlay: MapshaperDataset,
   options: SymmetricDifferenceOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runTwoInputTool(
     input,
     overlay,

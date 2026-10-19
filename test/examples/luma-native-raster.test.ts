@@ -1,3 +1,4 @@
+import type { RasterSource } from '../../src/domain/raster/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NativeRasterLayer } from '../../packages/examples/src/luma-raster/native-layer';
 import { AffineTransform } from '../../src/domain/geo/transform';
@@ -44,7 +45,7 @@ function setup(width = 1024, height = 1024) {
       levels: metadata.levels.map((l) => ({ ...l, width, height })),
     },
     dispose: vi.fn(),
-    readWindow: vi.fn(async (r: any) => ({
+    readWindow: vi.fn<RasterSource['readWindow']>(async (r) => ({
       width: r.window[2] - r.window[0],
       height: r.window[3] - r.window[1],
       data: Array.from(
@@ -62,7 +63,7 @@ function setup(width = 1024, height = 1024) {
     }),
     canvas: { ownerDocument: {} },
     stats: { liveTextureBytes: 0, textureUploads: 0 },
-    upload: vi.fn((tile: any, r: any) => {
+    upload: vi.fn((tile: any, _r: any) => {
       const bytes = (tile.window[2] - tile.window[0]) * (tile.window[3] - tile.window[1]) * 8;
       gpu.stats.liveTextureBytes += bytes;
       gpu.stats.textureUploads++;
@@ -121,7 +122,8 @@ describe('dynamic native raster cache lifecycle', () => {
     expect(source.readWindow).not.toHaveBeenCalled();
     layer.setInteracting(false);
     await vi.waitFor(() => expect(source.readWindow).toHaveBeenCalledOnce());
-    const signal = source.readWindow.mock.calls[0][1] as AbortSignal;
+    const signal = source.readWindow.mock.calls[0][1];
+    if (!signal) throw new Error('Expected raster cancellation signal');
     layer.dispose();
     expect(signal.aborted).toBe(true);
     resolve({ width: 257, height: 257, data: [new Uint16Array(257 * 257)] });
@@ -131,7 +133,7 @@ describe('dynamic native raster cache lifecycle', () => {
   it('does not replay obsolete requested blocks into a new viewport', async () => {
     const { layer, source, gpu } = setup();
     const original = source.readWindow.getMockImplementation()!,
-      promises: { resolve: () => void; signal: AbortSignal }[] = [];
+      promises: { resolve: () => Promise<void>; signal: AbortSignal }[] = [];
     source.readWindow.mockImplementation(
       (request: any, signal: any) =>
         new Promise((resolve) => {
@@ -142,9 +144,9 @@ describe('dynamic native raster cache lifecycle', () => {
     await vi.waitFor(() => expect(promises).toHaveLength(1));
     layer.update(new AffineTransform(1, -1, -800, 1024), 120, 120, 1);
     expect(promises[0].signal.aborted).toBe(true);
-    promises[0].resolve();
+    await promises[0].resolve();
     await vi.waitFor(() => expect(promises.length).toBeGreaterThan(1));
-    promises[1].resolve();
+    await promises[1].resolve();
     await vi.waitFor(() => expect(layer.ready).toBe(true));
     expect(gpu.upload.mock.calls.every(([t]: any) => t.key === '0:1:0')).toBe(true);
     layer.dispose();
@@ -309,7 +311,7 @@ it('recovers the GPU without reopening the source or uploading an obsolete read'
   await vi.waitFor(() => expect(source.readWindow).toHaveBeenCalledOnce());
   lose();
   await vi.waitFor(() => expect(gpu.recreate).toHaveBeenCalledOnce());
-  expect(source.readWindow.mock.calls[0][1].aborted).toBe(true);
+  expect(source.readWindow.mock.calls[0][1]?.aborted).toBe(true);
   expect(layer.ready).toBe(false);
   await finish();
   layer.update(view, 120, 120, 1);

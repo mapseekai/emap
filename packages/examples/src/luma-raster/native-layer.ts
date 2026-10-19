@@ -54,7 +54,7 @@ export class NativeRasterLayer {
   private copiedHalos = new Map<string, Set<string>>();
   private coreMode = false;
   private get packedMode() {
-    return this.pipeline !== 'legacy' && Boolean(this.source.readTexture);
+    return this.pipeline !== 'legacy' && typeof this.source.readTexture === 'function';
   }
   private patches: RasterPatch[] = [];
   private published = new Set<string>();
@@ -166,7 +166,16 @@ export class NativeRasterLayer {
   }
 
   update(view: AffineTransform, width: number, height: number, dpr: number): void {
-    const signature = [view.mx, view.my, view.bx, view.by, width, height, dpr, ...cameraUniforms(view)].join(':');
+    const signature = [
+      view.mx,
+      view.my,
+      view.bx,
+      view.by,
+      width,
+      height,
+      dpr,
+      ...cameraUniforms(view),
+    ].join(':');
     if (this.disposed || this.recovering || !this.gpu.available || signature === this.signature)
       return;
     const started = performance.now(),
@@ -297,9 +306,13 @@ export class NativeRasterLayer {
     // At most two 8-MiB batch reads plus two completed batches. Even slow uploads
     // cannot accumulate an unbounded queue of transferred original samples.
     if (
-      this.paused || this.disposed || this.recovering || !this.gpu.available ||
+      this.paused ||
+      this.disposed ||
+      this.recovering ||
+      !this.gpu.available ||
       this.uploads.length >= 2
-    ) return;
+    )
+      return;
     while (this.active.size < 2) {
       const reserved = new Set<string>();
       for (const job of this.active) for (const tile of job.batch.tiles) reserved.add(tile.key);

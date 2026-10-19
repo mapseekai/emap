@@ -50,6 +50,7 @@ describe('README transaction examples match the live API', () => {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
     }).outputText;
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- Executes this repository's compiled example fixture.
     new Function('exports', compiled)(exports);
     const ok = { ok: true, value: undefined };
     const failure = {

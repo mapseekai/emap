@@ -5,9 +5,9 @@ import type { TopologySource } from '../../source/source';
 import type { ArcCollection } from '../../../shared/types/mapshaper-types';
 
 function makeArcs(): ArcCollection {
-  let nn = new Int32Array([2]);
-  let xx = new Float64Array([0, 1]);
-  let yy = new Float64Array([0, 1]);
+  let nn: Int32Array = new Int32Array([2]);
+  let xx: Float64Array = new Float64Array([0, 1]);
+  let yy: Float64Array = new Float64Array([0, 1]);
 
   const arcs = {
     size: () => nn.length,

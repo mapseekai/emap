@@ -20,7 +20,7 @@ export function pointToLine(
   input: MapshaperDataset,
   options: PointToLineOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runSingleInputTool(
     input,
     'point_to_line',

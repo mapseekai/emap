@@ -35,8 +35,10 @@ export type SelectionSnapshot = ReadonlySet<string>;
  * ("what to draw extra strokes on right now").
  */
 export class Selection {
-  private _byKey: globalThis.Map<string, globalThis.Map<string, Set<number>>> =
-    new globalThis.Map();
+  private _byKey: globalThis.Map<string, globalThis.Map<string, Set<number>>> = new globalThis.Map<
+    string,
+    Map<string, Set<number>>
+  >();
   private _size = 0;
 
   /** Number of distinct selected features across all source/layer pairs. */
@@ -145,11 +147,12 @@ export class Selection {
    * restored state so callers can fire a single `selectionchange` event.
    */
   restore(snap: SelectionSnapshot): SelectionDiff {
+    const refs = Array.from(snap, parseRefKey);
     const before = this._refSetSnapshot();
     this._byKey.clear();
     this._size = 0;
-    for (const k of snap) this._addOne(parseRefKey(k));
-    return diffSnapshots(before, snap);
+    for (const ref of refs) this._addOne(ref);
+    return diffSnapshots(before, this._refSetSnapshot());
   }
 
   // --- internals --------------------------------------------------------
@@ -196,14 +199,27 @@ export class Selection {
 }
 
 function refKey(source: string, layer: string, id: number): string {
+  assertFeatureId(id);
   // JSON-encode the parts so any character (including separators a user might
   // pick for source/layer ids) is safely escaped — no collision risk.
   return JSON.stringify([source, layer, id]);
 }
 
 function parseRefKey(key: string): FeatureRef {
-  const [source, layer, id] = JSON.parse(key) as [string, string, number];
+  const parsed: unknown = JSON.parse(key);
+  if (!Array.isArray(parsed) || parsed.length !== 3)
+    throw new TypeError('Invalid selection snapshot record');
+  const parts: unknown[] = parsed;
+  const [source, layer, id] = parts;
+  if (typeof source !== 'string' || typeof layer !== 'string' || typeof id !== 'number')
+    throw new TypeError('Invalid selection snapshot record');
+  assertFeatureId(id);
   return { source, layer, id };
+}
+
+function assertFeatureId(id: number): void {
+  if (!Number.isSafeInteger(id) || id < 0)
+    throw new RangeError('Selection feature id must be a nonnegative safe integer');
 }
 
 function diffSnapshots(before: ReadonlySet<string>, after: ReadonlySet<string>): SelectionDiff {

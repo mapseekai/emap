@@ -51,7 +51,7 @@ describe('bounded local range source', () => {
   it('guards malicious directory entry counts before decoder allocations', async () => {
     const bytes = makeRasterFixture();
     new DataView(bytes.buffer).setUint16(8, 65535, true);
-    const source = new LocalRasterFileSource(new Blob([bytes]));
+    const source = new LocalRasterFileSource(new Blob([bytes.slice()]));
     await expect(validateTiffDirectory(source, 8, true, false)).rejects.toThrow(
       /TIFF_DIRECTORY_BUDGET/,
     );
@@ -65,7 +65,7 @@ describe('bounded local range source', () => {
       if (view.getUint16(p, true) === 33550) view.setUint32(p + 8, bytes.length + 100, true);
     }
     await expect(
-      validateTiffDirectory(new LocalRasterFileSource(new Blob([bytes])), 8, true, false),
+      validateTiffDirectory(new LocalRasterFileSource(new Blob([bytes.slice()])), 8, true, false),
     ).rejects.toThrow(/INVALID_TIFF_OFFSET/);
   });
   it('drops its strong Blob reference on close', async () => {

@@ -29,7 +29,7 @@ export async function nearest(
   reference: MapshaperDataset,
   options: NearestOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   assertProjectedCrs([input, reference], 'DuckDB nearest requires a known projected CRS');
   const result = await runTwoInputTool(
     input,

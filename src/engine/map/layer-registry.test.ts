@@ -1,3 +1,4 @@
+import { TopologySource as ConcreteTopologySource } from '../../domain/source/topology-source';
 import { describe, expect, it } from 'vitest';
 import { LayerRegistry, resolveLayerInList } from './layer-registry';
 import type { MapshaperLayer } from '../../shared/types/mapshaper-types';
@@ -17,7 +18,9 @@ function makeLayer(props: Partial<MapshaperLayer>): MapshaperLayer {
 }
 
 function makeSource(layers: MapshaperLayer[]): TopologySource {
-  return { getLayers: () => layers } as TopologySource;
+  const source = new ConcreteTopologySource('registry-test');
+  source.setDataset({ layers }, false);
+  return source;
 }
 
 describe('resolveLayerInList', () => {

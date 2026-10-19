@@ -404,7 +404,7 @@ export function splitSelectedPolylines(
     if (!shape) continue;
     properCutsByFeature.set(
       featureId,
-      new Map(
+      new Map<number, Set<string>>(
         shape.map((part, partIndex) => [
           partIndex,
           properLineCutCoordinates([part], arcs, cutterCoordinates, adapter),

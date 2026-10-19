@@ -41,7 +41,7 @@ function makeMockAdapter(): MapshaperAdapter {
   return {
     getAvgSegment: vi.fn(() => 1.0),
     simplifyArcsFast: vi.fn(
-      (arcs: any) => ({ size: () => 1, isFilteredCopy: true, fromFastPath: true }) as any,
+      (_arcs: any) => ({ size: () => 1, isFilteredCopy: true, fromFastPath: true }) as any,
     ),
   } as unknown as MapshaperAdapter;
 }

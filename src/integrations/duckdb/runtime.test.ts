@@ -123,6 +123,7 @@ function fakeDuckDbModuleWithMainModule(mainModule: string): DuckDbWasmModule {
   vi.mocked(duckdb.selectBundle).mockResolvedValue({
     mainModule,
     mainWorker: 'selected.worker.js',
+    pthreadWorker: null,
   });
   return duckdb;
 }
@@ -132,7 +133,7 @@ function fakeDuckDbModuleWithSelectedBundle(
   mainModule: string,
 ): DuckDbWasmModule {
   const duckdb = fakeDuckDbModule();
-  const bundles = {
+  const bundles: ReturnType<DuckDbWasmModule['getJsDelivrBundles']> = {
     mvp: { mainModule: 'https://cdn.test/default-mvp.wasm', mainWorker: 'mvp.worker.js' },
     eh: { mainModule: 'https://cdn.test/default-eh.wasm', mainWorker: 'eh.worker.js' },
     coi: {
@@ -141,13 +142,13 @@ function fakeDuckDbModuleWithSelectedBundle(
       pthreadWorker: 'coi.pthread.worker.js',
     },
   };
-  bundles[bundleKey].mainModule = mainModule;
-  vi.mocked(duckdb.getJsDelivrBundles).mockReturnValue(
-    bundles as unknown as ReturnType<DuckDbWasmModule['getJsDelivrBundles']>,
-  );
+  const selected = bundles[bundleKey];
+  if (!selected) throw new Error('Missing test bundle');
+  selected.mainModule = mainModule;
+  vi.mocked(duckdb.getJsDelivrBundles).mockReturnValue(bundles);
   vi.mocked(duckdb.selectBundle).mockResolvedValue({
-    ...bundles[bundleKey],
-    pthreadWorker: bundles[bundleKey].pthreadWorker ?? null,
+    ...selected,
+    pthreadWorker: 'pthreadWorker' in selected ? selected.pthreadWorker : null,
   });
   return duckdb;
 }

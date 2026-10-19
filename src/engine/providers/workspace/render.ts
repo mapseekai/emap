@@ -692,7 +692,7 @@ export class CanvasRenderService {
     labels.dispose();
     void labels.closed
       .then(() => this._retiredLabels.delete(labels))
-      .catch((error) => this.deps.events.fire('error', { error }));
+      .catch((error: unknown) => this.deps.events.fire('error', { error }));
   }
   dispose(): void {
     if (this._disposed) {

@@ -1,3 +1,4 @@
+import type { RenderPass } from '../../../runtime/services/contracts/render-pass';
 import { AffineTransform } from '../../../domain/geo/transform';
 import type { RenderFrame } from '../../../runtime/services/contracts/render-pass';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -278,6 +279,7 @@ describe('settled, progressive raster frames', () => {
     expect(before.planning?.displayTileSize).toBe(256);
     expect(before.planning?.tileBudgetPerLayer).toBe(64);
     const layer = before.planning?.layers[0];
+    if (!layer) throw new Error('Missing planned raster layer');
     expect(layer?.tiles).toBeGreaterThan(0);
     expect(layer?.tiles).toBeLessThanOrEqual(64);
     expect(layer?.grid[0] * layer?.grid[1]).toBe(layer?.tiles);

@@ -12,11 +12,11 @@ export function attachRasterBandControls(apply: (style: RasterStyle) => void): {
   dispose(): void;
 } {
   const mode = element<HTMLSelectElement>('render-mode');
-  const rgb = ['red-band', 'green-band', 'blue-band'].map(id => element<HTMLSelectElement>(id));
+  const rgb = ['red-band', 'green-band', 'blue-band'].map((id) => element<HTMLSelectElement>(id));
   const gray = element<HTMLSelectElement>('gray-band');
   const selectors = [...rgb, gray];
   const option = (value: string): HTMLOptionElement => {
-    const found = [...mode.options].find(entry => entry.value === value);
+    const found = [...mode.options].find((entry) => entry.value === value);
     if (!found) throw new Error(`Missing raster mode: ${value}`);
     return found;
   };
@@ -30,8 +30,12 @@ export function attachRasterBandControls(apply: (style: RasterStyle) => void): {
   const change = () => {
     syncMode();
     if (!available) return;
-    const bands = mode.value === 'palette' ? undefined : mode.value === 'gray'
-      ? [Number(gray.value)] : rgb.map(select => Number(select.value));
+    const bands =
+      mode.value === 'palette'
+        ? undefined
+        : mode.value === 'gray'
+          ? [Number(gray.value)]
+          : rgb.map((select) => Number(select.value));
     apply({ bands, ranges: undefined });
   };
   for (const control of [mode, ...selectors]) control.addEventListener('change', change);
@@ -39,10 +43,14 @@ export function attachRasterBandControls(apply: (style: RasterStyle) => void): {
     setSource(metadata) {
       available = metadata !== null;
       mode.disabled = !available;
-      if (!metadata) { syncMode(); return; }
+      if (!metadata) {
+        syncMode();
+        return;
+      }
       const level = metadata.levels[0];
-      const bands = Array.from({ length: level.samples }, (_, i) => i)
-        .filter(band => band !== metadata.alphaBand);
+      const bands = Array.from({ length: level.samples }, (_, i) => i).filter(
+        (band) => band !== metadata.alphaBand,
+      );
       const prefixes: Record<number, string> = { 1: 'UInt', 2: 'Int', 3: 'Float' };
       for (const [index, select] of selectors.entries()) {
         select.replaceChildren();
@@ -58,7 +66,8 @@ export function attachRasterBandControls(apply: (style: RasterStyle) => void): {
       option('palette').hidden = !metadata.palette;
       option('palette').disabled = !metadata.palette;
       mode.value = metadata.palette ? 'palette' : bands.length >= 3 ? 'rgb' : 'gray';
-      element('band-hint').textContent = `${bands.length} 个可用数据波段${metadata.alphaBand === null ? '' : '；Alpha 单独用于透明度'}。界面波段从 1 开始，API 索引从 0 开始。`;
+      element('band-hint').textContent =
+        `${bands.length} 个可用数据波段${metadata.alphaBand === null ? '' : '；Alpha 单独用于透明度'}。界面波段从 1 开始，API 索引从 0 开始。`;
       syncMode();
     },
     dispose() {

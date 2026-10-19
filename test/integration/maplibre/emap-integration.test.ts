@@ -6,6 +6,7 @@ import type { Control } from '../../../src/ui/control';
 import { Emap } from '../../../src/engine/map/map';
 import type { MapLibreServiceManager } from '../../../src/integrations/maplibre/maplibre-service';
 import { MapLibreServiceManagerImpl } from '../../../src/integrations/maplibre/maplibre-service-manager';
+import type { MapLibreService } from '../../../src/integrations/maplibre/maplibre-service';
 import type { MapOptions } from '../../../src/engine/map/types';
 const mapLibreModuleLoaded = vi.hoisted(() => vi.fn());
 vi.mock('maplibre-gl', () => {
@@ -32,8 +33,10 @@ const canvasContext = {
 } as unknown as CanvasRenderingContext2D;
 const maps: Emap[] = [];
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = (() =>
-    canvasContext) as typeof HTMLCanvasElement.prototype.getContext;
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: () => canvasContext,
+  });
 });
 afterEach(async () => {
   for (const map of maps.splice(0)) await map.dispose();
@@ -62,13 +65,13 @@ const inactiveOverlay = {
     roads: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
   },
   layers: [{ id: 'roads', type: 'line', source: 'roads' }],
-} as const;
+} satisfies MapLibreService;
 const basemap = {
   id: 'base',
   name: 'Base',
   role: 'basemap',
   style: { version: 8, sources: {}, layers: [] },
-} as const;
+} satisfies MapLibreService;
 describe('Emap MapLibre service ownership', () => {
   it('provides an unconfigured service without initializing the MapLibre runtime', async () => {
     const map = await createMap();

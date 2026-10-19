@@ -1,3 +1,4 @@
+import { EventDispatcher } from '../../../src/engine/core/events';
 import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,10 +52,15 @@ beforeEach(async () => {
     return frameId;
   });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function () {
-    const context = makeContext();
-    contexts.set(this, context);
-    return context as unknown as CanvasRenderingContext2D;
+  // jsdom supplies no native Canvas; this host fixture implements the exercised 2D surface.
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value(this: HTMLCanvasElement, kind: string) {
+      if (kind !== '2d') return null;
+      const context = makeContext();
+      contexts.set(this, context);
+      return context;
+    },
   });
   const el = document.createElement('div');
   Object.defineProperties(el, {
@@ -127,9 +133,8 @@ describe('temporary overlays with expensive map layers', () => {
       pixelRatio: window.devicePixelRatio || 1,
     });
     // Exercise the actual wheel listener, including the tool's move subscription.
-    const zoom = map.scrollZoom as {
-      fire: (type: string, event: object) => void;
-    };
+    const zoom = map.scrollZoom;
+    if (!(zoom instanceof EventDispatcher)) throw new Error('Expected native scroll-zoom events');
     zoom.fire('mousewheel', { direction: 1, multiplier: 1, x: 400, y: 300 });
     flushFrame();
     expect(base.clearRect).not.toHaveBeenCalled();

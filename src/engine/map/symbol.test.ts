@@ -86,7 +86,9 @@ describe('attached symbol style mapping', () => {
   it('deep clones resource metadata and expression trees and hides only symbols', () => {
     const copied = cloneSymbolStyle(style);
     (copied.layout!['text-field'] as any[])[1] = 'changed';
-    (copied.images!.marker.size as number[])[0] = 100;
+    const coordinates = copied.images!.marker.size;
+    if (!Array.isArray(coordinates)) throw new Error('Expected cloned coordinate tuple');
+    Reflect.set(coordinates, 0, 100);
     expect((style.layout!['text-field'] as any[])[1]).toBe('name');
     expect(style.images!.marker.size).toEqual([24, 32]);
     const hidden = compileSymbolStyle(

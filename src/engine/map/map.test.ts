@@ -1,3 +1,6 @@
+import type { DatasetNormalizer } from '../../domain/source/source';
+import type { Validator } from '../../domain/validation/validator';
+import { createTestAdapter } from '../../../test/utils/fixtures';
 import {
   createTestMap,
   fixtureGet,
@@ -11,7 +14,7 @@ import mapshaper from 'mapshaper';
 import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
-import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../../shared/types/mapshaper-types';
 import { Selection } from './selection';
 import { Projection } from '../../domain/geo/projection';
 import { Viewport } from '../../domain/geo/viewport';
@@ -79,61 +82,6 @@ function expectCli(expectedCli: string, actualCmds: any): void {
     expect(actual[i].options).toEqual(expected[i].options);
   }
 }
-/**
- * Render a `ParsedCommand[]` back to a CLI-string approximation for the
- * handful of legacy tests that grep the command for substrings rather
- * than asserting exact equality. Lossy by design.
- *
- * Knows about positional/default options for common command families so
- * round-trip via mapshaper.parseCommands is approximately stable for
- * the test corpus (e.g. `-target X` instead of `-target target=X`).
- */
-function parsedCmdsToCli(cmds: any): string {
-  // Map command-name → option key whose value renders as a positional
-  // argument (no `key=` prefix). Mirrors mapshaper's CLI grammar for the
-  // command families this test corpus exercises.
-  const POSITIONAL: Record<string, string> = {
-    target: 'target',
-    dissolve: 'fields',
-    'filter-fields': 'fields',
-    each: 'expression',
-    filter: 'expression',
-    sort: 'expression',
-    uniq: 'expression',
-    split: 'expression',
-    'rename-layers': 'names',
-    'rename-fields': 'fields',
-    buffer: 'radius',
-    simplify: 'percentage',
-    proj: 'crs',
-    lines: 'fields',
-  };
-  return (cmds as any[])
-    .map((c: any) => {
-      const parts: string[] = [`-${c.name}`];
-      const opts = (c.options ?? {}) as Record<string, unknown>;
-      const positionalKey = POSITIONAL[c.name];
-      // Drop `_` echo from real parseCommands output if present.
-      const keys = Object.keys(opts).filter((k) => k !== '_');
-      for (const k of keys) {
-        const v = opts[k];
-        if (v === undefined || v === false) continue;
-        if (k === positionalKey) {
-          // Render as positional: bare value, no `key=`.
-          if (Array.isArray(v)) parts.push(v.length === 1 ? `"${v[0]}"` : `"${v.join(',')}"`);
-          else parts.push(`"${v}"`);
-          continue;
-        }
-        const key = k.replace(/_/g, '-');
-        if (v === true) parts.push(key);
-        else if (Array.isArray(v)) parts.push(`${key}=${v.join(',')}`);
-        else if (typeof v === 'string') parts.push(`${key}="${v}"`);
-        else parts.push(`${key}=${v}`);
-      }
-      return parts.join(' ');
-    })
-    .join(' ');
-}
 function getPrivate(target: object, key: string): unknown {
   return fixtureGet(target, key);
 }
@@ -144,7 +92,7 @@ function callPrivate(target: object, key: string, ...args: unknown[]): unknown {
   }
   return (fn as (...input: unknown[]) => unknown).apply(target, args);
 }
-function createMockSource(layers?: unknown[]) {
+function createMockSource(layers?: MapshaperLayer[]) {
   return {
     id: 'test',
     type: 'topology' as const,
@@ -154,7 +102,7 @@ function createMockSource(layers?: unknown[]) {
     getExtent: vi.fn(() => ({ xmin: 0, ymin: 0, xmax: 1, ymax: 1 })),
     getArcs: vi.fn(() => undefined),
     getLayers: vi.fn(() => layers || []),
-    getDataset: vi.fn(() => undefined),
+    getDataset: vi.fn<() => MapshaperDataset | undefined>(() => undefined),
     getDisplayArcs: vi.fn(() => null),
     refreshDisplayArcs: vi.fn(),
     setDataset: vi.fn(),
@@ -251,7 +199,7 @@ describe('split sketch source lifecycle', () => {
     map.select(refs);
     const split = vi
       .spyOn(map.ops, 'splitSelected')
-      .mockResolvedValue({ ok: true, value: undefined });
+      .mockResolvedValue({ ok: true, value: { splitTargetCount: 0, resultFeatures: [] } });
     const pointer = (kind: 'click' | 'contextmenu', x: number): NormalizedPointerEvent => ({
       kind,
       point: { x, y: 50 },
@@ -588,7 +536,9 @@ describe('Emap layer management', () => {
       source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
       const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
       const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
-      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      let normalize: DatasetNormalizer = async () => {
+        throw new Error('Normalizer was not installed');
+      };
       source.setDatasetNormalizer.mockImplementation((fn) => {
         normalize = fn;
       });
@@ -599,7 +549,7 @@ describe('Emap layer management', () => {
       setPrivate(map, '_viewport', new Viewport());
       setPrivate(map, '_crsEstablished', true);
       await map.addSource('late', source as any);
-      const result = (await normalize?.(input)) as {
+      const result = (await normalize(input)) as {
         dataset: object;
         assertCommittable(): void;
       };
@@ -612,7 +562,9 @@ describe('Emap layer management', () => {
       source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
       const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
       const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
-      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      let normalize: DatasetNormalizer = async () => {
+        throw new Error('Normalizer was not installed');
+      };
       const { promise: pendingProjection, resolve: resolveProjection } =
         Promise.withResolvers<object>();
       source.setDatasetNormalizer.mockImplementation((fn) => {
@@ -630,7 +582,7 @@ describe('Emap layer management', () => {
       setPrivate(map, '_history', new EditHistory());
       setPrivate(map, '_crsEstablished', true);
       await map.addSource('late-stale', source as any);
-      const normalization = normalize?.(input);
+      const normalization = normalize(input);
       await vi.waitFor(() => expect(source.prepareReprojectDataset).toHaveBeenCalled());
       await map.reproject('EPSG:3395');
       resolveProjection(projected);
@@ -709,7 +661,9 @@ describe('Emap layer management', () => {
       source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
       const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
       const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
-      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      let normalize: DatasetNormalizer = async () => {
+        throw new Error('Normalizer was not installed');
+      };
       source.setDatasetNormalizer.mockImplementation((fn) => {
         normalize = fn;
       });
@@ -720,7 +674,7 @@ describe('Emap layer management', () => {
       setPrivate(map, '_viewport', new Viewport());
       setPrivate(map, '_crsEstablished', true);
       await map.addSource('late-detached', source as any);
-      const result = (await normalize?.(input)) as {
+      const result = (await normalize(input)) as {
         assertCommittable(): void;
       };
       map.removeSource('late-detached');
@@ -733,7 +687,9 @@ describe('Emap layer management', () => {
       source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
       const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
       const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
-      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      let normalize: DatasetNormalizer = async () => {
+        throw new Error('Normalizer was not installed');
+      };
       source.setDatasetNormalizer.mockImplementation((fn) => {
         normalize = fn;
       });
@@ -748,7 +704,7 @@ describe('Emap layer management', () => {
       setPrivate(map, '_viewport', new Viewport());
       setPrivate(map, '_crsEstablished', true);
       await map.addSource('late-stale-crs', source as any);
-      const result = (await normalize?.(input)) as {
+      const result = (await normalize(input)) as {
         assertCommittable(): void;
       };
       await map.reproject('EPSG:3395');
@@ -1238,8 +1194,8 @@ describe('Emap layer management', () => {
       ]);
     });
     it('auto-generates defaults from sources when no layers added', () => {
-      const layers = [
-        { name: 'roads', geometry_type: 'polyline', shapes: [[1]] },
+      const layers: MapshaperLayer[] = [
+        { name: 'roads', geometry_type: 'polyline', shapes: [[[1]]] },
         { name: 'cities', geometry_type: 'point', shapes: [[0, 0]] },
       ];
       const source = createMockSource(layers);
@@ -1286,13 +1242,15 @@ describe('Emap layer management', () => {
       );
     });
     it('emits effective after committed generated source changes and ignores unchanged data', () => {
-      let sourceLayers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      let sourceLayers: MapshaperLayer[] = [
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+      ];
       const source = createMockSource();
       source.getLayers.mockImplementation(() => sourceLayers);
       registerMockSource(map, 'src1', source);
       expect(map.getRenderedLayers().map((layer) => layer.id)).toEqual(['src1:roads']);
       const committedIds: string[][] = [];
-      const listener = vi.fn(() => {
+      const listener = vi.fn((_event: unknown) => {
         committedIds.push(map.getRenderedLayers().map((layer) => layer.id));
       });
       map.on('layerchange', listener);
@@ -1310,7 +1268,9 @@ describe('Emap layer management', () => {
       expect(committedIds).toEqual([['src1:roads', 'src1:cities']]);
     });
     it('captures changed source layers before a data listener changes visibility', () => {
-      let sourceLayers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      let sourceLayers: MapshaperLayer[] = [
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+      ];
       const source = createMockSource();
       source.getLayers.mockImplementation(() => sourceLayers);
       registerMockSource(map, 'src1', source);
@@ -1371,7 +1331,7 @@ describe('Emap layer management', () => {
         'drop:cities',
       ]);
       const sourceAtEvent: unknown[] = [];
-      const listener = vi.fn(() => sourceAtEvent.push(map.getSource('drop')));
+      const listener = vi.fn((_event: unknown) => sourceAtEvent.push(map.getSource('drop')));
       map.on('layerchange', listener);
       map.removeSource('drop');
       expect(listener).toHaveBeenCalledTimes(1);
@@ -1464,7 +1424,9 @@ describe('Emap layer management', () => {
       // Default polygon rendering is outline-only — Canvas 2D fill is much
       // more expensive than stroke for many-polygon datasets, and matches
       // mapshaper GUI's behaviour. Callers opt into fills via addLayer().
-      const layers = [{ name: 'countries', geometry_type: 'polygon', shapes: [[[1]]] }];
+      const layers: MapshaperLayer[] = [
+        { name: 'countries', geometry_type: 'polygon', shapes: [[[1]]] },
+      ];
       const source = createMockSource(layers);
       registerMockSource(map, 'src1', source);
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
@@ -1474,7 +1436,7 @@ describe('Emap layer management', () => {
   });
   describe('_getVisibleLayerKeys', () => {
     it('excludes layers with visibility none', () => {
-      const layers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      const layers: MapshaperLayer[] = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
       const source = createMockSource(layers);
       registerMockSource(map, 'src1', source);
       map.addLayer({
@@ -1488,7 +1450,7 @@ describe('Emap layer management', () => {
       expect(keys.size).toBe(0);
     });
     it('includes visible layers', () => {
-      const layers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      const layers: MapshaperLayer[] = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
       const source = createMockSource(layers);
       registerMockSource(map, 'src1', source);
       map.addLayer({
@@ -1566,14 +1528,14 @@ describe('Emap layer display filter', () => {
   it('reports structured details when a filter produces a non-boolean value', async () => {
     const map = await createBareMap();
     const filter = ['get', 'enabled'] as const;
-    const dataLayer = {
+    const dataLayer: MapshaperLayer = {
       name: 'cities',
       geometry_type: 'point',
       shapes: [[[0]]],
       data: { getRecords: () => [{ enabled: 'false' }] },
     };
     const source = createMockSource([dataLayer]);
-    source.getDataset.mockReturnValue({ attributeVersion: 0, editVersion: 0 });
+    source.getDataset.mockReturnValue({ layers: [dataLayer], attributeVersion: 0, editVersion: 0 });
     setPrivate(
       map,
       '_filterResolver',
@@ -1588,7 +1550,15 @@ describe('Emap layer display filter', () => {
       }),
     );
     registerMockSource(map, 'src1', source);
-    setPrivate(map, 'features', new FeatureAccessor(map));
+    setPrivate(
+      map,
+      'features',
+      new FeatureAccessor({
+        layers: map.layers,
+        _resolveRenderLayerTarget: (id) => map.ctx.layers._resolveRenderLayerTarget(id),
+        _filterMaskForRenderLayer: (layer) => map.ctx.layers._filterMaskForRenderLayer(layer),
+      }),
+    );
     map.addLayer({ id: 'l1', type: 'circle', source: 'src1', 'source-layer': 'cities', filter });
     const onError = vi.fn();
     map.on('error', onError);
@@ -2356,7 +2326,7 @@ describe('Emap mergeSelected', () => {
     expect(ok.ok).toBe(false);
   });
   it('prepares an isolated polygon union without mutating live records', async () => {
-    const liveRecords = beforeDataset.layers[0].data.getRecords();
+    const liveRecords = beforeDataset.layers[0].data.getRecords?.();
     map.select(
       [
         { source: 'src1', layer: 'parcels', id: 2 },
@@ -2571,7 +2541,7 @@ describe('Emap mergeSelected end-to-end', () => {
     );
     const ok = await map.ops.mergeSelected();
     expect(ok.ok).toBe(true);
-    const records = currentDataset.layers[0].data!.getRecords();
+    const records = currentDataset.layers[0].data?.getRecords?.() ?? [];
     expect(records).toHaveLength(3);
     // Discriminator field must be removed from the schema after cleanup
     expect(currentDataset.layers[0].data!.getFields()).not.toContain('__emap_merge');
@@ -4961,7 +4931,7 @@ async function setupDataEngineeringMap(): Promise<{
   };
 }
 describe('Emap dropLayer', () => {
-  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  let ctx: Awaited<ReturnType<typeof setupDataEngineeringMap>>;
   beforeEach(async () => {
     ctx = await setupDataEngineeringMap();
   });
@@ -4989,7 +4959,7 @@ describe('Emap dropLayer', () => {
   });
 });
 describe('Emap sortFeatures', () => {
-  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  let ctx: Awaited<ReturnType<typeof setupDataEngineeringMap>>;
   beforeEach(async () => {
     ctx = await setupDataEngineeringMap();
   });
@@ -5045,7 +5015,7 @@ describe('Emap sortFeatures', () => {
   });
 });
 describe('Emap uniqueFeatures', () => {
-  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  let ctx: Awaited<ReturnType<typeof setupDataEngineeringMap>>;
   beforeEach(async () => {
     ctx = await setupDataEngineeringMap();
   });
@@ -5116,7 +5086,7 @@ describe('Emap uniqueFeatures', () => {
   });
 });
 describe('Emap filterFields', () => {
-  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  let ctx: Awaited<ReturnType<typeof setupDataEngineeringMap>>;
   beforeEach(async () => {
     ctx = await setupDataEngineeringMap();
   });
@@ -5167,7 +5137,7 @@ describe('Emap filterFields', () => {
   });
 });
 describe('Emap renameFields', () => {
-  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  let ctx: Awaited<ReturnType<typeof setupDataEngineeringMap>>;
   beforeEach(async () => {
     ctx = await setupDataEngineeringMap();
   });
@@ -5502,7 +5472,7 @@ describe('Emap joinTable round-trip (real mapshaper)', () => {
       const s = new TopologySource('rt');
       s.on('data', () => resolve(s));
       s.on('error', (e: any) => reject(e?.error ?? e));
-      s.setData({ filename: 'rt.geojson', content: new TextEncoder().encode(polygons) });
+      void s.setData({ filename: 'rt.geojson', content: new TextEncoder().encode(polygons) });
     });
     const map = await createBareMap();
     setPrivate(map, '_history', new EditHistory());
@@ -5519,7 +5489,7 @@ describe('Emap joinTable round-trip (real mapshaper)', () => {
     });
     expect(ok.ok).toBe(true);
     const ds = map.getSource('rt')!.getDataset()!;
-    const recs = ds.layers[0].data!.getRecords();
+    const recs = ds.layers[0].data?.getRecords?.() ?? [];
     expect(recs.length).toBe(2);
     // Each polygon should now carry a 'pop' field from the joined CSV.
     const popById: Record<string, unknown> = {};
@@ -5646,12 +5616,17 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
 describe('Emap checkGeometry round-trip (real mapshaper)', () => {
   function buildSource(id: string, geojson: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      import('../../domain/source/topology-source').then(({ TopologySource }) => {
-        const source = new TopologySource(id);
-        source.on('data', () => resolve(source));
-        source.on('error', (e: any) => reject(e?.error ?? e));
-        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
-      });
+      void import('../../domain/source/topology-source')
+        .then(({ TopologySource }) => {
+          const source = new TopologySource(id);
+          source.on('data', () => resolve(source));
+          source.on('error', (e: any) => reject(e?.error ?? e));
+          void source.setData({
+            filename: `${id}.geojson`,
+            content: new TextEncoder().encode(geojson),
+          });
+        })
+        .catch(reject);
     });
   }
   it('reports zero intersections for a clean dataset', async () => {
@@ -5897,12 +5872,17 @@ describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
   // with overlapping polygons; this guards the basic plumbing.
   function buildSource(id: string, geojson: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      import('../../domain/source/topology-source').then(({ TopologySource }) => {
-        const source = new TopologySource(id);
-        source.on('data', () => resolve(source));
-        source.on('error', (e: any) => reject(e?.error ?? e));
-        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
-      });
+      void import('../../domain/source/topology-source')
+        .then(({ TopologySource }) => {
+          const source = new TopologySource(id);
+          source.on('data', () => resolve(source));
+          source.on('error', (e: any) => reject(e?.error ?? e));
+          void source.setData({
+            filename: `${id}.geojson`,
+            content: new TextEncoder().encode(geojson),
+          });
+        })
+        .catch(reject);
     });
   }
   it('runs without error on a simple polygon dataset and remains queryable', async () => {
@@ -5953,7 +5933,7 @@ describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
     expect(ok.ok).toBe(true);
     const ds = map.getSource('rt')?.getDataset();
     expect(ds).toBeDefined();
-    expect(ds!.layers[0].shapes.length).toBe(2);
+    expect(ds!.layers[0].shapes?.length).toBe(2);
     expect(ds!.arcs).toBeDefined();
   });
 });
@@ -6183,12 +6163,17 @@ describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () =>
   function buildSourceFromGeoJSON(id: string, geojson: string): Promise<any> {
     return new Promise((resolve, reject) => {
       // Lazy-import the concrete TopologySource via the same path used in production code
-      import('../../domain/source/topology-source').then(({ TopologySource }) => {
-        const source = new TopologySource(id);
-        source.on('data', () => resolve(source));
-        source.on('error', (e: any) => reject(e?.error ?? e));
-        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
-      });
+      void import('../../domain/source/topology-source')
+        .then(({ TopologySource }) => {
+          const source = new TopologySource(id);
+          source.on('data', () => resolve(source));
+          source.on('error', (e: any) => reject(e?.error ?? e));
+          void source.setData({
+            filename: `${id}.geojson`,
+            content: new TextEncoder().encode(geojson),
+          });
+        })
+        .catch(reject);
     });
   }
   function summarize(map: Emap, id: string) {
@@ -6272,7 +6257,7 @@ describe('Emap useWorker routing', () => {
   // We don't spawn a real worker — `workerPool` is a stub that records
   // the call and returns a packed payload of our choosing.
   let map: Emap;
-  let runSpy: ReturnType<typeof vi.fn>;
+  let runSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<unknown>>>;
   let exportSpy: ReturnType<typeof vi.fn>;
   let restoreSpy: ReturnType<typeof vi.fn>;
   let setDatasetSpy: ReturnType<typeof vi.fn>;
@@ -6387,6 +6372,7 @@ describe('Emap useWorker routing', () => {
     // the result (simplify does not change the CRS).
     beforeDs.info = { crs_string: 'EPSG:3857' };
     exportSpy.mockImplementationOnce(
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- This adapter test double intentionally returns an asynchronous result.
       async (
         datasets: {
           info?: object;
@@ -6396,6 +6382,7 @@ describe('Emap useWorker routing', () => {
       }),
     );
     restoreSpy.mockImplementationOnce(
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- This adapter test double intentionally returns an asynchronous result.
       async (packed: {
         datasets: {
           info?: object;
@@ -6441,6 +6428,7 @@ describe('Emap useWorker routing', () => {
   });
   it('throws when worker response has no datasets', async () => {
     runSpy.mockImplementationOnce(async () => ({ datasets: [] }));
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- This adapter test double intentionally returns an asynchronous result.
     restoreSpy.mockImplementationOnce(async () => ({ datasets: [] }));
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
@@ -6471,7 +6459,7 @@ describe("Emap useWorker: 'auto' thresholding", () => {
   // mock; flips the source dataset's vertex count to control which branch
   // _runDatasetCommand chooses.
   let map: Emap;
-  let runSpy: ReturnType<typeof vi.fn>;
+  let runSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<unknown>>>;
   let beforeDs: any;
   const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
   const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
@@ -6597,7 +6585,7 @@ describe("Emap useWorker: 'auto' thresholding", () => {
 // ---------------------------------------------------------------------------
 describe('Emap workerjobstart / workerjobend events', () => {
   let map: Emap;
-  let runSpy: ReturnType<typeof vi.fn>;
+  let runSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<unknown>>>;
   const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
   const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
@@ -7073,14 +7061,14 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
 // shape so that any future divergence shows up as a pinpoint failure.
 async function makeMapWithLayer(
   layerName: string,
-  geometry_type = 'polygon',
+  geometry_type: MapshaperLayer['geometry_type'] = 'polygon',
 ): Promise<{
   map: Emap;
   parseSpy: ReturnType<typeof vi.fn>;
 }> {
   const map = await createBareMap();
   setPrivate(map, '_history', new EditHistory());
-  const layers = [{ name: layerName, geometry_type, shapes: [] }];
+  const layers: MapshaperLayer[] = [{ name: layerName, geometry_type, shapes: [] }];
   const ds = { layers };
   const source = {
     id: 'src1',
@@ -7456,16 +7444,14 @@ describe('Emap.reproject', () => {
     configureMap(map);
     const before = { layers: [], info: {}, editVersion: 0 };
     const after = { layers: [], info: { crs_string: 'EPSG:3857' } };
-    let resolveProjection: ((dataset: object) => void) | null = null;
-    const pendingProjection = new Promise<object>((resolve) => {
-      resolveProjection = resolve;
-    });
+    const { promise: pendingProjection, resolve: resolveProjection } =
+      Promise.withResolvers<object>();
     const source = makeSource(before, pendingProjection);
     setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
     const reprojection = map.reproject('EPSG:3857');
     await vi.waitFor(() => expect(source.prepareReproject).toHaveBeenCalled());
     before.editVersion = 1;
-    resolveProjection?.(after);
+    resolveProjection(after);
     await expect(reprojection).rejects.toThrow('changed during reprojection');
     expect(source.setDataset).not.toHaveBeenCalled();
     expect(map.getCRS()).toBe('EPSG:4326');
@@ -7834,7 +7820,7 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
       const s = new TopologySource('rt');
       s.on('data', () => resolve(s));
       s.on('error', (e: any) => reject(e?.error ?? e));
-      s.setData({ filename: 'crossing.geojson', content: new TextEncoder().encode(crossing) });
+      void s.setData({ filename: 'crossing.geojson', content: new TextEncoder().encode(crossing) });
     });
     const map = await createBareMap();
     setPrivate(map, '_history', new EditHistory());
@@ -7852,7 +7838,7 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
     const ptLayer = ds.layers.find((l: any) => l.name === `${layerName}-intersections`);
     expect(ptLayer).toBeDefined();
     expect(ptLayer!.geometry_type).toBe('point');
-    expect(ptLayer!.shapes[0].length).toBeGreaterThan(0);
+    expect(ptLayer?.shapes?.[0]?.length).toBeGreaterThan(0);
   });
 });
 // ---------------------------------------------------------------------------
@@ -7944,11 +7930,11 @@ describe('Emap.remove() teardown', () => {
     const runImport = vi.fn(async () => importedDataset);
     const runOnDataset = vi.fn(async () => projectedDataset);
     const source = new TopologySource('retained', {
-      adapter: {
+      adapter: createTestAdapter({
         copyDataset: (dataset) => ({ ...dataset, layers: [...dataset.layers] }),
         runImport,
         runOnDataset,
-      },
+      }),
     });
     const staleNormalizer = vi.fn(async () => {
       throw new Error('destroyed map normalizer ran');
@@ -8240,7 +8226,7 @@ describe('Phase-6 integration', () => {
       const validator = {
         name: 'v1',
         phase: 'after-commit' as const,
-        run: vi.fn(async () => ({ ok: true, issues: [] })),
+        run: vi.fn<Validator['run']>(async () => ({ ok: true, issues: [] })),
       };
       map.validators.register(validator);
       await map.ops.dropLayer({ source: 'src1', target: 'parks' });
@@ -8254,7 +8240,7 @@ describe('Phase-6 integration', () => {
       const validator = {
         name: 'v1',
         phase: 'after-commit' as const,
-        run: vi.fn(async () => ({ ok: true, issues: [] })),
+        run: vi.fn<Validator['run']>(async () => ({ ok: true, issues: [] })),
       };
       map.validators.register(validator);
       const tx = map.beginTransaction();
@@ -8274,7 +8260,7 @@ describe('Phase-6 integration', () => {
       const validator = {
         name: 'v1',
         phase: 'after-commit' as const,
-        run: vi.fn(async () => ({ ok: true, issues: [] })),
+        run: vi.fn<Validator['run']>(async () => ({ ok: true, issues: [] })),
       };
       map.validators.register(validator);
       const tx = map.beginTransaction();
@@ -8298,7 +8284,7 @@ describe('Phase-6 integration', () => {
       const failing = {
         name: 'topology',
         phase: 'after-commit' as const,
-        run: vi.fn(async () => ({
+        run: vi.fn<Validator['run']>(async () => ({
           ok: false,
           issues: [{ severity: 'error' as const, message: '3 self-intersections' }],
         })),
@@ -8318,7 +8304,7 @@ describe('Phase-6 integration', () => {
       const passing = {
         name: 'v',
         phase: 'after-commit' as const,
-        run: vi.fn(async () => ({ ok: true, issues: [] })),
+        run: vi.fn<Validator['run']>(async () => ({ ok: true, issues: [] })),
       };
       map.validators.register(passing);
       const events: any[] = [];
@@ -8588,11 +8574,11 @@ describe('Emap classifyFeatures (real baking + undo)', () => {
       nullValue: '#eeeeee',
     });
     expect(res.ok).toBe(true);
-    let records = current.layers[0].data?.getRecords() ?? [];
+    let records = current.layers[0].data?.getRecords?.() ?? [];
     expect(records.map((r) => r.fill)).toEqual(['#111111', '#999999', '#eeeeee']);
     expect(current.attributeVersion ?? 0).toBeGreaterThanOrEqual(1);
     expect(map.undo()).toBe(true); // replace 撤销 → current 指回 before
-    records = current.layers[0].data?.getRecords() ?? [];
+    records = current.layers[0].data?.getRecords?.() ?? [];
     expect(records.map((r) => r.fill)).toEqual([undefined, undefined, undefined]);
   });
 });
@@ -8811,7 +8797,9 @@ describe('Emap point LOD integration', () => {
     map.setFilter('dots', ['>', ['get', 'id'], 0]);
     expect(map.queryFeatures([1, 1])[0].id).toBe(1);
     dataset.attributeVersion!++;
-    layer.data.getRecords()[0].id = 10;
+    const records = layer.data.getRecords?.();
+    if (!records) throw new Error('Missing point records');
+    records[0].id = 10;
     expect(map.queryFeatures([1, 1])[0].id).toBe(0);
   });
   for (const sourceId of ['s', undefined]) {

@@ -38,7 +38,7 @@ export async function simplify(
   input: MapshaperDataset,
   options: SimplifyOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   const normalized = normalize(input, options);
   return runUnaryGeometryTool(
     input,
@@ -59,7 +59,7 @@ export async function simplifyPreserveTopology(
   input: MapshaperDataset,
   options: SimplifyOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   const normalized = normalize(input, options);
   return runUnaryGeometryTool(
     input,

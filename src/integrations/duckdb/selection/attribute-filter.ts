@@ -83,9 +83,9 @@ function createInputDataset(
 function resultRowIds(table: Table, rowIdColumn: string, rowCount: number): number[] {
   const vector = table.getChild(rowIdColumn);
   if (!vector) throw new Error(`DuckDB query result is missing row id column ${rowIdColumn}`);
-  const rowIds: number[] = new Array(table.numRows);
+  const rowIds: number[] = new Array<number>(table.numRows);
   for (let row = 0; row < table.numRows; row++) {
-    const value = vector.get(row);
+    const value: unknown = vector.get(row);
     const rowId =
       typeof value === 'bigint'
         ? value >= BigInt(Number.MIN_SAFE_INTEGER) && value <= BigInt(Number.MAX_SAFE_INTEGER)
@@ -204,7 +204,7 @@ export async function attributeFilter(
         cleanupError = err;
       }
     }
-    const closeError = await conn?.close?.().catch((err) => err);
+    const closeError = await conn?.close?.().catch((err: unknown) => err);
     if ((cleanupError || closeError) && !primaryError) {
       throw new DuckDbOperationError('query-failed', 'DuckDB query cleanup failed', {
         cause: cleanupError ?? closeError,

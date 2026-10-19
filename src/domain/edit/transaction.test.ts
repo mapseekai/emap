@@ -80,9 +80,10 @@ function ds(label: string): MapshaperDataset {
   } as MapshaperDataset;
 }
 
-function makeCmd(
-  label: string,
-): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
+function makeCmd(label: string): EditCommand & {
+  do: ReturnType<typeof vi.fn<() => void>>;
+  undo: ReturnType<typeof vi.fn<() => void>>;
+} {
   return { do: vi.fn(), undo: vi.fn(), label };
 }
 
@@ -330,7 +331,7 @@ describe('rollback with in-place (direct) commands', () => {
   });
 
   it('logs failed captured undos while continuing rollback', () => {
-    const dataset = { layers: [], arcs: null, editVersion: 0 } as MapshaperDataset;
+    const dataset: MapshaperDataset = { layers: [], editVersion: 0 };
     const source = { getDataset: () => dataset, setDataset: vi.fn() };
     const host = makeRollbackHost(source);
     const t = new Transaction(host);

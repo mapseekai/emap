@@ -112,6 +112,7 @@ export class NumericRasterRenderer {
       const finish = (error?: unknown) => {
         this.canvas.removeEventListener('webglcontextrestored', restored);
         signal.removeEventListener('abort', aborted);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the caller's AbortSignal.reason.
         if (error) reject(error);
         else resolve();
       };

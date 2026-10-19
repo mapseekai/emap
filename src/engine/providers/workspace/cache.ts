@@ -17,7 +17,7 @@ interface Dependencies {
 /** cache implementation, wired through explicit service dependencies. */
 export class WorkspaceCache {
   _layerArcIdsCache: globalThis.Map<string, globalThis.Map<MapshaperLayer, Uint32Array>> =
-    new globalThis.Map();
+    new globalThis.Map<string, Map<MapshaperLayer, Uint32Array<ArrayBufferLike>>>();
 
   _featureQuery!: FeatureQuery;
 

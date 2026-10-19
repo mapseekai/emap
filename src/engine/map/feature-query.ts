@@ -90,7 +90,7 @@ export class FeatureQuery {
   //      callers that mutate via paths that don't go through edit
   //      commands).
   private _indexCache: globalThis.Map<string, globalThis.Map<number, IndexedLayerCacheEntry>> =
-    new globalThis.Map();
+    new globalThis.Map<string, Map<number, IndexedLayerCacheEntry>>();
 
   constructor(
     sources: globalThis.Map<string, MutableTopologySource>,

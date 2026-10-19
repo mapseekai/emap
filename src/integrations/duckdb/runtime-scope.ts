@@ -34,7 +34,9 @@ export class DuckDbRuntimeScope {
       .then(async (runtime) => {
         if (this.closed) {
           if (this.owned) await runtime.close?.();
-          throw new Error('DuckDB provider was disposed during initialization');
+          throw new InitializationDisposedError(
+            'DuckDB provider was disposed during initialization',
+          );
         }
         this.value = runtime;
         return runtime;
@@ -58,13 +60,11 @@ export class DuckDbRuntimeScope {
       : (this.pending?.then(
           () => undefined,
           (error) => {
-            if (
-              !(error instanceof Error) ||
-              !error.message.includes('disposed during initialization')
-            )
-              throw error;
+            if (!(error instanceof InitializationDisposedError)) throw error;
           },
         ) ?? Promise.resolve());
     return this.disposal;
   }
 }
+
+class InitializationDisposedError extends Error {}

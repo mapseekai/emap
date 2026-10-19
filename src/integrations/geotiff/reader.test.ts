@@ -10,7 +10,7 @@ function file(
   name = 'image.tif',
   size?: number,
 ): File {
-  const input = new File([makeRasterFixture(options)], name, { lastModified: 100 });
+  const input = new File([makeRasterFixture(options).slice()], name, { lastModified: 100 });
   if (size !== undefined) Object.defineProperty(input, 'size', { value: size });
   return input;
 }

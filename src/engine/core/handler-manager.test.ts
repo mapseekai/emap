@@ -4,7 +4,7 @@ import { HandlerManager } from './handler-manager';
 import type { Handler, NormalizedPointerEvent } from './handler';
 
 function fake(name: string): Handler & { _on: boolean } {
-  let on = true;
+  const on = true;
   return {
     name,
     _on: on,
@@ -144,7 +144,7 @@ describe('HandlerManager pointer arbitration', () => {
       toJSON() {},
     });
     const m = new HandlerManager();
-    let phase = 'exclusive';
+    const phase = 'exclusive';
     const calls: string[] = [];
     const owner = {
       name: 'dragPan',

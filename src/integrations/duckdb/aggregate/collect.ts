@@ -13,7 +13,7 @@ export function collect(
   input: MapshaperDataset,
   options: AggregateOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runSingleInputTool(
     input,
     'collect',

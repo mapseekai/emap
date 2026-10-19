@@ -81,7 +81,8 @@ describe('MSDF atlas ownership and reuse', () => {
       atlas.begin();
       await atlas.prepare(first, signal());
       await atlas.prepareGlyphs(first, signal());
-      const raster = atlas.get('A', {}, 1)!;
+      const raster = atlas.get('A', {}, 1);
+      if (!raster || !('glyphs' in raster)) throw new Error('Expected MSDF glyph raster');
       const old = raster.glyphs[0].page;
       for (const text of 'BCD') atlas.get(text, {}, 1);
       const data = old.data.slice(4100, 4116);
@@ -95,7 +96,9 @@ describe('MSDF atlas ownership and reuse', () => {
       expect(old.data.slice(4100, 4116)).toEqual(data);
       expect(old.version).toBe(version);
       expect(old.generation).toBe(generation);
-      expect(atlas.get('E', {}, 1)!.glyphs[0].page).not.toBe(old);
+      const nextRaster = atlas.get('E', {}, 1);
+      if (!nextRaster || !('glyphs' in nextRaster)) throw new Error('Expected MSDF glyph raster');
+      expect(nextRaster.glyphs[0].page).not.toBe(old);
     } finally {
       atlas.dispose();
     }
@@ -111,7 +114,8 @@ describe('MSDF atlas ownership and reuse', () => {
       atlas.reserve(first.text, first.options);
       await atlas.prepareGlyphs([first], signal());
       expect(mock.glyphs.mock.calls[0][0]).toHaveLength(1);
-      const a = atlas.get(first.text, first.options, 1)!;
+      const a = atlas.get(first.text, first.options, 1);
+      if (!a || !('glyphs' in a)) throw new Error('Expected MSDF glyph raster');
       expect(a.glyphs).toHaveLength(3);
       const page = a.glyphs[0].page,
         version = page.version;
@@ -120,7 +124,8 @@ describe('MSDF atlas ownership and reuse', () => {
       await atlas.prepare([next], signal());
       atlas.reserve(next.text, next.options);
       await atlas.prepareGlyphs([next], signal());
-      const b = atlas.get(next.text, next.options, 2)!;
+      const b = atlas.get(next.text, next.options, 2);
+      if (!b || !('glyphs' in b)) throw new Error('Expected MSDF glyph raster');
       expect(mock.shape).toHaveBeenCalledOnce();
       expect(mock.glyphs).toHaveBeenCalledOnce();
       expect(b.glyphs[0].page).toBe(page);

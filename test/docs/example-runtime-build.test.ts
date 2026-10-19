@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import { rollup } from 'rollup';
 import { describe, expect, it } from 'vitest';
+import { createPluginMiddleware } from '../utils/vite-plugin';
 import { runtimeAssetsPlugin } from '../../packages/examples/build/runtime-assets-plugin';
 
 const repoRoot = process.cwd();
@@ -90,40 +91,34 @@ describe('example runtime build assets', () => {
   }, 30_000);
 
   it('serves only declared local runtime files from the development middleware', async () => {
-    let runtimeMiddleware: RuntimeMiddleware | undefined;
-    const plugin = runtimeAssetsPlugin();
-    if (typeof plugin.configureServer !== 'function') {
-      throw new Error('runtimeAssetsPlugin must configure the Vite development server');
+    const server = await createPluginMiddleware(runtimeAssetsPlugin(), {
+      root: resolve('packages/examples'),
+      base: '/mapseekai/emap/examples/',
+    });
+    const runtimeMiddleware = server.middlewares;
+    try {
+      const vendorResponse = await invokeMiddleware(
+        runtimeMiddleware,
+        '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+      );
+      expect(vendorResponse?.statusCode).toBe(200);
+      expect(vendorResponse?.headers.get('content-type')).toContain('application/javascript');
+      const vendorBytes = await readFile(resolve(repoRoot, 'dist/mapshaper-vendor.js'));
+      expect(vendorResponse?.body.byteLength).toBe(vendorBytes.byteLength);
+      expect(vendorResponse?.body.equals(vendorBytes)).toBe(true);
+
+      const workerSiblingResponse = await invokeMiddleware(
+        runtimeMiddleware,
+        '/mapseekai/emap/examples/mapshaper-vendor.js',
+      );
+      expect(workerSiblingResponse?.statusCode).toBe(200);
+      expect(workerSiblingResponse?.body.equals(vendorBytes)).toBe(true);
+
+      await expect(
+        invokeMiddleware(runtimeMiddleware, '/mapseekai/emap/examples/vendor/package.json'),
+      ).resolves.toBeUndefined();
+    } finally {
+      await server.close();
     }
-    plugin.configureServer({
-      config: { base: '/mapseekai/emap/examples/' },
-      middlewares: {
-        use(handler: RuntimeMiddleware) {
-          runtimeMiddleware = handler;
-        },
-      },
-    } as never);
-    if (!runtimeMiddleware) throw new Error('runtime middleware was not registered');
-
-    const vendorResponse = await invokeMiddleware(
-      runtimeMiddleware,
-      '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
-    );
-    expect(vendorResponse?.statusCode).toBe(200);
-    expect(vendorResponse?.headers.get('content-type')).toContain('application/javascript');
-    const vendorBytes = await readFile(resolve(repoRoot, 'dist/mapshaper-vendor.js'));
-    expect(vendorResponse?.body.byteLength).toBe(vendorBytes.byteLength);
-    expect(vendorResponse?.body.equals(vendorBytes)).toBe(true);
-
-    const workerSiblingResponse = await invokeMiddleware(
-      runtimeMiddleware,
-      '/mapseekai/emap/examples/mapshaper-vendor.js',
-    );
-    expect(workerSiblingResponse?.statusCode).toBe(200);
-    expect(workerSiblingResponse?.body.equals(vendorBytes)).toBe(true);
-
-    await expect(
-      invokeMiddleware(runtimeMiddleware, '/mapseekai/emap/examples/vendor/package.json'),
-    ).resolves.toBeUndefined();
   });
 });

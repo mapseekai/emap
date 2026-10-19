@@ -12,7 +12,7 @@ export function isValid(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('isValid', input, options, runtime);
 }
 /**
@@ -23,7 +23,7 @@ export function isEmpty(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('isEmpty', input, options, runtime);
 }
 /**
@@ -34,7 +34,7 @@ export function isSimple(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('isSimple', input, options, runtime);
 }
 

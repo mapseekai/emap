@@ -1,3 +1,4 @@
+import type { MapshaperDataset } from '../../src/shared/types/mapshaper-types';
 // @vitest-environment jsdom
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -11,11 +12,13 @@ const duckDb = vi.hoisted(() => ({
   area: vi.fn(async (dataset) => dataset),
   x: vi.fn(async (dataset) => dataset),
   y: vi.fn(async (dataset) => dataset),
-  spatialRelation: vi.fn(async (input) => input),
+  spatialRelation: vi.fn(
+    async (input: MapshaperDataset, _reference: MapshaperDataset, _options: unknown) => input,
+  ),
   reproject: vi.fn(async (dataset) => dataset),
 }));
 const exampleRuntime = vi.hoisted(() => ({
-  autoLoadExampleFixtures: vi.fn(async () => {}),
+  autoLoadExampleFixtures: vi.fn(async (_id: string, _map: unknown) => {}),
   installExampleMapUi: vi.fn(),
   loadExampleRuntime: vi.fn(),
 }));
@@ -76,17 +79,36 @@ const operationNames = [
   'reproject',
 ] as const;
 type Source = ReturnType<typeof createSource>;
+type FixtureDraft = { input: string } | { mask: string } | { sourceId: string };
+type FixtureRequest = { id: string; source: Source } | FixtureDraft;
+interface FixturePlan {
+  sourceId: string;
+  source: Source;
+  answers?: Record<string, unknown>;
+}
+type FixturePreflight =
+  | { status: 'ready'; plan: FixturePlan }
+  | {
+      status: 'needs-input';
+      draft: FixtureDraft;
+      requirements: { code: string; field: string; reason: string }[];
+    }
+  | { status: 'rejected'; diagnostics: { code: string; severity: 'error'; message: string }[] };
 function createSource(id: string, setData: (id: string) => Promise<void> = async () => {}) {
-  const dataset = {
+  const dataset: MapshaperDataset = {
     info: {},
-    layers: [{ name: 'layer', geometry_type: 'point', shapes: [{}] }],
+    layers: [{ name: 'layer', geometry_type: 'point', shapes: [[[0, 0]]] }],
   };
   const source = {
     id,
     dataset,
     setData: vi.fn(async () => {}),
     getDataset: vi.fn(() => dataset),
-    setDataset: vi.fn((next) => Object.assign(dataset, next)),
+    setDataset: vi.fn((next: MapshaperDataset) => Object.assign(dataset, next)),
+    replaceDataset: vi.fn((next: MapshaperDataset) => {
+      Object.assign(dataset, next);
+      return Promise.resolve();
+    }),
     getLayers: vi.fn(() => dataset.layers),
     getExtent: vi.fn(() => [0, 0, 1, 1]),
   };
@@ -131,14 +153,21 @@ function fixture(
     addControl: vi.fn(),
     getCanvasContainer: () => document.getElementById('map')!,
     getSource: (id: string) => sources.get(id),
-    addSource: vi.fn(async (id: string, source: Source) => sources.set(id, source)),
-    preflightSource: vi.fn(async (request: { id: string; source: Source }) => ({
-      status: 'ready' as const,
-      plan: { sourceId: request.id, source: request.source },
-    })),
-    confirmSource: vi.fn(async (plan: { sourceId: string; source: Source }) =>
-      sources.set(plan.sourceId, plan.source),
+    addSource: vi.fn(async (id: string, source: Source) => {
+      sources.set(id, source);
+    }),
+    preflightSource: vi.fn(
+      async (
+        request: FixtureRequest,
+        _answers?: Record<string, unknown>,
+      ): Promise<FixturePreflight> => {
+        if (!('source' in request)) throw new Error('Expected a source load request');
+        return { status: 'ready', plan: { sourceId: request.id, source: request.source } };
+      },
     ),
+    confirmSource: vi.fn(async (plan: FixturePlan) => {
+      sources.set(plan.sourceId, plan.source);
+    }),
     removeSource: vi.fn((id: string) => sources.delete(id)),
     getLayers: () => layers,
     getLayer: (id: string) => layers.find((layer) => layer.id === id),
@@ -160,23 +189,13 @@ function fixture(
     clearHighlightedFeatures: vi.fn(),
     setHighlightedFeatures: vi.fn(),
   };
-  class TopologySource {
-    readonly impl = createSource('source', setData);
-    constructor(id: string) {
-      this.impl.id = id;
-      if (sourceInfo) this.impl.dataset.info = { ...sourceInfo };
-      return this.impl;
-    }
-  }
+  const TopologySource = vi.fn(function (id: string) {
+    const source = createSource(id, setData);
+    if (sourceInfo) source.dataset.info = { ...sourceInfo };
+    return source;
+  });
   exampleRuntime.loadExampleRuntime.mockResolvedValue({
-    Emap: class {
-      static async create(...args: any[]) {
-        return new this(...args);
-      }
-      constructor() {
-        return map;
-      }
-    },
+    Emap: { create: async () => map },
     TopologySource,
     NavigationControl: class {},
   });
@@ -256,10 +275,7 @@ const newOperationPages = [
   ...joinKeyPages,
   ...crsPages,
 ] as const;
-async function executePage(
-  id: string,
-  mount: (config: { id: string; operation: string }) => Promise<void>,
-) {
+async function executePage(id: string, mount: typeof mountDuckDbSpatialExample) {
   const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
   const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
   if (!script) throw new Error(`Missing module script for ${id}`);
@@ -270,7 +286,7 @@ async function executePage(
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
     name: string,
     body: string,
-  ) => (mount: typeof mount) => Promise<void>;
+  ) => (run: typeof mountDuckDbSpatialExample) => Promise<void>;
   await new AsyncFunction('mountDuckDbSpatialExample', body)(mount);
 }
 describe('DuckDB spatial example runner', () => {
@@ -641,7 +657,7 @@ describe('DuckDB spatial example runner', () => {
       id: 'duckdb-spatial-input',
       source: expect.anything(),
     });
-    expect(sources.get('duckdb-spatial-input')?.getDataset().info.crs_string).toBe('EPSG:3857');
+    expect(sources.get('duckdb-spatial-input')?.getDataset().info?.crs_string).toBe('EPSG:3857');
     expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
   });
   it('requests an explicit Input CRS after source preflight', async () => {
@@ -656,7 +672,7 @@ describe('DuckDB spatial example runner', () => {
       status: 'ready',
       plan: {
         sourceId: 'duckdb-spatial-input',
-        source: map.preflightSource.mock.calls[0]![0].source,
+        source: initialRequestSource(map.preflightSource.mock.calls[0]![0]),
         answers,
       },
     }));
@@ -697,7 +713,7 @@ describe('DuckDB spatial example runner', () => {
       status: 'ready',
       plan: {
         sourceId: 'duckdb-spatial-mask',
-        source: map.preflightSource.mock.calls[1]![0].source,
+        source: initialRequestSource(map.preflightSource.mock.calls[1]![0]),
         answers,
       },
     }));
@@ -807,7 +823,7 @@ describe('DuckDB spatial example runner', () => {
       status: 'ready',
       plan: {
         sourceId: 'duckdb-spatial-input',
-        source: map.preflightSource.mock.calls[0]![0].source,
+        source: initialRequestSource(map.preflightSource.mock.calls[0]![0]),
       },
     });
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
@@ -874,7 +890,9 @@ describe('DuckDB spatial example runner', () => {
     document.getElementById('run')!.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
     expect(map.setExtent).toHaveBeenCalledTimes(2);
-    expect(document.getElementById('target')!.value).toBe('duckdb-spatial-output:0');
+    expect((document.getElementById('target') as HTMLSelectElement).value).toBe(
+      'duckdb-spatial-output:0',
+    );
     const firstOutput = sources.get('duckdb-spatial-output');
     const firstOutputLayerIds = map
       .getLayers()
@@ -907,7 +925,7 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
     document.getElementById('run')!.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(duckDb.envelope).toHaveBeenCalledTimes(1));
-    expect(sources.has('duckdb-spatial-output')).toBe(true);
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
   });
   it.each([
     ['duckdb/attribute/x', 'x', 'x'],
@@ -991,8 +1009,6 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
     uploadResolvers.get('duckdb-spatial-input')!();
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
-    const initialInputSource = sources.get('duckdb-spatial-input');
-    const initialMaskSource = sources.get('duckdb-spatial-mask');
     expect(layers.map(({ id }) => id).sort()).toEqual([
       'duckdb-spatial-input-0-point',
       'duckdb-spatial-mask-0-point',
@@ -1059,3 +1075,8 @@ describe('DuckDB spatial example runner', () => {
     );
   });
 });
+
+function initialRequestSource(request: FixtureRequest): Source {
+  if (!('source' in request)) throw new Error('Expected initial source request');
+  return request.source;
+}

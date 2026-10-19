@@ -14,7 +14,7 @@ export function multipartToSinglepart(
   input: MapshaperDataset,
   options: MultipartToSinglepartOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runSingleInputTool(
     input,
     'multipart_to_singlepart',

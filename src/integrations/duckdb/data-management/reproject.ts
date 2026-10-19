@@ -22,7 +22,7 @@ export async function reproject(
   input: MapshaperDataset,
   options: ReprojectOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   const sourceCrs = options.sourceCrs ?? resolveDatasetCRSMetadata(input);
   if (!sourceCrs) throw processingValidation('reproject', 'source CRS is required', 'sourceCrs');
   if (!options.targetCrs?.trim())

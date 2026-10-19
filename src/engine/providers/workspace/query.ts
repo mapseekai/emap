@@ -58,7 +58,10 @@ export class QueryServiceImpl {
       this._pointLodForPick(sourceId, layer, bounds),
     );
     const results = this.deps.cache._featureQuery.query(geometryOrOptions, options, visibleKeys);
-    const renderRanks: MutableLayerValueIndex<number> = new globalThis.Map();
+    const renderRanks: MutableLayerValueIndex<number> = new globalThis.Map<
+      string,
+      Map<string, number>
+    >();
     const effectiveLayers = this.deps.layers._getEffectiveLayers();
     for (let rank = 0; rank < effectiveLayers.length; rank++) {
       const styleLayer = effectiveLayers[rank];

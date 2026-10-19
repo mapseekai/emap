@@ -101,7 +101,7 @@ export async function spatialSummaryJoin(
         targetDataset,
         target.layer,
         rowIds,
-        new Map(),
+        new Map<number, Record<string, unknown>>(),
         aggregations,
         options.outputLayer,
       );
@@ -137,7 +137,7 @@ export async function spatialSummaryJoin(
       targetDataset,
       target.layer,
       rowIds,
-      new Map(),
+      new Map<number, Record<string, unknown>>(),
       aggregations,
       options.outputLayer,
     );

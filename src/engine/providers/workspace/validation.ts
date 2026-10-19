@@ -19,13 +19,19 @@ export class ValidationServiceImpl {
     if (this.validators.size === 0 || this.deps.document._history.isCapturing()) return;
     const top = this.deps.document._history.snapshot();
     const change = { label: top.label ?? '' };
-    void this.validators.runFor('after-commit', this.deps.host, change).then((results) => {
-      if (this.deps.document._removed || this.deps.signal.aborted) return;
-      const failed = results.filter((r) => !r.report.ok);
-      if (failed.length > 0) {
-        this.deps.events.fire('validationfailed', { results: failed, label: change.label });
-      }
-    });
+    void this.validators
+      .runFor('after-commit', this.deps.host, change)
+      .then((results) => {
+        if (this.deps.document._removed || this.deps.signal.aborted) return;
+        const failed = results.filter((r) => !r.report.ok);
+        if (failed.length > 0) {
+          this.deps.events.fire('validationfailed', { results: failed, label: change.label });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!this.deps.document._removed && !this.deps.signal.aborted)
+          this.deps.events.fire('error', { error });
+      });
   }
 
   dispose(): void {

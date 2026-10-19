@@ -41,7 +41,7 @@ export async function buffer(
   input: MapshaperDataset,
   options: BufferOptions,
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   const normalized = normalizeBufferOptions(input, options);
   return runUnaryGeometryTool(
     input,

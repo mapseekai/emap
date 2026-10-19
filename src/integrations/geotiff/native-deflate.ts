@@ -8,8 +8,8 @@ import type {
 type GeoTIFFDecoder = Awaited<ReturnType<typeof getDecoder>>;
 
 const TIFF_DEFLATE_CODES = new Set([8, 32946]);
+const nativeFallbacks = 0;
 let nativeBlocks = 0,
-  nativeFallbacks = 0,
   nativeMs = 0,
   nativeAvailable = false,
   nativeEligible = false,

@@ -2,7 +2,7 @@ import type { FormatRegistryContract } from '../../runtime/services/formats';
 import { EventDispatcher } from '../../engine/core/events';
 import { createLayerDataset, type CreateLayerOptions } from './create-layer';
 import { bindLayerFields } from './layer-fields';
-import { TopologySource as ITopologySource } from './source';
+import type { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzip, strFromU8, zipSync } from 'fflate';
 import type { UnzipFileInfo, Unzipped } from 'fflate';
@@ -311,7 +311,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this._formats = formats ?? new FormatRegistry();
 
     if (this._data) {
-      this._updateData();
+      void this._updateData();
     }
   }
 

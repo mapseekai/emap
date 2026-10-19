@@ -12,7 +12,7 @@ export function x(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('x', input, options, runtime);
 }
 /**
@@ -23,7 +23,7 @@ export function y(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('y', input, options, runtime);
 }
 /**
@@ -34,7 +34,7 @@ export function centroidX(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('centroidX', input, options, runtime);
 }
 /**
@@ -45,7 +45,7 @@ export function centroidY(
   input: MapshaperDataset,
   options: AttributeOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runAttribute('centroidY', input, options, runtime);
 }
 

@@ -11,7 +11,7 @@ export function centroid(
   input: MapshaperDataset,
   options: GeometryOptions = {},
   runtime: DuckDbRuntime | null = null,
-) {
+): Promise<MapshaperDataset> {
   return runUnary('centroid', input, options, runtime);
 }
 export const centroidTool = defineDuckDbTool({

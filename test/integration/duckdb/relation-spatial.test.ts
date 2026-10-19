@@ -139,7 +139,7 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
       try {
         await conn.query('INSTALL spatial; LOAD spatial;');
       } finally {
-        conn.close?.();
+        await conn.close?.();
       }
     })();
 
