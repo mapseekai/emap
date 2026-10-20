@@ -15,7 +15,7 @@ import {
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { exportGeoParquet } from '../../arrow/geoparquet-io';
-import { datasetFromGeoJSON, injectParquetWasmForTests } from '../../arrow/test-utils';
+import { datasetFromGeoJSON, injectParquetWasmForTests } from '../../../../test/utils/arrow';
 import { DuckDbOperationError } from '../errors';
 import { createDuckDbGeoParquetQuerySource, queryGeoParquetWithDuckDb } from './query';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MapshaperDataset, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import type { OpContext } from './_context';
 import { classifyFeatures } from './classify-features';
-import { makeStubCtx, type StubCtxResult } from './_test-helpers';
+import { makeStubCtx, type StubCtxResult } from '../../../../test/utils/map-ops';
 
 // makeStubCtx 的 source id 固定为 's1'，layer 无 data——按记录注入。
 function ctxWithLayer(records: Array<Record<string, unknown>>): {

@@ -2,7 +2,7 @@ import type { EditHandlerHost } from '../../src/engine/core/handlers/edit-handle
 import { EventDispatcher } from '../../src/engine/core/events';
 import { EditSessions } from '../../src/engine/map/edit-sessions';
 import { MapshaperOps } from '../../src/engine/map/mapshaper-ops';
-import { makeStubCtx } from '../../src/engine/map/ops/_test-helpers';
+import { makeStubCtx } from './map-ops';
 import { TopologySource } from '../../src/domain/source/topology-source';
 import {
   asMutableTopologySource,

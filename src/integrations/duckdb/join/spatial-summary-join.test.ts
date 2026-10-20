@@ -22,7 +22,7 @@ import { getDefaultMapshaperAdapter } from '../../mapshaper/adapter';
 import * as datasetToTable from '../../arrow/dataset-to-table';
 import * as tableToDataset from '../../arrow/table-to-dataset';
 import type * as DuckDBBundles from '@duckdb/duckdb-wasm/blocking';
-import { datasetFromGeoJSON } from '../../arrow/test-utils';
+import { datasetFromGeoJSON } from '../../../../test/utils/arrow';
 import type { MapshaperDataset, MapshaperLayer } from '../../../shared/types/mapshaper-types';
 import * as datasetCrs from '../core/dataset-crs';
 import { DuckDbOperationError } from '../errors';

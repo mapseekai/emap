@@ -1,9 +1,12 @@
 /** Shared helpers for the formats test suite (not part of the public API). */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
-import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
-import { setParquetWasm, type ParquetWasmModule } from './parquet-wasm-loader';
+import { getDefaultMapshaperAdapter } from '../../src/integrations/mapshaper/adapter';
+import type { MapshaperDataset } from '../../src/shared/types/mapshaper-types';
+import {
+  setParquetWasm,
+  type ParquetWasmModule,
+} from '../../src/integrations/arrow/parquet-wasm-loader';
 
 /**
  * Import a GeoJSON object through real mapshaper into a dataset — the same

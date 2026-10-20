@@ -483,6 +483,35 @@ describe('loadMapLibreOverlayStyle', () => {
     await expect(loading).rejects.toBe(abortError);
   });
 
+  it.each([
+    'transform',
+    'fetch',
+    'json',
+  ] as const)('preserves an explicit null cancellation during %s', async (stage) => {
+    const controller = new AbortController();
+    const pending = new Promise<never>(() => {});
+    const response = createResponse(createFixture());
+    const transformRequest = vi.fn(() => (stage === 'transform' ? pending : { url: STYLE_URL }));
+    const fetch = vi.fn().mockReturnValue(stage === 'fetch' ? pending : Promise.resolve(response));
+    if (stage === 'json') vi.mocked(response.json).mockReturnValue(pending);
+    const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+      signal: controller.signal,
+      transformRequest: transformRequest as never,
+      fetch,
+    });
+    const failure = expect(loading).rejects.toBe(null);
+
+    await vi.waitFor(() => {
+      if (stage === 'transform') expect(transformRequest).toHaveBeenCalled();
+      else if (stage === 'fetch') expect(fetch).toHaveBeenCalled();
+      else expect(response.json).toHaveBeenCalled();
+    });
+    controller.abort(null);
+
+    await failure;
+    if (stage === 'transform') expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('aborts a deferred Style transform with the caller AbortError', async () => {
     const controller = new AbortController();
     const abortError = new DOMException('Superseded', 'AbortError');

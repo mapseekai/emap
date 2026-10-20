@@ -3,7 +3,7 @@ import { toArrowTable } from './dataset-to-table';
 import { fromArrowTable } from './table-to-dataset';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import { decodeWkb } from './wkb';
-import { datasetFromGeoJSON } from './test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 
 const TWO_LAYER_INPUT = {
   type: 'FeatureCollection',

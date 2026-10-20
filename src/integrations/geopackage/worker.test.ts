@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { output } from '@mapseekai/tasklane/host';
 import { importGeoPackageInWorker } from './worker';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import { encodeWorkerData } from '../mapshaper/binary';
 const options = { workerUrl: 'https://example.test/worker.js' };
 beforeEach(() => {

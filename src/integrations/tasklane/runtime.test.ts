@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { output } from '@mapseekai/tasklane/host';
 import { createEmapWorkerRuntime, SessionOwner, taskValue, workerError } from './runtime';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import type { EmapWorkerPool } from './runtime';
 const runtimes: ReturnType<typeof createEmapWorkerRuntime>[] = [];
 afterEach(async () => {

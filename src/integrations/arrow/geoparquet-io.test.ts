@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { exportGeoParquet, importGeoParquet } from './geoparquet-io';
 import { setParquetWasm } from './parquet-wasm-loader';
-import { datasetFromGeoJSON, injectParquetWasmForTests } from './test-utils';
+import { datasetFromGeoJSON, injectParquetWasmForTests } from '../../../test/utils/arrow';
 import { tableFromIPC } from 'apache-arrow';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import type { ParquetWasmModule } from './parquet-wasm-loader';

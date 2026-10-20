@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { bufferLayer } from './buffer';
-import { makeStubCtx } from './_test-helpers';
+import { makeStubCtx } from '../../../../test/utils/map-ops';
 
 describe('bufferLayer — parameter passthrough', () => {
   it('forwards every new option as snake_case keys', async () => {

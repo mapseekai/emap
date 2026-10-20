@@ -23,10 +23,8 @@ export const divideLayer = defineLayerOp<DivideOptions>({
         `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`,
       );
     }
-    if (o.fields && o.fields.length > 0) {
-      const fields = validateFieldList('fields', o.fields);
-      if (!fields.ok) return fields;
-    }
+    const fields = validateFieldList('fields', o.fields);
+    if (!fields.ok) return fields;
   },
   options: (o) => {
     const divideOpts: Record<string, unknown> = { source: o.divider };

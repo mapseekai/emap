@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { getDefaultMapshaperAdapter } from '../../../src/integrations/mapshaper/adapter';
 import { toArrowTable } from '../../../src/integrations/arrow/dataset-to-table';
-import { datasetFromGeoJSON } from '../../../src/integrations/arrow/test-utils';
+import { datasetFromGeoJSON } from '../../utils/arrow';
 import type { MapshaperDataset } from '../../../src/shared/types/mapshaper-types';
 import {
   type DuckDbConnection,

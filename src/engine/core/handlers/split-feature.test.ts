@@ -616,4 +616,96 @@ describe('SplitFeatureHandler', () => {
 
     expect(map.clearEditDrawState).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['one-point arc', { nn: new Int32Array([1, 2]) }],
+    ['negative start', { ii: new Int32Array([-1, 2]) }],
+    ['x overflow', { xx: new Float64Array([0]) }],
+    ['y overflow', { yy: new Float64Array([0]) }],
+    ['missing start', { ii: new Int32Array() }],
+    ['NaN x', { xx: new Float64Array([0, NaN, 20, 30]) }],
+    ['infinite y', { yy: new Float64Array([0, Infinity, 0, 0]) }],
+  ])('rejects an invalid %s before enabling', (_name, invalid) => {
+    const arcs = map.getSource().getArcs();
+    const vertexData = { ...arcs.getVertexData(), ...invalid };
+    map.getSource.mockReturnValue({
+      getArcs: () => ({ ...arcs, getVertexData: () => vertexData }),
+    });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
+    expect(handler.isEnabled()).toBe(false);
+    expect(arcs.forEachArcSegment).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['vertex wins an edge tie', -1, 0, [0, 0], 'vertex'],
+    ['edge projection', 5, 2, [5, 0], 'edge'],
+    ['exact threshold is excluded', 5, 5, null, null],
+  ])('preserves %s', (_name, x, y, snapCoord, snapKind) => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+      snapThreshold: 5,
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(event('click', -20, -20));
+      handler.handlePointer(event('move', x, y));
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ snapCoord, snapKind }),
+      );
+      expect(map.unproject).toHaveBeenCalledWith(x - 5, y - 5);
+      expect(map.unproject).toHaveBeenCalledWith(x + 5, y + 5);
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it('does not snap even to vertices without a segment API', () => {
+    const arcs = map.getSource().getArcs();
+    Reflect.deleteProperty(arcs, 'forEachArcSegment');
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', 0, 0));
+      handler.handlePointer(event('click', 0, 0));
+      expect(map.setEditDrawState).not.toHaveBeenCalled();
+      expect(map.ops.splitSelected).not.toHaveBeenCalled();
+      expect(map.project).not.toHaveBeenCalled();
+      expect(map.unproject.mock.calls).toEqual([
+        [0, 0],
+        [0, 0],
+      ]);
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it('does not snap a polygon cutter onto the polygon path', () => {
+    map = createMap({ geometry: 'polygon' });
+    const arcs = map.getSource().getArcs();
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', 1, 1));
+      handler.handlePointer(event('click', 1, 1));
+      handler.handlePointer(event('move', 9, 1));
+      handler.handlePointer(event('click', 9, 1));
+      handler.handlePointer(event('contextmenu'));
+      expect(map.ops.splitSelected).toHaveBeenCalledWith({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [1, 1],
+            [9, 1],
+          ],
+        },
+      });
+      expect(arcs.forEachArcSegment).not.toHaveBeenCalled();
+      expect(map.project).not.toHaveBeenCalled();
+    } finally {
+      handler.disable();
+    }
+  });
 });

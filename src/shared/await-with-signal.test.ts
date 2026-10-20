@@ -15,6 +15,21 @@ describe('detachable cancelled await', () => {
     controller.abort();
     await failure;
   });
+  it.each([
+    null,
+    false,
+    0,
+    'cancelled',
+  ])('preserves the explicit abort reason %j', async (reason) => {
+    for (const alreadyAborted of [false, true]) {
+      const controller = new AbortController();
+      if (alreadyAborted) controller.abort(reason);
+      const operation = awaitWithSignal(new Promise<never>(() => {}), controller.signal);
+      const failure = expect(operation).rejects.toBe(reason);
+      if (!alreadyAborted) controller.abort(reason);
+      await failure;
+    }
+  });
   it('consumes late errors without reactivating an aborted consumer', async () => {
     const controller = new AbortController();
     let reject!: (reason: unknown) => void;

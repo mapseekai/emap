@@ -2,7 +2,7 @@ import { createBrowserTestMap } from '../../utils/plugin-test-map';
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MapshaperWorkerPool } from '../../../src/engine/core/mapshaper-worker-pool';
-import { TasklaneTestWorker as TestWorker, flushTasks } from '../../helpers/tasklane-worker';
+import { TasklaneTestWorker as TestWorker, flushTasks } from '../../utils/tasklane-worker';
 import { output } from '@mapseekai/tasklane/host';
 import { encodeWorkerData } from '../../../src/integrations/mapshaper/binary';
 beforeAll(() => {

@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
 import { toArrowTable } from '../arrow/dataset-to-table';
-import { datasetFromGeoJSON } from '../arrow/test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
 import { duckDbToolbox } from './toolbox';

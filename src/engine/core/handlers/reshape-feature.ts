@@ -1,12 +1,13 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
-import type {
-  ArcCollection,
-  ArcVertexData,
-  PathShape,
-} from '../../../shared/types/mapshaper-types';
+import type { ArcCollection } from '../../../shared/types/mapshaper-types';
 import { isPathLayer } from '../../../shared/types/mapshaper-types';
-import { projectPointOnSegment } from './draw-feature';
+import {
+  collectPathShapeArcIds,
+  findPathSnapTarget,
+  isValidPathArc,
+  type PathSnapContext,
+} from './path-snap';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
 import type { EditMode } from '../../map/edit-state-store';
 import type { OpResult } from '../../map/op-result';
@@ -16,12 +17,6 @@ export interface ReshapeFeatureOptions {
 }
 
 const DEFAULT_SNAP_THRESHOLD = 10;
-/** Snap context resolved best-effort from the current selection. */
-type SelectionContext = {
-  arcs: ArcCollection;
-  vertexData: ArcVertexData;
-  arcIds: readonly number[];
-};
 
 /**
  * Interactive reshape-line sketch delegated to `ops.reshapeSelected`.
@@ -34,7 +29,7 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
   private _opts: ReshapeFeatureOptions;
   private _generation = 0;
   private _submissionGeneration: number | null = null;
-  private _snapContext: SelectionContext | null = null;
+  private _snapContext: PathSnapContext | null = null;
   private _session: SketchSession;
   _manager?: { refreshCursor(): void };
 
@@ -139,7 +134,7 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     );
   }
 
-  private _resolveSelectionContext(): SelectionContext | null {
+  private _resolveSelectionContext(): PathSnapContext | null {
     const selected = this._map.getSelection();
     if (!Array.isArray(selected) || selected.length === 0) return null;
 
@@ -171,53 +166,13 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     const arcIds = new Set<number>();
     for (const ref of selected) {
       const shape = layer.shapes[ref.id];
-      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds))
+      if (!collectPathShapeArcIds(shape, ref.id, layer.shapes.length, vertexData, arcIds))
         return null;
     }
     for (const arcId of arcIds) {
-      if (!this._isValidArc(arcId, vertexData)) return null;
+      if (!isValidPathArc(arcId, vertexData)) return null;
     }
     return { arcs, vertexData, arcIds: [...arcIds] };
-  }
-
-  private _collectPathShape(
-    shape: unknown,
-    id: number,
-    shapeCount: number,
-    vertexData: ArcVertexData,
-    arcIds: Set<number>,
-  ): shape is PathShape {
-    if (
-      !Number.isInteger(id) ||
-      id < 0 ||
-      id >= shapeCount ||
-      !Array.isArray(shape) ||
-      shape.length === 0
-    )
-      return false;
-    for (const part of shape) {
-      if (!Array.isArray(part) || part.length === 0) return false;
-      for (const raw of part) {
-        if (typeof raw !== 'number' || !Number.isSafeInteger(raw)) return false;
-        const arcId = raw < 0 ? -raw - 1 : raw;
-        if (arcId < 0 || arcId >= vertexData.nn.length) return false;
-        arcIds.add(arcId);
-      }
-    }
-    return true;
-  }
-
-  private _isValidArc(arcId: number, vertexData: ArcVertexData): boolean {
-    const start = vertexData.ii[arcId];
-    const count = vertexData.nn[arcId];
-    if (!Number.isInteger(start) || !Number.isInteger(count) || count < 2) return false;
-    if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count)
-      return false;
-    for (let index = start; index < start + count; index++) {
-      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index]))
-        return false;
-    }
-    return true;
   }
 
   protected _execute(vertices: [number, number][]): Promise<OpResult<unknown>> {
@@ -241,56 +196,9 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
   private _findSnapTarget(
     px: number,
     py: number,
-    context: SelectionContext,
+    context: PathSnapContext,
   ): SketchSnapTarget | null {
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
-    const c0 = this._map.unproject(px - threshold, py - threshold);
-    const c1 = this._map.unproject(px + threshold, py + threshold);
-    const minX = Math.min(c0[0], c1[0]);
-    const maxX = Math.max(c0[0], c1[0]);
-    const minY = Math.min(c0[1], c1[1]);
-    const maxY = Math.max(c0[1], c1[1]);
-    let bestDistance = threshold;
-    let best: SketchSnapTarget | null = null;
-    const { vertexData } = context;
-    for (const arcId of context.arcIds) {
-      const start = vertexData.ii[arcId]!;
-      const count = vertexData.nn[arcId]!;
-      for (let index = start; index < start + count; index++) {
-        const coord = [vertexData.xx[index]!, vertexData.yy[index]!] as [number, number];
-        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) continue;
-        const projected = this._map.project(coord[0], coord[1]);
-        const distance = Math.hypot(projected[0] - px, projected[1] - py);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = { coord, kind: 'vertex' };
-        }
-      }
-    }
-    if (!context.arcs.forEachArcSegment) return best;
-    for (const arcId of context.arcIds) {
-      context.arcs.forEachArcSegment(arcId, (i, j, xx, yy) => {
-        const ax = xx[i];
-        const ay = yy[i];
-        const bx = xx[j];
-        const by = yy[j];
-        if (
-          Math.max(ax, bx) < minX ||
-          Math.min(ax, bx) > maxX ||
-          Math.max(ay, by) < minY ||
-          Math.min(ay, by) > maxY
-        )
-          return;
-        const projected = projectPointOnSegment(
-          [px, py],
-          this._map.project(ax, ay),
-          this._map.project(bx, by),
-        );
-        if (projected.dist >= bestDistance) return;
-        bestDistance = projected.dist;
-        best = { coord: this._map.unproject(projected.point[0], projected.point[1]), kind: 'edge' };
-      });
-    }
-    return best;
+    return findPathSnapTarget(this._map, px, py, threshold, context);
   }
 }

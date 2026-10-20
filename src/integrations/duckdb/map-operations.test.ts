@@ -1,7 +1,7 @@
 import { tableFromArrays, type Table } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
-import { datasetFromGeoJSON } from '../arrow/test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
 import { DuckDbOperationError } from './errors';

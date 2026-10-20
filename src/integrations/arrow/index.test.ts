@@ -8,7 +8,7 @@ import {
   getFormatForExtension,
 } from '../../domain/source/format-registry';
 import { TopologySource } from '../../domain/source/topology-source';
-import { datasetFromGeoJSON } from './test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import { toArrowTable } from './dataset-to-table';
 import { Emap } from '../../engine/map/map';
 import { Selection } from '../../engine/map/selection';

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { output } from '@mapseekai/tasklane/host';
 import { GeometryWorker } from './geometry-worker';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import type { GeometryPacket } from '../../engine/rendering/luma/geometry-jobs';
 const clients: GeometryWorker[] = [];
 function client() {

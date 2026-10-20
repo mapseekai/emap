@@ -11,11 +11,8 @@ export function validateFieldName(optionName: string, value: unknown): OpResult<
   return okValue(value);
 }
 
-export function validateFieldList(
-  optionName: string,
-  values: readonly unknown[] | undefined,
-): OpResult<string[]> {
-  if (values == null || values.length === 0) return okValue([]);
+export function validateFieldList(optionName: string, values: unknown): OpResult<string[]> {
+  if (values == null) return okValue([]);
   if (!Array.isArray(values)) {
     return Err.validation(optionName, 'must be an array');
   }

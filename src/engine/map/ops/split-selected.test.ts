@@ -8,7 +8,7 @@ import type {
   PathShape,
 } from '../../../shared/types/mapshaper-types';
 import { splitSelected } from './split-selected';
-import { makeStubCtx } from './_test-helpers';
+import { makeStubCtx } from '../../../../test/utils/map-ops';
 
 import { EditHistory } from '../../../domain/edit/edit-history';
 import { Transaction } from '../../../domain/edit/transaction';

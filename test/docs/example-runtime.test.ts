@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { importGeoParquet } from '../../src/integrations/arrow/geoparquet-io';
 import { examples } from '../../docs-meta/examples';
 import { setParquetWasm } from '../../src/integrations/arrow/parquet-wasm-loader';
-import { injectParquetWasmForTests } from '../../src/integrations/arrow/test-utils';
+import { injectParquetWasmForTests } from '../utils/arrow';
 import {
   autoLoadExampleFixtures,
   fixtureManifest,

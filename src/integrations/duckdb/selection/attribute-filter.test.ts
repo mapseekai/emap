@@ -2,7 +2,7 @@ import { tableFromArrays, tableToIPC, type Table } from 'apache-arrow';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
-import { datasetFromGeoJSON } from '../../arrow/test-utils';
+import { datasetFromGeoJSON } from '../../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import { DuckDbOperationError } from '../errors';
 import { attributeFilter } from './attribute-filter';

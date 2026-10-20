@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EditHistory } from '../../../domain/edit/edit-history';
 import { EventDispatcher } from '../../core/events';
-import { makeStubCtx } from '../../map/ops/_test-helpers';
+import { makeStubCtx } from '../../../../test/utils/map-ops';
 import { ValidationServiceImpl } from './validation';
 
 describe('ValidationServiceImpl', () => {

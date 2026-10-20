@@ -72,11 +72,9 @@ export async function joinTable(ctx: OpContext, opts: JoinTableOptions): Promise
     source: joinSource,
     keys: [targetKey, sourceKey],
   };
-  if (opts.fields && opts.fields.length > 0) {
-    const fields = validateFieldList('fields', opts.fields);
-    if (!fields.ok) return fields;
-    joinOpts.fields = fields.value;
-  }
+  const fields = validateFieldList('fields', opts.fields);
+  if (!fields.ok) return fields;
+  if (fields.value.length > 0) joinOpts.fields = fields.value;
   if (opts.prefix && opts.prefix.length > 0) joinOpts.prefix = opts.prefix;
   if (opts.where && opts.where.trim().length > 0) joinOpts.where = opts.where;
   if (opts.calc && opts.calc.trim().length > 0) joinOpts.calc = opts.calc;

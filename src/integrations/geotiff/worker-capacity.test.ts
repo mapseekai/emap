@@ -7,7 +7,7 @@ import {
   acquireRasterReplica,
 } from './worker-capacity';
 import { createEmapWorkerRuntime } from '../tasklane/runtime';
-import { TasklaneTestWorker } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker } from '../../../test/utils/tasklane-worker';
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();

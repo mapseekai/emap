@@ -1,4 +1,4 @@
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import { output } from '@mapseekai/tasklane/host';
 import { createEmapWorkerRuntime } from '../tasklane/runtime';
 import { planRasterTile } from '../../engine/rendering/raster/tile';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datasetFromGeoJSON } from '../../arrow/test-utils';
+import { datasetFromGeoJSON } from '../../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import { alignSecondaryDatasetCrs, inheritPrimaryDatasetCrs } from './dataset-crs';
 

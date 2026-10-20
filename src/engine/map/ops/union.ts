@@ -22,11 +22,9 @@ export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<O
   if (!resolved.ok) return resolved;
   const { targetList } = resolved.value;
   const unionOpts: Record<string, unknown> = {};
-  if (opts.fields && opts.fields.length > 0) {
-    const fields = validateFieldList('fields', opts.fields);
-    if (!fields.ok) return fields;
-    unionOpts.fields = fields.value;
-  }
+  const fields = validateFieldList('fields', opts.fields);
+  if (!fields.ok) return fields;
+  if (fields.value.length > 0) unionOpts.fields = fields.value;
   if (opts.name && opts.name.trim()) unionOpts.name = opts.name;
   if (opts.noReplace) unionOpts.no_replace = true;
 

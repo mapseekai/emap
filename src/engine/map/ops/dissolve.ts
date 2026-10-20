@@ -27,11 +27,8 @@ export const dissolveLayer = defineLayerOp<DissolveOptions>({
   },
   expressions: (o) => [o.calc, o.where],
   validate: (o) => {
-    const hasFields = Array.isArray(o.fields) && o.fields.length > 0;
-    if (hasFields) {
-      const fields = validateFieldList('fields', o.fields);
-      if (!fields.ok) return fields;
-    }
+    const fields = validateFieldList('fields', o.fields);
+    if (!fields.ok) return fields;
 
     const sumFields = validateFieldList('sumFields', o.sumFields);
     if (!sumFields.ok) return sumFields;

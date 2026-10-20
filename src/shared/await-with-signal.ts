@@ -23,7 +23,11 @@ export function awaitWithSignal<T>(pending: Promise<T>, signal: AbortSignal): Pr
     };
     const abort = () => {
       clear();
-      reject(signal.reason ?? new DOMException('Operation cancelled', 'AbortError'));
+      reject(
+        signal.reason === undefined
+          ? new DOMException('Operation cancelled', 'AbortError')
+          : signal.reason,
+      );
     };
     cell.resolve = (value) => {
       clear();

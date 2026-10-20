@@ -7,7 +7,7 @@ import { openGeoTIFF } from '../../../src/integrations/geotiff/source';
 import { GEOTIFF_WORKER_PROTOCOL_VERSION } from '../../../src/integrations/geotiff/worker-protocol';
 import { encodeWorkerData, decodeWorkerData } from '../../../src/integrations/mapshaper/binary';
 import { getDefaultMapshaperAdapter } from '../../../src/integrations/mapshaper/adapter';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../utils/tasklane-worker';
 const runtimes: any[] = [];
 const sources: any[] = [];
 function runtime(limits: any = {}) {

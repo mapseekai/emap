@@ -7,7 +7,7 @@ import { openGeoTIFF } from '../../../src/integrations/geotiff/source';
 import { GEOTIFF_WORKER_PROTOCOL_VERSION } from '../../../src/integrations/geotiff/worker-protocol';
 import { importGeoPackageInWorker } from '../../../src/integrations/geopackage/worker';
 import { encodeWorkerData } from '../../../src/integrations/mapshaper/binary';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../utils/tasklane-worker';
 const runtimes: any[] = [],
   sources: any[] = [];
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

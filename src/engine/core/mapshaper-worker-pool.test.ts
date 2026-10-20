@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { output } from '@mapseekai/tasklane/host';
 import { MapshaperWorkerPool } from './mapshaper-worker-pool';
-import { TasklaneTestWorker, flushTasks } from '../../../test/helpers/tasklane-worker';
+import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import { encodeWorkerData, decodeWorkerData } from '../../integrations/mapshaper/binary';
 
 const pools: MapshaperWorkerPool[] = [];

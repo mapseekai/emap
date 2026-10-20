@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { tableFromIPC } from 'apache-arrow';
 import { exportGeoArrow, importGeoArrow } from './geoarrow-io';
-import { datasetFromGeoJSON } from './test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 

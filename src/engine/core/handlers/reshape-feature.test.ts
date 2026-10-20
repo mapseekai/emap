@@ -70,6 +70,124 @@ describe('ReshapeFeatureHandler', () => {
     expect(handler.isEnabled()).toBe(true);
   });
 
+  it('draws and submits arbitrary coordinates without a selection', () => {
+    map = createMap({ selection: [] });
+    const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', 1, 2));
+      handler.handlePointer(event('click', 1, 2));
+      handler.handlePointer(event('move', 3, 4));
+      handler.handlePointer(event('click', 3, 4));
+      handler.handlePointer(event('contextmenu'));
+      expect(map.ops.reshapeSelected).toHaveBeenCalledWith({
+        line: [
+          [101, 202],
+          [103, 204],
+        ],
+      });
+      expect(map.project).not.toHaveBeenCalled();
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it.each([
+    ['one-point arc', { nn: new Int32Array([1]) }],
+    ['negative start', { ii: new Int32Array([-1]) }],
+    ['x overflow', { xx: new Float64Array([0]) }],
+    ['y overflow', { yy: new Float64Array([0]) }],
+    ['missing start', { ii: new Int32Array() }],
+    ['NaN x', { xx: new Float64Array([0, NaN]) }],
+    ['infinite y', { yy: new Float64Array([0, Infinity]) }],
+  ])('ignores the whole snap context for an invalid %s but still draws', (_name, invalid) => {
+    const arcs = map.getSource().getArcs();
+    const vertexData = { ...arcs.getVertexData(), ...invalid };
+    map.getSource.mockReturnValue({
+      getArcs: () => ({ ...arcs, getVertexData: () => vertexData }),
+    });
+    const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', -100, -200));
+      handler.handlePointer(event('click', -100, -200));
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ vertices: [[0, 0]], snapKind: null }),
+      );
+      expect(map.project).not.toHaveBeenCalled();
+      expect(arcs.forEachArcSegment).not.toHaveBeenCalled();
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it.each([
+    ['sparse shape', new Array(1)],
+    ['sparse part', [new Array(1)]],
+    ['out-of-range reversed arc', [[-2]]],
+    ['unsafe arc ID', [[Number.MAX_SAFE_INTEGER + 1]]],
+  ])('ignores a %s without blocking sketch placement', (_name, shape) => {
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [shape],
+    });
+    const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', -100, -200));
+      handler.handlePointer(event('click', -100, -200));
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ vertices: [[0, 0]], snapKind: null }),
+      );
+      expect(map.project).not.toHaveBeenCalled();
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it.each([
+    ['vertex wins an edge tie on a reversed arc', -101, -200, [0, 0], 'vertex'],
+    ['edge projection', -95, -198, [5, 0], 'edge'],
+    ['exact threshold is excluded', -95, -195, null, null],
+  ])('preserves %s', (_name, x, y, snapCoord, snapKind) => {
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[-1]]],
+    });
+    const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost, {
+      snapThreshold: 5,
+    });
+    handler.enable();
+    try {
+      handler.handlePointer(event('click', -120, -220));
+      handler.handlePointer(event('move', x, y));
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ snapCoord, snapKind }),
+      );
+      expect(map.unproject).toHaveBeenCalledWith(x - 5, y - 5);
+      expect(map.unproject).toHaveBeenCalledWith(x + 5, y + 5);
+    } finally {
+      handler.disable();
+    }
+  });
+
+  it('retains vertex snapping without a segment API', () => {
+    const arcs = map.getSource().getArcs();
+    Reflect.deleteProperty(arcs, 'forEachArcSegment');
+    const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    try {
+      handler.handlePointer(event('move', -101, -200));
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ snapCoord: [0, 0], snapKind: 'vertex' }),
+      );
+    } finally {
+      handler.disable();
+    }
+  });
+
   it('submits two placed data coordinates on right click', async () => {
     const handler = new ReshapeFeatureHandler(map as unknown as EditHandlerHost);
     handler.enable();

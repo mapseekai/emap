@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ValidatorRegistry } from './registry';
 import type { Validator, ValidationReport } from './validator';
-import { makeStubCtx } from '../../engine/map/ops/_test-helpers';
+import { makeStubCtx } from '../../../test/utils/map-ops';
 
 const fakeHost = makeStubCtx().ctx.host;
 

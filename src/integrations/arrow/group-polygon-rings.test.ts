@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
 import { groupPolygonRings } from './group-polygon-rings';
-import { datasetFromGeoJSON } from './test-utils';
+import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 
 function square(cx: number, cy: number, r: number): number[][] {
   // counterclockwise (GeoJSON shell convention; mapshaper normalizes on import)

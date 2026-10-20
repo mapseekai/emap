@@ -18,7 +18,7 @@ import { filterSlivers } from '../../../src/engine/map/ops/filter-slivers';
 import { filterGeom } from '../../../src/engine/map/ops/filter-geom';
 import { affineLayer } from '../../../src/engine/map/ops/affine';
 import { dataFill } from '../../../src/engine/map/ops/data-fill';
-import { makeStubCtx } from '../../../src/engine/map/ops/_test-helpers';
+import { makeStubCtx } from '../../utils/map-ops';
 
 // =========================================================================
 // clip / erase — bbox path

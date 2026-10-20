@@ -4,15 +4,15 @@
 // coupling. Extracted so multiple op test files can stay in sync when
 // the host contract grows new fields.
 
-import { OK } from '../op-result';
-import { TopologySource } from '../../../domain/source/topology-source';
-import { asMutableTopologySource } from '../../../domain/source/source';
-import { EditHistory } from '../../../domain/edit/edit-history';
-import { Selection } from '../selection';
-import { LayerRegistry } from '../layer-registry';
-import type { OpContext } from './_context';
-import type { ParsedCommand } from '../../../integrations/mapshaper/adapter';
-import type { MapshaperLayer, MapshaperDataset } from '../../../shared/types/mapshaper-types';
+import { OK } from '../../src/engine/map/op-result';
+import { TopologySource } from '../../src/domain/source/topology-source';
+import { asMutableTopologySource } from '../../src/domain/source/source';
+import { EditHistory } from '../../src/domain/edit/edit-history';
+import { Selection } from '../../src/engine/map/selection';
+import { LayerRegistry } from '../../src/engine/map/layer-registry';
+import type { OpContext } from '../../src/engine/map/ops/_context';
+import type { ParsedCommand } from '../../src/integrations/mapshaper/adapter';
+import type { MapshaperLayer, MapshaperDataset } from '../../src/shared/types/mapshaper-types';
 
 export interface StubLayer {
   name: string;

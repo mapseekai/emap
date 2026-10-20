@@ -1,4 +1,5 @@
 import type * as maplibregl from 'maplibre-gl';
+import { awaitWithSignal } from '../../shared/await-with-signal';
 import type { MapLibreOverlayStyleService } from './maplibre-service';
 
 export interface PreparedMapLibreOverlayStyle {
@@ -199,19 +200,14 @@ export async function loadMapLibreStyle(
   if (options.signal.aborted) abort();
   try {
     if (controller.signal.aborted) throw controller.signal.reason;
-    const interrupted = new Promise<never>((_resolve, reject) => {
-      controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
-        once: true,
-      });
-    });
     const transformed = options.transformRequest
-      ? await Promise.race([
-          options.transformRequest(styleUrl, 'Style' as maplibregl.ResourceType),
-          interrupted,
-        ])
+      ? await awaitWithSignal(
+          Promise.resolve(options.transformRequest(styleUrl, 'Style' as maplibregl.ResourceType)),
+          controller.signal,
+        )
       : undefined;
     const request = transformed ?? { url: styleUrl };
-    const response = await Promise.race([
+    const response = await awaitWithSignal(
       options.fetch(request.url, {
         signal: controller.signal,
         headers: request.headers as HeadersInit | undefined,
@@ -221,15 +217,15 @@ export async function loadMapLibreStyle(
         cache: request.cache,
         referrerPolicy: request.referrerPolicy,
       }),
-      interrupted,
-    ]);
+      controller.signal,
+    );
     if (!response.ok) {
       throw new Error(`MapLibre style request failed: HTTP ${response.status}`);
     }
-    const style = (await Promise.race([
+    const style = (await awaitWithSignal(
       response.json(),
-      interrupted,
-    ])) as maplibregl.StyleSpecification;
+      controller.signal,
+    )) as maplibregl.StyleSpecification;
     assertMapLibreStyle(style);
     return normalizeMapLibreStyleUrls(style, response.url);
   } catch (error) {
