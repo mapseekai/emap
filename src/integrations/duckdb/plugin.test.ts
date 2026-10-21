@@ -11,6 +11,34 @@ function fakeRuntime(): DuckDbRuntime {
   return { connect: vi.fn(), ensureSpatial: vi.fn(), close: vi.fn(async () => {}) };
 }
 describe('DuckDB provider lifecycle', () => {
+  it('combines caller cancellation without AbortSignal.any and releases execution listeners', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any')!;
+    Object.defineProperty(AbortSignal, 'any', { ...descriptor, value: undefined });
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const dataset = { layers: [] };
+    const execute = vi.spyOn(duckDbToolbox, 'execute').mockResolvedValue(dataset);
+    const map = await Emap.create({
+      preset: 'headless',
+      plugins: [duckDbPlugin({ runtime: fakeRuntime() })],
+    });
+    try {
+      await expect(
+        map.ctx.duckDbProcessing.execute('buffer', { inputs: {}, signal: controller.signal }),
+      ).resolves.toBe(dataset);
+      expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+      const reason = new Error('cancel next execution');
+      controller.abort(reason);
+      await expect(
+        map.ctx.duckDbProcessing.execute('buffer', { inputs: {}, signal: controller.signal }),
+      ).rejects.toBe(reason);
+      expect(execute).toHaveBeenCalledOnce();
+    } finally {
+      execute.mockRestore();
+      await map.dispose();
+      Object.defineProperty(AbortSignal, 'any', descriptor);
+    }
+  });
   it('does not initialize a runtime for an already cancelled caller', async () => {
     const create = vi.fn(async () => fakeRuntime());
     const map = await Emap.create({ preset: 'headless', plugins: [duckDbPlugin({ create })] });

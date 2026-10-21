@@ -10,10 +10,31 @@ const probe = buildSync({
       import { createDuckDbRuntimeFromJsDelivr } from './src/integrations/duckdb/runtime.ts';
       export { runPipeline } from './src/integrations/duckdb/core/pipeline.ts';
       export { tableFromArrays } from 'apache-arrow';
-      export function createRuntime() {
+      export let database;
+      export let streamId;
+      export const cancellationAcks = [];
+      export function createRuntime(onHeader) {
+        class ObservedDatabase extends duckdb.AsyncDuckDB {
+          constructor(...args) { super(...args); database = this; }
+          async startPendingQuery(id, ...args) {
+            const header = await super.startPendingQuery(id, ...args);
+            if (header !== null) { streamId = id; onHeader?.(); }
+            return header;
+          }
+          async pollPendingQuery(id) {
+            const header = await super.pollPendingQuery(id);
+            if (header !== null) { streamId = id; onHeader?.(); }
+            return header;
+          }
+          async cancelPendingQuery(id) {
+            const acknowledgement = await super.cancelPendingQuery(id);
+            cancellationAcks.push(acknowledgement);
+            return acknowledgement;
+          }
+        }
         const bundle = (name) => ({ mainModule: location.origin + '/duckdb-assets/duckdb-' + name + '.wasm',
           mainWorker: location.origin + '/duckdb-assets/duckdb-browser-' + name + '.worker.js' });
-        return createDuckDbRuntimeFromJsDelivr({ duckdb: { ...duckdb,
+        return createDuckDbRuntimeFromJsDelivr({ duckdb: { ...duckdb, AsyncDuckDB: ObservedDatabase,
           getJsDelivrBundles: () => ({ mvp: bundle('mvp'), eh: bundle('eh') }) } });
       }`,
   },
@@ -93,5 +114,46 @@ test('real DuckDB-Wasm pending query cancellation cleans tables and leaves other
   });
   expect(result).toMatchObject({ cancelled: 'AbortError', other: 7, retry: 9, tables: 0 });
   expect(result.cancelMs).toBeLessThan(5000);
+  await expect.poll(() => page.workers().length).toBe(0);
+});
+
+test('direct DuckDB-Wasm cancellation releases unread remote streams and preserves connection state for repeated runs', async ({ page }) => {
+  await page.goto('/cancellation-probe.html');
+  const result = await page.evaluate(async () => {
+    const probe = await import('/cancellation-probe.mjs');
+    let active;
+    const runtime = await probe.createRuntime(() => {
+      if (!active) return;
+      const controller = active;
+      active = undefined;
+      controller.abort();
+    });
+    const conn = await runtime.connect();
+    const other = await runtime.connect();
+    const streams = [], failures = [], retries = [], times = [];
+    try {
+      await conn.query('CREATE TEMP TABLE retained AS SELECT 41 AS value');
+      for (let cycle = 0; cycle < 2; cycle++) {
+        const controller = new AbortController();
+        active = controller;
+        const before = performance.now();
+        failures.push(await conn.query('SELECT sqrt(i::DOUBLE) FROM range(1000000000) t(i)', controller.signal)
+          .then(() => 'delivered', (error) => error.name));
+        times.push(performance.now() - before);
+        streams.push((await probe.database.fetchQueryResults(probe.streamId))?.length ?? 0);
+        const retry = await conn.query('SELECT value FROM retained', new AbortController().signal);
+        retries.push(Number(retry.getChild('value').get(0)));
+      }
+      const sibling = await other.query('SELECT 7 AS value', new AbortController().signal);
+      return { streams, failures, retries, times, other: Number(sibling.getChild('value').get(0)), acknowledgements: probe.cancellationAcks };
+    } finally {
+      await conn.close();
+      await other.close();
+      await runtime.close();
+    }
+  });
+  expect(result).toMatchObject({ streams: [0, 0], failures: ['AbortError', 'AbortError'], retries: [41, 41], other: 7 });
+  expect(result.acknowledgements).toContain(false);
+  expect(Math.max(...result.times)).toBeLessThan(5000);
   await expect.poll(() => page.workers().length).toBe(0);
 });

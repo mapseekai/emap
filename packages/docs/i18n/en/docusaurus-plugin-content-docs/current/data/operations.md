@@ -5,7 +5,7 @@ title: Data operations
 api: ["AffineLayerOptions", "ApplyExpressionOptions", "BufferOptions", "CheckGeometryOptions", "CleanOptions", "ClipEraseOptions", "DataFillOptions", "DissolveOptions", "DivideOptions", "DragSessionOptions", "DropLayerOptions", "Emap", "ExplodeOptions", "ExportSnapshotOptions", "ExpressionEvaluationPolicy", "FeatureAffineSession", "FeatureRef", "FeatureTranslateSession", "FilterFieldsOptions", "FilterGeomOptions", "FilterIslandsOptions", "FilterOptions", "FilterSliversOptions", "GeometryCheckReport", "HighlightStyle", "InnerlinesOptions", "IntersectionPointsLayerOptions", "JoinTableData", "JoinTableOptions", "LinesOptions", "LoadSnapshotOptions", "MapOptions", "MergeLayersOptions", "MosaicOptions", "PointsMode", "PointsOptions", "PolygonsOptions", "ProjectLayerExport", "ProjectLayerOutputOptions", "ProjectOptions", "QueriedFeature", "QueryFeaturesOptions", "RebuildTopologyOptions", "RenameFieldsOptions", "RenameLayerOptions", "SimplifyMethod", "SimplifyOptions", "SnapOptions", "SortFeaturesOptions", "SplitCutter", "SplitFeatureHandler", "SplitFeatureOptions", "SplitLayerOptions", "SplitSelectedOptions", "SplitSelectedResult", "UnionOptions", "UniqueFeaturesOptions", "OpResult", "OpError", "ClassifyFeaturesOptions"]
 examples: ["buffer","clip","erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
-verifiedVersion: 0.14.0
+verifiedVersion: 0.15.0
 ---
 
 # Data operations
@@ -48,7 +48,7 @@ const result = await ops.simplifyLayer({ source: 'main', percentage: 25 });
 
 Logical cancellation and completed cleanup are separate points: `signal.aborted` revokes commit permission, while the operation Promise finishes after input preparation, Worker execution and result-resource handling have ended. Async input preparation must return or respond to its signal; a main-thread Promise cannot be forcibly stopped. Synchronous main-thread algorithms, copying and packing block the event loop and cannot be preempted by AbortSignal. Configure Worker routing for long algorithms that need interruption.
 
-For direct `MapshaperWorkerPool` use, `run(cmd, packed, inputFiles?, signal?)` and `runWithId(...)` accept a caller signal. `runWithId()` returns `{ id, promise }`; `await pool.cancel(id)` cancels only that active job and waits for tasklane's physical completion. Repeated cancellation is idempotent, and the result Promise finishes after resource cleanup. Both `dispatchWithId()` and `dispatchPreparedWithId()` take the signal as their sixth argument; the prepare callback receives the task signal. `map.cancelWorkerJobs()` / `pool.cancelAll()` still cancel the whole pool scope; await `pool.closed` for batch cleanup.
+For direct `MapshaperWorkerPool` use, `run(cmd, packed, inputFiles?, signal?)` and `runWithId(...)` accept a caller signal. `runWithId()` returns `{ id, promise }`; `await pool.cancel(id)` cancels only that active job and waits for preparation, physical execution and result decoding/consumption to end. Repeated cancellation is idempotent. Cancellation still revokes delivery while a returned Worker result is being decoded, and the result Promise finishes after resource cleanup. Both `dispatchWithId()` and `dispatchPreparedWithId()` take the signal as their sixth argument; the prepare callback receives the task signal. `map.cancelWorkerJobs()` / `pool.cancelAll()` still cancel the whole pool scope; await `pool.closed` for consumption and cleanup of the batch.
 
 ## More operations
 

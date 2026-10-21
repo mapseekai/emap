@@ -76,6 +76,7 @@ export async function runOverlayTool(
   let mask: Table;
   try {
     const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
+    opts.signal?.throwIfAborted();
     input = datasetToArrowInput(
       inputDataset,
       { layer: opts.inputLayer, geometryColumn: inputGeometryColumn },
@@ -97,6 +98,7 @@ export async function runOverlayTool(
       );
     }
   } catch (err) {
+    opts.signal?.throwIfAborted();
     throw new DuckDbOperationError('conversion-failed', messages.inputConversion, { cause: err });
   }
 

@@ -80,7 +80,16 @@ export async function runTwoInputTool(
   opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
-  const secondaryInput = alignCrs ? await alignSecondaryDatasetCrs(primary, secondary) : secondary;
+  let secondaryInput = secondary;
+  if (alignCrs) {
+    try {
+      secondaryInput = await alignSecondaryDatasetCrs(primary, secondary);
+    } catch (error) {
+      opts.signal?.throwIfAborted();
+      throw error;
+    }
+    opts.signal?.throwIfAborted();
+  }
   const left = datasetToArrowInput(primary, opts, label);
   const right = datasetToArrowInput(secondaryInput, { geometryColumn }, label);
   return runPipeline({

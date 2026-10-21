@@ -784,6 +784,33 @@ describe('spatialSummaryJoin', () => {
     expect(runtime.connection.queries[0]).toContain('SUM(j." sales ")');
   });
 
+  it.each([
+    'target',
+    'join',
+  ] as const)('preserves cancellation after CRS alignment for an empty %s', async (empty) => {
+    const target =
+      empty === 'target'
+        ? await datasetFromGeoJSON({ type: 'FeatureCollection', features: [] })
+        : await targetDataset();
+    const join = empty === 'join' ? await emptyJoinDataset() : await joinDataset();
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
+    const controller = new AbortController();
+    const reason = new Error('cancel empty summary');
+    const result = spatialSummaryJoin(
+      target,
+      join,
+      {
+        signal: controller.signal,
+        predicate: 'contains',
+        aggregations: [{ operation: 'count', outputColumn: 'count' }],
+      },
+      runtime,
+    );
+    controller.abort(reason);
+    await expect(result).rejects.toBe(reason);
+    expect(runtime.events).toEqual([]);
+  });
+
   it('defaults omitted joinType to left and handles empty target and empty-join inner output', async () => {
     const defaultRuntime = new AggregateRuntime(
       tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),

@@ -120,7 +120,9 @@ export async function runRelationTool(
   let alignedMaskDataset: MapshaperDataset;
   try {
     alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
+    opts.signal?.throwIfAborted();
   } catch (err) {
+    opts.signal?.throwIfAborted();
     throw new DuckDbOperationError(
       'conversion-failed',
       pipelineMessages(operation.id).inputConversion,

@@ -58,7 +58,10 @@ describe('dataset command selection history', () => {
 
   const ref = { source: 's', layer: 'points', id: 0 };
 
-  it('bridges scoped cancellation to its worker without changing data, selection or history', async () => {
+  it.each([
+    'caller',
+    'parent',
+  ] as const)('bridges %s scope cancellation to its worker without changing data, selection or history', async (cancelledScope) => {
     const { host, source, selection, history, ops } = setup();
     const pool = new MapshaperWorkerPool({
       workerUrl: 'worker.js',
@@ -69,21 +72,28 @@ describe('dataset command selection history', () => {
     selection.apply([ref], 'replace');
     const original = source.getDataset();
     const controller = new AbortController();
+    const parent = new AbortController();
+    const removals = [parent, controller].map((source) =>
+      vi.spyOn(source.signal, 'removeEventListener'),
+    );
     const adapter = getDefaultMapshaperAdapter();
     const restored = vi.spyOn(adapter, 'restoreSessionData');
     try {
       const work = ops
+        .withSignal(parent.signal)
         .withSignal(controller.signal)
         .sortFeatures({ source: 's', target: 'points', expression: 'rank' });
       await vi.waitFor(() => expect(TasklaneTestWorker.instances.at(-1)?.requests).toHaveLength(1));
       const worker = TasklaneTestWorker.instances.at(-1)!;
-      controller.abort();
+      (cancelledScope === 'parent' ? parent : controller).abort();
       expect(await work).toMatchObject({ ok: false, error: { kind: 'host-removed' } });
       expect(worker.terminate).toHaveBeenCalledOnce();
       expect(restored).not.toHaveBeenCalled();
       expect(source.getDataset()).toBe(original);
       expect(selection.getAll()).toEqual([ref]);
       expect(history.size()).toBe(0);
+      for (const remove of removals)
+        expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
       Object.assign(host, { _workerMode: false });
       expect(
         (
@@ -96,6 +106,7 @@ describe('dataset command selection history', () => {
       expect(
         (
           await ops
+            .withSignal(parent.signal)
             .withSignal(controller.signal)
             .sortFeatures({ source: 's', target: 'points', expression: 'rank' })
         ).ok,

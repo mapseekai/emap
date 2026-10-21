@@ -3,6 +3,7 @@ import { output } from '@mapseekai/tasklane/host';
 import { MapshaperWorkerPool } from './mapshaper-worker-pool';
 import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import { encodeWorkerData, decodeWorkerData } from '../../integrations/mapshaper/binary';
+import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
 
 const pools: MapshaperWorkerPool[] = [];
 function pool(size = 1, timeout = 120000) {
@@ -32,6 +33,97 @@ const respond = (worker: TasklaneTestWorker, value: unknown) => {
 };
 
 describe('tasklane Mapshaper ownership', () => {
+  it('runs and releases caller listeners when AbortSignal.any is unavailable', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any')!;
+    Object.defineProperty(AbortSignal, 'any', { ...descriptor, value: undefined });
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    try {
+      const pending = pool().run('-clean', { datasets: [] }, undefined, controller.signal);
+      const outcome = pending.then(
+        (value: unknown) => value,
+        (error: unknown) => error,
+      );
+      await flushTasks();
+      if (TasklaneTestWorker.instances[0]?.pending.length) {
+        respond(TasklaneTestWorker.instances[0], { datasets: ['result'] });
+      }
+      expect(await outcome).toEqual({ datasets: ['result'] });
+      expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    } finally {
+      Object.defineProperty(AbortSignal, 'any', descriptor);
+    }
+  });
+  it.each([
+    'task',
+    'signal',
+    'all',
+    'destroy',
+  ] as const)('keeps %s cancellation pending through result decoding and rejects delivery', async (mode) => {
+    const client = pool();
+    const controller = new AbortController();
+    const adapter = getDefaultMapshaperAdapter();
+    const unpack = adapter.unpackSessionData.bind(adapter);
+    let decoding!: () => void;
+    let resume!: () => void;
+    const started = new Promise<void>((resolve) => {
+      decoding = resolve;
+    });
+    const paused = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const spy = vi.spyOn(adapter, 'unpackSessionData').mockImplementationOnce(async (bytes) => {
+      decoding();
+      await paused;
+      return unpack(bytes);
+    });
+    const job = client.runWithId('-clean', { datasets: [] }, undefined, controller.signal);
+    const outcome = job.promise.then(
+      () => 'delivered',
+      (error: unknown) => error,
+    );
+    try {
+      await flushTasks();
+      respond(TasklaneTestWorker.instances[0], { datasets: ['cancelled'] });
+      await started;
+      let stop: Promise<void>;
+      if (mode === 'task') stop = client.cancel(job.id);
+      else if (mode === 'signal') {
+        controller.abort();
+        stop = client.cancel(job.id);
+      } else {
+        if (mode === 'all') client.cancelAll();
+        else client.destroy();
+        stop = client.closed;
+      }
+      let stopped = false;
+      const finished = stop.then(() => {
+        stopped = true;
+      });
+      await flushTasks();
+      const stoppedBeforeDecode = stopped;
+      resume();
+      await finished;
+      const result = await outcome;
+      expect(stoppedBeforeDecode).toBe(false);
+      expect(result).toMatchObject({ name: 'AbortError' });
+      if (mode !== 'destroy') {
+        const retry = client.run(
+          '-clean',
+          { datasets: [] },
+          undefined,
+          new AbortController().signal,
+        );
+        await flushTasks();
+        respond(TasklaneTestWorker.instances.at(-1)!, { datasets: ['retry'] });
+        await expect(retry).resolves.toEqual({ datasets: ['retry'] });
+      }
+    } finally {
+      resume();
+      await outcome;
+      spy.mockRestore();
+    }
+  });
   it('rejects a pre-aborted signal without preparing or transferring input', async () => {
     const client = pool();
     const controller = new AbortController();
@@ -178,6 +270,45 @@ describe('tasklane Mapshaper ownership', () => {
     respond(worker, packed);
     await expect(work).resolves.toEqual(packed);
   });
+  it('keeps work submitted by cancellation callbacks outside the old generation and cleanup barrier', async () => {
+    const client = pool();
+    let finish!: () => void;
+    const preparation = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let retry: Promise<unknown> | undefined;
+    const old = client.dispatchPreparedWithId(client.reserveId(), '-clean', async (signal) => {
+      signal.addEventListener(
+        'abort',
+        () => {
+          retry = client.run('-clean', { datasets: [] }).then(
+            (value: unknown) => value,
+            (error: unknown) => error,
+          );
+        },
+        { once: true },
+      );
+      await preparation;
+      return { datasets: [] };
+    });
+    const cancelled = expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await flushTasks();
+    client.cancelAll();
+    let closed = false;
+    const stopped = client.closed.then(() => {
+      closed = true;
+    });
+    finish();
+    await cancelled;
+    await flushTasks();
+    expect(closed).toBe(true);
+    expect(retry).toBeDefined();
+    const worker = TasklaneTestWorker.instances.find((candidate) => candidate.pending.length > 0);
+    if (worker) respond(worker, { datasets: ['fresh'] });
+    expect(await retry).toEqual({ datasets: ['fresh'] });
+    await stopped;
+  });
+
   it('cancelAll rejects running and queued tasks and permits a fresh generation', async () => {
     const client = pool();
     const a = client.run('-clean', { datasets: [] }),
