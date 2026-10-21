@@ -4,9 +4,9 @@ import {
   navigateExampleRenderer,
 } from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
-import { installIconControls } from '../luma-benchmark/icon-controls';
+import { installIconControls } from '../symbol-controls/icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
-import { installLabelControls } from '../luma-benchmark/label-controls';
+import { installLabelControls } from '../symbol-controls/label-controls';
 import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
 import { importBenchmarkFile } from '../luma-benchmark/import-file';

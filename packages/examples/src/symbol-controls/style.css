@@ -1,0 +1,17 @@
+.emap-symbol-settings {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--emap-example-border);
+  background: var(--emap-banner-bg);
+  color: var(--emap-banner-ink);
+  font: 12px/1.5 var(--emap-example-font);
+}
+.emap-symbol-settings > summary { cursor: pointer; font-weight: 600; }
+.emap-symbol-settings label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.emap-symbol-settings label:has(> input[type="checkbox"]) { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.emap-symbol-settings input, .emap-symbol-settings select { min-width: 0; max-width: 100%; box-sizing: border-box; font: inherit; }
+.emap-symbol-settings input[type="checkbox"] { width: auto; }
+.emap-symbol-settings pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.emap-symbol-settings p { color: var(--emap-example-muted-foreground); overflow-wrap: anywhere; }
+.emap-example-workbench .emap-symbol-settings { margin: 0; padding: 0; border: 0; }
+.emap-example-workbench .emap-symbol-settings > summary { display: none; }

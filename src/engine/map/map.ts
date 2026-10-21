@@ -479,6 +479,19 @@ export class Emap extends EventDispatcher {
   public getCRS(): string {
     return this.ctx.view.getCRS();
   }
+  /** Change automatic line/polygon display simplification without modifying source geometry.
+   * @example
+   * map.setGeometryLod({ pixelTolerance: 1 });
+   * map.setGeometryLod(false);
+   */
+  public setGeometryLod(options?: EmapOptions['geometryLod']): void {
+    this.ctx.view.setGeometryLod(options);
+  }
+
+  /** Toggle display-only screen path deduplication independently of geometry LOD. Defaults to true. */
+  public setScreenPathFiltering(enabled = true): void {
+    this.ctx.view.setScreenPathFiltering(enabled);
+  }
   public setCRS(crs: string): void {
     return this.ctx.projection.setCRS(crs);
   }

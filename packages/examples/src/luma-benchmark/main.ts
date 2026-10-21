@@ -6,9 +6,7 @@ import {
   syncExampleRendererToolbar,
 } from '../renderer-choice';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
-import { installIconControls } from './icon-controls';
 import type { IconOptions } from '../../../../src/engine/map/icon';
-import { installLabelControls } from './label-controls';
 import type { LabelOptions } from '../../../../src/engine/map/label';
 import { loadExampleRuntime } from '../example-runtime';
 import { AffineTransform } from '../../../../src/domain/geo/transform';
@@ -19,9 +17,6 @@ import { importBenchmarkFile } from './import-file';
 import { BenchmarkRenderers, type Backend } from './renderers';
 import { animationTick, navigationFrame, summarize, type Samples } from './metrics';
 import './style.css';
-
-let labelControls: ReturnType<typeof installLabelControls> | null = null;
-let iconControls: ReturnType<typeof installIconControls> | null = null;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -182,8 +177,6 @@ selector.querySelector<HTMLOptionElement>('option[value="luma"]')!.textContent =
   requestedGpu === 'webgpu' ? 'luma / WebGPU' : 'luma / WebGL2';
 selector.value = backend;
 renderers.show(backend);
-labelControls = installLabelControls(el('benchmark'), renderers, requestDraw);
-iconControls = installIconControls(el('benchmark'), renderers, requestDraw);
 el('device').textContent = renderers.gpu
   ? JSON.stringify(renderers.gpu.deviceInfo)
   : 'Canvas2D only';
@@ -218,8 +211,6 @@ function refreshCounters() {
 }
 
 function draw() {
-  labelControls?.refresh();
-  iconControls?.refresh();
   if (!scene || disposed) return;
   try {
     const ms = renderers.drawInteractive(backend, transform);
@@ -715,10 +706,6 @@ function hidden() {
 }
 document.addEventListener('visibilitychange', hidden);
 function dispose() {
-  labelControls?.dispose();
-  labelControls = null;
-  iconControls?.dispose();
-  iconControls = null;
   if (disposed) return;
   disposed = true;
   loading?.abort();

@@ -76,6 +76,24 @@ describe('Viewport Web Mercator constraints', () => {
 });
 
 describe('Viewport arc filtering', () => {
+  it('scales tiny-arc filtering with geometry LOD tolerance and preserves viewport culling when off', () => {
+    const v = vp();
+    let threshold = 0;
+    const arcs = {
+      arcIsSmaller: (_id: number, min: number) => {
+        threshold = min;
+        return min > 0;
+      },
+      arcIntersectsBBox: (id: number) => id === 0,
+    };
+    v.geometryLodTolerance = 2;
+    expect(v.getArcFilter(arcs)(0)).toBe(false);
+    expect(threshold).toBeCloseTo((0.35 * 4) / Math.abs(v.transform.mx));
+    v.geometryLodTolerance = 0;
+    expect(v.getArcFilter(arcs)(0)).toBe(true);
+    expect(v.getArcFilter(arcs)(1)).toBe(false);
+    expect(threshold).toBe(0);
+  });
   it('filters tiny arcs near full extent before they reach Canvas stroke', () => {
     const v = vp();
     let smallerCalls = 0;

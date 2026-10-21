@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { GpuTextRenderer } from './text-renderer';
 for (const backend of ['webgl', 'webgpu'] as const)
   it(`${backend}: bitmap label navigation reuses capacity and releases every owner`, () => {
+    let glyphData: number[] = [];
     const resources: { destroy: ReturnType<typeof vi.fn> }[] = [];
     const object = () => {
       const r = { destroy: vi.fn() };
@@ -14,7 +15,9 @@ for (const backend of ['webgl', 'webgpu'] as const)
       createBuffer: (props: any) => ({
         ...object(),
         byteLength: props.byteLength ?? props.data?.byteLength ?? 0,
-        write: vi.fn(),
+        write: vi.fn((data: Float32Array) => {
+          if (props.id === 'emap-bitmap-label-instances') glyphData = Array.from(data);
+        }),
       }),
       createTexture: (props: any) => ({
         ...object(),
@@ -50,6 +53,8 @@ for (const backend of ['webgl', 'webgpu'] as const)
     expect(renderer.stats.bufferAllocations).toBe(1);
     expect(renderer.stats.reusedBatches).toBe(20);
     expect(renderer.stats.textureUploads).toBe(1);
+    renderer.draw(pass, { key: 'zoom-out', labels: [{ ...label, scale: 0.5 }] }, 200, 200);
+    expect(glyphData.slice(0, 4)).toEqual([30, 30, 10, 10]);
     renderer.dispose();
     renderer.dispose();
     expect(renderer.stats.stagingBytes).toBe(0);

@@ -95,6 +95,10 @@ const exampleDescriptions = {
     zh: '设置名称、几何类型、坐标系和字段，从空图层开始绘制并查看默认属性。',
     en: 'Create an empty layer with a name, geometry type, CRS and fields, then draw features with default attributes.',
   },
+  'geometry-lod': {
+    zh: '实时调整线面自动简化强度，缩放对比显示细节和顶点数量，支持关闭自动简化。',
+    en: 'Adjusts automatic line and polygon display simplification, compares vertex counts while zooming, and supports full source detail.',
+  },
   'point-lod': {
     zh: '用固定种子的十万或百万点比较自动 LOD、原始点绘制和过滤后的代表点。',
     en: 'Compares automatic LOD, full-detail drawing and filtered representatives with 100k or 1M seeded points.',
@@ -123,6 +127,14 @@ const exampleDescriptions = {
   'getting-started/point-style': {
     zh: '加载点要素，并实时修改 circle 图层的形状、颜色、半径和填充样式。',
     en: 'Loads point features and updates the circle layer shape, color, radius, and fill style in real time.',
+  },
+  labels: {
+    zh: '为点、线和面绑定属性文字注记，实时调整字段、字体、字号、颜色、描边、偏移与碰撞避让。',
+    en: 'Attaches field-based labels to points, lines and polygons, with live font, size, color, halo, offset and collision settings.',
+  },
+  'point-icons': {
+    zh: '用预设、图片 URL 或本地图片替换点符号，调整尺寸、锚点、旋转、偏移、透明度与着色。',
+    en: 'Replaces point symbols with presets, image URLs or local images, with size, anchor, rotation, offset, opacity and tint controls.',
   },
   'getting-started/lines': {
     zh: '加载两条线路要素，并实时修改 line 图层的颜色、宽度以及实线、虚线、点线、点划线或方向箭头点划线样式。',
@@ -790,6 +802,26 @@ export const examples: readonly ExampleDefinition[] = [
     'fixtures/getting-started-lines.geojson',
     'Two route features render with live color, width, and dash styling controls.',
   ),
+  recipe(
+    'labels',
+    'style',
+    '文字注记',
+    'Layer labels',
+    [docsStyling, docsSourceLayer],
+    'Emap.setLayerSymbol',
+    ['labels', 'symbol'],
+    ['fixtures/symbol-labels.geojson'],
+  ),
+  recipe(
+    'point-icons',
+    'style',
+    '点图标',
+    'Point icons',
+    [docsStyling, docsSourceLayer],
+    'Emap.setLayerSymbol',
+    ['icons', 'symbol'],
+    ['fixtures/getting-started-points.geojson'],
+  ),
   seed(
     'getting-started/polygon-fill',
     'style',
@@ -1109,6 +1141,16 @@ export const examples: readonly ExampleDefinition[] = [
     'Emap',
     ['point-lod'],
     ['inline:seeded-points'],
+  ),
+  recipe(
+    'geometry-lod',
+    'rendering',
+    '线面自动简化',
+    'Line and polygon display LOD',
+    [docsPerformance],
+    'Emap.setGeometryLod',
+    ['geometry-lod'],
+    ['fixtures/geometry-lod.geojson'],
   ),
   recipe(
     'simplify-control',

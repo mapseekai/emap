@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "北站 · North", "kind": "车站" }, "geometry": { "type": "Point", "coordinates": [-122.42, 37.81] } },
+    { "type": "Feature", "properties": { "name": "中心 · Central", "kind": "广场" }, "geometry": { "type": "Point", "coordinates": [-122.41, 37.78] } },
+    { "type": "Feature", "properties": { "name": "滨水步道 · Waterfront", "kind": "道路" }, "geometry": { "type": "LineString", "coordinates": [[-122.45, 37.82], [-122.43, 37.83], [-122.39, 37.825], [-122.37, 37.81]] } },
+    { "type": "Feature", "properties": { "name": "城市公园 · Park", "kind": "公园" }, "geometry": { "type": "Polygon", "coordinates": [[[-122.44, 37.74], [-122.38, 37.74], [-122.38, 37.77], [-122.44, 37.77], [-122.44, 37.74]]] } }
+  ]
+}

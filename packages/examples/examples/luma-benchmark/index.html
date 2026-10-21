@@ -3,7 +3,8 @@
 <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Emap - luma WebGL2 A/B Benchmark</title></head>
 <body>
 <div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a><strong>luma WebGL2 / Canvas2D 性能对照</strong></div>
-<p><a href="../luma-raster/">动态栅格示例：放大后读取 TIFF 并补充高清数据 →</a>（本页栅格仅测试固定解码图片）</p><main id="benchmark">
+<p><a href="../luma-raster/">动态栅格示例：放大后读取 TIFF 并补充高清数据 →</a>（本页栅格仅测试固定解码图片）</p>
+<p>样式示例：<a href="../labels/">文字注记</a> · <a href="../point-icons/">点图标</a></p><main id="benchmark">
   <section class="bench-toolbar"><label>GPU API（切换后重新选文件） <select id="gpu-backend" data-lock disabled><option value="webgl">WebGL2</option><option value="webgpu">WebGPU</option></select></label><strong id="geometry-mode">点 LOD · 3 CSS px / 线面全精度</strong></section>
   <section class="bench-toolbar" aria-label="数据与渲染器">
     <label>当前后端 <select id="backend" data-lock disabled><option value="luma">luma / WebGL2</option><option value="canvas">Canvas2D</option></select></label>

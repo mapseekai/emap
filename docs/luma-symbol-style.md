@@ -58,9 +58,9 @@ const style = map.getLayer('poi')?.symbol; // 深拷贝，适合保存或编辑 
 | 对外属性 | 现有内部参数 / 行为 |
 | --- | --- |
 | `text-field` | 简单 `['get', field]` → `label.field`；其他安全表达式或固定字符串 → `label.text` |
-| `text-size` | `label.fontSize`，CSS px，6–96；默认沿用 emap 的 14 |
+| `text-size` | `label.fontSize`，基准 CSS px，6–96；默认 14；拉远最低 12px（配置更小字号时保持配置值），放大最多恢复基准字号 |
 | `text-font` | 一个字体家族/字面名称 → `fontFamily`；内置 Noto 的 Regular/Bold 后缀可映射字重 |
-| `text-offset` | em × 当前 `text-size` → 屏幕像素 offset；字号改变后重新换算 |
+| `text-offset` | em × 基准 `text-size` → 屏幕像素 offset；配置字号改变后重新换算；默认 `[0, 0]` |
 | `text-allow-overlap` | `label.allowOverlap` |
 | `text-padding` | `label.padding`，CSS px |
 | `text-color` / `text-halo-color` / `text-halo-width` | 原有文字颜色、描边颜色与宽度 |
@@ -73,8 +73,8 @@ const style = map.getLayer('poi')?.symbol; // 深拷贝，适合保存或编辑 
 | `symbol.layout.visibility` | 只开关附属文字/图标，不隐藏父几何 |
 
 父图层的 `layout.visibility`、过滤器与源数据版本仍独立生效。
-文字的自动点周边定位、线段定位、面内部锚点和碰撞策略使用 emap 的定位算法。
-`text-offset` 设置定位结果的屏幕偏移；接入时按 emap 的整段线注记和候选点定位语义配置。
+点注记默认位于点正上方、水平居中，保留点半径外 3px 的间距；线注记沿线定位，面注记使用内部锚点，默认开启跨图层碰撞避让。
+`text-offset` 设置定位结果的屏幕偏移；字号、描边与碰撞范围同步缩放，显式偏移保持屏幕像素单位。
 
 ## 图片与字体资源
 

@@ -284,6 +284,8 @@ export class BenchmarkRenderers {
       this.dimensions[0],
       this.dimensions[1],
       this.dimensions[2],
+      false,
+      Math.min(1, Math.abs(view.mx) / this.initialScale),
     );
   }
 

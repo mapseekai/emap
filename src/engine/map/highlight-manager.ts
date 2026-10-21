@@ -80,6 +80,7 @@ export class HighlightManager {
     lineScale: number,
     visibleLayers?: VisibleLayerLookup,
     featureMask?: (sourceId: string, layerId: string) => Uint8Array | null,
+    pixelTolerance = 0.5,
   ): void {
     if (this._highlighted.size === 0) return;
     const highlightColor = this._highlightStyle.color || EMAP_THEME_COLORS.primary;
@@ -93,7 +94,13 @@ export class HighlightManager {
       if (!sourceHighlights) continue;
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
+      const arcs = displayArcs
+        ? displayArcs.getScaledArcs(pixelSize, pixelTolerance)
+        : source.getArcs();
+      if (arcs?.setRetainedInterval && (typeof arcs.isFlat !== 'function' || !arcs.isFlat()))
+        arcs.setRetainedInterval(
+          Math.max(source.getSimplifyFloor?.() ?? 0, pixelSize * pixelTolerance),
+        );
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex];

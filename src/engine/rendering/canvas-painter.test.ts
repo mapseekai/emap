@@ -118,6 +118,134 @@ function makeArrowArcs(parts: readonly (readonly [number, number][])[]) {
   };
 }
 
+describe('independent Canvas screen path filtering', () => {
+  it('initializes the exported painter at device DPR before any camera setter is called', () => {
+    const ratio = window.devicePixelRatio;
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2 });
+    try {
+      const ctx = {
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        stroke: vi.fn(),
+        beginPath: vi.fn(),
+        setLineDash: vi.fn(),
+      };
+      const painter = new CanvasPainter({ width: 100, height: 100, getContext: () => ctx } as any);
+      painter.setScreenPathFiltering(false);
+      painter.drawArcs(
+        makeArrowArcs([
+          [
+            [1, 1],
+            [2, 1],
+          ],
+        ]) as any,
+        { width: 1, color: '#123456' },
+      );
+      expect(ctx.moveTo).toHaveBeenCalledWith(2, 2);
+      expect(ctx.lineTo).toHaveBeenCalledWith(4, 2);
+    } finally {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: ratio });
+    }
+  });
+
+  it.each([
+    1, 2,
+  ])('retains source positions with filtering enabled or disabled at DPR %s', (pixelRatio) => {
+    const { painter, segments } = makeArrowPainter(100, 100, pixelRatio);
+    const arcs = makeArrowArcs([
+      [
+        [0.1, 0.1],
+        [0.11, 0.11],
+        [1.1, 0.1],
+      ],
+    ]);
+    const transform = new AffineTransform(1, -1, 3.35, 4.25);
+    painter.setTransform(transform);
+    painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, bounds: [-5, -5, 5, 5] });
+    painter.setScreenPathFiltering(false);
+    painter.drawArcs(arcs as any, { color: '#123456', width: 2 });
+    expect(segments).toHaveLength(2);
+    expect(segments[0][0]).toBeCloseTo(3.45 * pixelRatio);
+    expect(segments[0][2]).toBeCloseTo(3.46 * pixelRatio);
+    segments.length = 0;
+    painter.setScreenPathFiltering(true);
+    painter.drawArcs(arcs as any, { color: '#123456', width: 2 });
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toEqual([
+      3.45 * pixelRatio,
+      4.15 * pixelRatio,
+      4.45 * pixelRatio,
+      4.15 * pixelRatio,
+    ]);
+    segments.length = 0;
+    transform.translate(0.17, -0.23);
+    painter.setTransform(transform);
+    painter.drawArcs(arcs as any, { color: '#123456', width: 2 });
+    expect(segments).toHaveLength(1);
+    expect(segments[0][0]).toBeCloseTo(3.62 * pixelRatio);
+    expect(segments[0][2]).toBeCloseTo(4.62 * pixelRatio);
+  });
+
+  it.each([
+    { dash: [2, 3] },
+    { color: 'rgba(0, 0, 0, 0.5)' },
+    { color: 'color(display-p3 0 0 0 / 50%)' },
+  ])('preserves raw geometry for styles outside opaque solid filtering: %j', (style) => {
+    const { painter, segments } = makeArrowPainter();
+    const arcs = makeArrowArcs([
+      [
+        [0.1, 0.1],
+        [0.11, 0.11],
+        [1.1, 0.1],
+      ],
+    ]);
+    painter.drawArcs(arcs as any, { width: 2, color: '#123456', ...style });
+    expect(segments).toHaveLength(2);
+    expect(segments[0][0]).toBeCloseTo(0.1);
+    expect(segments[0][2]).toBeCloseTo(0.11);
+  });
+
+  it.each([
+    'rgb(0, 0, 0)',
+    'color(display-p3 0 0 0)',
+  ])('also filters opaque native CSS colors: %s', (color) => {
+    const { painter, segments } = makeArrowPainter();
+    const arcs = makeArrowArcs([
+      [
+        [0.1, 0.1],
+        [0.11, 0.11],
+        [1.1, 0.1],
+      ],
+    ]);
+    painter.drawArcs(arcs as any, { width: 2, color });
+    expect(segments).toHaveLength(1);
+  });
+
+  it('keeps subpixel polygon rings at source precision with either screen setting', () => {
+    const ctx = { beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), fill: vi.fn() };
+    const { painter } = createCanvasPainterHarness(ctx);
+    const base = makeArrowArcs([
+      [
+        [0.1, 0.1],
+        [0.11, 0.1],
+        [0.1, 0.11],
+        [0.1, 0.1],
+      ],
+    ]);
+    const arcs = { ...base, getShapeIter: (part: number[]) => base.getArcIter(part[0]) };
+    for (const enabled of [true, false]) {
+      painter.setScreenPathFiltering(enabled);
+      ctx.lineTo.mockClear();
+      painter.drawPolygonFill([[[0]]], arcs as any, '#123456', undefined, 0.5);
+      expect(ctx.lineTo.mock.calls).toEqual([
+        [0.11, 0.1],
+        [0.1, 0.11],
+        [0.1, 0.1],
+      ]);
+    }
+  });
+});
+
 const arrowStyle = {
   color: '#2463eb',
   width: 2,
@@ -1216,8 +1344,8 @@ describe('polygon fills isolate independent features', () => {
   });
 });
 
-describe('bounded collapsed polygon replay', () => {
-  function cachedHarness() {
+describe('bounded point-only polygon replay', () => {
+  function cachedHarness(pointOnly = true) {
     const commands: unknown[][] = [];
     const { painter } = createCanvasPainterHarness({
       globalAlpha: 1,
@@ -1228,6 +1356,19 @@ describe('bounded collapsed polygon replay', () => {
       clearRect: vi.fn(),
     });
     const { arcs } = harness();
+    if (pointOnly)
+      arcs.getShapeIter = (part) => {
+        let visited = false;
+        return {
+          x: part[0] + 0.25,
+          y: part[0] + 0.75,
+          hasNext() {
+            if (visited) return false;
+            visited = true;
+            return true;
+          },
+        };
+      };
     const trace = vi.spyOn(arcs, 'getShapeIter');
     let interval = 0;
     arcs.getRetainedInterval = () => interval;
@@ -1275,7 +1416,7 @@ describe('bounded collapsed polygon replay', () => {
   });
 
   it('does not retain or discard paths that still contain edges', () => {
-    const h = cachedHarness();
+    const h = cachedHarness(false);
     h.camera.mx = h.camera.my = 1;
     h.painter.setTransform(h.camera);
     h.draw();
@@ -1328,7 +1469,7 @@ describe('bounded collapsed polygon replay', () => {
 
   it('keeps the typed-array budget bounded and draws uncached layers when it is full', () => {
     const h = cachedHarness();
-    const shapes = new Array(Math.floor((32 * 1024 ** 2) / 9));
+    const shapes = new Array(Math.floor((32 * 1024 ** 2) / 17));
     shapes[0] = [[0]];
     const draw = () =>
       h.painter.drawPolygonFill(shapes, h.arcs, '#333', undefined, 1, {
@@ -1338,7 +1479,7 @@ describe('bounded collapsed polygon replay', () => {
     draw();
     draw();
     expect(h.trace).toHaveBeenCalledTimes(1);
-    expect(Reflect.get(h.painter, '_fillPathBytes')).toBe(shapes.length * 9);
+    expect(Reflect.get(h.painter, '_fillPathBytes')).toBe(shapes.length * 17);
     h.layer.id = 'second';
     h.draw();
     h.draw();

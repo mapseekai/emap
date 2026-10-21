@@ -4,6 +4,7 @@ import { LumaPainter } from './painter';
 import { GpuRenderer } from './gpu-renderer';
 import { Viewport } from '../../domain/geo/viewport';
 import { Bounds } from '../../domain/geo/bounds';
+import { AffineTransform } from '../../domain/geo/transform';
 import type { ArcCollection } from '../../shared/types/mapshaper-types';
 vi.mock('./gpu-renderer', () => ({ GpuRenderer: { create: vi.fn() } }));
 vi.mock('./colors', () => ({
@@ -18,6 +19,9 @@ vi.mock('./colors', () => ({
 afterEach(() => vi.clearAllMocks());
 async function fixture() {
   const gpu = {
+    pathMode: 'auto',
+    pathRendering: { samples: 4 },
+    strokeBatchingEnabled: true,
     resize: vi.fn(),
     begin: vi.fn(() => true),
     end: vi.fn(),
@@ -72,17 +76,122 @@ async function fixture() {
   return { painter, gpu, view, arcs, frame };
 }
 describe('formal GPU prepared path selection', () => {
+  it.each([
+    { name: 'raw opaque MSAA', expected: true },
+    { name: 'translucent', alpha: 0.5, expected: false },
+    { name: 'dashed', dash: [2, 3], expected: false },
+    { name: 'arrows', arrow: true, expected: false },
+    { name: 'legacy', mode: 'legacy', expected: false },
+    { name: 'single sample', samples: 1, expected: false },
+    { name: 'batching disabled', batching: false, expected: false },
+    { name: 'screen filtered', screen: true, expected: false },
+    { name: 'unowned overlay', sourceSelection: false, expected: false },
+  ])('gates spatial preparation for $name strokes', async (c) => {
+    const f = await fixture();
+    Reflect.set(f.arcs, 'getPointCount', () => 100_000);
+    f.gpu.pathMode = c.mode ?? 'auto';
+    f.gpu.pathRendering.samples = c.samples ?? 4;
+    f.gpu.strokeBatchingEnabled = c.batching ?? true;
+    f.painter.setScreenPathFiltering(c.screen ?? false);
+    vi.spyOn(Reflect.get(f.painter, 'colors'), 'resolve').mockReturnValue([1, 0, 0, c.alpha ?? 1]);
+    const request = vi.spyOn(Reflect.get(f.painter, 'chunks'), 'request');
+    f.frame(() => {
+      f.painter.setLayerContext({
+        id: 'line',
+        sourceId: 's',
+        revision: 0,
+        sourceSelection: c.sourceSelection ?? true,
+      });
+      f.painter.drawPaths(
+        [[[2, 1, 0]]],
+        { width: 1, dash: c.dash, ...(c.arrow ? { dashType: 'arrow-dot' as const } : {}) },
+        f.arcs,
+      );
+    });
+    expect(request.mock.calls).toHaveLength(1);
+    expect(request.mock.calls[0][0]).toMatchObject({ spatialOrder: c.expected });
+    f.painter.dispose();
+  });
+  it('retains one whole-layer request when panning large source-owned strokes', async () => {
+    const f = await fixture();
+    Reflect.set(f.arcs, 'getPointCount', () => 100_000);
+    Reflect.set(f.gpu, 'compactStrokesEnabled', false);
+    const cache = Reflect.get(f.painter, 'chunks');
+    const request = vi.spyOn(cache, 'request');
+    const draw = () => {
+      f.painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, sourceSelection: true });
+      f.painter.drawArcs(f.arcs, { width: 1 }, f.view.getArcFilter(f.arcs));
+    };
+    f.frame(draw);
+    f.view.pan(100, 0);
+    f.frame(draw);
+    expect(request.mock.results[1].value).toBe(request.mock.results[0].value);
+    expect(request.mock.calls[0][0]).toMatchObject({ wholeLayer: true, viewBounds: undefined });
+    expect(f.arcs.arcIntersectsBBox).not.toHaveBeenCalled();
+    f.painter.dispose();
+  });
+  it.each([
+    1, 2,
+  ])('filters small paths independently of geometry LOD, invalidates toggles and reuses a panned screen mesh at DPR %s', async (pixelRatio) => {
+    const f = await fixture();
+    const points = [
+      [0.1, 0.1],
+      [0.11, 0.11],
+      [1.1, 0.1],
+    ];
+    f.arcs.getArcIter = () => {
+      let i = -1;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (++i >= points.length) return false;
+          [this.x, this.y] = points[i];
+          return true;
+        },
+      };
+    };
+    const view = new AffineTransform(1, -1, 3.35, 4.25);
+    f.painter.setPixelRatio(pixelRatio);
+    const draw = () => {
+      f.painter.setTransform(view);
+      f.painter.clear();
+      f.painter.setLayerContext({
+        id: 'line',
+        sourceId: 's',
+        revision: 0,
+        bounds: [-5, -5, 5, 5],
+        geometryLod: false,
+      });
+      f.painter.drawArcs(f.arcs, { width: 2 }, undefined, new Int32Array([0]));
+      f.painter.finishFrame();
+    };
+    draw();
+    expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(1);
+    expect(f.gpu.drawMesh.mock.calls.at(-1)![1]).toMatchObject({
+      screenSpace: true,
+      screenView: [1, -1, -0, 0],
+    });
+    view.translate(0.17, -0.23);
+    draw();
+    expect(f.gpu.createMesh).toHaveBeenCalledOnce();
+    f.painter.setScreenPathFiltering(false);
+    draw();
+    expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(2);
+    expect(f.gpu.drawMesh.mock.calls.at(-1)![1].screenSpace).not.toBe(true);
+    f.painter.setScreenPathFiltering(true);
+    draw();
+    expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(1);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+    f.painter.dispose();
+  });
+
   it('does not rescan viewport arc predicates on warm frames or paint-only changes', async () => {
     const f = await fixture(),
       ids = new Uint32Array([0, 1, 2]);
     f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }, f.view.getArcFilter(f.arcs), ids));
     f.frame(() =>
-      f.painter.drawArcs(
-        f.arcs,
-        { width: 2, color: '#00ff00', dash: [2, 3] },
-        f.view.getArcFilter(f.arcs),
-        ids,
-      ),
+      f.painter.drawArcs(f.arcs, { width: 2, color: '#00ff00' }, f.view.getArcFilter(f.arcs), ids),
     );
     expect(f.arcs.arcIsSmaller).toHaveBeenCalledTimes(3);
     expect(f.gpu.createMesh).toHaveBeenCalledOnce();

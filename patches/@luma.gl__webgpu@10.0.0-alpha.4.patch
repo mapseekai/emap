@@ -1,0 +1,160 @@
+diff --git a/src/adapter/resources/webgpu-shader.ts b/src/adapter/resources/webgpu-shader.ts
+--- a/src/adapter/resources/webgpu-shader.ts
++++ b/src/adapter/resources/webgpu-shader.ts
+@@ -61,6 +61,7 @@
+     // this.handle.destroy();
+     // @ts-expect-error readonly
+     this.handle = null;
++    this.destroyResource();
+   }
+
+   /** Returns compilation info for this shader */
+diff --git a/src/adapter/resources/webgpu-pipeline-layout.ts b/src/adapter/resources/webgpu-pipeline-layout.ts
+--- a/src/adapter/resources/webgpu-pipeline-layout.ts
++++ b/src/adapter/resources/webgpu-pipeline-layout.ts
+@@ -43,6 +43,7 @@
+     // WebGPUPipelineLayout has no destroy method.
+     // @ts-expect-error
+     this.handle = null;
++    this.destroyResource();
+   }
+
+   protected mapShaderLayoutToBindGroupEntriesByGroup(): GPUBindGroupLayoutEntry[][] {
+diff --git a/src/adapter/resources/webgpu-render-pipeline.ts b/src/adapter/resources/webgpu-render-pipeline.ts
+--- a/src/adapter/resources/webgpu-render-pipeline.ts
++++ b/src/adapter/resources/webgpu-render-pipeline.ts
+@@ -116,6 +116,7 @@
+     // WebGPURenderPipeline has no destroy method.
+     // @ts-expect-error
+     this.handle = null;
++    this.destroyResource();
+   }
+
+   /** @deprecated Set bindings on RenderPass instead. Will be removed in the next major release. */
+@@ -207,6 +208,7 @@
+     const layout = this.device.createPipelineLayout({
+       shaderLayout: this.shaderLayout
+     });
++    this.attachResource(layout);
+
+     // Create a partially populated descriptor
+     const descriptor: GPURenderPipelineDescriptor = {
+diff --git a/src/adapter/resources/webgpu-vertex-array.ts b/src/adapter/resources/webgpu-vertex-array.ts
+--- a/src/adapter/resources/webgpu-vertex-array.ts
++++ b/src/adapter/resources/webgpu-vertex-array.ts
+@@ -38,8 +38,6 @@
+     this.resolvedBufferSlots = resolvedSlots;
+     this.logicalBufferSlots = getBufferSlots(props.shaderLayout, props.bufferLayout);
+   }
+-
+-  override destroy(): void {}
+
+   /**
+    * Set an elements buffer, for indexed rendering.
+diff --git a/dist/adapter/resources/webgpu-shader.js b/dist/adapter/resources/webgpu-shader.js
+--- a/dist/adapter/resources/webgpu-shader.js
++++ b/dist/adapter/resources/webgpu-shader.js
+@@ -45,6 +45,7 @@
+         // this.handle.destroy();
+         // @ts-expect-error readonly
+         this.handle = null;
++        this.destroyResource();
+     }
+     /** Returns compilation info for this shader */
+     async getCompilationInfo() {
+diff --git a/dist/adapter/resources/webgpu-pipeline-layout.js b/dist/adapter/resources/webgpu-pipeline-layout.js
+--- a/dist/adapter/resources/webgpu-pipeline-layout.js
++++ b/dist/adapter/resources/webgpu-pipeline-layout.js
+@@ -26,6 +26,7 @@
+         // WebGPUPipelineLayout has no destroy method.
+         // @ts-expect-error
+         this.handle = null;
++        this.destroyResource();
+     }
+     mapShaderLayoutToBindGroupEntriesByGroup() {
+         const maxGroup = this.props.shaderLayout.bindings.reduce((highestGroup, binding) => Math.max(highestGroup, binding.group), -1);
+diff --git a/dist/adapter/resources/webgpu-render-pipeline.js b/dist/adapter/resources/webgpu-render-pipeline.js
+--- a/dist/adapter/resources/webgpu-render-pipeline.js
++++ b/dist/adapter/resources/webgpu-render-pipeline.js
+@@ -89,6 +89,7 @@
+         // WebGPURenderPipeline has no destroy method.
+         // @ts-expect-error
+         this.handle = null;
++        this.destroyResource();
+     }
+     /** @deprecated Set bindings on RenderPass instead. Will be removed in the next major release. */
+     setBindings(bindings) {
+@@ -153,6 +154,7 @@
+         const layout = this.device.createPipelineLayout({
+             shaderLayout: this.shaderLayout
+         });
++        this.attachResource(layout);
+         // Create a partially populated descriptor
+         const descriptor = {
+             vertex,
+diff --git a/dist/adapter/resources/webgpu-vertex-array.js b/dist/adapter/resources/webgpu-vertex-array.js
+--- a/dist/adapter/resources/webgpu-vertex-array.js
++++ b/dist/adapter/resources/webgpu-vertex-array.js
+@@ -24,7 +24,6 @@
+         this.resolvedBufferSlots = resolvedSlots;
+         this.logicalBufferSlots = getBufferSlots(props.shaderLayout, props.bufferLayout);
+     }
+-    destroy() { }
+     /**
+      * Set an elements buffer, for indexed rendering.
+      * Must be a Buffer bound to buffer with usage bit Buffer.INDEX set.
+diff --git a/dist/adapter/resources/webgpu-vertex-array.d.ts b/dist/adapter/resources/webgpu-vertex-array.d.ts
+--- a/dist/adapter/resources/webgpu-vertex-array.d.ts
++++ b/dist/adapter/resources/webgpu-vertex-array.d.ts
+@@ -13,7 +13,6 @@
+     private readonly logicalBufferSlots;
+     /** Creates a WebGPU vertex array helper for draw-time buffer rebinding. */
+     constructor(device: WebGPUDevice, props: VertexArrayProps);
+-    destroy(): void;
+     /**
+      * Set an elements buffer, for indexed rendering.
+      * Must be a Buffer bound to buffer with usage bit Buffer.INDEX set.
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -837,6 +837,7 @@
+       }
+       destroy() {
+         this.handle = null;
++        this.destroyResource();
+       }
+       /** Returns compilation info for this shader */
+       async getCompilationInfo() {
+@@ -1252,6 +1253,7 @@
+       }
+       destroy() {
+         this.handle = null;
++        this.destroyResource();
+       }
+       /** @deprecated Set bindings on RenderPass instead. Will be removed in the next major release. */
+       setBindings(bindings) {
+@@ -1312,6 +1314,7 @@
+         const layout = this.device.createPipelineLayout({
+           shaderLayout: this.shaderLayout
+         });
++        this.attachResource(layout);
+         const descriptor = {
+           vertex,
+           ...fragment && { fragment },
+@@ -1703,8 +1706,6 @@
+         this.resolvedBufferSlots = resolvedSlots;
+         this.logicalBufferSlots = getBufferSlots(props.shaderLayout, props.bufferLayout);
+       }
+-      destroy() {
+-      }
+       /**
+        * Set an elements buffer, for indexed rendering.
+        * Must be a Buffer bound to buffer with usage bit Buffer.INDEX set.
+@@ -2847,6 +2848,7 @@
+       }
+       destroy() {
+         this.handle = null;
++        this.destroyResource();
+       }
+       mapShaderLayoutToBindGroupEntriesByGroup() {
+         const maxGroup = this.props.shaderLayout.bindings.reduce((highestGroup, binding) => Math.max(highestGroup, binding.group), -1);

@@ -3,9 +3,12 @@ import { PolygonPresentation, type PolygonChannel } from './polygon-presentation
 import type { GeometryEntry, GeometryRequest } from './geometry-cache';
 import type { GeometryPartition } from '../../engine/rendering/luma/geometry-jobs';
 
-function fixture() {
+function fixture(atomic = false, fillMembership = [0, 1]) {
   const shapes = [[[0]], [[1]]];
-  const fill: GeometryPartition = { membership: Uint32Array.from([0, 1]), chunks: 2 };
+  const fill: GeometryPartition = {
+    membership: Uint32Array.from(fillMembership),
+    chunks: Math.max(...fillMembership) + 1,
+  };
   const stroke: GeometryPartition = { membership: Uint32Array.from([7, 3]), chunks: 8 };
   const calls: string[] = [];
   const resident = new Set<GeometryEntry>();
@@ -13,6 +16,7 @@ function fixture() {
     report = vi.fn();
   const ready = (entry: GeometryEntry) => resident.has(entry) && entry.state === 'ready';
   const group = new PolygonPresentation(shapes, {
+    atomic,
     ready,
     complete: (request) => !!request.entries && request.entries.every(ready),
     invalidate,
@@ -65,6 +69,207 @@ const planned = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe('polygon presentation', () => {
+  it('exposes only the lifetime of a pending dependency plan and clears it on reset or disposal', async () => {
+    const f = fixture(),
+      old = f.entry('old', 7, [0]);
+    expect(f.group.planning).toBe(false);
+    f.group.update([f.channel('path', [old])]);
+    f.group.draw();
+    const next = f.entry('next', 7, [0], 'building');
+    f.group.update([f.channel('path', [next])]);
+    f.group.draw();
+    expect(f.group.planning).toBe(true);
+    await planned(f);
+    expect(f.group.planning).toBe(false);
+    f.group.update([f.channel('path', [f.entry('newer', 7, [0], 'building')])]);
+    expect(f.group.planning).toBe(false);
+    f.group.draw();
+    expect(f.group.planning).toBe(true);
+    f.group.dispose();
+    expect(f.group.planning).toBe(false);
+  });
+  it('releases independent old strokes while retaining one identical fill across replacement', async () => {
+    const f = fixture(false, [0, 0]),
+      fill = f.entry('fill', 0, [0, 1]),
+      oldA = f.entry('old-a', 7, [0]),
+      oldB = f.entry('old-b', 3, [~1]);
+    f.group.update([f.channel('fill', [fill]), f.channel('path', [oldA, oldB])]);
+    f.group.draw();
+    const nextA = f.entry('next-a', 7, [0]),
+      nextB = f.entry('next-b', 3, [~1], 'building');
+    f.calls.length = 0;
+    f.group.update([f.channel('fill', [fill]), f.channel('path', [nextA, nextB])]);
+    f.group.draw();
+    await planned(f);
+    expect(f.calls).toEqual(['fill', 'next-a', 'old-b']);
+    f.resident.delete(oldA);
+    f.calls.length = 0;
+    f.group.draw();
+    expect(f.calls).toEqual(['fill', 'next-a', 'old-b']);
+    expect(f.group.complete).toBe(false);
+    nextB.state = 'ready';
+    f.calls.length = 0;
+    f.group.draw();
+    expect(f.calls).toEqual(['fill', 'next-a', 'next-b']);
+    expect(f.group.complete).toBe(true);
+    f.group.dispose();
+  });
+  it('keeps changed fills paired while a separate stable fill is retained', async () => {
+    const f = fixture(),
+      stable = f.entry('stable', 0, [0, 1]),
+      oldFill = f.entry('old-fill', 0, [0]),
+      oldA = f.entry('old-a', 7, [0]),
+      oldB = f.entry('old-b', 3, [1]);
+    const stableChannel = f.channel('fill', [stable], 'stable', 0);
+    stableChannel.request.plan.promise = Promise.resolve({
+      membership: Uint32Array.from([0, 0]),
+      chunks: 1,
+    });
+    f.group.update([
+      stableChannel,
+      f.channel('fill', [oldFill], 'changing', 1),
+      f.channel('path', [oldA, oldB]),
+    ]);
+    f.group.draw();
+    const fill = f.entry('next-fill', 0, [0]),
+      nextA = f.entry('next-a', 7, [0], 'building'),
+      nextB = f.entry('next-b', 3, [1]);
+    f.group.update([
+      stableChannel,
+      f.channel('fill', [fill], 'changing', 1),
+      f.channel('path', [nextA, nextB]),
+    ]);
+    f.group.draw();
+    await planned(f);
+    expect(f.calls).toEqual(['stable', 'old-fill', 'next-b', 'old-a']);
+    nextA.state = 'ready';
+    f.calls.length = 0;
+    f.group.draw();
+    expect(f.calls).toEqual(['stable', 'next-fill', 'next-a', 'next-b']);
+    f.group.dispose();
+  });
+  it('does not exempt identical fill geometry when its paint channel changes', async () => {
+    const f = fixture(false, [0, 0]),
+      fill = f.entry('fill', 0, [0, 1]),
+      oldA = f.entry('old-a', 7, [0]),
+      oldB = f.entry('old-b', 3, [1]);
+    f.group.update([f.channel('fill', [fill], 'old-paint'), f.channel('path', [oldA, oldB])]);
+    f.group.draw();
+    f.group.update([
+      f.channel('fill', [fill], 'new-paint'),
+      f.channel('path', [f.entry('next-a', 7, [0]), f.entry('next-b', 3, [1], 'building')]),
+    ]);
+    f.group.draw();
+    await planned(f);
+    expect(f.calls).toEqual(['fill', 'old-b', 'old-a']);
+    f.group.dispose();
+  });
+  it('does not exempt a replacement fill entry that reuses the same topology job', async () => {
+    const f = fixture(false, [0, 0]),
+      fill = f.entry('old-fill', 0, [0, 1]),
+      oldA = f.entry('old-a', 7, [0]),
+      oldB = f.entry('old-b', 3, [1]);
+    f.group.update([f.channel('fill', [fill]), f.channel('path', [oldA, oldB])]);
+    f.group.draw();
+    const nextFill = f.entry('new-fill', 0, [0, 1]);
+    nextFill.job = fill.job;
+    f.group.update([
+      f.channel('fill', [nextFill]),
+      f.channel('path', [f.entry('next-a', 7, [0]), f.entry('next-b', 3, [1], 'building')]),
+    ]);
+    f.group.draw();
+    await planned(f);
+    expect(f.calls).toEqual(['old-fill', 'old-b', 'old-a']);
+    f.group.dispose();
+  });
+  for (const update of [false, true])
+    it(`replans conservatively if an exempt fill loses residency ${update ? 'across another update' : 'after partial replacement'}`, async () => {
+      const f = fixture(false, [0, 0]),
+        fill = f.entry('fill', 0, [0, 1]),
+        oldA = f.entry('old-a', 7, [0]),
+        oldB = f.entry('old-b', 3, [1]);
+      f.group.update([f.channel('fill', [fill]), f.channel('path', [oldA, oldB])]);
+      f.group.draw();
+      f.group.update([
+        f.channel('fill', [fill]),
+        f.channel('path', [f.entry('next-a', 7, [0]), f.entry('next-b', 3, [1], 'building')]),
+      ]);
+      f.group.draw();
+      await planned(f);
+      expect(f.calls).toEqual(['fill', 'next-a', 'old-b']);
+      f.resident.delete(fill);
+      if (update)
+        f.group.update([
+          f.channel('fill', [fill]),
+          f.channel('path', [f.entry('latest-a', 7, [0]), f.entry('latest-b', 3, [1], 'building')]),
+        ]);
+      f.invalidate.mockClear();
+      f.calls.length = 0;
+      f.group.draw();
+      expect(f.calls).toEqual([]);
+      await planned(f);
+      expect(f.calls).toEqual([]);
+      f.group.dispose();
+    });
+  it('discards a superseded dependency plan while retaining a shared fill', async () => {
+    const f = fixture(false, [0, 0]),
+      fill = f.entry('fill', 0, [0, 1]);
+    f.group.update([
+      f.channel('fill', [fill]),
+      f.channel('path', [f.entry('old-a', 7, [0]), f.entry('old-b', 3, [1])]),
+    ]);
+    f.group.draw();
+    const pending = f.channel('path', [
+      f.entry('pending-a', 7, [0]),
+      f.entry('pending-b', 3, [1], 'building'),
+    ]);
+    let release!: (partition: GeometryPartition) => void;
+    pending.request.plan.promise = new Promise((resolve) => {
+      release = resolve;
+    });
+    f.group.update([f.channel('fill', [fill]), pending]);
+    f.group.draw();
+    f.calls.length = 0;
+    f.group.update([
+      f.channel('fill', [fill]),
+      f.channel('path', [f.entry('latest-a', 7, [0]), f.entry('latest-b', 3, [1])]),
+    ]);
+    f.group.draw();
+    expect(f.calls).toEqual(['fill', 'latest-a', 'latest-b']);
+    release({ membership: Uint32Array.from([7, 3]), chunks: 8 });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(f.invalidate).not.toHaveBeenCalled();
+    expect(f.report).not.toHaveBeenCalled();
+    f.calls.length = 0;
+    f.group.draw();
+    expect(f.calls).toEqual(['fill', 'latest-a', 'latest-b']);
+    f.group.dispose();
+  });
+  it('keeps all stroke paint buckets on the last complete layer across repeated updates', async () => {
+    const f = fixture(true);
+    const first = f.entry('old-red', 0, [0]),
+      second = f.entry('old-blue', 1, [1]);
+    f.group.update([f.channel('path', [first], 'red', 0), f.channel('path', [second], 'blue', 1)]);
+    f.group.draw();
+    const red = f.entry('new-red', 0, [0]);
+    const blue = f.entry('new-blue', 1, [1], 'building');
+    for (let i = 0; i < 2; i++) {
+      f.calls.length = 0;
+      f.group.update([f.channel('path', [red], 'red', 0), f.channel('path', [blue], 'blue', 1)]);
+      f.group.draw();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      f.calls.length = 0;
+      f.group.draw();
+      expect(f.calls).toEqual(['old-red', 'old-blue']);
+      expect(f.group.complete).toBe(false);
+    }
+    f.calls.length = 0;
+    blue.state = 'ready';
+    f.group.draw();
+    expect(f.calls).toEqual(['new-red', 'new-blue']);
+    expect(f.group.complete).toBe(true);
+    f.group.dispose();
+  });
   for (const held of ['fill', 'path'] as const)
     it(`never publishes one half while ${held} is pending`, async () => {
       const f = fixture(),

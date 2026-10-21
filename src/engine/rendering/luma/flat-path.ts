@@ -152,9 +152,11 @@ export function flatScreenPathGeometry(
     starts[path++] = n / 2;
     if (trackMembers) members.push(j);
     let lastX = NaN,
-      lastY = NaN;
+      lastY = NaN,
+      x = NaN,
+      y = NaN;
     for (let i = offsets[j]; i < offsets[j + 1]; i++) {
-      let [x, y] = view.project(xy[i * 2], xy[i * 2 + 1]);
+      [x, y] = view.project(xy[i * 2], xy[i * 2 + 1]);
       if (
         !Number.isFinite(x) ||
         !Number.isFinite(y) ||
@@ -167,21 +169,30 @@ export function flatScreenPathGeometry(
           screenStats: { ...emptyScreenPathStats(), rawFallbackChunks: 1 },
         };
       if (r.halfPixel) {
-        x = ((x * 2) | 0) / 2;
-        y = ((y * 2) | 0) / 2;
-        if (n > first && x === lastX && y === lastY) {
+        const cellX = (x * 2) | 0,
+          cellY = (y * 2) | 0;
+        if (n > first && cellX === lastX && cellY === lastY) {
           stats.duplicateVertices++;
           continue;
         }
+        lastX = cellX;
+        lastY = cellY;
       }
       positions[n++] = x / r.pixelRatio;
       positions[n++] = y / r.pixelRatio;
-      lastX = x;
-      lastY = y;
+    }
+    // The grid chooses interior vertices; original endpoints keep road junctions fixed.
+    if (
+      r.halfPixel &&
+      (positions[n - 2] !== x / r.pixelRatio || positions[n - 1] !== y / r.pixelRatio)
+    ) {
+      positions[n++] = x / r.pixelRatio;
+      positions[n++] = y / r.pixelRatio;
+      stats.duplicateVertices--;
     }
     if (r.halfPixel && n - first === 2) {
-      positions[n++] = (lastX + 0.1) / r.pixelRatio;
-      positions[n++] = lastY / r.pixelRatio;
+      positions[n++] = (x + 0.1) / r.pixelRatio;
+      positions[n++] = y / r.pixelRatio;
       stats.collapsedArcs++;
     }
   }

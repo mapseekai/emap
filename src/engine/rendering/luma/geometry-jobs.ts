@@ -1,4 +1,5 @@
 import { geometryBatchIds } from './geometry-batches';
+import { radixOrder } from './radix-order';
 import { normalizePointShape } from '../../../domain/source/layer-utils';
 import {
   absArcId,
@@ -21,6 +22,10 @@ export interface GeometryInput {
   forward?: boolean;
   /** Multicolour icons must preserve feature order even within one paint. */
   ordered?: boolean;
+  /** Cache and present the entire layer; batches bound preparation, not spatial coverage. */
+  wholeLayer?: boolean;
+  /** Raw opaque MSAA strokes alone permit ordering inside one existing preparation job. */
+  spatialOrder?: boolean;
   filter?: (id: number) => boolean;
   interval: number;
   bounds: Rect;
@@ -122,6 +127,35 @@ export async function partitionGeometry(
   };
   const membership = new Uint32Array(count);
   membership.fill(EMPTY_COMPONENT);
+  if (input.wholeLayer && !input.ordered) {
+    signal.throwIfAborted();
+    const costs: number[] = [];
+    let chunk = 0,
+      vertices = 0,
+      size = 0;
+    for (let id = 0; id < count; id++) {
+      if ((id & 2047) === 0 && performance.now() - slice >= 4) await checkpoint();
+      const bounds = box(),
+        cost = geometryBounds(input, id, bounds, data);
+      if (!bounds.every(Number.isFinite) || (input.kind === 'fill' && cost < 3)) continue;
+      if (size && (vertices + cost > GEOMETRY_CHUNK_VERTICES || size >= 8192)) {
+        costs.push(vertices);
+        chunk++;
+        vertices = size = 0;
+      }
+      membership[id] = chunk;
+      vertices += cost;
+      size++;
+    }
+    if (size) costs.push(vertices);
+    return {
+      membership,
+      chunks: costs.length,
+      ...(input.kind === 'path' && count >= 100_000 && costs.length >= 64
+        ? { batchIds: geometryBatchIds(Uint32Array.from(costs), GEOMETRY_CHUNK_VERTICES * 4) }
+        : {}),
+    };
+  }
   if (input.ordered) {
     for (let i = 0; i < count; i++) {
       if ((i & 8191) === 0 && performance.now() - slice >= 4) await checkpoint();
@@ -273,7 +307,7 @@ export async function selectGeometryJobs(
       members: Int32Array.from(group.members),
       ...(input.kind === 'point' ? { components: Uint32Array.from(group.components) } : {}),
     }));
-  if (!partition.batchIds || input.kind !== 'path') return jobs;
+  if (!partition.batchIds || input.kind !== 'path') return spatialPathJobs(input, jobs, signal);
   const batched: GeometryJob[] = [];
   for (let i = 0; i < jobs.length; ) {
     const first = i,
@@ -290,7 +324,68 @@ export async function selectGeometryJobs(
     }
     batched.push({ chunk: batch, members });
   }
-  return batched;
+  return spatialPathJobs(input, batched, signal);
+}
+function spread(value: number): number {
+  let n = value & 0xffff;
+  n = (n | (n << 8)) & 0x00ff00ff;
+  n = (n | (n << 4)) & 0x0f0f0f0f;
+  n = (n | (n << 2)) & 0x33333333;
+  return (n | (n << 1)) & 0x55555555;
+}
+/** Same-paint coverage is commutative only at the caller's opaque MSAA boundary.
+ * Sort derived member IDs, never coordinates, source shapes or preparation groups. */
+async function spatialPathJobs(
+  input: GeometryInput,
+  jobs: GeometryJob[],
+  signal: AbortSignal,
+): Promise<GeometryJob[]> {
+  if (
+    !input.spatialOrder ||
+    input.kind !== 'path' ||
+    !input.wholeLayer ||
+    input.ordered ||
+    input.screen
+  )
+    return jobs;
+  const data = input.arcs!.getVertexData?.(),
+    bounds = box(),
+    [x0, y0, x1, y1] = input.bounds;
+  let slice = performance.now();
+  for (const job of jobs) {
+    signal.throwIfAborted();
+    const codes = new Uint32Array(job.members.length);
+    for (let i = 0; i < codes.length; i++) {
+      if ((i & 2047) === 0 && performance.now() - slice >= 4) {
+        await geometryYield(signal);
+        slice = performance.now();
+      }
+      bounds[0] = bounds[1] = Infinity;
+      bounds[2] = bounds[3] = -Infinity;
+      arcBox(input.arcs!, job.members[i], bounds, data);
+      const x = Math.max(
+          0,
+          Math.min(
+            65535,
+            Math.floor(((bounds[0] / 2 + bounds[2] / 2 - x0) / (x1 - x0 || 1)) * 65535),
+          ),
+        ),
+        y = Math.max(
+          0,
+          Math.min(
+            65535,
+            Math.floor(((bounds[1] / 2 + bounds[3] / 2 - y0) / (y1 - y0 || 1)) * 65535),
+          ),
+        );
+      codes[i] = (spread(x) | (spread(y) << 1)) >>> 0;
+    }
+    const order = radixOrder(codes),
+      members = new Int32Array(order.length);
+    for (let i = 0; i < order.length; i++) members[i] = job.members[order[i]];
+    job.members = members;
+  }
+  signal.throwIfAborted();
+  return jobs;
 }
 export interface GeometryPacket {
   /** Optional conservative source-space coverage for derived GPU fill storage. */

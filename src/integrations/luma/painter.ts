@@ -9,9 +9,10 @@ import type { GeometryEntry } from './geometry-cache';
 import { GeometryChunkCache, type GeometryOwner, type GeometryRequest } from './geometry-cache';
 import type { GeometryInput } from '../../engine/rendering/luma/geometry-jobs';
 import { groundBounds } from '../../domain/geo/perspective-transform';
-import { arcVisibilityKey } from '../../domain/geo/arc-visibility';
+import { arcVisibilityFilter, arcVisibilityKey } from '../../domain/geo/arc-visibility';
 import { GpuRenderer } from './gpu-renderer';
 import { GpuColors } from './colors';
+import { useMsaaPath } from './path-pipeline';
 import {
   PainterGeometryCache,
   type GeometryKey,
@@ -28,6 +29,8 @@ import {
   type Shapes,
 } from '../../engine/rendering/luma/geometry';
 import { pathGeometry } from '../../engine/rendering/luma/path-geometry';
+import { flatScreenPathGeometry } from '../../engine/rendering/luma/flat-path';
+import type { ScreenPathRequest } from '../../engine/rendering/luma/screen-paths';
 import { CanvasPainter } from '../../engine/rendering/canvas-painter';
 import type {
   EditPainter,
@@ -69,6 +72,7 @@ export class LumaPainter implements EditPainter {
   private width = 1;
   private height = 1;
   private pixelRatio = 1;
+  private screenPathFiltering = true;
   private active = false;
   private frameStarted = 0;
   private completionSample: {
@@ -101,7 +105,13 @@ export class LumaPainter implements EditPainter {
   private polygonKeys = new Set<string>();
   private polygonSlots = new Map<string, number>();
   private polygonFrames: PolygonPresentation[] = [];
-  private context: (GeometryOwner & { bounds?: Rect; content?: string }) | null = null;
+  private strokeScopes = new Map<
+    string,
+    { channels: PolygonChannel[]; presentation: PolygonPresentation }
+  >();
+  private context:
+    | (GeometryOwner & { bounds?: Rect; content?: string; geometryLod?: boolean })
+    | null = null;
   /** Presence marker; owner.content in the chunk cache owns content invalidation. */
   private paintedContent: true | null = null;
   private paintedDimensions = '';
@@ -113,6 +123,7 @@ export class LumaPainter implements EditPainter {
     readonly gpu: GpuRenderer,
     private readonly options: Options,
   ) {
+    this.screenPathFiltering = options.screenPathFiltering !== false;
     this.colors = new GpuColors(canvas);
     this.cache = new PainterGeometryCache(gpu, undefined, true, (incoming) =>
       this.chunks.admitExternal(incoming),
@@ -230,7 +241,9 @@ export class LumaPainter implements EditPainter {
   clearLabels(): void {
     this.gpu.clearLabels();
   }
-  setLayerContext(context: (GeometryOwner & { bounds?: Rect; content?: string }) | null): void {
+  setLayerContext(
+    context: (GeometryOwner & { bounds?: Rect; content?: string; geometryLod?: boolean }) | null,
+  ): void {
     this.context = context;
     this.cache.contextFor(context);
   }
@@ -246,6 +259,11 @@ export class LumaPainter implements EditPainter {
     this.paintedContent = null;
     this.paintedCommands = [];
     this.chunks.pin([]);
+  }
+  setScreenPathFiltering(enabled: boolean): void {
+    if (enabled === this.screenPathFiltering) return;
+    this.screenPathFiltering = enabled;
+    this.clearGeometryCache();
   }
   setTransform(transform: AffineTransform): void {
     this.transform = transform.clone();
@@ -278,6 +296,7 @@ export class LumaPainter implements EditPainter {
     this.polygonKeys.clear();
     this.polygonSlots.clear();
     this.polygonFrames = [];
+    this.strokeScopes.clear();
     this.context = null;
     // Record an ordered frame before clearing the last complete GPU image.
     this.active = true;
@@ -289,6 +308,7 @@ export class LumaPainter implements EditPainter {
     if (!this.active) return;
     const dimensions = [this.width, this.height, this.pixelRatio].join(':');
     try {
+      for (const scope of this.strokeScopes.values()) scope.presentation.update(scope.channels);
       const pending = this.requests.some((request) => !this.chunks.complete(request));
       this.gpu.resize(this.width, this.height, this.pixelRatio);
       if (!this.gpu.begin(this.transform)) {
@@ -304,7 +324,10 @@ export class LumaPainter implements EditPainter {
       } finally {
         this.gpu.end();
       }
-      this.chunks.pin(this.drawnEntries);
+      this.chunks.pin(
+        this.drawnEntries,
+        this.polygonFrames.some((polygon) => polygon.planning),
+      );
       this.frameComplete = !pending && this.polygonFrames.every((polygon) => polygon.complete);
       // An empty loading frame must not become a navigation snapshot that blocks first paint.
       this.framePresented = this.frameComplete || this.gpu.stats.drawCalls > drawsBefore;
@@ -326,6 +349,7 @@ export class LumaPainter implements EditPainter {
       this.active = false;
       this.commands = [];
       this.requests = [];
+      this.strokeScopes.clear();
       for (const [key, polygon] of this.polygons)
         if (!this.polygonKeys.has(key)) {
           polygon.presentation.dispose();
@@ -382,6 +406,26 @@ export class LumaPainter implements EditPainter {
   }
   /** Large owner-bound draws use bounded packets. Tiny layers and immediate editor
    * highlights retain their existing synchronous implementation. */
+  private screenPath(paint: MeshPaint): ScreenPathRequest | undefined {
+    if (!this.screenPathFiltering || paint.color[3] !== 1 || paint.dash?.length || paint.arrow)
+      return;
+    return {
+      view: screenPathFrame(
+        this.transform,
+        this.context?.bounds ?? [-180, -90, 180, 90],
+        this.pixelRatio,
+      ),
+      width: this.width,
+      height: this.height,
+      pixelRatio: this.pixelRatio,
+      initialScale: 0,
+      smallArcs: false,
+      halfPixel: true,
+      cull: false,
+      padding: 8,
+      revision: this.context?.revision ?? 0,
+    };
+  }
   private chunked(
     input: Omit<GeometryInput, 'bounds' | 'interval'>,
     paint: MeshPaint,
@@ -395,26 +439,10 @@ export class LumaPainter implements EditPainter {
         : (input.arcs?.getPointCount?.() ?? 0) >= 100_000;
     if (!large || (input.filter && !arcVisibilityKey(input.arcs!, input.filter))) return false;
     const view = this.transform;
+    const wholeLayer = input.kind === 'path' && owner.sourceSelection && !this.polygonScope;
+    const visibility = input.arcs && arcVisibilityKey(input.arcs, input.filter);
     const bounds = owner.bounds ?? ([-180, -90, 180, 90] as const);
-    const screen =
-      input.kind === 'path' &&
-      this.options.screenPathFiltering !== false &&
-      paint.color[3] === 1 &&
-      !paint.dash?.length &&
-      !paint.arrow
-        ? {
-            view: screenPathFrame(view, bounds, this.pixelRatio),
-            width: this.width,
-            height: this.height,
-            pixelRatio: this.pixelRatio,
-            initialScale: 0,
-            smallArcs: false,
-            halfPixel: true,
-            cull: false,
-            padding: 8,
-            revision: owner.revision,
-          }
-        : undefined;
+    const screen = input.kind === 'path' ? this.screenPath(paint) : undefined;
     const viewBounds = groundBounds(
       this.transform,
       this.width,
@@ -424,8 +452,20 @@ export class LumaPainter implements EditPainter {
     const request = this.chunks.request(
       {
         ...input,
+        wholeLayer,
+        filter:
+          wholeLayer && visibility
+            ? arcVisibilityFilter(input.arcs!, visibility[0], null)
+            : input.filter,
         sourceSelection: owner.sourceSelection,
         ordered: !!icon || input.ordered,
+        spatialOrder:
+          !!wholeLayer &&
+          !screen &&
+          !input.ordered &&
+          !icon &&
+          this.gpu.strokeBatchingEnabled &&
+          useMsaaPath(paint, this.gpu.pathMode, this.gpu.pathRendering.samples),
         compactStroke:
           !!screen &&
           this.gpu.compactStrokesEnabled !== false &&
@@ -434,7 +474,7 @@ export class LumaPainter implements EditPainter {
           compactStrokeCompatible(view, screen.view),
         screen,
         bounds,
-        viewBounds,
+        viewBounds: wholeLayer ? undefined : viewBounds,
         storageBounds: input.kind === 'fill' ? fillStorageBounds(viewBounds, bounds) : undefined,
         interval: input.arcs?.getRetainedInterval?.() ?? 0,
       },
@@ -534,6 +574,53 @@ export class LumaPainter implements EditPainter {
       }
       flush();
     };
+    if (wholeLayer) {
+      const key = JSON.stringify(['stroke', owner.sourceId, owner.id]);
+      let scope = this.strokeScopes.get(key);
+      if (!scope) {
+        const signature = JSON.stringify([
+          owner.revision,
+          owner.content,
+          this.chunks.identity(input.shapes),
+          this.chunks.identity(owner.bounds),
+        ]);
+        let layer = this.polygons.get(key);
+        if (layer?.signature !== signature) {
+          layer?.presentation.dispose();
+          layer = {
+            signature,
+            sourceId: owner.sourceId,
+            layerId: owner.id,
+            presentation: new PolygonPresentation(input.shapes ?? [], {
+              atomic: true,
+              ready: (entry) =>
+                this.chunks.isResident(entry) &&
+                (!entry.meshes.some((mesh) => mesh.compactStroke) ||
+                  compactStrokeCompatible(this.transform, entry.screenView)),
+              complete: (pending) => this.chunks.complete(pending),
+              invalidate: () => this.options.invalidate('geometry'),
+              report: this.options.report,
+            }),
+          };
+          this.polygons.set(key, layer);
+        }
+        scope = { channels: [], presentation: layer.presentation };
+        this.strokeScopes.set(key, scope);
+        this.polygonKeys.add(key);
+        this.polygonFrames.push(layer.presentation);
+        this.commands.push(() => layer!.presentation.draw());
+      }
+      scope.channels.push({
+        key: JSON.stringify([request.owner.content, request.slot]),
+        order: scope.channels.length,
+        request,
+        draw: (entries) => {
+          for (const entry of entries) this.drawnEntries.add(entry);
+          drawEntries(entries);
+        },
+      });
+      return true;
+    }
     if (this.polygonScope) {
       const order = this.polygonScope.order;
       this.polygonScope.channels.push({
@@ -554,13 +641,25 @@ export class LumaPainter implements EditPainter {
     if (!entry.mesh) return;
     const mesh = entry.mesh;
     this.commands.push(() => {
-      const selection = entry.ranges?.select(
-        this.transform,
-        this.width,
-        this.height,
-        Math.max(8, (paint.width ?? 1) * 4 + 2),
+      const selection = !entry.screenView
+        ? entry.ranges?.select(
+            this.transform,
+            this.width,
+            this.height,
+            Math.max(8, (paint.width ?? 1) * 4 + 2),
+          )
+        : undefined;
+      this.gpu.drawMesh(
+        mesh,
+        entry.screenView
+          ? {
+              ...paint,
+              screenSpace: true,
+              screenView: entry.screenView,
+            }
+          : paint,
+        selection?.ranges,
       );
-      this.gpu.drawMesh(mesh, paint, selection?.ranges);
     });
   }
 
@@ -662,6 +761,7 @@ export class LumaPainter implements EditPainter {
       )
     )
       return;
+    const screen = this.screenPath(this.arcPaint(style));
     const entry = this.preparedArcs(
       arcs,
       filter,
@@ -682,10 +782,11 @@ export class LumaPainter implements EditPainter {
         // Default outlines historically discard arc direction; bucketed drawPaths
         // preserves it. Keep that distinction so dash phases do not change.
         if (forward) for (let i = 0; i < ordered.length; i++) ordered[i] = absArcId(ordered[i]);
-        const prepared = this.arcJob(arcs, style, filter, ordered);
+        const prepared = this.arcJob(arcs, style, filter, ordered, undefined, screen);
         prepared.key = { ...prepared.key, values: [...prepared.key.values, revision] };
         return prepared;
       },
+      screen,
     );
     this.paintArcs(entry, style);
   }
@@ -712,6 +813,7 @@ export class LumaPainter implements EditPainter {
       )
     )
       return;
+    const screen = this.screenPath(this.arcPaint(style));
     const entry = this.preparedArcs(
       arcs,
       filter,
@@ -725,7 +827,8 @@ export class LumaPainter implements EditPainter {
         ],
         selections: [arcIds, arrow?.shapeIndices],
       },
-      () => this.arcJob(arcs, style, filter, arcIds, arrow),
+      () => this.arcJob(arcs, style, filter, arcIds, arrow, screen),
+      screen,
     );
     this.paintArcs(entry, style);
   }
@@ -734,6 +837,7 @@ export class LumaPainter implements EditPainter {
     filter: ((id: number) => boolean) | undefined,
     key: GeometryKey,
     prepare: () => PreparedGeometry,
+    screen?: ScreenPathRequest,
   ): CachedGeometry {
     const visibility = arcVisibilityKey(arcs, filter);
     // Only predicates created by Viewport have a trustworthy semantic key.
@@ -745,7 +849,14 @@ export class LumaPainter implements EditPainter {
     return this.cache.getPrepared(
       {
         ...key,
-        values: [...key.values, filter ? 'viewport' : 'unfiltered', ...(visibility ?? [])],
+        values: [
+          ...key.values,
+          filter ? 'viewport' : 'unfiltered',
+          ...(visibility ?? []),
+          screen ? 'screen' : 'source',
+          ...(screen?.view ?? []),
+          screen?.pixelRatio,
+        ],
       },
       prepare,
     );
@@ -756,6 +867,7 @@ export class LumaPainter implements EditPainter {
     filter?: (id: number) => boolean,
     arcIds?: Uint32Array | Int32Array,
     arrow?: ArrowDotPathOptions,
+    screen?: ScreenPathRequest,
   ): PreparedGeometry {
     const hasArrow = style.dashType === 'arrow-dot';
     const storage = new Int32Array(arcIds?.length ?? arcs.size());
@@ -779,10 +891,32 @@ export class LumaPainter implements EditPainter {
           hasArrow ? 'arrow' : 'path',
           arcs.getRetainedInterval?.() ?? 0,
           hasArrow ? arrow?.geometryRevision : undefined,
+          screen ? 'screen' : 'source',
+          ...(screen?.view ?? []),
+          screen?.pixelRatio,
         ],
         selections: [ordered, arrow?.shapeIndices],
       },
-      build: () => (hasArrow ? lineGeometry(paths()) : pathGeometry(paths())),
+      build: () => {
+        if (hasArrow) return lineGeometry(paths());
+        if (!screen) return pathGeometry(paths());
+        const list = Array.from(paths());
+        const coordinates = new Float64Array(list.reduce((n, p) => n + p.length * 2, 0));
+        const offsets = new Uint32Array(list.length + 1);
+        let cursor = 0;
+        for (let i = 0; i < list.length; i++) {
+          offsets[i] = cursor / 2;
+          for (const point of list[i]) {
+            coordinates[cursor++] = point[0];
+            coordinates[cursor++] = point[1];
+          }
+        }
+        offsets[list.length] = cursor / 2;
+        const filtered = flatScreenPathGeometry(coordinates, offsets, screen);
+        return filtered.screenSpace
+          ? { ...filtered.geometry, screenView: screen.view }
+          : filtered.geometry;
+      },
     };
   }
   private paintArcs(entry: CachedGeometry, style: StrokeStyle): void {
@@ -1023,6 +1157,7 @@ export class LumaPainter implements EditPainter {
     this.active = false;
     this.commands = this.paintedCommands = [];
     this.requests = [];
+    this.strokeScopes.clear();
     this.polygonScope = null;
     this.forgetPolygons();
     this.polygonFrames = [];

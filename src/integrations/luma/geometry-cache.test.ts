@@ -1,6 +1,6 @@
 import { arcVisibilityFilter } from '../../domain/geo/arc-visibility';
 import { describe, expect, it, vi } from 'vitest';
-import { GeometryChunkCache } from './geometry-cache';
+import { GeometryChunkCache, type GeometryEntry, type GeometryRequest } from './geometry-cache';
 import { buildGeometryPacket } from '../../engine/rendering/luma/geometry-packet';
 import type { GeometryInput } from '../../engine/rendering/luma/geometry-jobs';
 import type { GpuRenderer } from './gpu-renderer';
@@ -52,6 +52,96 @@ function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
   return { cache, gpu, transport, report, invalidate, input, frame };
 }
 describe('formal asynchronous chunk ownership', () => {
+  it('evicts an unpresented intermediate layer when a newer detail replaces it', async () => {
+    const f = fixture(352 * 1.05);
+    const shapes = [
+      Array.from({ length: 14 }, () => [1, 1]),
+      Array.from({ length: 7 }, () => [6, 6]),
+    ];
+    const input = { ...f.input, shapes, wholeLayer: true };
+    const frame = (interval: number) => {
+      f.cache.begin();
+      const requests = [0, 1].map((id) =>
+        f.cache.request(
+          { ...input, interval, ids: Uint32Array.of(id) },
+          {
+            id: 'layer',
+            sourceId: 'source',
+            revision: 0,
+            content: String(id),
+          },
+        ),
+      );
+      f.cache.finish();
+      return requests;
+    };
+    let release!: () => void;
+    try {
+      const first = frame(0);
+      await vi.waitFor(() => expect(first.every((r) => f.cache.complete(r))).toBe(true));
+      const displayed = first.flatMap((r) => f.cache.drawable(r));
+      expect(f.cache.stats.bytes).toBe(352);
+      f.cache.pin(displayed);
+      let calls = 0;
+      f.transport.build.mockImplementation(async (packet) => {
+        if (++calls === 2)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        return buildGeometryPacket(packet);
+      });
+      Reflect.set(f.cache, 'turn', 0);
+      const intermediate = frame(1);
+      await vi.waitFor(() => expect(typeof release).toBe('function'));
+      expect(f.cache.complete(intermediate[0])).toBe(true);
+      const unused = intermediate[0].entries![0];
+      const latest = frame(2);
+      await vi.waitFor(() => expect(latest.every((r) => r.entries !== null)).toBe(true));
+      release();
+      await vi.waitFor(() => expect(latest.every((r) => f.cache.complete(r))).toBe(true));
+      expect(f.cache.isResident(unused)).toBe(false);
+      expect(displayed.every((entry) => f.cache.isResident(entry))).toBe(true);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+      f.cache.dispose();
+    }
+  });
+  it('presents a whole layer only after all bounded preparation jobs are ready', async () => {
+    const f = fixture();
+    const input = {
+      ...f.input,
+      wholeLayer: true,
+      shapes: Array.from({ length: 9000 }, (_, i) => [[i, i]]),
+      bounds: [0, 0, 9000, 9000] as const,
+    };
+    let release!: () => void;
+    let count = 0;
+    f.transport.build.mockImplementation(async (packet) => {
+      if (++count === 2)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      return buildGeometryPacket(packet);
+    });
+    const request = f.frame(input);
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(f.cache.complete(request)).toBe(false);
+    expect(f.cache.drawable(request)).toEqual([]);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    const previous = f.cache.drawable(request);
+    f.cache.pin(previous);
+    count = 0;
+    const next = f.frame({ ...input, interval: 1 });
+    await vi.waitFor(() => expect(count).toBe(2));
+    expect(f.cache.drawable(next)).toEqual(previous);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).toEqual(next.entries);
+    expect(f.cache.drawable(next).some((entry) => previous.includes(entry))).toBe(false);
+    f.cache.dispose();
+  });
   it('reuses overlapping spatial chunks across navigation and releases all resources on disposal', async () => {
     const f = fixture(),
       first = f.frame();
@@ -144,6 +234,733 @@ it('recovers a budget-rejected chunk after another owner releases memory, withou
   f.cache.finish();
   await vi.waitFor(() => expect(f.cache.complete(retry)).toBe(true));
   f.cache.dispose();
+});
+
+it('does not inherit a budget retry marker when the retry encounters a real Worker failure', async () => {
+  const f = fixture(30),
+    input = (id: number) => ({ ...f.input, ids: Uint32Array.of(id) });
+  try {
+    f.cache.begin();
+    const first = f.cache.request(input(0), { id: 'a', sourceId: 'a', revision: 0 }),
+      second = f.cache.request(input(1), { id: 'b', sourceId: 'b', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(first) && f.cache.complete(second)).toBe(true));
+    f.cache.begin();
+    f.cache.request(input(0), { id: 'a', sourceId: 'a', revision: 0 });
+    f.cache.request(input(1), { id: 'b', sourceId: 'b', revision: 0 });
+    const third = f.cache.request(input(2), { id: 'c', sourceId: 'c', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.failed(third)).toBe(true));
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.report).toHaveBeenCalledOnce());
+    f.cache.clear({ sourceId: 'a' });
+    f.cache.clear({ sourceId: 'b' });
+    f.transport.build.mockRejectedValueOnce(new Error('Worker reconstruction failed'));
+    f.cache.begin();
+    const retry = f.cache.request(input(2), { id: 'c', sourceId: 'c', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.report).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(f.cache.failed(retry)).toBe(true);
+    expect(f.transport.build).toHaveBeenCalledTimes(4);
+    expect(f.report.mock.lastCall?.[0].message).toBe('Worker reconstruction failed');
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  false,
+  true,
+])('waits for progressive presentation capacity without reporting or rebuilding temporary admission failures (pending plan: %s)', async (delayedPlan) => {
+  const f = fixture(104),
+    input = {
+      ...f.input,
+      shapes: [1, 9, 17, 25].map((n) => [
+        [n, n],
+        [n + 0.1, n + 0.1],
+      ]),
+      bounds: [0, 0, 32, 32] as const,
+    };
+  let interval = 0;
+  let planning = false;
+  let previous: ReturnType<typeof f.cache.drawable> = [];
+  let request: ReturnType<typeof f.cache.request>;
+  const draw = () => {
+    f.cache.begin();
+    request = f.cache.request({ ...input, interval }, { id: 'p', sourceId: 's', revision: 0 });
+    f.cache.pin(planning ? previous : f.cache.drawable(request), planning);
+    f.cache.finish();
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(208);
+  };
+  f.invalidate.mockImplementation(draw);
+  try {
+    draw();
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    draw();
+    expect(f.cache.stats.bytes).toBe(160);
+    previous = f.cache.drawable(request!);
+    f.transport.build.mockImplementation(async (packet) => {
+      const result = buildGeometryPacket(packet);
+      result.geometries = result.geometries.map((g) => ({
+        ...g,
+        vertices: new Float32Array(4),
+        count: 1,
+      }));
+      return result;
+    });
+    interval = 1;
+    planning = delayedPlan;
+    draw();
+    if (delayedPlan) {
+      await vi.waitFor(() => expect(f.transport.build).toHaveBeenCalledTimes(6));
+      for (let i = 0; i < 3; i++) draw();
+      expect(f.report).not.toHaveBeenCalled();
+      expect(f.transport.build).toHaveBeenCalledTimes(6);
+      planning = false;
+      draw();
+    }
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    draw();
+    expect(f.transport.build).toHaveBeenCalledTimes(8);
+    expect(f.cache.stats.bytes).toBe(96);
+    expect(f.cache.stats.failedEntries).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.cache.stats.errors).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'success',
+  'same-text worker failure',
+] as const)('defers payload admission after an early presentation wake while another owner can retire memory (%s)', async (outcome) => {
+  const f = fixture(164),
+    input = {
+      ...f.input,
+      shapes: [1, 9, 17, 25].map((n) => [
+        [n, n],
+        [n + 0.1, n + 0.1],
+      ]),
+      bounds: [0, 0, 32, 32] as const,
+    },
+    holderInput = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: [[6, 6.1, 6.2, 6.3].map((n) => [n, n])],
+    };
+  let interval = 0,
+    finishing = false,
+    wakeups = 0;
+  let previous: GeometryEntry[] = [];
+  let request: GeometryRequest, holder: GeometryRequest;
+  let release: (() => void) | undefined;
+  const draw = () => {
+    f.cache.begin();
+    request = f.cache.request({ ...input, interval }, { id: 'p', sourceId: 's', revision: 0 });
+    holder = f.cache.request(
+      { ...holderInput, interval },
+      { id: 'holder', sourceId: 's', revision: 0 },
+    );
+    const waiting = interval && !f.cache.complete(holder);
+    if (waiting) wakeups++;
+    f.cache.pin([...(waiting ? previous : f.cache.drawable(request)), ...f.cache.drawable(holder)]);
+    finishing = true;
+    f.cache.finish();
+    finishing = false;
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(328);
+  };
+  f.invalidate.mockImplementation(draw);
+  f.report.mockImplementation(() => expect(finishing).toBe(false));
+  try {
+    draw();
+    await vi.waitFor(() =>
+      expect(f.cache.complete(request) && f.cache.complete(holder)).toBe(true),
+    );
+    draw();
+    expect(f.cache.stats.bytes).toBe(232);
+    previous = f.cache.drawable(request!);
+    f.transport.build.mockImplementation(async (packet) => {
+      if (packet.coordinates[0] !== 6) return buildGeometryPacket(packet);
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      if (outcome === 'same-text worker failure')
+        throw new RangeError(
+          'Visible GPU geometry exceeds the bounded working-set limit; zoom in or hide layers. Source data was not simplified or truncated.',
+        );
+      return {
+        ...buildGeometryPacket(packet),
+        geometries: [{ kind: 'point', vertices: new Float32Array(4), count: 1 }],
+      };
+    });
+    interval = 1;
+    draw();
+    await vi.waitFor(() => {
+      expect(release).toBeTypeOf('function');
+      expect(request.entries?.filter((entry) => entry.requiredBytes !== undefined)).toHaveLength(3);
+    });
+    expect(wakeups).toBeGreaterThan(1);
+    expect(f.report).not.toHaveBeenCalled();
+    const builds = f.transport.build.mock.calls.length;
+    for (let i = 0; i < 3; i++) draw();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    expect(f.report).not.toHaveBeenCalled();
+    release!();
+    if (outcome === 'success') {
+      await vi.waitFor(() =>
+        expect(f.cache.complete(request) && f.cache.complete(holder)).toBe(true),
+      );
+      draw();
+      expect(f.report).not.toHaveBeenCalled();
+      expect(f.cache.stats.errors).toBe(0);
+      expect(f.cache.stats.bytes).toBe(184);
+      expect(f.transport.build).toHaveBeenCalledTimes(builds + 3);
+    } else {
+      await vi.waitFor(() => expect(f.report).toHaveBeenCalledTimes(4));
+      for (let i = 0; i < 3; i++) draw();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(f.report).toHaveBeenCalledTimes(4);
+      expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    }
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('schedules a cold known-cost owner whose capacity requires unpublished foreign payload rollback', async () => {
+  const f = fixture(50),
+    owner = (id: string) => ({ id, sourceId: 's', revision: 0 }),
+    entry = (
+      id: string,
+      layer: string,
+      chunk: number,
+      bytes: number,
+      requiredBytes?: number,
+    ): GeometryEntry => ({
+      id,
+      family: id,
+      partition: 'p',
+      owner: owner(layer),
+      job: { chunk, members: Int32Array.of(chunk) },
+      state: requiredBytes === undefined ? 'ready' : 'error',
+      meshes: [],
+      ranges: [],
+      fillRanges: [],
+      screenSpace: false,
+      bytes,
+      used: 0,
+      ...(requiredBytes === undefined ? {} : { requiredBytes, error: new RangeError('capacity') }),
+    }),
+    old = entry('old-a', 'a', 0, 60),
+    prefix = entry('prefix-a', 'a', 0, 24),
+    blocked = entry('blocked-a', 'a', 1, 4, 20),
+    cold = entry('cold-c', 'c', 0, 4, 16),
+    request = (
+      id: string,
+      entries: GeometryEntry[],
+      fallback?: GeometryEntry[],
+    ): GeometryRequest => ({
+      owner: owner(id),
+      input: {
+        ...f.input,
+        wholeLayer: true,
+        shapes: id === 'a' ? [[[1, 1]], [[2, 2]]] : [[[3, 3]]],
+      },
+      plan: {
+        key: 'p',
+        ready: true,
+        count: 2,
+        boundsBytes: 0,
+        sourceId: 's',
+        revision: 0,
+        used: 0,
+        controller: new AbortController(),
+        promise: Promise.resolve({ chunks: 2, membership: Uint32Array.of(0, 1) }),
+      },
+      key: id,
+      frame: 0,
+      cursor: 0,
+      controller: new AbortController(),
+      entries,
+      fallback,
+    }),
+    atomic = request('a', [prefix, blocked], [old]),
+    next = request('c', [cold]);
+  Reflect.set(f.cache, 'entries', new Map([old, prefix, blocked, cold].map((e) => [e.id, e])));
+  Reflect.set(
+    f.cache,
+    'requests',
+    new Map([
+      ['a', atomic],
+      ['c', next],
+    ]),
+  );
+  Reflect.set(f.cache, 'bytes', 92);
+  const draw = () => {
+    f.cache.pin([old, ...f.cache.drawable(next)]);
+    f.cache.finish();
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(100);
+  };
+  f.invalidate.mockImplementation(draw);
+  try {
+    draw();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build.mock.calls[0][0].coordinates[0]).toBe(3);
+    expect(f.cache.isResident(cold)).toBe(true);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(100);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('trims an unpresented intermediate before admitting a replacement selection without evicting its prefix', async () => {
+  const f = fixture(),
+    input = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: Array.from({ length: 8193 }, () => [[1, 1]]),
+      ids: Uint32Array.of(0, 4096, 8192),
+    };
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const displayed = f.cache.drawable(first);
+    f.cache.pin(displayed);
+    const intermediate = f.frame({ ...input, interval: 1 });
+    await vi.waitFor(() => expect(f.cache.complete(intermediate)).toBe(true));
+    Reflect.set(f.cache, 'limit', 77);
+    f.cache.begin();
+    const latest = f.cache.request(
+      { ...input, interval: 2 },
+      { id: 'p', sourceId: 's', revision: 0 },
+    );
+    await vi.waitFor(() => expect(f.cache.complete(latest)).toBe(true));
+    f.cache.finish();
+    expect(displayed.every((entry) => f.cache.isResident(entry))).toBe(true);
+    expect(intermediate.entries?.some((entry) => f.cache.isResident(entry))).toBe(false);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(154);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'clear',
+  'dispose',
+] as const)('wakes a pending presentation admission on %s without restoring retired geometry', async (action) => {
+  const f = fixture(104),
+    input = {
+      ...f.input,
+      shapes: [1, 9, 17, 25].map((n) => [
+        [n, n],
+        [n + 0.1, n + 0.1],
+      ]),
+      bounds: [0, 0, 32, 32] as const,
+    };
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    f.cache.pin(f.cache.drawable(first));
+    f.transport.build.mockImplementation(async (packet) => ({
+      ...buildGeometryPacket(packet),
+      geometries: [{ kind: 'point', vertices: new Float32Array(4), count: 1 }],
+    }));
+    const next = f.frame({ ...input, interval: 1 });
+    await vi.waitFor(() => {
+      expect(f.transport.build).toHaveBeenCalledTimes(6);
+      expect(next.entries?.filter((entry) => f.cache.isResident(entry))).toHaveLength(1);
+      expect(f.cache.failed(next)).toBe(false);
+    });
+    if (action === 'clear') f.cache.clear({ sourceId: 's' });
+    else f.cache.dispose();
+    await vi.waitFor(() => {
+      expect(Reflect.get(f.cache, 'running')).toBe(false);
+      expect(f.cache.stats.entries).toBe(0);
+      expect(f.cache.stats.bytes).toBe(0);
+      expect(f.cache.stats.pending).toBe(0);
+    });
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(5);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reports an atomic replacement that cannot fit instead of leaving known-cost failures pending', async () => {
+  const f = fixture(84),
+    input = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: Array.from({ length: 8193 }, () => [
+        [1, 1],
+        [1.1, 1.1],
+      ]),
+      ids: Uint32Array.of(0, 4096, 8192),
+    };
+  let interval = 0;
+  let request: ReturnType<typeof f.cache.request>;
+  const draw = () => {
+    f.cache.begin();
+    request = f.cache.request({ ...input, interval }, { id: 'p', sourceId: 's', revision: 0 });
+    f.cache.pin(f.cache.drawable(request));
+    f.cache.finish();
+  };
+  f.invalidate.mockImplementation(draw);
+  try {
+    draw();
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    draw();
+    const previous = f.cache.drawable(request!);
+    f.transport.build.mockImplementation(async (packet) => ({
+      ...buildGeometryPacket(packet),
+      geometries: [{ kind: 'point', vertices: new Float32Array(4), count: 1 }],
+    }));
+    interval = 1;
+    draw();
+    await vi.waitFor(() => expect(f.cache.stats.failedEntries).toBe(2));
+    expect(f.cache.drawable(request!)).toEqual(previous);
+    expect(f.cache.complete(request!)).toBe(false);
+    expect(f.cache.failed(request!)).toBe(true);
+    const builds = f.transport.build.mock.calls.length;
+    for (let i = 0; i < 3; i++) draw();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(168);
+    expect(f.report).toHaveBeenCalledTimes(2);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reserves known retry costs across one Worker batch and does not rebuild losing admissions', async () => {
+  const f = fixture(104),
+    input = {
+      ...f.input,
+      shapes: [1, 9, 17, 25].map((n) => [[n, n]]),
+      bounds: [0, 0, 32, 32] as const,
+    };
+  let interval = 0,
+    external = 0;
+  let request: ReturnType<typeof f.cache.request>;
+  const draw = () => {
+    f.cache.begin(external);
+    request = f.cache.request({ ...input, interval }, { id: 'p', sourceId: 's', revision: 0 });
+    f.cache.pin(f.cache.drawable(request));
+    f.cache.finish();
+  };
+  f.invalidate.mockImplementation(draw);
+  const result = () => ({
+    geometries: [{ kind: 'point' as const, vertices: new Float32Array(8), count: 2 }],
+    screenSpace: false,
+  });
+  try {
+    draw();
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    draw();
+    f.transport.build.mockImplementation(async () => result());
+    interval = 1;
+    external = 64;
+    draw();
+    await vi.waitFor(() => expect(f.cache.stats.failedEntries).toBe(4));
+    expect(f.report).toHaveBeenCalledTimes(4);
+    f.transport.build.mockClear();
+    const buildBatch = vi.fn(async (packets: Parameters<typeof buildGeometryPacket>[0][]) => {
+      expect(f.cache.stats.bytes + external + packets.length * 32).toBeLessThanOrEqual(208);
+      return packets.map(() => ({ result: result() }));
+    });
+    Object.assign(f.transport, { buildBatch });
+    external = 0;
+    draw();
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    const jobs =
+      f.transport.build.mock.calls.length +
+      buildBatch.mock.calls.reduce((n, [packets]) => n + packets.length, 0);
+    expect(jobs).toBe(4);
+    expect(f.report).toHaveBeenCalledTimes(4);
+    expect(f.cache.stats.failedEntries).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'success',
+  'worker failure',
+] as const)('defers a metadata admission report while another owner can retire memory (%s)', async (outcome) => {
+  const f = fixture(),
+    selectedInput = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: Array.from({ length: 8193 }, () => [[1, 1]]),
+      ids: Uint32Array.of(0, 4096, 8192),
+    },
+    holderInput = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: [
+        [
+          [6, 6],
+          [6.1, 6.1],
+          [6.2, 6.2],
+          [6.3, 6.3],
+        ],
+      ],
+    };
+  let interval = 0,
+    holderInterval = 0;
+  let selected: GeometryRequest, holder: GeometryRequest;
+  let release: (() => void) | undefined;
+  const draw = () => {
+    f.cache.begin();
+    selected = f.cache.request(
+      { ...selectedInput, interval },
+      { id: 'p', sourceId: 's', revision: 0 },
+    );
+    holder = f.cache.request(
+      { ...holderInput, interval: holderInterval },
+      { id: 'holder', sourceId: 's', revision: 0 },
+    );
+    f.cache.pin([selected, holder].flatMap((r) => f.cache.drawable(r)));
+    f.cache.finish();
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(170);
+  };
+  f.invalidate.mockImplementation(draw);
+  try {
+    draw();
+    await vi.waitFor(() =>
+      expect(f.cache.complete(selected) && f.cache.complete(holder)).toBe(true),
+    );
+    draw();
+    expect(f.cache.stats.bytes).toBe(144);
+    Reflect.set(f.cache, 'limit', 85);
+    f.transport.build.mockImplementation(async (packet) => {
+      if (packet.coordinates[0] === 6) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        if (outcome === 'worker failure') throw new Error('Holder Worker reconstruction failed');
+        return {
+          ...buildGeometryPacket(packet),
+          geometries: [{ kind: 'point', vertices: new Float32Array(4), count: 1 }],
+        };
+      }
+      return buildGeometryPacket(packet);
+    });
+    holderInterval = 1;
+    draw();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    interval = 1;
+    draw();
+    await vi.waitFor(() => expect(selected.requiredMetadataBytes).toBeDefined());
+    await vi.waitFor(() => expect(f.cache.stats.bytes).toBe(152));
+    expect(f.cache.drawable(selected!)).toHaveLength(3);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.cache.stats.errors).toBe(0);
+    release!();
+    if (outcome === 'success') {
+      await vi.waitFor(() =>
+        expect(f.cache.complete(selected) && f.cache.complete(holder)).toBe(true),
+      );
+      expect(f.report).not.toHaveBeenCalled();
+      expect(f.cache.stats.errors).toBe(0);
+    } else {
+      await vi.waitFor(() => expect(f.report).toHaveBeenCalledTimes(2));
+      expect(f.cache.failed(selected!)).toBe(true);
+      expect(f.cache.failed(holder!)).toBe(true);
+      const builds = f.transport.build.mock.calls.length;
+      for (let i = 0; i < 3; i++) draw();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(f.report).toHaveBeenCalledTimes(2);
+      expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    }
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  false,
+  true,
+])('reports quiescent metadata admission once and recovers after frame retirement (self-dependent presentation plan: %s)', async (selfDependentPlan) => {
+  const f = fixture(),
+    input = {
+      ...f.input,
+      wholeLayer: true,
+      ordered: true,
+      shapes: Array.from({ length: 8193 }, () => [[1, 1]]),
+      ids: Uint32Array.of(0, 4096, 8192),
+    },
+    holderInput = selfDependentPlan
+      ? { ...input, wholeLayer: false, ordered: false, shapes: input.shapes.slice() }
+      : input;
+  let interval = 0,
+    holderVisible = true;
+  let selected: ReturnType<typeof f.cache.request>;
+  let holder: ReturnType<typeof f.cache.request>;
+  const draw = () => {
+    f.cache.begin();
+    selected = f.cache.request({ ...input, interval }, { id: 'p', sourceId: 's', revision: 0 });
+    const requests = [selected];
+    if (holderVisible) {
+      holder = f.cache.request(holderInput, {
+        id: selfDependentPlan ? 'p' : 'holder',
+        sourceId: 's',
+        revision: 0,
+        ...(selfDependentPlan ? { content: 'fill' } : {}),
+      });
+      requests.push(holder);
+    }
+    const shown = requests
+      .filter((request) => !(selfDependentPlan && interval && request === holder))
+      .flatMap((request) => f.cache.drawable(request));
+    if (interval) expect(f.cache.drawable(selected)).toHaveLength(3);
+    f.cache.pin(shown, !!interval && selfDependentPlan);
+    f.cache.finish();
+  };
+  f.invalidate.mockImplementation(draw);
+  try {
+    draw();
+    await vi.waitFor(() =>
+      expect(f.cache.complete(selected) && f.cache.complete(holder)).toBe(true),
+    );
+    draw();
+    const initialBytes = f.cache.stats.bytes;
+    const builds = f.transport.build.mock.calls.length;
+    Reflect.set(f.cache, 'limit', initialBytes * 0.55);
+    interval = 1;
+    draw();
+    await vi.waitFor(() => expect(f.cache.failed(selected)).toBe(true));
+    const blocked = selected!;
+    for (let i = 0; i < 5; i++) draw();
+    expect(selected!).toBe(blocked);
+    expect(f.cache.stats.bytes).toBe(initialBytes);
+    expect(f.cache.stats.errors).toBe(1);
+    expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    holderVisible = false;
+    draw();
+    // The retiring holder is dropped by finish(), after request() saw the old capacity.
+    await vi.waitFor(() => expect(f.cache.complete(selected)).toBe(true));
+    expect(selected!).not.toBe(blocked);
+    expect(f.cache.stats.failedRequests).toBe(0);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(f.cache.stats.budgetBytes * 2);
+    expect(f.cache.stats.errors).toBe(1);
+    expect(f.transport.build).toHaveBeenCalledTimes(builds + 3);
+    expect(f.report).toHaveBeenCalledOnce();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('defers metadata admission while another owner has a fitting known-cost retry after orphan cleanup', async () => {
+  const f = fixture(86),
+    input = { ...f.input, ids: Uint32Array.of(0) };
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const old = first.entries![0];
+    old.bytes = 146;
+    Reflect.set(f.cache, 'bytes', 146);
+    f.cache.pin([old]);
+    Reflect.set(f.cache, 'running', true);
+    const retry = f.frame({ ...input, interval: 1 });
+    await vi.waitFor(() => expect(retry.entries).not.toBeNull());
+    const entry = retry.entries![0];
+    entry.state = 'error';
+    entry.requiredBytes = 16;
+    entry.error = new RangeError('capacity');
+    Reflect.set(f.cache, 'running', false);
+    const waiting = f.cache.request(f.input, { id: 'a', sourceId: 's', revision: 0 });
+    await vi.waitFor(() => expect(waiting.requiredMetadataBytes).toBeDefined());
+    f.cache.finish();
+    expect(f.cache.stats.bytes).toBe(154);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(Reflect.get(f.cache, 'nextQueued').call(f.cache).request).toBe(retry);
+  } finally {
+    Reflect.set(f.cache, 'running', false);
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'report',
+  'clear',
+  'dispose',
+  'capacity',
+] as const)('delivers quiescent metadata failure after finish and rechecks %s before notification', async (action) => {
+  const f = fixture(86),
+    input = { ...f.input, ids: Uint32Array.of(0) };
+  let finishing = false;
+  f.report.mockImplementation(() => expect(finishing).toBe(false));
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const old = first.entries![0];
+    old.bytes = 154;
+    Reflect.set(f.cache, 'bytes', 154);
+    f.cache.pin([old]);
+    Reflect.set(f.cache, 'running', true);
+    f.cache.begin();
+    f.cache.request(input, { id: 'p', sourceId: 's', revision: 0 });
+    const waiting = f.cache.request(f.input, { id: 'a', sourceId: 's', revision: 0 });
+    await vi.waitFor(() => expect(waiting.requiredMetadataBytes).toBeDefined());
+    expect(f.report).not.toHaveBeenCalled();
+    Reflect.set(f.cache, 'running', false);
+    finishing = true;
+    f.cache.finish();
+    finishing = false;
+    expect(f.report).not.toHaveBeenCalled();
+    if (action === 'clear') f.cache.clear({ layerId: 'a' });
+    else if (action === 'dispose') f.cache.dispose();
+    else if (action === 'capacity') Reflect.set(f.cache, 'limit', 100);
+    if (action === 'report') await vi.waitFor(() => expect(f.report).toHaveBeenCalledOnce());
+    else {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(f.report).not.toHaveBeenCalled();
+      expect(f.cache.stats.errors).toBe(0);
+    }
+  } finally {
+    Reflect.set(f.cache, 'running', false);
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'validation',
+  'worker',
+] as const)('does not retry a real %s error when capacity changes', async (failure) => {
+  const f = fixture(),
+    input = screenPathInput();
+  if (failure === 'validation') input.screen.width = 0;
+  else
+    f.transport.build.mockRejectedValueOnce(
+      new RangeError('Geometry selection cache exceeds its bounded working set.'),
+    );
+  const draw = (externalBytes: number) => {
+    f.cache.begin(externalBytes);
+    const request = f.cache.request(input, { id: 'p', sourceId: 's', revision: 0 });
+    f.cache.finish();
+    return request;
+  };
+  try {
+    const failed = draw(128);
+    await vi.waitFor(() => expect(f.cache.failed(failed)).toBe(true));
+    for (const bytes of [0, 128, 0]) expect(draw(bytes)).toBe(failed);
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.report).toHaveBeenCalledOnce();
+  } finally {
+    f.cache.dispose();
+  }
 });
 
 it('notifies a drawable partial result before a deliberately slow later chunk finishes', async () => {
@@ -638,6 +1455,383 @@ function handoffInput(kind: 'point' | 'path' | 'fill'): GeometryInput {
   };
 }
 
+function screenPathInput(): GeometryInput & { screen: NonNullable<GeometryInput['screen']> } {
+  const input = handoffInput('path'),
+    arcs = input.arcs!;
+  return {
+    ...input,
+    // Reuse fixtures keep one segment per arc, independently of the screen resolution.
+    arcs: {
+      size: () => arcs.size(),
+      getArcIter(id: number) {
+        const iter = arcs.getArcIter(id);
+        let n = 0;
+        return {
+          get x() {
+            return iter.x;
+          },
+          get y() {
+            return iter.y;
+          },
+          hasNext: () => n++ < 2 && iter.hasNext(),
+        };
+      },
+    } as GeometryInput['arcs'],
+    sourceSelection: true,
+    wholeLayer: true,
+    screen: {
+      view: [16, -16, -128, 128],
+      width: 100,
+      height: 100,
+      pixelRatio: 2,
+      initialScale: 0,
+      smallArcs: false,
+      halfPixel: true,
+      cull: false,
+      padding: 8,
+      revision: 0,
+    },
+  };
+}
+
+it('reuses whole-layer source membership without rescanning arcs on camera changes', async () => {
+  const f = fixture(),
+    input = screenPathInput(),
+    small = vi.fn(() => false);
+  Object.assign(input.arcs!, { arcIsSmaller: small });
+  input.filter = arcVisibilityFilter(input.arcs!, 0.1, null);
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    expect(f.cache.stats.selectionBuilds).toBe(1);
+    small.mockClear();
+    for (const scale of [15, 12, 8]) {
+      const next = f.frame({
+        ...input,
+        screen: { ...input.screen, view: [scale, -scale, -8 * scale, 8 * scale] },
+      });
+      await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    }
+    expect(small).not.toHaveBeenCalled();
+    expect(f.cache.stats.selectionBuilds).toBe(1);
+    expect(f.cache.stats.selectionHits).toBe(3);
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  0, 5000,
+])('rebuilds a coarse path rather than retaining 10,000 fine segments beside %i empty arcs', async (emptyArcs) => {
+  const f = fixture(),
+    input = screenPathInput();
+  input.arcs = {
+    size: () => emptyArcs + 1,
+    getArcIter(id: number) {
+      let at = 0;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (id || at > 10_000) return false;
+          this.x = at++ % 2 ? 0.04 : 0.02;
+          return true;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  input.screen = { ...input.screen, view: [16, -16, 0, 0], pixelRatio: 1 };
+  try {
+    const fine = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(fine)).toBe(true));
+    expect(f.cache.drawable(fine)[0].screenStats?.outputSegments).toBe(10_000);
+    const coarse = f.frame({ ...input, screen: { ...input.screen, view: [8, -8, 0, 0] } });
+    await vi.waitFor(() => expect(f.cache.complete(coarse)).toBe(true));
+    expect(f.cache.drawable(coarse)[0].screenStats?.outputSegments).toBe(1);
+    expect(f.cache.stats.builds).toBe(2);
+    expect(f.transport.build).toHaveBeenCalledTimes(2);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('rebuilds coarser geometry when the worker omits screen work statistics', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  f.transport.build.mockImplementationOnce(async (packet) => ({
+    ...buildGeometryPacket(packet),
+    screenStats: undefined,
+  }));
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const next = f.frame({ ...input, screen: { ...input.screen, view: [8, -8, -64, 64] } });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).not.toEqual(first.entries);
+    expect(f.transport.build).toHaveBeenCalledTimes(2);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('keeps spatial raw ordering distinct from source-order requests and their fallback', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('path'), wholeLayer: true, sourceSelection: true };
+  try {
+    const original = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(original)).toBe(true));
+    const ordered = f.frame({ ...input, spatialOrder: true });
+    expect(ordered).not.toBe(original);
+    expect(ordered.fallback).toBeUndefined();
+    await vi.waitFor(() => expect(f.cache.complete(ordered)).toBe(true));
+    expect([...f.cache.drawable(ordered)[0].job.members]).toEqual([3, 0, 1, 2]);
+    const restored = f.frame(input);
+    expect(restored).not.toBe(ordered);
+    expect(restored.fallback).toBeUndefined();
+    await vi.waitFor(() => expect(f.cache.complete(restored)).toBe(true));
+    expect([...f.cache.drawable(restored)[0].job.members]).toEqual([0, 1, 2, 3]);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reuses finer whole-layer screen paths across coarser resolutions without rebuilding or uploading', async () => {
+  const f = fixture(4 * 1024 ** 2),
+    input = screenPathInput(),
+    arcs = input.arcs!;
+  input.arcs = {
+    size: () => 9000,
+    getArcIter: (id: number) => arcs.getArcIter(id % arcs.size()),
+  } as GeometryInput['arcs'];
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const resident = f.cache.drawable(first),
+      builds = f.cache.stats.builds,
+      bytes = f.cache.stats.bytes,
+      uploads = f.gpu.createMesh.mock.calls.length;
+    expect(resident).toHaveLength(2);
+    expect(resident.reduce((n, entry) => n + entry.job.members.length, 0)).toBe(9000);
+    expect(resident.every((entry) => entry.screenSpace)).toBe(true);
+    for (const scale of [15, 14, 12, 10, 8, 12, 16]) {
+      const next = f.frame({
+        ...input,
+        screen: { ...input.screen, view: [scale, -scale, -8 * scale, 8 * scale] },
+      });
+      await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+      expect(f.cache.drawable(next)).toEqual(resident);
+      expect(f.cache.stats.builds).toBe(builds);
+      expect(f.transport.build).toHaveBeenCalledTimes(builds);
+      expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads);
+      expect(f.cache.stats.bytes).toBe(bytes);
+    }
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('reuses finer screen paths after the coarser mesh is evicted under the unchanged byte budget', async () => {
+  const f = fixture(1024),
+    input = screenPathInput(),
+    coarse = {
+      ...input,
+      screen: { ...input.screen, view: [8, -8, -64, 64] as [number, number, number, number] },
+    };
+  try {
+    const first = f.frame(coarse);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const old = f.cache.drawable(first);
+    f.cache.pin(old);
+    const finer = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(finer)).toBe(true));
+    const retained = f.cache.drawable(finer),
+      builds = f.cache.stats.builds,
+      uploads = f.gpu.createMesh.mock.calls.length;
+    f.cache.pin(retained);
+    f.frame(input);
+    expect(old.every((entry) => !f.cache.isResident(entry))).toBe(true);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(1024);
+    const revisit = f.frame(coarse);
+    await vi.waitFor(() => expect(f.cache.complete(revisit)).toBe(true));
+    expect(f.cache.drawable(revisit)).toEqual(retained);
+    expect(f.cache.stats.builds).toBe(builds);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads);
+    expect(f.cache.stats.budgetBytes).toBe(1024);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(2048);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('keeps the final coarse screen frame when an obsolete zoom-in finishes later', async () => {
+  const f = fixture(1024),
+    input = screenPathInput();
+  let release: (() => void) | undefined;
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const displayed = f.cache.drawable(first);
+    f.cache.pin(displayed);
+    f.transport.build.mockImplementationOnce(async (packet) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return buildGeometryPacket(packet);
+    });
+    const intermediate = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [32, -32, -256, 256] },
+    });
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(f.cache.complete(intermediate)).toBe(false);
+    expect(f.cache.drawable(intermediate)).toEqual(displayed);
+    const latest = f.frame({ ...input, screen: { ...input.screen, view: [8, -8, -64, 64] } });
+    await vi.waitFor(() => expect(f.cache.complete(latest)).toBe(true));
+    expect(f.cache.drawable(latest)).toEqual(displayed);
+    release!();
+    await vi.waitFor(() => expect(f.cache.stats.builds).toBe(2));
+    expect(f.cache.drawable(latest)).toEqual(displayed);
+    expect(f.transport.build).toHaveBeenCalledTimes(2);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);
+    f.frame(latest.input);
+    expect(f.cache.isResident(intermediate.entries![0])).toBe(false);
+    expect(displayed.every((entry) => f.cache.isResident(entry))).toBe(true);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(1024);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(2048);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+it('halves descending-octave screen rebuilds while preferring exact resident resolutions', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  try {
+    for (const [scale, builds, frameScale] of [
+      [16, 1, 16],
+      [8, 1, 16],
+      [4, 2, 4],
+      [2, 2, 4],
+      [1, 3, 1],
+      [16, 3, 16],
+      [4, 3, 4],
+      [32, 4, 32],
+      [16, 4, 16],
+    ]) {
+      const next = f.frame({
+        ...input,
+        screen: { ...input.screen, view: [scale, -scale, -8 * scale, 8 * scale] },
+      });
+      await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+      expect(f.cache.drawable(next)[0].screenView?.[0]).toBe(frameScale);
+      expect(f.cache.stats.builds).toBe(builds);
+      expect(f.gpu.createMesh).toHaveBeenCalledTimes(builds);
+    }
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each<[string, Partial<NonNullable<GeometryInput['screen']>>]>([
+  ['higher scale', { view: [32, -32, -256, 256] }],
+  ['higher physical resolution', { pixelRatio: 4 }],
+  ['more than one octave of extra detail', { view: [4, -4, -32, 32] }],
+  ['different screen revision', { revision: 1 }],
+  ['culling', { cull: true }],
+  ['small-arc filtering', { smallArcs: true }],
+  ['perspective projection', { perspective: { pitch: 30, bearing: 45 } }],
+  ['unfiltered vertices', { halfPixel: false }],
+  ['nonuniform projection', { view: [8, -4, -64, 32] }],
+  ['reflected projection', { view: [-8, -8, 64, 64] }],
+])('does not reuse screen paths across %s', async (_, screen) => {
+  const f = fixture(),
+    input = screenPathInput();
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const next = f.frame({
+      ...input,
+      screen: { ...input.screen, ...screen, view: [...(screen.view ?? input.screen.view)] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).not.toEqual(first.entries);
+    expect(f.cache.stats.builds).toBe(2);
+    expect(f.transport.build).toHaveBeenCalledTimes(2);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('validates new screen requests before reusing compatible resident geometry', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const invalid = f.frame({
+      ...input,
+      screen: { ...input.screen, width: 0, view: [8, -8, -64, 64] },
+    });
+    await vi.waitFor(() => expect(f.cache.failed(invalid)).toBe(true));
+    expect(f.report).toHaveBeenCalledOnce();
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.cache.complete(invalid)).toBe(false);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('keeps source detail, membership and raw overflow fallback distinct from reusable screen detail', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const detail = f.frame({
+      ...input,
+      interval: 1,
+      screen: { ...input.screen, view: [8, -8, -64, 64] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(detail)).toBe(true));
+    expect(f.cache.stats.builds).toBe(2);
+    const selected = f.frame({
+      ...input,
+      ids: Uint32Array.of(0),
+      screen: { ...input.screen, view: [8, -8, -64, 64] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(selected)).toBe(true));
+    expect(f.cache.stats.builds).toBe(3);
+    expect(f.cache.drawable(selected)[0].job.members).toEqual(Int32Array.of(0));
+    const overflow = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [1e12, -1e12, -8e12, 8e12] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(overflow)).toBe(true));
+    expect(f.cache.drawable(overflow)[0].screenSpace).toBe(false);
+    expect(f.cache.drawable(overflow)[0].screenStats?.rawFallbackChunks).toBe(1);
+    const next = f.frame({ ...input, screen: { ...input.screen, view: [2, -2, -16, 16] } });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)[0].screenSpace).toBe(true);
+    expect(f.cache.stats.builds).toBe(5);
+    const raw = f.frame({ ...input, screen: undefined });
+    await vi.waitFor(() => expect(f.cache.complete(raw)).toBe(true));
+    expect(f.cache.drawable(raw)[0].screenSpace).toBe(false);
+    expect(f.cache.drawable(raw)[0].screenStats).toBeUndefined();
+    expect(f.cache.stats.builds).toBe(6);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
 it.each([
   'point',
   'path',
@@ -994,7 +2188,7 @@ it('reports queued work behind a failure and still completes independent members
   }
 });
 
-it('caches the interior arc selection and only tests boundary chunks during navigation', async () => {
+it('reuses source arc membership while selecting visible chunks during navigation', async () => {
   const f = fixture(),
     input = { ...handoffInput('path'), sourceSelection: true };
   const small = vi.fn(() => false),
@@ -1031,6 +2225,37 @@ it('caches the interior arc selection and only tests boundary chunks during navi
   }
 });
 
+it('reuses a resident boundary path chunk when panning changes its visible arcs', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('path'), sourceSelection: true };
+  const xs = [1.1, 1.2, 1.3, 0.1];
+  Object.assign(input.arcs!, {
+    arcIntersectsBBox: (id: number, b: number[]) => xs[id] + 0.02 >= b[0] && xs[id] <= b[2],
+  });
+  try {
+    const first = f.frame({
+      ...input,
+      viewBounds: [1, 1, 1.25, 1.3],
+      filter: arcVisibilityFilter(input.arcs!, 0, [1, 1, 1.25, 1.3]),
+    });
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const displayed = f.cache.drawable(first);
+    const builds = f.cache.stats.builds;
+    const next = f.frame({
+      ...input,
+      viewBounds: [1.15, 1, 1.4, 1.3],
+      filter: arcVisibilityFilter(input.arcs!, 0, [1.15, 1, 1.4, 1.3]),
+    });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.stats.builds).toBe(builds);
+    expect(f.cache.drawable(next)).toEqual(displayed);
+    expect(f.cache.drawable(next).flatMap((entry) => [...entry.job.members])).toEqual([0, 1, 2]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
 it('isolates concurrent stable selections with the same paint but different draw slots', async () => {
   const f = fixture(),
     input = { ...handoffInput('fill'), sourceSelection: true };
@@ -1054,7 +2279,7 @@ it('isolates concurrent stable selections with the same paint but different draw
   }
 });
 
-it('finishes a bounded compatible boundary refinement instead of restarting the geometry Worker', async () => {
+it('reuses an in-flight boundary chunk while panning instead of restarting its Worker', async () => {
   const f = fixture(),
     input = { ...handoffInput('path'), sourceSelection: true };
   const xs = [1.1, 1.2, 1.3, 0.1];
@@ -1084,10 +2309,9 @@ it('finishes a bounded compatible boundary refinement instead of restarting the 
     await vi.waitFor(() => expect(next.entries).not.toBeNull());
     expect(f.cache.stats.cancellations).toBe(0);
     releases[0]();
-    await vi.waitFor(() => expect(releases.length).toBe(2));
-    releases[1]();
     await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
-    expect(f.cache.drawable(next).flatMap((e) => [...e.job.members])).toEqual([1, 2]);
+    expect(releases).toHaveLength(1);
+    expect(f.cache.drawable(next).flatMap((e) => [...e.job.members])).toEqual([0, 1, 2]);
     expect(f.report).not.toHaveBeenCalled();
   } finally {
     for (const release of releases) release();
@@ -1108,6 +2332,159 @@ it('bounds empty completed membership cache entries across many detail keys', as
     }
     expect(Reflect.get(f.cache, 'selections').size).toBeLessThanOrEqual(128);
     expect(f.cache.stats.selectionCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'interrupted',
+  'unchanged',
+  'paint buckets',
+  'metadata reserve',
+  'oversized progressive',
+] as const)('recovers a mixed-owner handoff (%s) by rolling back only an unpresented atomic prefix', async (mode) => {
+  const f = fixture(75);
+  const owner = (id: string) => ({ id, sourceId: 's', revision: 0 });
+  const entry = (
+    id: string,
+    layer: string,
+    chunk: number,
+    members: number[],
+    bytes: number,
+    requiredBytes?: number,
+  ): GeometryEntry => ({
+    id,
+    family: `${layer}:${chunk}`,
+    partition: 'p',
+    owner: owner(layer),
+    job: { chunk, members: Int32Array.from(members) },
+    state: requiredBytes === undefined ? 'ready' : 'error',
+    meshes: (requiredBytes === undefined
+      ? [{ kind: 'point', count: 1, bytes: bytes - members.length * 4 }]
+      : []) as GeometryEntry['meshes'],
+    ranges: [],
+    fillRanges: [],
+    screenSpace: false,
+    bytes,
+    used: 0,
+    ...(requiredBytes === undefined ? {} : { requiredBytes, error: new RangeError('capacity') }),
+  });
+  const oldA = entry('old-a', 'a', 0, [0, 1], 60),
+    oldB = [entry('old-b0', 'b', 0, [0], 20), entry('old-b1', 'b', 1, [1], 20)],
+    prefix = entry('prefix-a', 'a', 0, [0], mode === 'oversized progressive' ? 20 : 24),
+    nextA = [prefix, entry('next-a1', 'a', 1, [1], 4, mode === 'oversized progressive' ? 16 : 20)],
+    nextB = [
+      entry('next-b0', 'b', 0, [0], 4, mode === 'oversized progressive' ? 100 : 16),
+      entry('next-b1', 'b', 1, [1], 4, mode === 'oversized progressive' ? 100 : 16),
+    ];
+  nextB.forEach((e, i) => {
+    e.fallback = oldB[i];
+  });
+  const request = (
+    id: string,
+    wholeLayer: boolean,
+    entries: GeometryEntry[],
+    fallback: GeometryEntry[],
+  ): GeometryRequest => ({
+    input: {
+      ...f.input,
+      wholeLayer,
+      shapes: id === 'a' ? [[[1, 1]], [[2, 2]]] : [[[3, 3]], [[4, 4]]],
+      interval: 1,
+    },
+    owner: owner(id),
+    plan: {
+      key: 'p',
+      ready: true,
+      count: 2,
+      boundsBytes: 0,
+      sourceId: 's',
+      revision: 0,
+      used: 0,
+      controller: new AbortController(),
+      promise: Promise.resolve({ chunks: 2, membership: Uint32Array.of(0, 1) }),
+    },
+    controller: new AbortController(),
+    key: 'current',
+    entries,
+    fallback,
+    frame: 0,
+    cursor: 0,
+  });
+  const atomic =
+      mode === 'paint buckets'
+        ? [request('a', true, [prefix], [oldA]), request('a', true, [nextA[1]], [oldA])]
+        : [request('a', true, nextA, [oldA])],
+    progressive = request('b', false, nextB, oldB),
+    requests = [...atomic, progressive],
+    all = [oldA, ...oldB, ...nextA, ...nextB];
+  Reflect.set(f.cache, 'entries', new Map(all.map((e) => [e.id, e])));
+  Reflect.set(f.cache, 'requests', new Map(requests.map((r, i) => [r.owner.id + i, r])));
+  Reflect.set(f.cache, 'bytes', mode === 'oversized progressive' ? 132 : 136);
+  Reflect.set(f.cache, 'handoffOwner', atomic[0].owner);
+  Reflect.set(
+    f.cache,
+    'handoffRequests',
+    mode === 'interrupted' ? atomic.map((r) => ({ ...r, key: 'interrupted' })) : atomic,
+  );
+  f.cache.pin([oldA, ...oldB]);
+  const draw = () => {
+    const ready = atomic.every((r) => f.cache.complete(r));
+    const shown = [
+      ...(ready ? atomic.flatMap((r) => f.cache.drawable(r)) : [oldA]),
+      ...f.cache.drawable(progressive),
+    ];
+    if (!ready) expect(f.cache.isResident(oldA)).toBe(true);
+    f.cache.pin(shown);
+    f.cache.finish();
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(150);
+  };
+  f.invalidate.mockImplementation(draw);
+  f.transport.build.mockImplementation(async (packet) => ({
+    geometries: [
+      {
+        kind: 'point',
+        vertices: new Float32Array(
+          packet.coordinates[0] < 3 && mode !== 'oversized progressive' ? 5 : 4,
+        ),
+        count: 1,
+      },
+    ],
+    screenSpace: false,
+  }));
+  try {
+    if (mode === 'metadata reserve') {
+      prefix.screenSpace = true;
+      prefix.screenView = [1, 1, 0, 0];
+      prefix.screenStats = { outputVertices: 2, outputSegments: 1 } as GeometryEntry['screenStats'];
+      Reflect.get(f.cache, 'trim').call(f.cache, 38, progressive);
+      expect(prefix.bytes).toBe(4);
+      expect(prefix.state).toBe('queued');
+      expect(prefix.requiredBytes).toBeUndefined();
+      expect(prefix.screenStats).toBeUndefined();
+      expect(prefix.screenView).toBeUndefined();
+      expect(f.cache.stats.bytes).toBe(116);
+      expect(() => f.cache.admitExternal(34)).not.toThrow();
+      expect(() => f.cache.admitExternal(38)).toThrow(RangeError);
+    }
+    draw();
+    if (mode === 'oversized progressive') {
+      await vi.waitFor(() => expect(atomic.every((r) => f.cache.complete(r))).toBe(true));
+      draw();
+      expect(f.cache.failed(progressive)).toBe(true);
+      expect(f.cache.stats.pending).toBe(0);
+      expect(f.transport.build).toHaveBeenCalledTimes(1);
+      expect(f.report).not.toHaveBeenCalled();
+      return;
+    }
+    await vi.waitFor(() => expect(requests.every((r) => f.cache.complete(r))).toBe(true));
+    draw();
+    expect(f.cache.stats.bytes).toBe(88);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(150);
+    expect(f.cache.stats.failedRequests).toBe(0);
+    expect(f.transport.build).toHaveBeenCalledTimes(4);
     expect(f.report).not.toHaveBeenCalled();
   } finally {
     f.cache.dispose();

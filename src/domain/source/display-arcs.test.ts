@@ -91,6 +91,16 @@ describe('DisplayArcs lifecycle', () => {
     expect(result).not.toBe(arcs);
     expect((result as any).isFilteredCopy).toBe(true);
   });
+
+  it('scales the LOD switch with the requested pixel tolerance and permits full detail', () => {
+    const arcs = makeMockArcs(600_000);
+    const da = new DisplayArcs(arcs);
+    expect(da.getScaledArcs(1, 0.5)).toBe(arcs);
+    expect(da.getScaledArcs(1, 2)).not.toBe(arcs);
+    expect(da.getScaledArcs(100, 0)).toBe(arcs);
+    expect(da.getScaledArcs(100, 0.001)).toBe(arcs);
+    expect(da.getScaledArcs(100)).not.toBe(arcs);
+  });
 });
 
 describe('cooperative display LOD', () => {
@@ -125,6 +135,7 @@ describe('cooperative display LOD', () => {
       expect(ticks).toBeGreaterThan(1);
       expect(ready).toHaveBeenCalledOnce();
       expect(actual.getScaledArcs(100).getVertexData!()).toMatchObject(expected.getVertexData!());
+      expect(actual.getScaledArcs(100, 0)).toBe(arcs);
       expect(arcs.getRetainedInterval!()).toBe(thresholds ? 2 : 0);
       actual.dispose();
     });

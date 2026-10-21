@@ -10,6 +10,7 @@ export interface LabelOptions {
   fontFamily?: string;
   /** Font outline URL for MSDF (TTF/OTF/WOFF1); resolved by the host, fetched locally in its Worker. */
   fontUrl?: string;
+  /** Base CSS-pixel size; zoom-out stops at 12px, or this size when it is smaller. */
   fontSize?: number;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
@@ -18,7 +19,7 @@ export interface LabelOptions {
   haloWidth?: number;
   /** CSS pixel offset applied after placement. */
   offset?: readonly [number, number];
-  /** Auto: around points, parallel to lines, interior of polygons. */
+  /** Auto: above points, parallel to lines, interior of polygons. */
   placement?: 'auto' | 'horizontal' | 'parallel';
   allowOverlap?: boolean;
   /** Higher priorities are placed first; ties use parent layer order and feature ID. */

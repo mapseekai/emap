@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 文字注记 (Layer labels)</title>
+</head>
+<body class="emap-example-with-floating-header" data-symbol-example="labels">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>文字注记 (Layer labels)</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>文字注记</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">矢量文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.csv,.tsv" />
+        </div>
+        <p class="emap-example-hint">选择点、线或面图层，按属性字段显示文字，调整字体、描边、偏移与避让。</p>
+      </section>
+      <section id="symbol-controls" class="emap-example-section"></section>
+      <p id="status" class="emap-example-status" role="status" data-state="loading">正在加载示例…</p>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+import { mountSymbolStyleExample } from '/src/symbol-controls/main.ts';
+const emap = await loadExampleRuntime();
+const map = await emap.Emap.create({ container: 'map', renderer: getExampleRenderer(), preset: 'viewer' });
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await mountSymbolStyleExample(map, emap);
+  </script>
+</body>
+</html>

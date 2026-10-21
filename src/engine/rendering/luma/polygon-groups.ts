@@ -12,6 +12,8 @@ export interface PolygonGeometryPart {
   kind: 'fill' | 'path' | 'arrow';
   job: GeometryJob;
   partition: GeometryPartition;
+  /** Identical resident fill and paint in both frames; no boundary replacement. */
+  stableFill?: boolean;
 }
 
 /** Couple actual render units, not equal-looking chunk numbers from unrelated
@@ -40,9 +42,18 @@ export async function polygonPresentationGroups(
   const domains: { partition: GeometryPartition; paths: boolean; chunks: Map<number, number> }[] =
     [];
   const indexes = new Map<GeometryPartition, Map<boolean, (typeof domains)[number]>>();
+  const stableFills = new Map<GeometryJob, number>();
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i],
       paths = part.kind === 'path';
+    if (part.kind === 'fill' && part.stableFill) {
+      // Pair the retained old/new face without making it a bridge between
+      // independent stroke or changing-fill chunks in either partition.
+      const existing = stableFills.get(part.job);
+      if (existing === undefined) stableFills.set(part.job, i);
+      else join(i, existing);
+      continue;
+    }
     let kinds = indexes.get(part.partition);
     if (!kinds) indexes.set(part.partition, (kinds = new Map<boolean, (typeof domains)[number]>()));
     let domain = kinds.get(paths);
@@ -71,6 +82,7 @@ export async function polygonPresentationGroups(
     slice = performance.now();
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
+    if (part.kind === 'fill' && part.stableFill) continue;
     for (const member of part.job.members) {
       if (part.kind === 'path') connect(i, absArcId(member), paths);
       else {

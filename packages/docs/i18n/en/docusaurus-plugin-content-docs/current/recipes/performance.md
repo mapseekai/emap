@@ -2,8 +2,8 @@
 id: performance
 slug: /recipes/performance
 title: Performance
-api: ["Emap", "MapOptions", "SimplifyOptions"]
-examples: ["simplify", "simplify-control", "web-worker", "point-lod", "luma-benchmark"]
+api: ["Emap", "Emap.setGeometryLod", "Emap.setScreenPathFiltering", "MapOptions", "SimplifyOptions"]
+examples: ["simplify", "simplify-control", "web-worker", "point-lod", "geometry-lod", "luma-benchmark"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -74,9 +74,46 @@ Simplification writes its threshold to shared arcs' `retainedInterval` and keeps
 
 ### Display-arc LOD
 
-`DisplayArcs` is source-internal render LOD with no option. More than `500000` arc vertices creates a low-detail copy: existing thresholds retain about `8%`; otherwise it fast-simplifies at four times average segment length. It renders while `unitsPerPixel > low-detail average segment length × 1.5`; closer scales use full arcs.
+`geometryLod` controls automatic line and polygon display simplification for the current map, shared by Canvas2D, WebGL2, and WebGPU. The default is `{ pixelTolerance: 0.5 }`; `false` disables it. Change the setting without reloading data:
 
-Each frame sets `max(retainedInterval, pixelSize × 0.5)`, preserving user simplification as a floor. In-place edits mark display arcs stale; rebuild waits for a low-detail copy. Export temporarily restores full precision.
+```ts
+const map = await Emap.create({
+  container: 'map',
+  geometryLod: { pixelTolerance: 0.5 },
+});
+map.setGeometryLod({ pixelTolerance: 2 }); // Prefer simpler display geometry
+map.setGeometryLod(false); // Restore the detail allowed by the source
+map.setGeometryLod(); // Restore the default 0.5
+```
+
+`pixelTolerance` is a CSS-pixel simplification strength greater than `0` and at most `64`. With existing vertex thresholds, each frame uses `max(user simplification floor, pixelSize × pixelTolerance)`. Larger values reduce display detail. Disabling preserves an explicitly applied data simplification. Drawing, picking, and highlighting share the same LOD setting; original coordinates, attributes, and feature counts remain unchanged.
+
+Above `500000` arc vertices, `DisplayArcs` prepares a low-detail copy: existing thresholds retain about `8%`; otherwise it fast-simplifies at four times average segment length. It switches when `unitsPerPixel × (pixelTolerance / 0.5) > low-detail average segment length × 1.5`. This is not a strict maximum-error guarantee. Small files without vertex thresholds do not automatically acquire per-vertex simplification preprocessing.
+
+The tiny-arc filter also scales by `pixelTolerance / 0.5`. `geometryLod: false` bypasses low-detail copies, automatic vertex thresholds, and tiny-arc filtering while retaining viewport culling. It does not change the independent `screenPathFiltering` setting. In-place edits invalidate display copies for rebuilding on demand; export temporarily restores full precision.
+
+### Screen-pixel deduplication
+
+`screenPathFiltering` defaults to true independently of geometry LOD. Canvas2D, WebGL2, and WebGPU use the same source-anchored half-device-pixel grid to merge consecutive interior duplicates in opaque solid lines and polygon outlines. Retained vertices and both endpoints keep their original positions; the grid never snaps road junctions. Reversals are preserved. Panning reuses the frame; zooming in updates its resolution band. Small layers and large Worker batches share this rule.
+
+Whole-layer GPU stroke caches can reuse a finer result while zooming out when its physical resolution is at most twice the requested resolution and it averages at most two segments per nonempty arc. This avoids repeated preparation and uploads without retaining excessive draw work. An already resident exact level takes priority. Changes outside these conditions or zooming beyond cached precision still update the geometry; source coordinates and endpoints stay unchanged.
+
+```ts
+const map = await Emap.create({
+  container: 'map',
+  geometryLod: false,
+  screenPathFiltering: true,
+});
+map.setScreenPathFiltering(false); // Disable screen deduplication without changing geometry LOD
+map.setScreenPathFiltering(); // Restore the default: enabled
+map.setGeometryLod(false);
+map.setScreenPathFiltering(false); // Disable both to retain the detail allowed by the source
+```
+
+Deduplication does not change source coordinates, features, exports, or geometry LOD vertex counts. Dashes, arrows, translucent strokes, and polygon fills retain geometry precision in every backend to preserve dash distances, alpha composition, and holes. Compare performance with identical settings, data, viewports, and DPR. CPU submission time is not GPU duration or FPS.
+
+The [geometry LOD example](/mapseekai/emap/examples/geometry-lod/) exposes two independent toggles, a simplification strength input, and vertex counts. It calculates missing thresholds with `100%` vertex retention only when geometry simplification is first enabled. Importing with simplification disabled displays full precision directly.
+Local GeoPackage files are also supported: enter comma-separated table names before selecting a `.gpkg` file, or leave the field empty to import all tables. Import runs in a Worker without uploading the file.
 
 ### Viewport-culling parameters
 
@@ -322,7 +359,7 @@ original TIFFs in the authorized `cdf20250916042716` folder.
 
 These optimizations are enabled by default for formal maps with `renderer: 'webgl2'` or `'webgpu'`;
 no private benchmark flags are needed. Lightweight pan and wheel gestures replay resident GPU geometry
-at the current camera and coalesce new viewport planning approximately every 80 ms. When CPU drawing
+at the current camera. New viewport planning waits until input pauses for approximately 80 ms or the gesture ends, avoiding repeated geometry preparation during continuous input. When CPU drawing
 or asynchronous GPU completion latency exceeds 33.3 ms, navigation reuses the painted frame until
 the gesture ends, then redraws the current view instead of resubmitting dense geometry on every move.
 Completion latency is sampled at most once per 250 ms; it includes scheduling and asynchronous completion; GPU timestamps are measured separately.
@@ -341,12 +378,17 @@ Stable views reuse arc visibility and candidate-outline preparation instead of f
 again before a GPU mesh cache hit. Ordered input IDs and geometry revisions are still checked;
 dash direction, point density, layer order, selection and editing semantics remain unchanged.
 Additional selection snapshots share the existing geometry byte budget and owner lifecycle.
+Strokes cache whole layers; draw-range indices and GPU viewport clipping avoid preparing or uploading geometry again when visible roads change during a pan. Polygon-fill boundary chunks still retain complete spatial membership.
+With screen filtering disabled, opaque solid MSAA strokes arrange GPU data by spatial proximity within each preparation batch to improve range culling. Original coordinates, topology, feature order, and whole-layer presentation stay unchanged. Dashes, arrows, translucent strokes, and other order-dependent paths retain their original order.
 
-Large formal GPU draws now use stable spatial chunks and a dedicated geometry Worker. The main
-thread cooperatively copies selected XY packets; triangulation and GPU packing run off-thread.
-The entire source dataset and attribute tables are never cloned into that Worker. Ready chunks are
-presented progressively by clearing and replaying available content in parent/bucket order, without
-accumulating alpha from previous partial frames. Icons preserve their original overlap order.
+Large formal GPU draws use a dedicated geometry Worker. The main thread cooperatively copies bounded
+XY packets; triangulation and GPU packing run off-thread without cloning the entire source or attribute tables.
+Strokes cache whole layers without spatial-grid loading. A layer is presented only when all its batches are ready;
+detail updates retain the complete previous layer until its replacement is ready. Internal preparation and uploads
+remain bounded by vertex and buffer limits. Fills and points retain progressive presentation in parent/bucket order,
+without accumulating alpha from previous partial frames. Icons preserve their original overlap order.
+
+When polygon fills reuse identical cached geometry, they do not join unrelated stroke updates into one large handoff group. Changed fills and boundaries still transition together, preventing temporary GPU memory pressure from blocking later updates.
 
 ```ts
 const map = await Emap.create({
@@ -357,10 +399,11 @@ const map = await Emap.create({
 });
 ```
 
-Screen filtering defaults to half-device-pixel display filtering of large opaque solid strokes,
-preserving source coordinates with the stated display approximation. Dashes, arrows and translucent
-strokes retain raw paths. Set `screenPathFiltering: false` to disable it. Small layers and edit
-highlights remain synchronous. The geometry Worker is independent of the operation `useWorker` flag.
+`screenPathFiltering` defaults to half-device-pixel display filtering for opaque solid strokes in every renderer,
+using cells only to select interior vertices while preserving retained positions and endpoints. It is independent of `geometryLod`;
+call `setScreenPathFiltering(false)` to disable it at runtime. Dashes, arrows, translucent strokes, and polygon fills
+retain geometry precision. Small layers and edit highlights remain synchronous.
+The geometry Worker is independent of the operation `useWorker` flag.
 
 The geometry soft budget is 256 MiB, with a bounded visible working set of at most 512 MiB.
 Over-budget work reports an error instead of truncating features. A single packet is limited to
@@ -403,8 +446,8 @@ CPU preparation batches remain independent of small GPU allocations, and queue/e
 is incremental. Progressive notifications are coalesced using observed presentation cost.
 Opaque solid strokes use source-anchored detail frames at least as fine as the requested device resolution.
 Pans within existing coverage reuse these buffers; new coverage, members, revisions or detail levels still
-require preparation. The per-axis half-device-pixel approximation bound is retained, but the grid phase
-can change, so old and new filtered strokes can differ at edge pixels. Set `screenPathFiltering: false`
+require preparation. Cells select interior vertices without snapping retained coordinates or endpoints,
+so changing detail bands does not shift road junctions. Set `screenPathFiltering: false`
 to disable this approximation. Authoritative topology, export and editing coordinates are unchanged.
 Metadata-only registration reuses an unchanged DisplayArcs instead of constructing the same LOD twice.
 

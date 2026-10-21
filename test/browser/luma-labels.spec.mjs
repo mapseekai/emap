@@ -93,8 +93,10 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
       await settle(page,name);expect(await page.evaluate(()=>window.lumaBenchmark.labelPlacements.some(l=>l.text==='修改后的名称'))).toBe(true);
     }
     await page.screenshot({path:info.outputPath('bound-labels.png')});
-    await page.locator('#label-settings summary').click();
-    expect(await page.locator('#label-owner option').count()).toBe(before.length);
+    if(route==='luma-25d') {
+      await page.locator('#label-settings summary').click();
+      expect(await page.locator('#label-owner option').count()).toBe(before.length);
+    }
     await page.evaluate(name=>{const a=window[name];for(const l of a.layers)a.setLayerLabel(l.id,null);a.draw('luma');},name);await settle(page,name);
     expect(await paintedText(page,name)).toBe(0);
     const cleared=await page.evaluate(name=>window[name].labelStats,name);

@@ -1,9 +1,27 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { installLabelControls } from '../../packages/examples/src/luma-benchmark/label-controls';
-import { installIconControls } from '../../packages/examples/src/luma-benchmark/icon-controls';
+import { installLabelControls } from '../../packages/examples/src/symbol-controls/label-controls';
+import { installIconControls } from '../../packages/examples/src/symbol-controls/icon-controls';
 
 describe('symbol controls refresh by settings revision, not every map frame', () => {
+  it('enables collision avoidance by default and maps disabling it to allowOverlap', () => {
+    const layers: any[] = [{ id: 'p', type: 'circle', label: { field: 'name' } }];
+    const renderer: any = {
+      getLayers: () => layers,
+      getLabelFields: () => ['name'],
+      labelControlRevision: '0',
+      setLayerSymbol: vi.fn(),
+    };
+    const host = document.createElement('div'),
+      controls = installLabelControls(host, renderer, vi.fn()),
+      collision = host.querySelector<HTMLInputElement>('#label-collision')!;
+    expect(collision).not.toBeNull();
+    expect(collision.checked).toBe(true);
+    collision.checked = false;
+    collision.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(renderer.setLayerSymbol.mock.calls[0][1].layout['text-allow-overlap']).toBe(true);
+    controls.dispose();
+  });
   for (const install of [installLabelControls, installIconControls])
     it(install.name, () => {
       const layers: any[] = [

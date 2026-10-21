@@ -101,6 +101,27 @@ describe('MSDF pass resource ownership', () => {
 });
 
 for (const backend of ['webgl', 'webgpu'] as const) {
+  it(`${backend}: scales glyph positions, extents and distance effects without replacing the font atlas`, () => {
+    const f = setup(),
+      writes = new Map<string, number[]>(),
+      create = f.device.createBuffer;
+    f.device.createBuffer = (props: any) => {
+      const buffer = create(props);
+      buffer.write = (data: Float32Array) => writes.set(props.id, Array.from(data));
+      return buffer;
+    };
+    f.label.raster.glyphs[0].plane = [4, -6, 20, 24];
+    const renderer = new MsdfTextRenderer(f.device, backend);
+    renderer.draw(f.pass, { key: 'initial', labels: [f.label] }, 100, 100, 1);
+    renderer.draw(f.pass, { key: 'zoom-out', labels: [{ ...f.label, scale: 0.5 }] }, 100, 100, 1);
+    expect(writes.get('emap-msdf-poses')!.slice(0, 2)).toEqual([42, 37]);
+    const glyph = writes.get('emap-msdf-glyphs')!;
+    expect(glyph.slice(0, 2)).toEqual([10, 12]);
+    expect(glyph.slice(14, 16)).toEqual([4, 1]);
+    expect(renderer.stats.textureUploads).toBe(1);
+    expect(renderer.stats.bufferAllocations).toBe(2);
+    renderer.dispose();
+  });
   it(`${backend}: unchanged frames inspect atlas generations without scanning glyphs`, () => {
     const f = setup(),
       renderer = new MsdfTextRenderer(f.device, backend);

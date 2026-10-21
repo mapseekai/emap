@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 线面自动简化</title>
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>线面自动简化 / Geometry LOD</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>线面自动简化</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">线或面矢量文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.gpkg" />
+        </div>
+        <div class="emap-example-field">
+          <label for="gpkg-layers">GeoPackage 表名（可选）</label>
+          <input id="gpkg-layers" type="text" placeholder="留空导入全部表，多个表名用逗号分隔" />
+        </div>
+        <p class="emap-example-hint">导入 GeoPackage 时，可先填写表名再选择文件；大文件建议选择需要对比的线、面图层。</p>
+        <label class="emap-example-check"><input id="geometry-lod" type="checkbox" checked /> 启用线面自动简化</label>
+        <div class="emap-example-field">
+          <label for="pixel-tolerance">简化强度（CSS 像素）</label>
+          <input id="pixel-tolerance" type="number" min="0.01" max="64" step="0.01" value="0.5" />
+        </div>
+        <p class="emap-example-hint">默认 0.5；数值越大，拉远时越倾向于简化。关闭后恢复源数据允许的细节，已手动应用的简化仍保留。放大、缩小可对比边界变化。</p>
+        <label class="emap-example-check"><input id="screen-path-filtering" type="checkbox" checked /> 启用屏幕同像素去重</label>
+        <p class="emap-example-hint">独立于几何简化：半设备像素网格仅合并连续重复的内部顶点，保留点和首尾端点不移动。两项都关闭可比较完整精度；去重不改变源数据和下方几何顶点数。</p>
+        <p class="emap-example-hint">GPU 线图层整层显示，平移复用现有几何；缩放更新细节时，保留旧层直到新层全部就绪后统一替换。</p>
+        <div class="emap-example-actions">
+          <button id="reset-detail">恢复默认参数</button>
+          <button id="fit">完整范围</button>
+        </div>
+        <p id="geometry-stats" class="emap-example-hint" aria-live="polite"></p>
+      <p class="emap-example-hint">首次启用几何简化时才计算缺少的阈值，并保留全部顶点；关闭简化导入可直接查看完整精度。</p>
+        <p id="status" class="emap-example-status" role="status" data-state="loading">正在加载示例…</p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+import { mountGeometryLodExample } from '/src/geometry-lod.ts';
+const emap = await loadExampleRuntime();
+const map = await emap.Emap.create({ container: 'map', renderer: getExampleRenderer(), preset: 'viewer' });
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await mountGeometryLodExample(map, emap);
+  </script>
+</body>
+</html>

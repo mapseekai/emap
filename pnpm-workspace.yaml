@@ -32,6 +32,7 @@ minimumReleaseAgeExclude:
 
 patchedDependencies:
   '@luma.gl/webgl@10.0.0-alpha.4': patches/@luma.gl__webgl@10.0.0-alpha.4.patch
+  '@luma.gl/webgpu@10.0.0-alpha.4': patches/@luma.gl__webgpu@10.0.0-alpha.4.patch
   apache-arrow@17.0.0: patches/apache-arrow@17.0.0.patch
   # GHSA-vfj7-8cjw-p6xm / GHSA-ch52-4w7c-c8xp: local fixes pending upstream releases.
   # Regression coverage: test/security/docs-toolchain-dependencies.test.ts.

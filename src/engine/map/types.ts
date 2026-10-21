@@ -53,8 +53,10 @@ export interface MapOptions {
   msdfWorkerUrl?: string | URL;
   /** Bounded GPU geometry preparation Worker. Defaults to the sibling emap-geometry-worker.js. */
   geometryWorkerUrl?: string | URL;
-  /** Half-device-pixel display filtering for large opaque solid GPU strokes. Defaults to true; source coordinates never change. */
+  /** Independent half-device-pixel filtering for opaque solid strokes in every renderer. Defaults to true; source coordinates never change. */
   screenPathFiltering?: boolean;
+  /** Display-only line/polygon LOD. False restores source detail; pixelTolerance is >0..64 CSS pixels (default 0.5). */
+  geometryLod?: false | { pixelTolerance?: number };
   container: string | HTMLElement;
   interactive?: boolean;
   /** Native MapLibre basemap and online-overlay integration. */

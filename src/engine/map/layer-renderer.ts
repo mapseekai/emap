@@ -146,6 +146,7 @@ export function renderLayers(
   pixelSize: number,
   lineScale: number,
 ): void {
+  const tolerance = ctx.viewport.geometryLodTolerance ?? 0.5;
   const pointLod = pointLodForPainter(ctx.painter);
   pointLod.retainLayers(ctx.retainLayerIds ?? new Set(ctx.layers.map((layer) => layer.id)));
   for (const layer of ctx.layers) {
@@ -155,11 +156,11 @@ export function renderLayers(
     if (!source) continue;
 
     const displayArcs = source.getDisplayArcs();
-    const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
+    const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize, tolerance) : source.getArcs();
 
     if (arcs?.setRetainedInterval && (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
       const userFloor = source.getSimplifyFloor?.() ?? 0;
-      arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
+      arcs.setRetainedInterval(Math.max(userFloor, pixelSize * tolerance));
     }
 
     const ml = ctx.resolveSourceLayer(layer.source, layer['source-layer']);
@@ -170,7 +171,9 @@ export function renderLayers(
       revision: dataset?.editVersion ?? 0,
       bounds: stableSourceBounds(source, dataset),
       sourceSelection: retainsVectorChunks(ctx, layer, arcs),
+      geometryLod: tolerance !== 0,
       content: JSON.stringify([
+        tolerance,
         layer.paint,
         layer.filter,
         layer.label,

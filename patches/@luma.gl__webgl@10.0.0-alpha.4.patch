@@ -84,3 +84,208 @@ index 803c495dcc8b3ba27ff84f4e3fffe4ffb7716901..7c534f8b25c1f46ceddb581e4510b2a7
  
      installProgramSpy(gl);
  
+diff --git a/src/adapter/resources/webgl-sampler.ts b/src/adapter/resources/webgl-sampler.ts
+--- a/src/adapter/resources/webgl-sampler.ts
++++ b/src/adapter/resources/webgl-sampler.ts
+@@ -27,10 +27,13 @@
+
+   override destroy(): void {
+     if (this.handle) {
+-      this.device.gl.deleteSampler(this.handle);
++      if (this.ownsHandle) {
++        this.device.gl.deleteSampler(this.handle);
++      }
+       // @ts-expect-error read-only/undefined
+       this.handle = undefined;
+     }
++    this.destroyResource();
+   }
+
+   override toString(): string {
+diff --git a/src/adapter/resources/webgl-framebuffer.ts b/src/adapter/resources/webgl-framebuffer.ts
+--- a/src/adapter/resources/webgl-framebuffer.ts
++++ b/src/adapter/resources/webgl-framebuffer.ts
+@@ -49,10 +49,10 @@
+
+   /** destroys any auto created resources etc. */
+   override destroy(): void {
++    if (!this.destroyed && this.handle !== null && this.ownsHandle) {
++      this.gl.deleteFramebuffer(this.handle);
++    }
+     super.destroy(); // destroys owned resources etc.
+-    if (!this.destroyed && this.handle !== null && !this.props.handle) {
+-      this.gl.deleteFramebuffer(this.handle);
+-    }
+   }
+
+   protected updateAttachments(): void {
+diff --git a/src/adapter/webgl-canvas-context.ts b/src/adapter/webgl-canvas-context.ts
+--- a/src/adapter/webgl-canvas-context.ts
++++ b/src/adapter/webgl-canvas-context.ts
+@@ -30,6 +30,12 @@
+     this._configureDevice();
+   }
+
++  override destroy(): void {
++    this._framebuffer?.destroy();
++    this._framebuffer = null;
++    super.destroy();
++  }
++
+   // IMPLEMENTATION OF ABSTRACT METHODS
+
+   _configureDevice(): void {
+diff --git a/src/adapter/resources/webgl-command-encoder.ts b/src/adapter/resources/webgl-command-encoder.ts
+--- a/src/adapter/resources/webgl-command-encoder.ts
++++ b/src/adapter/resources/webgl-command-encoder.ts
+@@ -35,6 +35,7 @@
+       id: this.id,
+       userData: this.userData
+     });
++    this.attachResource(this.commandBuffer);
+   }
+
+   override destroy(): void {
+@@ -42,6 +43,7 @@
+   }
+
+   override finish(): WEBGLCommandBuffer {
++    this.detachResource(this.commandBuffer);
+     this.destroy();
+     return this.commandBuffer;
+   }
+diff --git a/dist/adapter/resources/webgl-sampler.js b/dist/adapter/resources/webgl-sampler.js
+--- a/dist/adapter/resources/webgl-sampler.js
++++ b/dist/adapter/resources/webgl-sampler.js
+@@ -22,10 +22,13 @@
+     }
+     destroy() {
+         if (this.handle) {
+-            this.device.gl.deleteSampler(this.handle);
++            if (this.ownsHandle) {
++                this.device.gl.deleteSampler(this.handle);
++            }
+             // @ts-expect-error read-only/undefined
+             this.handle = undefined;
+         }
++        this.destroyResource();
+     }
+     toString() {
+         return `Sampler(${this.id},${JSON.stringify(this.props)})`;
+diff --git a/dist/adapter/resources/webgl-framebuffer.js b/dist/adapter/resources/webgl-framebuffer.js
+--- a/dist/adapter/resources/webgl-framebuffer.js
++++ b/dist/adapter/resources/webgl-framebuffer.js
+@@ -31,10 +31,10 @@
+     }
+     /** destroys any auto created resources etc. */
+     destroy() {
+-        super.destroy(); // destroys owned resources etc.
+-        if (!this.destroyed && this.handle !== null && !this.props.handle) {
++        if (!this.destroyed && this.handle !== null && this.ownsHandle) {
+             this.gl.deleteFramebuffer(this.handle);
+         }
++        super.destroy(); // destroys owned resources etc.
+     }
+     updateAttachments() {
+         /** Attach from a map of attachments */
+diff --git a/dist/adapter/webgl-canvas-context.js b/dist/adapter/webgl-canvas-context.js
+--- a/dist/adapter/webgl-canvas-context.js
++++ b/dist/adapter/webgl-canvas-context.js
+@@ -21,6 +21,12 @@
+         this._setAutoCreatedCanvasId(`${this.device.id}-canvas`);
+         this._configureDevice();
+     }
++    destroy() {
++        this._framebuffer?.destroy();
++        this._framebuffer = null;
++        super.destroy();
++    }
++
+     // IMPLEMENTATION OF ABSTRACT METHODS
+     _configureDevice() {
+         const shouldResize = this.drawingBufferWidth !== this._framebuffer?.width ||
+diff --git a/dist/adapter/resources/webgl-command-encoder.js b/dist/adapter/resources/webgl-command-encoder.js
+--- a/dist/adapter/resources/webgl-command-encoder.js
++++ b/dist/adapter/resources/webgl-command-encoder.js
+@@ -15,11 +15,13 @@
+             id: this.id,
+             userData: this.userData
+         });
++        this.attachResource(this.commandBuffer);
+     }
+     destroy() {
+         this.destroyResource();
+     }
+     finish() {
++        this.detachResource(this.commandBuffer);
+         this.destroy();
+         return this.commandBuffer;
+     }
+diff --git a/dist/adapter/webgl-canvas-context.d.ts b/dist/adapter/webgl-canvas-context.d.ts
+--- a/dist/adapter/webgl-canvas-context.d.ts
++++ b/dist/adapter/webgl-canvas-context.d.ts
+@@ -11,6 +11,7 @@
+     private _framebuffer;
+     get [Symbol.toStringTag](): string;
+     constructor(device: WebGLDevice, props: CanvasContextProps);
++    destroy(): void;
+     _configureDevice(): void;
+     _getCurrentFramebuffer(): WEBGLFramebuffer;
+ }
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -2357,10 +2357,10 @@
+       }
+       /** destroys any auto created resources etc. */
+       destroy() {
++        if (!this.destroyed && this.handle !== null && this.ownsHandle) {
++          this.gl.deleteFramebuffer(this.handle);
++        }
+         super.destroy();
+-        if (!this.destroyed && this.handle !== null && !this.props.handle) {
+-          this.gl.deleteFramebuffer(this.handle);
+-        }
+       }
+       updateAttachments() {
+         const prevHandle = this.gl.bindFramebuffer(36160, this.handle);
+@@ -2457,6 +2457,11 @@
+         this._configureDevice();
+       }
+       // IMPLEMENTATION OF ABSTRACT METHODS
++      destroy() {
++        this._framebuffer?.destroy();
++        this._framebuffer = null;
++        super.destroy();
++      }
+       _configureDevice() {
+         var _a, _b, _c;
+         const shouldResize = this.drawingBufferWidth !== ((_a = this._framebuffer) == null ? void 0 : _a.width) || this.drawingBufferHeight !== ((_b = this._framebuffer) == null ? void 0 : _b.height);
+@@ -3270,9 +3275,12 @@
+       }
+       destroy() {
+         if (this.handle) {
+-          this.device.gl.deleteSampler(this.handle);
++          if (this.ownsHandle) {
++            this.device.gl.deleteSampler(this.handle);
++          }
+           this.handle = void 0;
+         }
++        this.destroyResource();
+       }
+       toString() {
+         return `Sampler(${this.id},${JSON.stringify(this.props)})`;
+@@ -5432,11 +5440,13 @@
+           id: this.id,
+           userData: this.userData
+         });
++        this.attachResource(this.commandBuffer);
+       }
+       destroy() {
+         this.destroyResource();
+       }
+       finish() {
++        this.detachResource(this.commandBuffer);
+         this.destroy();
+         return this.commandBuffer;
+       }

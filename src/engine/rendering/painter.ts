@@ -117,6 +117,8 @@ export interface CorePainter {
   readonly closed?: Promise<void>;
   dispose?(): void;
   clearGeometryCache?(scope?: { sourceId?: string; layerId?: string }): void;
+  /** @internal Screen approximation is independent of source geometry LOD. */
+  setScreenPathFiltering?(enabled: boolean): void;
   setLayerContext?(
     context: {
       id: string;
@@ -126,6 +128,8 @@ export interface CorePainter {
       content?: string;
       /** IDs are a source/style selection, not a camera-dependent candidate list. */
       sourceSelection?: boolean;
+      /** Automatic source geometry LOD; independent of screen filtering. */
+      geometryLod?: boolean;
     } | null,
   ): void;
   createLabelAtlas?(): import('./labels/text-types').LabelAtlasProvider;

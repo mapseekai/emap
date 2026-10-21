@@ -42,6 +42,103 @@ function fixture(): GeometryInput {
   return { kind: 'path', arcs, interval: 0, bounds: [0, 0, 16, 16] };
 }
 describe('bounded stable geometry planning', () => {
+  it('spatially orders eligible raw members within their existing job without changing signed IDs', async () => {
+    const ids = Int32Array.from([~2, 1, 0]),
+      input = { ...fixture(), wholeLayer: true, spatialOrder: true, ids },
+      partition = await partitionGeometry(input, signal()),
+      membership = partition.membership.slice();
+    const jobs = await selectGeometryJobs(input, partition, signal());
+    expect(jobs).toHaveLength(1);
+    expect([...jobs[0].members]).toEqual([0, 1, ~2]);
+    expect(jobs[0].chunk).toBe(0);
+    expect(partition.membership).toEqual(membership);
+    expect([...ids]).toEqual([~2, 1, 0]);
+    expect(await selectGeometryJobs(input, partition, signal())).toEqual(jobs);
+    const packet = await packGeometryJob(input, jobs[0], signal());
+    expect([...packet.coordinates]).toEqual([1, 1, 2, 1, 10, 1, 11, 1, 2, 10, 1, 10]);
+    expect([...packet.features]).toEqual([0, 1, 2, 3]);
+  });
+  it('keeps equal spatial keys stable and source coordinate arrays unchanged', async () => {
+    const data = {
+      xx: Float64Array.from([1, 2, 10, 11, 1, 2, 1, 2]),
+      yy: Float64Array.from([1, 1, 1, 1, 10, 10, 1, 1]),
+      ii: Uint32Array.from([0, 2, 4, 6]),
+      nn: new Uint32Array(4).fill(2),
+      bb: Float64Array.from([1, 1, 2, 1, 10, 1, 11, 1, 1, 10, 2, 10, 1, 1, 2, 1]),
+    };
+    const before = structuredClone(data),
+      input = {
+        ...fixture(),
+        arcs: { size: () => 4, getVertexData: () => data } as unknown as ArcCollection,
+        wholeLayer: true,
+        spatialOrder: true,
+        ids: Int32Array.from([3, 0, ~2, 1]),
+      },
+      partition = await partitionGeometry(input, signal()),
+      jobs = await selectGeometryJobs(input, partition, signal());
+    expect([...jobs[0].members]).toEqual([3, 0, 1, ~2]);
+    expect(data).toEqual(before);
+  });
+  it('retains existing preparation groups when ordering final batched members', async () => {
+    const input = {
+        ...fixture(),
+        wholeLayer: true,
+        spatialOrder: true,
+        ids: Int32Array.from([~2, 1, 0]),
+      },
+      partition = {
+        membership: Uint32Array.from([0, 1, 2]),
+        chunks: 3,
+        batchIds: Uint32Array.from([0, 0, 2]),
+      },
+      jobs = await selectGeometryJobs(input, partition, signal());
+    expect(jobs.map((j) => j.chunk)).toEqual([0, 2]);
+    expect(jobs.map((j) => [...j.members])).toEqual([[0, 1], [~2]]);
+    expect([...partition.membership]).toEqual([0, 1, 2]);
+  });
+  it('does not spatially reorder source-sensitive paths or point components', async () => {
+    const raw = fixture(),
+      ids = Int32Array.from([~2, 1, 0]);
+    for (const [input, expected] of [
+      [{ ...raw, wholeLayer: true, ids }, [~2, 1, 0]],
+      [{ ...raw, spatialOrder: true, ids }, [0, 1, ~2]],
+      [{ ...raw, wholeLayer: true, spatialOrder: true, ordered: true, ids }, [~2, 1, 0]],
+    ] as const) {
+      const partition = await partitionGeometry(input, signal());
+      expect(
+        (await selectGeometryJobs(input, partition, signal())).flatMap((j) => [...j.members]),
+      ).toEqual(expected);
+    }
+    const input: GeometryInput = {
+      ...raw,
+      kind: 'point' as const,
+      shapes: [
+        [
+          [1, 1],
+          [2, 2],
+        ],
+        [[10, 10]],
+        [[12, 12]],
+      ],
+      wholeLayer: true,
+      spatialOrder: true,
+      ids: Uint32Array.from([2, 0, 1]),
+      components: Uint32Array.from([EMPTY_COMPONENT, 1, 0]),
+    };
+    const partition = await partitionGeometry(input, signal()),
+      jobs = await selectGeometryJobs(input, partition, signal());
+    expect([...jobs[0].members]).toEqual([2, 0, 1]);
+    expect([...jobs[0].components!]).toEqual([EMPTY_COMPONENT, 1, 0]);
+  });
+  it('keeps the whole layer independent of spatial grid cells and viewport bounds', async () => {
+    const input = { ...fixture(), wholeLayer: true, viewBounds: [0, 0, 3, 3] as const };
+    const partition = await partitionGeometry(input, signal());
+    expect(partition.chunks).toBe(1);
+    expect(partition.bounds).toBeUndefined();
+    const jobs = await selectGeometryJobs(input, partition, signal());
+    expect(jobs).toHaveLength(1);
+    expect([...jobs[0].members]).toEqual([0, 1, 2]);
+  });
   it('keeps spatial chunk IDs stable across selected subsets and preserves signed direction', async () => {
     const input = fixture(),
       partition = await partitionGeometry(input, signal());

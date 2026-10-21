@@ -16,6 +16,61 @@ import type { LayerSpecification } from './layer';
 import { StyleResolver } from './style-resolver';
 import { FilterResolver } from './filter-resolver';
 
+describe('line and polygon display simplification', () => {
+  for (const type of ['line', 'fill'] as const)
+    it(`${type} uses the configured tolerance and restores the user floor when disabled`, () => {
+      const intervals: number[] = [];
+      const arcs = {
+        size: () => 1,
+        isFlat: () => false,
+        setRetainedInterval: (value: number) => intervals.push(value),
+      };
+      const getScaledArcs = vi.fn(() => arcs);
+      const painter = {
+        drawPaths: vi.fn(),
+        drawArcs: vi.fn(),
+        drawPolygon: vi.fn(),
+        setLayerContext: vi.fn(),
+      };
+      const viewport = {
+        geometryLodTolerance: 2,
+        getArcFilter: () => undefined,
+        getMapScale: () => 1,
+        getViewBounds: () => [0, 0, 10, 10],
+      };
+      const ctx = {
+        layers: [{ id: 'shape', type, source: 's', paint: { 'line-width': 1 } }],
+        sources: new Map([
+          [
+            's',
+            {
+              getDisplayArcs: () => ({ getScaledArcs }),
+              getArcs: () => arcs,
+              getSimplifyFloor: () => 0.1,
+            },
+          ],
+        ]),
+        viewport,
+        painter,
+        resolveSourceLayer: () => ({
+          geometry_type: type === 'fill' ? 'polygon' : 'polyline',
+          shapes: [[[0]]],
+        }),
+        getLayerArcIds: () => new Uint32Array([0]),
+      } as unknown as LayerRendererContext;
+      renderLayers(ctx, 0.5, 1);
+      expect(intervals.at(-1)).toBe(1);
+      expect(getScaledArcs).toHaveBeenLastCalledWith(0.5, 2);
+      const activeContent = painter.setLayerContext.mock.calls.at(-1)![0].content;
+      viewport.geometryLodTolerance = 0;
+      renderLayers(ctx, 0.5, 1);
+      expect(intervals.at(-1)).toBe(0.1);
+      expect(getScaledArcs).toHaveBeenLastCalledWith(0.5, 0);
+      expect(painter.setLayerContext.mock.calls.at(-1)![0]).toMatchObject({ geometryLod: false });
+      expect(painter.setLayerContext.mock.calls.at(-1)![0].content).not.toBe(activeContent);
+    });
+});
+
 describe('renderLayers fill rendering', () => {
   it('skips outline arc-id work when fill layer line width is zero', () => {
     const arcs = { size: () => 0 };

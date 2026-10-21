@@ -12,11 +12,13 @@ import { AffineTransform } from '../../../domain/geo/transform';
 import { Viewport } from '../../../domain/geo/viewport';
 import type { DocumentContract as WorkspaceDocument } from '../../../runtime/services/contracts/document';
 import type { RenderSignalsContract as RenderSignals } from '../../../runtime/services/contracts/signals';
+import type { MapOptions } from '../../map/types';
 
 interface Dependencies {
   document: Pick<WorkspaceDocument, '_sources'>;
   events: EventDispatcher;
   signals: RenderSignals;
+  options?: Pick<MapOptions, 'geometryLod' | 'screenPathFiltering'>;
 }
 
 /** view implementation, wired through explicit service dependencies. */
@@ -29,6 +31,34 @@ export class ViewServiceImpl {
 
   public getCRS(): string {
     return this._projection.crs;
+  }
+
+  public setGeometryLod(options?: MapOptions['geometryLod']): void {
+    if (
+      options !== undefined &&
+      options !== false &&
+      (!options ||
+        typeof options !== 'object' ||
+        Array.isArray(options) ||
+        Object.keys(options).some((key) => key !== 'pixelTolerance') ||
+        (options.pixelTolerance !== undefined &&
+          (typeof options.pixelTolerance !== 'number' ||
+            !Number.isFinite(options.pixelTolerance) ||
+            options.pixelTolerance <= 0 ||
+            options.pixelTolerance > 64)))
+    )
+      throw new Error('geometryLod must be false or { pixelTolerance: >0..64 }.');
+    const tolerance = options === false ? 0 : (options?.pixelTolerance ?? 0.5);
+    if (tolerance === this._viewport.geometryLodTolerance) return;
+    this._viewport.geometryLodTolerance = tolerance;
+    this.deps.signals.requestRender();
+  }
+
+  public setScreenPathFiltering(enabled = true): void {
+    if (typeof enabled !== 'boolean') throw new Error('screenPathFiltering must be a boolean.');
+    if (enabled === this._viewport.screenPathFiltering) return;
+    this._viewport.screenPathFiltering = enabled;
+    this.deps.signals.requestRender();
   }
 
   public getCenter(): [number, number] {
@@ -143,6 +173,8 @@ export class ViewServiceImpl {
   }
 
   constructor(private readonly deps: Dependencies) {
+    this.setGeometryLod(deps.options?.geometryLod);
+    this.setScreenPathFiltering(deps.options?.screenPathFiltering);
     this._viewport.onViewChange = () => this.deps.events.fire('move');
     this._viewport.initZoomTween();
     this._camera = new Camera({

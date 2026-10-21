@@ -2,7 +2,7 @@ import type { Plugin } from 'cordis';
 import { ViewServiceImpl } from './view';
 export const viewPlugin: Plugin.Object = {
   name: 'provider.view',
-  inject: ['document', 'mapEvents', 'signals'],
+  inject: ['document', 'mapEvents', 'signals', 'options'],
   provide: ['view'],
   apply(ctx) {
     ctx.effect(function* () {
@@ -10,6 +10,7 @@ export const viewPlugin: Plugin.Object = {
         document: ctx.document,
         events: ctx.mapEvents,
         signals: ctx.signals,
+        options: ctx.options,
       });
       yield ctx.effect(() => () => value.dispose());
       yield ctx.provide('view', value);

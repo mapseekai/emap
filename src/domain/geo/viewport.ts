@@ -31,6 +31,9 @@ const MIN_PATH_LEN = 0.35;
  * pixels.  It handles zoom animation, pan constraints, and LOD parameters.
  */
 export class Viewport {
+  /** Display-only line/polygon detail; zero disables automatic simplification. */
+  geometryLodTolerance = 0.5;
+  screenPathFiltering = true;
   private _transform: AffineTransform = new AffineTransform();
   private _extent: Bounds = new Bounds();
   private _width = 0;
@@ -225,7 +228,7 @@ export class Viewport {
     const mapScale = this._initialMX > 0 ? Math.abs(this._transform.mx) / this._initialMX : 1;
 
     const pixelSize = 1 / Math.abs(this._transform.mx);
-    const minPathLen = pixelSize * MIN_PATH_LEN;
+    const minPathLen = pixelSize * MIN_PATH_LEN * (this.geometryLodTolerance / 0.5);
     const adjustedMinLen = mapScale < 1 ? minPathLen * mapScale : minPathLen;
     const viewBBox = this._getViewBounds();
 

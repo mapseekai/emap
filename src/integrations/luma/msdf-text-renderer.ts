@@ -420,7 +420,8 @@ export class MsdfTextRenderer {
       instances.every(
         (instance, i) =>
           instance.glyph === reuse.instances[i].glyph &&
-          instance.label.raster === reuse.instances[i].label.raster,
+          instance.label.raster === reuse.instances[i].label.raster &&
+          (instance.label.scale ?? 1) === (reuse.instances[i].label.scale ?? 1),
       );
     const length = instances.length * 18,
       poseLength = instances.length * 4;
@@ -442,24 +443,25 @@ export class MsdfTextRenderer {
       }
       const [x, y, w, h] = g.plane,
         [u, v, uw, vh] = g.rect,
-        r = l.raster;
+        r = l.raster,
+        scale = l.scale ?? 1;
       const pose = i * 4;
-      poses[pose] = l.x + c * x - sine * y;
-      poses[pose + 1] = l.y + sine * x + c * y;
+      poses[pose] = l.x + (c * x - sine * y) * scale;
+      poses[pose + 1] = l.y + (sine * x + c * y) * scale;
       poses[pose + 2] = c;
       poses[pose + 3] = sine;
       if (!sameStatic) {
         const at = i * 18;
-        data[at] = w;
-        data[at + 1] = h;
+        data[at] = w * scale;
+        data[at + 1] = h * scale;
         data[at + 2] = u / source.width;
         data[at + 3] = v / source.height;
         data[at + 4] = (u + uw) / source.width;
         data[at + 5] = (v + vh) / source.height;
         data.set(r.color, at + 6);
         data.set(r.haloColor, at + 10);
-        data[at + 14] = g.rangeCss;
-        data[at + 15] = r.haloWidth;
+        data[at + 14] = g.rangeCss * scale;
+        data[at + 15] = r.haloWidth * scale;
         data[at + 16] = r.shear;
         data[at + 17] = 0;
       }

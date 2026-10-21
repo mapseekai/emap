@@ -113,7 +113,9 @@ export class DisplayArcs {
    * @param unitsPerPixel - Map units per screen pixel (1 / transform.mx)
    * @returns Low-detail arcs when zoomed out, full-detail arcs when zoomed in
    */
-  getScaledArcs(unitsPerPixel: number): ArcCollection {
+  getScaledArcs(unitsPerPixel: number, pixelTolerance = 0.5): ArcCollection {
+    if (pixelTolerance === 0) return this._unfilteredArcs;
+    unitsPerPixel *= pixelTolerance / 0.5;
     if (this.onReady) {
       if (this._filteredArcs && this._filteredArcs.size() !== this._unfilteredArcs.size())
         this.markDirty();

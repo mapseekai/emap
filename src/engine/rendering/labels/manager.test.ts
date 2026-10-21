@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BoundLabelManager } from './manager';
+import { BoundLabelManager, drawCanvasLabels } from './manager';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { PerspectiveTransform } from '../../../domain/geo/perspective-transform';
 import Flatbush from 'flatbush';
@@ -51,6 +51,78 @@ async function prepare(f: ReturnType<typeof fixture>, camera = view) {
   return f.manager.request([f.binding], camera, 800, 600, 1);
 }
 describe('asynchronous owner-bound labels', () => {
+  it('places point labels directly above their point with a fixed screen gap', async () => {
+    const f = fixture();
+    const frame = await prepare(f);
+    for (const label of frame.labels) {
+      const point = f.binding.layer.shapes[label.featureId][0];
+      const [x, y] = view.project(...(point as [number, number]));
+      expect(label.x).toBe(x);
+      expect(label.y + label.raster.height / 2).toBe(y - 7);
+      expect(label.bounds[3]).toBeLessThan(y - 4);
+    }
+    f.manager.dispose();
+  });
+  it('hides colliding point labels by default instead of moving them away from the point', async () => {
+    const f = fixture();
+    f.binding.layer.shapes[1] = [[100, 100]];
+    expect((await prepare(f)).labels.map((l) => l.featureId)).toEqual([0]);
+    Object.assign(f.binding.options, { allowOverlap: true });
+    expect((await prepare(f)).labels.map((l) => l.featureId)).toEqual([0, 1]);
+    f.manager.dispose();
+  });
+  it('uses the same scaled glyph size and collision bounds during navigation and a settled layout', async () => {
+    const f = fixture();
+    Object.assign(f.binding.options, { fontSize: 64, offset: [12, -8] });
+    Object.assign(f.binding, { pointRadius: 10 });
+    const first = await prepare(f),
+      original = first.labels[0],
+      camera = view.clone();
+    camera.scale(0.25, 100, 100);
+    const preview = f.manager.preview(camera, 800, 600, 0.25),
+      label = preview.labels.find((l) => l.featureId === 0)!;
+    expect(label.scale).toBe(0.25);
+    expect(label.raster).toBe(original.raster);
+    expect(label.x).toBe(112);
+    expect(label.y + (original.raster.height * 0.25) / 2).toBe(100 - 10 - 3 - 8);
+    expect(label.bounds[2] - label.bounds[0]).toBeCloseTo(original.raster.width * 0.25 + 4);
+    f.manager.request([f.binding], camera, 800, 600, 1, false, 0.25);
+    await f.manager.settled();
+    const settled = f.manager.request([f.binding], camera, 800, 600, 1, false, 0.25);
+    expect(settled.labels[0]).toMatchObject({
+      scale: 0.25,
+      x: label.x,
+      y: label.y,
+      bounds: label.bounds,
+    });
+    const restored = await prepare(f);
+    expect(restored.labels[0].scale).toBe(1);
+    expect(restored.labels[0].raster).toBe(original.raster);
+    f.manager.dispose();
+  });
+  it.each([
+    6, 12, 16, 64, 96,
+  ])('keeps %spx labels readable when zooming far out without enlarging smaller configured fonts', async (fontSize) => {
+    const f = fixture();
+    Object.assign(f.binding.options, { fontSize });
+    const camera = new AffineTransform(0.001, 0.001, 400, 300);
+    f.manager.request([f.binding], camera, 800, 600, 1, false, 0.001);
+    await f.manager.settled();
+    const full = f.manager.request([f.binding], camera, 800, 600, 1, false, 0.001);
+    expect(full.labels.length).toBeGreaterThan(0);
+    for (const label of full.labels)
+      expect((label.scale ?? 1) * fontSize).toBeCloseTo(Math.min(12, fontSize));
+    const next = camera.clone();
+    next.scale(0.1, 400, 300);
+    const preview = f.manager.preview(next, 800, 600, 0.0001);
+    expect(preview.labels.length).toBeGreaterThan(0);
+    for (const label of preview.labels) {
+      expect((label.scale ?? 1) * fontSize).toBeCloseTo(Math.min(12, fontSize));
+      const [, y] = next.project(...label.anchor!);
+      expect(label.y + (label.raster.height * (label.scale ?? 1)) / 2).toBeCloseTo(y - 7);
+    }
+    f.manager.dispose();
+  });
   it('prepares healthy owners together so glyph pages are pinned before allocation', async () => {
     const f = fixture(),
       atlas = (f.manager as any).atlas;
@@ -59,7 +131,7 @@ describe('asynchronous owner-bound labels', () => {
     const other = {
       ...f.binding,
       id: 'other',
-      options: { text: 'other', allowOverlap: true },
+      options: { text: 'other', allowOverlap: true, offset: [80, 0] as const },
     };
     f.manager.request([f.binding, other], view, 800, 600, 1);
     await f.manager.settled();
@@ -163,7 +235,7 @@ describe('asynchronous owner-bound labels', () => {
     f.binding.layer.shapes[1] = [[400, 250]];
     f.binding.dataset.editVersion++;
     const next = await prepare(f);
-    expect(next.labels[0].x).toBeGreaterThan(400);
+    expect(next.labels[0].x).toBe(400);
     f.manager.dispose();
   });
   it('does not publish stale work, respects pause, and updates perspective poses', async () => {
@@ -183,6 +255,28 @@ describe('asynchronous owner-bound labels', () => {
     expect(f.report).not.toHaveBeenCalled();
     f.manager.dispose();
   });
+});
+
+it('scales Canvas2D glyphs and halos around the placed anchor', () => {
+  const canvas = {
+    save: vi.fn(),
+    restore: vi.fn(),
+    setTransform: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    scale: vi.fn(),
+    drawImage: vi.fn(),
+  };
+  const label: any = {
+    x: 100,
+    y: 120,
+    angle: 0,
+    scale: 0.5,
+    raster: { page: { canvas: {} }, rect: [0, 0, 20, 30], width: 20, height: 30 },
+  };
+  drawCanvasLabels(canvas as any, { key: 'scaled', labels: [label] }, 2);
+  expect(canvas.translate).toHaveBeenCalledWith(100, 120);
+  expect(canvas.scale).toHaveBeenCalledWith(0.5, 0.5);
 });
 
 it('reprojects navigation anchors without scaling glyphs or CSS offsets, and immediately invalidates filtered content', async () => {

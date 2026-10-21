@@ -1,12 +1,13 @@
-import type { BenchmarkRenderers } from './renderers';
+import type { SymbolControlTarget } from './target';
 import { ICON_ANCHORS, type SymbolLayout } from '../../../../src/engine/map/symbol';
 import { symbolStyleFromLegacy } from '../../../../src/engine/map/symbol-compat';
+import './style.css';
 const svg = (body: string) =>
   'data:image/svg+xml,' +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">${body}</svg>`,
   );
-const presets = {
+export const presets = {
   pin: svg(
     '<path d="M32 61C25 50 9 35 9 24a23 23 0 0 1 46 0c0 11-16 26-23 37z" fill="#2563eb" stroke="white" stroke-width="3"/><circle cx="32" cy="24" r="9" fill="white"/>',
   ),
@@ -23,12 +24,12 @@ const presets = {
 /** Parent point-layer settings, not another entry in the layer tree. */
 export function installIconControls(
   host: HTMLElement,
-  renderer: BenchmarkRenderers,
+  renderer: SymbolControlTarget,
   changed: () => void,
 ) {
   const panel = document.createElement('details');
   panel.id = 'icon-settings';
-  panel.className = 'emap-bound-label-settings';
+  panel.className = 'emap-symbol-settings';
   panel.innerHTML = `<summary>点图标（替换现有点符号）</summary>
 <label>所属点图层 <select id="icon-owner"></select></label>
 <label><input id="icon-enabled" type="checkbox">使用图标</label>
@@ -56,7 +57,7 @@ export function installIconControls(
     ownedUrls = new Set<string>();
   let signature = '',
     jsonSignature = '';
-  let cachedPoints: ReturnType<BenchmarkRenderers['getLayers']> = [];
+  let cachedPoints: ReturnType<SymbolControlTarget['getLayers']> = [];
   const number = (id: string) => Number($<HTMLInputElement>(id).value);
   function read() {
     const layer = renderer.getLayers().find((l) => l.id === owner.value),
@@ -123,6 +124,12 @@ export function installIconControls(
       );
     }
     const s = renderer.iconStats;
+    if (!s) {
+      $('icon-message').textContent = points.length
+        ? '图标替换原点符号，支持透明背景、缩放、锚点和着色。'
+        : '加载点数据后启用。图标不会新增图层。';
+      return;
+    }
     $('icon-message').textContent = s.errors.length
       ? `图标加载失败，保留普通点：${s.errors.join('；')}`
       : points.length

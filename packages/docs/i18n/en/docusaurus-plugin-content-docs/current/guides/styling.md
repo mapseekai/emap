@@ -3,7 +3,7 @@ id: styling
 slug: /guides/styling
 title: Styling layers
 api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
-examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
+examples: ["getting-started/lines","getting-started/point-style","labels","point-icons","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -204,15 +204,22 @@ map.setLayerLabel('city-points', null); // Remove labels, not the parent layer
 
 `setLayerLabel` replaces the entire configuration. Choose `field` or `text`; `text`
 accepts a literal string or the existing safe style-expression subset. Null values
-are skipped. Font sizes, halos and `offset` use CSS pixels. Point labels try nearby
-positions, line labels rotate as an upright text run, and polygon anchors avoid holes.
+are skipped. `fontSize` is the base CSS-pixel size at the full-extent view.
+Zooming out beyond that view scales text, halos, and collision bounds together,
+with a 12px font-size floor (or the configured size when smaller).
+Zooming in restores at most the base size. `offset` remains an independent additional screen-pixel
+offset and defaults to `[0, 0]`. Point labels are horizontally centered above their points,
+with a 3px gap beyond the point radius; line labels
+rotate as an upright text run, and polygon anchors avoid holes. Cross-layer collision
+avoidance is enabled by default: lower-priority colliding labels are hidden.
+Set `allowOverlap: true` to allow overlap.
 `placement: 'horizontal'` keeps line labels horizontal. Placement operates on whole text runs
 with the point, line, and polygon anchors above. Per-character curved placement, callouts,
 rule-based labeling, and QGIS PAL layouts require a separate application integration.
 Polygon anchors are inside the valid area; the full text rectangle may extend outside it.
 
 The Canvas2D renderer accepts this configuration. The luma branch draws batched
-font-atlas quads in the existing GPU render pass. The local `luma-benchmark`, `luma-25d`
+font-atlas quads in the existing GPU render pass. The local [Labels](/mapseekai/emap/examples/labels/), `luma-25d`
 and `luma-vertex-editing` examples include parent-layer label settings. Labels are off
 by default and allocate no font atlas or label index until enabled. Placement uses
 cross-layer collision avoidance, at most 20,000 candidates and 2,000 labels per view,

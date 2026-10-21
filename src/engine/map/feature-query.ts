@@ -97,6 +97,7 @@ export class FeatureQuery {
     getTransform: () => AffineTransform,
     getSize: () => { width: number; height: number },
     getInitialMX: () => number,
+    private readonly getGeometryLodTolerance: () => number = () => 0.5,
   ) {
     this._sources = sources;
     this._getTransform = getTransform;
@@ -625,7 +626,10 @@ export class FeatureQuery {
     for (const [sourceId, source] of this._sources) {
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
+      const tolerance = this.getGeometryLodTolerance();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize, tolerance) : source.getArcs();
+      if (arcs?.setRetainedInterval && (typeof arcs.isFlat !== 'function' || !arcs.isFlat()))
+        arcs.setRetainedInterval(Math.max(source.getSimplifyFloor?.() ?? 0, pixelSize * tolerance));
       const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {

@@ -9,6 +9,7 @@ import {
   type PolygonFillOptions,
 } from './painter';
 import { AffineTransform } from '../../domain/geo/transform';
+import { screenPathFrame } from './luma/screen-path-frame';
 import { normalizePointShape } from '../../domain/source/layer-utils';
 import {
   EMAP_THEME_COLORS,
@@ -34,8 +35,8 @@ const ARROW_DOT_BATCH_SEGMENT_LIMIT = 12_000;
 const VERTEX_DOT_BATCH_LIMIT = 100;
 const ARROW_DOT_CACHE_ENTRY_LIMIT = 64;
 const ARROW_DOT_CACHE_BYTE_LIMIT = 32 * 1024 * 1024;
-// Small polygons often collapse to points at full extent. Retain their exact
-// Canvas commands in bounded typed arrays; larger paths keep immediate drawing.
+// Retain exact point-only contours in bounded typed arrays; real rings keep
+// their source precision, matching GPU fill tessellation.
 const FILL_PATH_CACHE_BYTES = 32 * 1024 * 1024;
 type LayerContext = Parameters<NonNullable<EditPainter['setLayerContext']>>[0];
 interface FillPathCache {
@@ -47,7 +48,7 @@ interface FillPathCache {
   interval: number | undefined;
   /** 0 immediate, 1 move-only fill, 2 empty fill, 3 fully culled. */
   states: Uint8Array;
-  points: Int32Array;
+  points: Float64Array;
   bytes: number;
 }
 const DEFAULT_ARROW_DOT_SPACING = 32;
@@ -301,6 +302,10 @@ export class CanvasPainter implements EditPainter {
     this._icons = null;
   }
   private _transform: AffineTransform = new AffineTransform();
+  private _pixelView = new AffineTransform();
+  private _screenView = new AffineTransform();
+  private _screenProjection = new AffineTransform();
+  private _screenPathFiltering = true;
   private _pixelRatio: number = window.devicePixelRatio || 1;
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
   private _arrowDotCacheBytes = 0;
@@ -322,6 +327,7 @@ export class CanvasPainter implements EditPainter {
     const ctx = _canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this._ctx = ctx;
+    this._updateScreenTransform();
   }
 
   private _resolveColor(value: string | undefined, role: ThemeColorRole): string {
@@ -351,16 +357,47 @@ export class CanvasPainter implements EditPainter {
     if (key !== this._fillPathTransform) this.clearGeometryCache();
     this._fillPathTransform = key;
     this._transform = transform;
+    this._updateScreenTransform();
   }
 
   setPixelRatio(ratio: number): void {
     if (ratio !== this._pixelRatio) this.clearGeometryCache();
     this._pixelRatio = ratio;
+    this._updateScreenTransform();
   }
 
   setLayerContext(context: LayerContext): void {
     this._layerContext = context;
+    this._updateScreenTransform();
     if (context) this._seenLayers.add(context.id);
+  }
+
+  setScreenPathFiltering(enabled: boolean): void {
+    if (enabled === this._screenPathFiltering) return;
+    this._screenPathFiltering = enabled;
+    this.clearGeometryCache();
+  }
+
+  private _updateScreenTransform(): void {
+    const view = this._transform,
+      ratio = this._pixelRatio;
+    this._pixelView = new AffineTransform(
+      view.mx * ratio,
+      view.my * ratio,
+      view.bx * ratio,
+      view.by * ratio,
+    );
+    const frame = new AffineTransform(
+      ...screenPathFrame(view, this._layerContext?.bounds ?? [-180, -90, 180, 90], ratio),
+    );
+    this._screenView = new AffineTransform(
+      frame.mx * ratio,
+      frame.my * ratio,
+      frame.bx * ratio,
+      frame.by * ratio,
+    );
+    const [x, y] = this._pixelView.project(...frame.unproject(0, 0));
+    this._screenProjection = new AffineTransform(view.mx / frame.mx, view.my / frame.my, x, y);
   }
 
   clearGeometryCache(scope?: { sourceId?: string; layerId?: string }): void {
@@ -416,7 +453,7 @@ export class CanvasPainter implements EditPainter {
       cache = undefined;
     }
     if (!cache) {
-      const stateBytes = shapes.length * 9;
+      const stateBytes = shapes.length * 17;
       if (this._fillPathBytes + stateBytes > FILL_PATH_CACHE_BYTES) return;
       cache = {
         sourceId: layer.sourceId,
@@ -426,7 +463,7 @@ export class CanvasPainter implements EditPainter {
         view,
         interval,
         states: new Uint8Array(shapes.length),
-        points: new Int32Array(shapes.length * 2),
+        points: new Float64Array(shapes.length * 2),
         bytes: stateBytes,
       };
       this._fillPathBytes += stateBytes;
@@ -481,7 +518,7 @@ export class CanvasPainter implements EditPainter {
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
     const visitEpoch = this._beginArcVisit(arcs.size());
 
-    this._applyStrokeStyle(style, style.dash ?? []);
+    const filtering = this._applyStrokeStyle(style, style.dash ?? []);
 
     let arcCount = 0;
     let vertexCount = 0;
@@ -515,7 +552,7 @@ export class CanvasPainter implements EditPainter {
           ) {
             flush();
           }
-          this.drawPathSnapping(arcs.getArcIter(signedArcId), ctx);
+          this.drawPathSnapping(arcs.getArcIter(signedArcId), ctx, filtering);
           arcCount++;
           vertexCount += arcVertexCount;
           hasPath = true;
@@ -553,7 +590,7 @@ export class CanvasPainter implements EditPainter {
     const n = arcIds?.length ?? arcs.size();
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
 
-    this._applyStrokeStyle(style, style.dash ?? []);
+    const filtering = this._applyStrokeStyle(style, style.dash ?? []);
 
     let arcCount = 0;
     let vertexCount = 0;
@@ -582,7 +619,7 @@ export class CanvasPainter implements EditPainter {
         flush();
       }
       const iter = arcs.getArcIter(signedArcId);
-      this.drawPathSnapping(iter, ctx);
+      this.drawPathSnapping(iter, ctx, filtering);
       arcCount++;
       vertexCount += arcVertexCount;
       hasPath = true;
@@ -590,67 +627,96 @@ export class CanvasPainter implements EditPainter {
     flush();
   }
 
-  // Equivalent to mapshaper's drawPath2 with optimized rounding
-  private drawPathSnapping(iter: ArcIterator, ctx: CanvasRenderingContext2D): void {
-    const count = this._traceSnapped(iter, ctx);
+  // Screen cells select vertices without moving their source positions.
+  private drawPathSnapping(
+    iter: ArcIterator,
+    ctx: CanvasRenderingContext2D,
+    filtering: boolean,
+  ): void {
+    const count = this._traceSnapped(iter, ctx, undefined, filtering);
 
     // Draw tiny line if all coords round to same location (Mapshaper behavior)
-    if (count === 0 && Number.isFinite(iter.x) && Number.isFinite(iter.y)) {
-      const x =
-        ((iter.x * this._transform.mx * this._pixelRatio + this._transform.bx * this._pixelRatio) *
-          2) |
-        0;
-      const y =
-        ((iter.y * this._transform.my * this._pixelRatio + this._transform.by * this._pixelRatio) *
-          2) |
-        0;
-      ctx.lineTo(x / 2 + 0.1, y / 2);
+    if (filtering && count === 0 && Number.isFinite(iter.x) && Number.isFinite(iter.y)) {
+      const [x, y] = this._screenView.project(iter.x, iter.y);
+      ctx.lineTo(...this._screenProjection.project(x + 0.1, y));
     }
   }
 
-  private _applyStrokeStyle(style: StrokeStyle, dash: readonly number[]): void {
+  private _applyStrokeStyle(style: StrokeStyle, dash: readonly number[]): boolean {
     const ctx = this._ctx;
-    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
+    const color = this._resolveColor(style.color, 'foreground');
+    ctx.strokeStyle = color;
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.setLineDash(dash.map((length) => length * this._pixelRatio));
+    // Native Canvas serializes legacy alpha as rgba(..., a), modern colors as ... / a.
+    const alpha = /(?:\/|(?:rgba|hsla)\([^)]*,)\s*([^()]+)\)$/i
+      .exec(String(ctx.strokeStyle || color))?.[1]
+      .trim();
+    const opaque =
+      alpha === undefined ||
+      Math.round(parseFloat(alpha) * (alpha.endsWith('%') ? 2.55 : 255)) === 255;
+    return (
+      this._screenPathFiltering &&
+      !dash.length &&
+      style.dashType !== 'arrow-dot' &&
+      (ctx.globalAlpha ?? 1) === 1 &&
+      opaque
+    );
   }
 
   private _traceSnapped(
     iter: ArcIterator,
     ctx: Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo'>,
-    point?: Int32Array,
+    point?: Float64Array,
+    filtering = true,
   ): number {
-    const mx = this._transform.mx * this._pixelRatio;
-    const my = this._transform.my * this._pixelRatio;
-    const bx = this._transform.bx * this._pixelRatio;
-    const by = this._transform.by * this._pixelRatio;
-
-    let x: number, y: number, xp: number, yp: number;
+    const view = filtering ? this._screenView : this._pixelView;
+    let x: number, y: number;
     let count = 0;
     // Mapshaper reuses iterators. An empty LOD arc can retain the previous
     // arc's x/y: distinguish it from a real point before drawing tiny strokes.
     if (!iter.hasNext()) return -1;
 
-    x = ((iter.x * mx + bx) * 2) | 0;
-    y = ((iter.y * my + by) * 2) | 0;
-    ctx.moveTo(x / 2, y / 2);
+    [x, y] = view.project(iter.x, iter.y);
+    let lastX = x,
+      lastY = y,
+      emittedX = x,
+      emittedY = y;
+    if (filtering) {
+      ctx.moveTo(...this._screenProjection.project(x, y));
+      x = Math.trunc(x * 2);
+      y = Math.trunc(y * 2);
+    } else ctx.moveTo(x, y);
     if (point) {
       point[0] = x;
       point[1] = y;
     }
 
     while (iter.hasNext()) {
-      xp = x;
-      yp = y;
-      x = ((iter.x * mx + bx) * 2) | 0;
-      y = ((iter.y * my + by) * 2) | 0;
-
-      if (x !== xp || y !== yp) {
-        ctx.lineTo(x / 2, y / 2);
+      const [rawX, rawY] = view.project(iter.x, iter.y);
+      let nextX = rawX,
+        nextY = rawY;
+      lastX = rawX;
+      lastY = rawY;
+      if (filtering) {
+        nextX = Math.trunc(nextX * 2);
+        nextY = Math.trunc(nextY * 2);
+      }
+      if (!filtering || nextX !== x || nextY !== y) {
+        if (filtering) ctx.lineTo(...this._screenProjection.project(rawX, rawY));
+        else ctx.lineTo(nextX, nextY);
+        emittedX = rawX;
+        emittedY = rawY;
         count++;
       }
+      x = nextX;
+      y = nextY;
+    }
+    if (filtering && (lastX !== emittedX || lastY !== emittedY)) {
+      ctx.lineTo(...this._screenProjection.project(lastX, lastY));
+      count++;
     }
 
     return count;
@@ -1168,7 +1234,7 @@ export class CanvasPainter implements EditPainter {
     const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox?.bind(arcs) : undefined;
     const cache = this._fillPathCache(shapes, arcs, viewBBox, filter);
     const bbox = [0, 0, 0, 0];
-    const point = cache ? new Int32Array(2) : undefined;
+    const point = cache ? new Float64Array(2) : undefined;
     const indexCount = indices ? indices.length : shapes.length;
     for (let k = 0; k < indexCount; k++) {
       const id = indices ? indices[k] : k;
@@ -1176,7 +1242,7 @@ export class CanvasPainter implements EditPainter {
       if (state) {
         if (state === 3) continue;
         ctx.beginPath();
-        if (state === 1) ctx.moveTo(cache!.points[id * 2] / 2, cache!.points[id * 2 + 1] / 2);
+        if (state === 1) ctx.moveTo(cache!.points[id * 2], cache!.points[id * 2 + 1]);
         ctx.fill('evenodd');
         continue;
       }
@@ -1193,7 +1259,7 @@ export class CanvasPainter implements EditPainter {
         if (!visible) continue;
         if (!hasVisiblePart) ctx.beginPath();
         hasVisiblePart = true;
-        const count = this._traceSnapped(arcs.getShapeIter!(part), ctx, point);
+        const count = this._traceSnapped(arcs.getShapeIter!(part), ctx, point, false);
         segments += Math.max(0, count);
         if (count >= 0) moves++;
       }

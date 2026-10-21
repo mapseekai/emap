@@ -23,6 +23,9 @@ import {
   type GeometryPacket,
 } from '../../engine/rendering/luma/geometry-jobs';
 import { PathRangeIndex } from '../../engine/rendering/luma/path-ranges';
+import { compactStrokeCompatible } from '../../engine/rendering/luma/compact-stroke';
+import { validateScreenPathRequest } from '../../engine/rendering/luma/screen-paths';
+import { AffineTransform } from '../../domain/geo/transform';
 import type { GeometryResult } from '../../engine/rendering/luma/geometry-packet';
 import type { GpuMesh, GpuRenderer } from './gpu-renderer';
 import { GeometryWorker } from './geometry-worker';
@@ -67,6 +70,12 @@ export interface GeometryEntry {
   ranges: (PathRangeIndex | undefined)[];
   screenSpace: boolean;
   screenView?: readonly [number, number, number, number];
+  /** Only whole-layer affine filtering can cover a coarser physical resolution. */
+  screenDetail?: {
+    interval: number;
+    resolution: readonly [number, number];
+    revision: number;
+  };
   fillRanges: (FillRangeIndex | undefined)[];
   memberRanges?: (Uint32Array | undefined)[];
   fallback?: GeometryEntry;
@@ -96,6 +105,8 @@ export interface GeometryRequest {
   fallbackChunks?: Map<number, GeometryEntry[]>;
   fallbackGroups?: GeometryHandoffGroup[];
   error?: Error;
+  /** Includes any partial allocation, so its cleanup alone cannot trigger another attempt. */
+  requiredMetadataBytes?: number;
   frame: number;
   /** Monotone cursor through this immutable selection; no repeated prefix scans. */
   cursor: number;
@@ -113,6 +124,15 @@ interface Options {
   externalBytes?: () => number;
   /** Internal test/host transport seam, not a second source dataset. */
   transport?: GeometryTransport;
+}
+class GeometryAdmissionError extends RangeError {
+  reported = false;
+  reportPending = false;
+}
+class GeometryMetadataAdmissionError extends GeometryAdmissionError {
+  constructor(readonly requiredBytes: number) {
+    super('Geometry selection cache exceeds its bounded working set.');
+  }
 }
 function containsBounds(a: readonly number[], b: readonly number[]): boolean {
   return a[0] <= b[0] && a[1] <= b[1] && a[2] >= b[2] && a[3] >= b[3];
@@ -169,6 +189,8 @@ export class GeometryChunkCache {
   private running = false;
   private interacting = false;
   private notification: ReturnType<typeof setTimeout> | null = null;
+  private resumeAdmission: (() => void) | null = null;
+  private presentationPlanning = false;
   private pinned = new Set<GeometryEntry>();
   private latest = new Map<string, GeometryEntry>();
   private turn = 0;
@@ -315,6 +337,8 @@ export class GeometryChunkCache {
       input.interval,
       input.forward,
       input.ordered,
+      input.wholeLayer,
+      input.spatialOrder,
       visibility,
       input.bounds,
       input.viewBounds,
@@ -333,10 +357,14 @@ export class GeometryChunkCache {
     const id = ownerId + ':' + slot,
       key = this.inputKey(input, owner),
       previous = this.requests.get(id);
+    const retryMetadata =
+      previous?.requiredMetadataBytes !== undefined &&
+      this.bytes + this.externalBytes + previous.requiredMetadataBytes <= this.limit * 2;
     if (
       previous?.key === key &&
       sameArray(previous.input.ids, input.ids) &&
-      sameArray(previous.input.components, input.components)
+      sameArray(previous.input.components, input.components) &&
+      !retryMetadata
     ) {
       previous.frame = this.frame;
       previous.plan.used = ++this.clock;
@@ -368,6 +396,7 @@ export class GeometryChunkCache {
       owner.revision,
       input.kind === 'path' ? 'arcs' : input.kind,
       input.ordered,
+      input.wholeLayer,
       this.identity(input.kind === 'path' ? input.arcs : input.shapes),
       this.identity(input.arcs),
       input.bounds,
@@ -427,6 +456,7 @@ export class GeometryChunkCache {
             previous.input.ordered === input.ordered &&
             previous.input.arcs?.size() === input.arcs?.size())) &&
         previous.input.forward === input.forward &&
+        previous.input.spatialOrder === input.spatialOrder &&
         previous.input.compactStroke === input.compactStroke
           ? this.drawable(previous)
           : undefined,
@@ -441,6 +471,7 @@ export class GeometryChunkCache {
       controller.signal.throwIfAborted();
       if (
         request.fallback?.length &&
+        !snapshot.wholeLayer &&
         !snapshot.ordered &&
         request.fallback.some((entry) => entry.partition !== plan.key)
       ) {
@@ -466,8 +497,28 @@ export class GeometryChunkCache {
         request.fallback = retained;
       }
       controller.signal.throwIfAborted();
-      request.entries = jobs.map((job) => this.entry(job, request));
-      if (request.fallback && !snapshot.ordered && !request.fallbackGroups) {
+      // Admit the selection together before its prefix exists outside request.entries.
+      // Per-entry trimming could otherwise evict that not-yet-published prefix.
+      const metadataBytes = jobs.reduce(
+        (n, job) => n + job.members.byteLength + (job.components?.byteLength ?? 0),
+        0,
+      );
+      if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
+        this.trim(metadataBytes, request);
+      const allocatedBefore = this.bytes;
+      try {
+        request.entries = jobs.map((job) => this.entry(job, request));
+      } catch (error) {
+        if (error instanceof GeometryMetadataAdmissionError)
+          request.requiredMetadataBytes = this.bytes - allocatedBefore + error.requiredBytes;
+        throw error;
+      }
+      if (
+        request.fallback &&
+        !snapshot.wholeLayer &&
+        !snapshot.ordered &&
+        !request.fallbackGroups
+      ) {
         const selected = new Set(jobs.map((job) => job.chunk));
         request.fallback = request.fallback.filter((entry) => selected.has(entry.job.chunk));
         request.fallbackChunks = new Map();
@@ -485,11 +536,76 @@ export class GeometryChunkCache {
     })().catch((error) => {
       if (controller.signal.aborted || this.disposed) return;
       request.error = error instanceof Error ? error : new Error(String(error));
+      if (request.error instanceof GeometryMetadataAdmissionError) {
+        // finish() first removes this selection's unpublished metadata prefix
+        // and presents other owners before deciding whether admission is terminal.
+        if (request.requiredMetadataBytes! <= this.limit * 2) {
+          this.notify();
+          return;
+        }
+        request.error.reported = true;
+      }
       this.counters.errors++;
       this.options.report(request.error);
       this.notify();
     });
     return request;
+  }
+  private admissionCapacity(owner: GeometryOwner): number {
+    return (
+      this.limit * 2 -
+      this.bytes -
+      this.externalBytes +
+      this.provisionalAtomicEntries(owner).reduce(
+        (n, e) => n + e.bytes - e.job.members.byteLength - (e.job.components?.byteLength ?? 0),
+        0,
+      )
+    );
+  }
+  private canPrepare(
+    request: GeometryRequest,
+    capacity = this.admissionCapacity(request.owner),
+  ): boolean {
+    return (
+      (request.requiredMetadataBytes !== undefined && request.requiredMetadataBytes <= capacity) ||
+      (!request.error &&
+        (request.entries === null ||
+          request.entries.some(
+            (entry) =>
+              entry.state === 'queued' ||
+              (entry.state === 'error' &&
+                entry.requiredBytes !== undefined &&
+                entry.requiredBytes <= capacity),
+          )))
+    );
+  }
+  private metadataCanProgress(request: GeometryRequest): boolean {
+    return this.admissionCanProgress(request, request.requiredMetadataBytes);
+  }
+  private admissionCanProgress(
+    request: GeometryRequest,
+    required: number | undefined,
+    entry?: GeometryEntry,
+  ): boolean {
+    if (required === undefined || required > this.limit * 2) return false;
+    if (required <= this.admissionCapacity(request.owner)) return true;
+    if (this.running || this.active) return true;
+    const current = this.current();
+    if (current.some((r) => this.canPrepare(r))) return true;
+    // A real dependency walk can publish already prepared progressive geometry.
+    // Planning that depends only on this failed selection cannot free capacity.
+    return (
+      this.presentationPlanning &&
+      current.some(
+        (r) =>
+          (entry ||
+            r.owner.sourceId !== request.owner.sourceId ||
+            r.owner.id !== request.owner.id) &&
+          !r.input.wholeLayer &&
+          !r.input.ordered &&
+          r.entries?.some((e) => this.isResident(e) && !this.pinned.has(e)),
+      )
+    );
   }
   private selectionKey(
     input: GeometryInput,
@@ -510,6 +626,7 @@ export class GeometryChunkCache {
       owner.id,
       owner.content,
       input.forward,
+      input.spatialOrder,
       visibility?.[0],
       slot,
     ]);
@@ -525,7 +642,7 @@ export class GeometryChunkCache {
     if (
       !input.sourceSelection ||
       input.ordered ||
-      !partition.bounds ||
+      (!partition.bounds && !input.wholeLayer) ||
       (input.kind !== 'fill' && input.kind !== 'path') ||
       (input.filter && !visibility)
     )
@@ -558,7 +675,7 @@ export class GeometryChunkCache {
       retained.promise = (async () => {
         const jobs = await selectGeometryJobs(stable, partition, controller.signal);
         const bounds = new Map<number, [number, number, number, number]>();
-        for (let i = 0; i < partition.chunks; i++) {
+        for (let i = 0; partition.bounds && i < partition.chunks; i++) {
           const chunk = input.kind === 'path' && partition.batchIds ? partition.batchIds[i] : i;
           const b = partition.bounds!,
             at = i * 4;
@@ -588,6 +705,7 @@ export class GeometryChunkCache {
     }
     const jobs = await selection.promise;
     request.controller.signal.throwIfAborted();
+    if (input.wholeLayer) return jobs;
     const view = input.viewBounds;
     const visible = view
       ? jobs.filter(
@@ -601,32 +719,9 @@ export class GeometryChunkCache {
             ),
         )
       : jobs;
-    // Interior chunks already satisfy the exact viewport predicate. Only boundary
-    // chunks need the cheap arc test; keep offscreen path storage bounded without
-    // rescanning every source shape/ring on each navigation refresh.
-    if (input.kind !== 'path' || !visibility || visibility.length !== 5) return visible;
-    const bbox = visibility.slice(1);
-    const result: GeometryJob[] = [];
-    let slice = performance.now();
-    for (const job of visible) {
-      if (job.bounds && containsBounds(bbox, job.bounds)) {
-        result.push(job);
-        continue;
-      }
-      const members: number[] = [];
-      for (let i = 0; i < job.members.length; i++) {
-        const signed = job.members[i],
-          id = signed < 0 ? ~signed : signed;
-        if (input.filter!(id)) members.push(signed);
-        if ((i & 2047) === 0 && performance.now() - slice >= 4) {
-          await geometryYield(request.controller.signal);
-          slice = performance.now();
-        }
-      }
-      if (members.length === job.members.length) result.push(job);
-      else if (members.length) result.push({ ...job, members: Int32Array.from(members) });
-    }
-    return result;
+    // Keep complete boundary chunks resident; draw-range culling and the GPU
+    // viewport clip them without rebuilding their membership on every pan.
+    return visible;
   }
 
   private trimSelections(): void {
@@ -748,9 +843,56 @@ export class GeometryChunkCache {
       this.counters.cacheHits++;
       return existing;
     }
+    const screen = request.input.screen;
+    const screenDetail =
+      request.input.wholeLayer &&
+      request.input.kind === 'path' &&
+      screen?.halfPixel &&
+      !screen.perspective &&
+      !screen.smallArcs &&
+      !screen.cull
+        ? {
+            interval: request.input.interval,
+            resolution: [
+              Math.abs(screen.view[0]) * screen.pixelRatio,
+              Math.abs(screen.view[1]) * screen.pixelRatio,
+            ] as const,
+            revision: screen.revision,
+          }
+        : undefined;
+    const oldDetail = old?.screenDetail;
+    if (
+      screen &&
+      screenDetail &&
+      oldDetail &&
+      old?.screenSpace &&
+      old.screenView &&
+      old.screenStats &&
+      // Each nonempty retained arc contributes one more vertex than segment.
+      old.screenStats.outputSegments <=
+        2 * (old.screenStats.outputVertices - old.screenStats.outputSegments) &&
+      old.state === 'ready' &&
+      this.entries.get(old.id) === old &&
+      old.owner.content === request.owner.content &&
+      sameJob(old.job, job) &&
+      oldDetail.interval === screenDetail.interval &&
+      oldDetail.revision === screenDetail.revision &&
+      // One octave avoids per-level rebuilding without retaining arbitrarily finer detail.
+      screenDetail.resolution.every(
+        (value, axis) =>
+          value <= oldDetail.resolution[axis] && oldDetail.resolution[axis] <= value * 2,
+      ) &&
+      compactStrokeCompatible(new AffineTransform(...screen.view), old.screenView)
+    ) {
+      validateScreenPathRequest(screen);
+      // Finer cells retain exact positions and endpoints; zoom-out only reprojects them.
+      this.touch(old);
+      this.counters.cacheHits++;
+      return old;
+    }
     const metadataBytes = job.members.byteLength + (job.components?.byteLength ?? 0);
     if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
-      throw new RangeError('Geometry selection cache exceeds its bounded working set.');
+      throw new GeometryMetadataAdmissionError(metadataBytes);
     const entry: GeometryEntry = {
       id,
       family,
@@ -767,6 +909,7 @@ export class GeometryChunkCache {
       ranges: [],
       fillRanges: [],
       screenSpace: false,
+      ...(screenDetail ? { screenDetail } : {}),
       bytes: metadataBytes,
       used: ++this.clock,
     };
@@ -784,6 +927,10 @@ export class GeometryChunkCache {
     ): entry is GeometryEntry & { state: 'ready' } =>
       !!entry && entry.state === 'ready' && this.entries.get(entry.id) === entry;
     if (!request.entries) return (request.fallback ?? []).filter(resident);
+    if (request.input.wholeLayer) {
+      if (request.entries.every(resident)) return request.entries;
+      return (request.fallback ?? []).filter(resident);
+    }
     const selected = request.entries.map((entry) => {
       if (resident(entry)) return entry;
       const latest = this.latest.get(entry.family);
@@ -824,10 +971,11 @@ export class GeometryChunkCache {
   isResident(entry: GeometryEntry): boolean {
     return entry.state === 'ready' && this.entries.get(entry.id) === entry;
   }
-  pin(entries: Iterable<GeometryEntry>): void {
+  pin(entries: Iterable<GeometryEntry>, planning = false): void {
     this.trimCandidates = null;
     this.trimCursor = 0;
     this.pinned = new Set(entries);
+    this.presentationPlanning = planning;
   }
   complete(request: GeometryRequest): boolean {
     return (
@@ -931,15 +1079,43 @@ export class GeometryChunkCache {
         entry.requiredBytes !== undefined &&
         this.bytes + this.externalBytes + entry.requiredBytes <= this.limit * 2
       ) {
-        entry.state = 'queued';
-        entry.error = undefined;
         for (const r of this.current()) r.cursor = 0;
       }
+    if (
+      current.some(
+        (request) =>
+          request.requiredMetadataBytes !== undefined &&
+          this.bytes + this.externalBytes + request.requiredMetadataBytes <= this.limit * 2,
+      )
+    )
+      this.notify();
+    for (const request of current) {
+      if (
+        request.error instanceof GeometryMetadataAdmissionError &&
+        !request.error.reported &&
+        !this.metadataCanProgress(request)
+      ) {
+        request.error.reportPending = true;
+        this.notify();
+      }
+      for (const entry of request.entries ?? [])
+        if (
+          entry.state === 'error' &&
+          this.entries.get(entry.id) === entry &&
+          entry.error instanceof GeometryAdmissionError &&
+          !entry.error.reported &&
+          !this.admissionCanProgress(request, entry.requiredBytes, entry)
+        ) {
+          entry.error.reportPending = true;
+          this.notify();
+        }
+    }
     if (!this.running && !this.active && current.every((r) => this.complete(r))) {
       this.settledRequests = current;
       this.settledVersion = this.residencyVersion;
       this.settledExternal = this.externalBytes;
     }
+    if (!this.presentationPlanning) this.resumeAdmission?.();
     this.schedule();
   }
   /** Retain compact completed spatial plans across full/low-detail switches.
@@ -987,10 +1163,36 @@ export class GeometryChunkCache {
     const delay = this.firstPresentation
       ? 0
       : Math.max(this.interacting ? 80 : 32, Math.min(250, this.presentationCost * 4));
-    this.notification = setTimeout(() => {
-      this.notification = null;
-      if (!this.disposed) this.options.invalidate();
-    }, delay);
+    this.notification = setTimeout(() => this.flushNotification(), delay);
+  }
+  private flushNotification(): void {
+    this.notification = null;
+    if (this.disposed) return;
+    for (const request of this.current())
+      for (const entry of [undefined, ...(request.entries ?? [])]) {
+        const error = entry ? entry.error : request.error;
+        if (
+          this.disposed ||
+          request.controller.signal.aborted ||
+          request.frame !== this.frame ||
+          (entry && (entry.state !== 'error' || this.entries.get(entry.id) !== entry)) ||
+          !(error instanceof GeometryAdmissionError) ||
+          error.reported ||
+          !error.reportPending
+        )
+          continue;
+        error.reportPending = false;
+        if (
+          entry
+            ? this.admissionCanProgress(request, entry.requiredBytes, entry)
+            : this.metadataCanProgress(request)
+        )
+          continue;
+        error.reported = true;
+        this.counters.errors++;
+        this.options.report(error);
+      }
+    if (!this.disposed) this.options.invalidate();
   }
   private queued(request: GeometryRequest): GeometryEntry | undefined {
     if (request.error || !request.entries) return undefined;
@@ -998,6 +1200,13 @@ export class GeometryChunkCache {
       const entry = request.entries[request.cursor];
       // A failed member must not starve independent chunks behind it.
       if (entry.state === 'error') {
+        // Select retries against current capacity; waking every individually
+        // fitting failure would make later ones rebuild after that room is spent.
+        if (
+          entry.requiredBytes !== undefined &&
+          this.bytes + this.externalBytes + entry.requiredBytes <= this.limit * 2
+        )
+          return entry;
         request.cursor++;
         continue;
       }
@@ -1019,6 +1228,17 @@ export class GeometryChunkCache {
     let available = current.filter((r) => !!this.queued(r));
     const sameOwner = (a: GeometryOwner, b: GeometryOwner) =>
       a.sourceId === b.sourceId && a.id === b.id;
+    const capacities = new Map<string, number>();
+    const capacity = (owner: GeometryOwner) => {
+      const key = JSON.stringify([owner.sourceId, owner.id, owner.revision]);
+      let bytes = capacities.get(key);
+      if (bytes === undefined) {
+        bytes = this.admissionCapacity(owner);
+        capacities.set(key, bytes);
+      }
+      return bytes;
+    };
+    const pending = (r: GeometryRequest) => this.canPrepare(r, capacity(r.owner));
     if (this.handoffOwner) {
       const owner = this.handoffOwner;
       const group = current.filter((r) => sameOwner(r.owner, owner));
@@ -1028,6 +1248,15 @@ export class GeometryChunkCache {
       const unchanged =
         group.length === this.handoffRequests.length &&
         group.every((r, i) => r === this.handoffRequests[i]);
+      const progressiveWaiting =
+        group.every((r) => r.input.wholeLayer || r.input.ordered) &&
+        current.some(
+          (r) =>
+            !r.input.wholeLayer &&
+            !r.input.ordered &&
+            pending(r) &&
+            [...this.pinned].some((e) => sameOwner(e.owner, r.owner) && !this.wanted().has(e)),
+        );
       if (unchanged && group.length && group.every((r) => this.complete(r))) {
         // The replacement is uploaded, but the last presented frame can still
         // own its predecessor. Let presentation unpin it before the next owner
@@ -1036,7 +1265,18 @@ export class GeometryChunkCache {
         if ([...this.pinned].some((e) => sameOwner(e.owner, owner) && !wanted.has(e)))
           return undefined;
       }
-      if (!unchanged || !group.length || group.every((r) => this.complete(r) || this.failed(r))) {
+      if (
+        !unchanged ||
+        progressiveWaiting ||
+        !group.length ||
+        !group.some(pending) ||
+        group.every(
+          (r) =>
+            this.complete(r) ||
+            (r.error && r.requiredMetadataBytes === undefined) ||
+            r.entries?.some((e) => e.state === 'error' && e.requiredBytes === undefined),
+        )
+      ) {
         this.handoffOwner = undefined;
         this.handoffRequests = [];
       }
@@ -1046,31 +1286,75 @@ export class GeometryChunkCache {
       // no polygon has both its fill and outline ready to retire the old meshes.
       // Finish one layer's paint requests together, starting with the most old
       // residency to release. Cold loading keeps the normal fair scheduling.
-      const owners = new Map<string, { owner: GeometryOwner; entries: Set<GeometryEntry> }>();
+      const owners = new Map<
+        string,
+        { owner: GeometryOwner; entries: Set<GeometryEntry>; progressive: boolean }
+      >();
+      const wanted = this.wanted();
       for (const r of current) {
         const key = JSON.stringify([r.owner.sourceId, r.owner.id]);
         let group = owners.get(key);
-        if (!group) owners.set(key, (group = { owner: r.owner, entries: new Set() }));
-        for (const e of r.fallback ?? [])
-          if (this.isResident(e) && !this.wanted().has(e)) group.entries.add(e);
+        if (!group)
+          owners.set(key, (group = { owner: r.owner, entries: new Set(), progressive: false }));
+        if (!r.input.wholeLayer && !r.input.ordered && !this.complete(r)) group.progressive = true;
       }
-      let largest = 0;
-      for (const { owner, entries } of owners.values()) {
+      for (const e of this.pinned) {
+        if (!wanted.has(e))
+          owners.get(JSON.stringify([e.owner.sourceId, e.owner.id]))?.entries.add(e);
+      }
+      let largest = 0,
+        progressive = false;
+      for (const { owner, entries, progressive: canProgress } of owners.values()) {
         const bytes = [...entries].reduce((sum, e) => sum + e.bytes, 0);
         // Planning order is asynchronous too: a large retiring layer must not
         // lose priority just because a smaller, growing layer planned first.
-        const pending = current.some(
-          (r) => sameOwner(r.owner, owner) && !r.error && (r.entries === null || !!this.queued(r)),
-        );
-        if (bytes > largest && pending) {
+        // With no dispatchable work, a cold known-cost owner can also need
+        // foreign unpublished payload rollback before its first admission.
+        const preparing = current.some((r) => sameOwner(r.owner, owner) && pending(r));
+        if (
+          preparing &&
+          (bytes || !available.length) &&
+          (!this.handoffOwner ||
+            (canProgress && !progressive) ||
+            (canProgress === progressive && bytes > largest))
+        ) {
           largest = bytes;
+          progressive = canProgress;
           this.handoffOwner = owner;
           this.handoffRequests = current.filter((r) => sameOwner(r.owner, owner));
         }
       }
     }
-    if (this.handoffOwner)
+    if (this.handoffOwner) {
+      if (!available.some((r) => sameOwner(r.owner, this.handoffOwner!))) {
+        let retry: { request: GeometryRequest; bytes: number } | undefined;
+        for (const request of this.handoffRequests) {
+          if (
+            request.requiredMetadataBytes !== undefined &&
+            (!retry || request.requiredMetadataBytes < retry.bytes)
+          )
+            retry = { request, bytes: request.requiredMetadataBytes };
+          for (const entry of request.entries ?? [])
+            if (
+              entry.state === 'error' &&
+              entry.requiredBytes !== undefined &&
+              (!retry || entry.requiredBytes < retry.bytes)
+            )
+              retry = { request, bytes: entry.requiredBytes };
+        }
+        if (retry) {
+          this.trim(retry.bytes, retry.request);
+          for (const request of this.handoffRequests) request.cursor = 0;
+          available = current.filter((r) => !!this.queued(r));
+          if (
+            retry.request.requiredMetadataBytes !== undefined &&
+            this.bytes + this.externalBytes + retry.bytes <= this.limit * 2
+          )
+            this.notify();
+        }
+      }
       available = available.filter((r) => sameOwner(r.owner, this.handoffOwner!));
+    }
     const preview =
       this.counters.builds === 0
         ? available.find((r) => r.input.kind === 'path' || r.input.kind === 'point')
@@ -1085,6 +1369,10 @@ export class GeometryChunkCache {
     entry.state = 'error';
     entry.error = error instanceof Error ? error : new Error(String(error));
     request.cursor = 0;
+    if (entry.error instanceof GeometryAdmissionError) {
+      if (entry.requiredBytes !== undefined && entry.requiredBytes <= this.limit * 2) return;
+      entry.error.reported = true;
+    }
     this.counters.errors++;
     this.options.report(entry.error);
   }
@@ -1127,10 +1415,30 @@ export class GeometryChunkCache {
       ranges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
       fillRanges.reduce((n, r) => n + (r?.bytes ?? 0), 0) +
       result.geometries.reduce((n, g) => n + (g.memberRanges?.byteLength ?? 0), 0);
-    this.trim(cost);
+    this.trim(cost, request);
+    if (
+      this.bytes + this.externalBytes + cost > this.limit * 2 &&
+      [...this.pinned].some((e) => !this.wanted().has(e)) &&
+      [...this.wanted()].some((e) => this.isResident(e) && !this.pinned.has(e))
+    ) {
+      // Keep this bounded Worker result until presentation retires the ready
+      // replacements' predecessors, rather than discarding and rebuilding it.
+      await new Promise<void>((resolve) => {
+        const resume = () => {
+          signal.removeEventListener('abort', resume);
+          this.resumeAdmission = null;
+          resolve();
+        };
+        this.resumeAdmission = resume;
+        signal.addEventListener('abort', resume, { once: true });
+        this.notify();
+      });
+      signal.throwIfAborted();
+      this.trim(cost, request);
+    }
     if (this.bytes + this.externalBytes + cost > this.limit * 2) {
       entry.requiredBytes = cost;
-      throw new RangeError(
+      throw new GeometryAdmissionError(
         'Visible GPU geometry exceeds the bounded working-set limit; zoom in or hide layers. Source data was not simplified or truncated.',
       );
     }
@@ -1244,6 +1552,7 @@ export class GeometryChunkCache {
         const tasks: { request: GeometryRequest; entry: GeometryEntry; packet: GeometryPacket }[] =
           [];
         let bytes = 0;
+        let retryBytes = 0;
         const packingStarted = performance.now();
         // First feedback never waits for a batch. Large/unknown jobs stay isolated.
         const maxJobs =
@@ -1269,6 +1578,11 @@ export class GeometryChunkCache {
                   : undefined;
             if (!next) break;
             const { request, entry } = next;
+            if (
+              entry.requiredBytes !== undefined &&
+              this.bytes + this.externalBytes + retryBytes + entry.requiredBytes > this.limit * 2
+            )
+              break;
             if (tasks.length) {
               const admission = performance.now();
               const bound = geometryJobByteBound(
@@ -1280,7 +1594,10 @@ export class GeometryChunkCache {
               if (bound > GEOMETRY_BATCH_BYTES - bytes) break;
             }
             progressed = true;
+            retryBytes += entry.requiredBytes ?? 0;
+            entry.requiredBytes = undefined;
             entry.state = 'building';
+            entry.error = undefined;
             this.active.entries.add(entry);
             this.residencyVersion++;
             request.cursor++;
@@ -1354,6 +1671,8 @@ export class GeometryChunkCache {
         } finally {
           this.residencyVersion++;
           this.active = null;
+          this.trimCandidates = null;
+          this.trimCursor = 0;
         }
         this.notify();
       }
@@ -1365,14 +1684,33 @@ export class GeometryChunkCache {
         this.current().every((r) => this.complete(r) || this.failed(r))
       ) {
         if (this.notification !== null) clearTimeout(this.notification);
-        this.notification = setTimeout(() => {
-          this.notification = null;
-          if (!this.disposed) this.options.invalidate();
-        }, 0);
+        this.notification = setTimeout(() => this.flushNotification(), 0);
       }
     }
   }
-  private trim(incoming: number): void {
+  private provisionalAtomicEntries(owner: GeometryOwner): GeometryEntry[] {
+    const key = (owner: GeometryOwner) =>
+      JSON.stringify([owner.sourceId, owner.id, owner.revision]);
+    const atomic = this.current().filter((r) => r.input.wholeLayer || r.input.ordered);
+    const incomplete = new Set(atomic.filter((r) => !this.complete(r)).map((r) => key(r.owner)));
+    const wanted = this.wanted();
+    const retiring = new Set(
+      [...this.pinned].filter((e) => !wanted.has(e)).map((e) => key(e.owner)),
+    );
+    return [
+      ...new Set(
+        atomic
+          .filter(
+            (r) =>
+              key(r.owner) !== key(owner) &&
+              incomplete.has(key(r.owner)) &&
+              retiring.has(key(r.owner)),
+          )
+          .flatMap((r) => r.entries ?? []),
+      ),
+    ].filter((e) => this.isResident(e) && !this.pinned.has(e) && !this.active?.entries.has(e));
+  }
+  private trim(incoming: number, request?: GeometryRequest): void {
     if (this.bytes + this.externalBytes + incoming <= this.limit) return;
     if (!this.trimCandidates) {
       // Protect requests from the preceding frame until all current slots exist.
@@ -1387,7 +1725,8 @@ export class GeometryChunkCache {
       // Protect it even when a pending upload triggers eviction between frames.
       const presenting = new Set(
         (this.collecting ? [...this.requests.values()] : this.current()).flatMap((r) =>
-          this.drawable(r),
+          // Atomic layers pin their committed frame; provisional buckets may be superseded unseen.
+          r.input.wholeLayer ? [] : this.drawable(r),
         ),
       );
       this.trimCandidates = [...this.entries.values()]
@@ -1413,6 +1752,30 @@ export class GeometryChunkCache {
       if (entry.screenSpace) this.counters.evictedScreenEntries++;
       this.drop(entry);
       this.counters.evictions++;
+    }
+    if (request && this.bytes + this.externalBytes + incoming > this.limit * 2) {
+      for (const entry of this.provisionalAtomicEntries(request.owner)) {
+        if (this.bytes + this.externalBytes + incoming <= this.limit * 2) break;
+        if (!this.isResident(entry) || this.pinned.has(entry) || this.active?.entries.has(entry))
+          continue;
+        // An incomplete atomic owner still draws its committed pins. Release
+        // only its unpublished payload; keep metadata and identity for retry.
+        const metadata = entry.job.members.byteLength + (entry.job.components?.byteLength ?? 0);
+        this.counters.evictedPreparationMs += entry.preparationMs ?? 0;
+        if (entry.screenSpace) this.counters.evictedScreenEntries++;
+        this.drop(entry);
+        entry.bytes = metadata;
+        entry.state = 'queued';
+        entry.screenSpace = false;
+        entry.screenStats = undefined;
+        entry.screenView = undefined;
+        entry.requiredBytes = undefined;
+        entry.error = undefined;
+        this.bytes += metadata;
+        this.entries.set(entry.id, entry);
+        for (const r of this.current()) r.cursor = 0;
+        this.counters.evictions++;
+      }
     }
   }
   private drop(entry: GeometryEntry): void {

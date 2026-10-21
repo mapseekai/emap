@@ -1,22 +1,23 @@
 import { withSymbolLabel, symbolStyleFromLegacy } from '../../../../src/engine/map/symbol-compat';
-import type { BenchmarkRenderers } from './renderers';
+import type { SymbolControlTarget } from './target';
 import type { LabelOptions } from '../../../../src/engine/map/label';
+import './style.css';
 
 /** One settings panel bound to an existing vector layer; no annotation tree entries. */
 export function installLabelControls(
   host: HTMLElement,
-  renderer: BenchmarkRenderers,
+  renderer: SymbolControlTarget,
   changed: () => void,
 ) {
   const panel = document.createElement('details');
   panel.id = 'label-settings';
-  panel.className = 'emap-bound-label-settings';
+  panel.className = 'emap-symbol-settings';
   panel.innerHTML = `<summary>图层注记（绑定点 / 线 / 面）</summary>
     <label>所属矢量图层 <select id="label-owner"></select></label>
     <label><input id="label-parent-visible" type="checkbox" checked>显示父图层</label>
     <label><input id="label-enabled" type="checkbox">启用此图层的注记</label>
     <label>注记字段 <select id="label-field"></select></label>
-    <label>字号 · text-size（px）<input id="label-size" type="number" min="6" max="96" value="14"></label>
+    <label>基准字号 · text-size（px）<input id="label-size" type="number" min="6" max="96" value="14"></label>
     <label>X 偏移 · text-offset（em）<input id="label-offset-x" type="number" step="0.1" value="0"></label>
     <label>Y 偏移 · text-offset（em）<input id="label-offset-y" type="number" step="0.1" value="0"></label>
     <label>字体 · text-font <select id="label-font"><option value="sans-serif">Noto Sans SC（MSDF）</option><option value="serif">Noto Serif SC</option><option value="monospace">Noto Sans Mono</option></select></label>
@@ -24,14 +25,10 @@ export function installLabelControls(
     <label>文字颜色 · text-color <input id="label-color" type="color" value="#243447"></label>
     <label>描边颜色 <input id="label-halo-color" type="color" value="#ffffff"></label>
     <label>描边宽度 · text-halo-width <input id="label-halo" type="number" min="0" max="12" step="0.5" value="1.5"></label>
-    <label>沿线定位 <select id="label-placement"><option value="auto">自动：点周围 / 沿线 / 面内部</option><option value="horizontal">线注记保持水平</option><option value="parallel">线注记平行于线段</option></select></label>
-    <label><input id="label-overlap" type="checkbox">允许注记重叠</label>
+    <label>沿线定位 <select id="label-placement"><option value="auto">自动：点正上方 / 沿线 / 面内部</option><option value="horizontal">线注记保持水平</option><option value="parallel">线注记平行于线段</option></select></label>
+    <label><input id="label-collision" type="checkbox" checked>启用注记避让</label>
     <button id="label-show-symbol" type="button" aria-expanded="false">查看 symbol 样式</button><pre id="label-symbol-json" hidden style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
     <p id="label-message" role="status">加载矢量数据后选择字段。注记不会新增图层。</p>`;
-  const style = document.createElement('style');
-  style.textContent = `.emap-bound-label-settings{margin:10px 0;padding:10px;border:1px solid #cdd6dd;background:#fff;color:#243447;font:12px/1.5 system-ui}
-.emap-bound-label-settings summary{cursor:pointer;font-weight:600}.emap-bound-label-settings label{display:inline-flex;align-items:center;gap:6px;margin:6px 8px 6px 0;font-size:12px}.emap-bound-label-settings input[type=number]{width:65px}.emap-bound-label-settings input[type=color]{width:40px;height:24px;padding:0}.emap-bound-label-settings input[type=checkbox]{width:auto}.emap-bound-label-settings select{max-width:230px}.emap-bound-label-settings p{margin:6px 0;color:#526574}`;
-  panel.append(style);
   host.append(panel);
   const $ = <T extends HTMLElement>(id: string) => panel.querySelector<T>(`#${id}`)!;
   const owner = $<HTMLSelectElement>('label-owner'),
@@ -41,7 +38,7 @@ export function installLabelControls(
   let signature = '',
     selected = '',
     jsonSignature = '';
-  let cachedLayers: ReturnType<BenchmarkRenderers['getLayers']> = [];
+  let cachedLayers: ReturnType<SymbolControlTarget['getLayers']> = [];
   function read() {
     const spec = renderer.getLayers().find((l) => l.id === owner.value),
       options = spec?.label;
@@ -65,7 +62,7 @@ export function installLabelControls(
     $<HTMLInputElement>('label-color').value = options?.color ?? '#243447';
     $<HTMLInputElement>('label-halo-color').value = options?.haloColor ?? '#ffffff';
     $<HTMLInputElement>('label-halo').value = String(options?.haloWidth ?? 1.5);
-    $<HTMLInputElement>('label-overlap').checked = options?.allowOverlap ?? false;
+    $<HTMLInputElement>('label-collision').checked = !options?.allowOverlap;
     $<HTMLSelectElement>('label-placement').value = options?.placement ?? 'auto';
     for (const control of panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
       'input,select',
@@ -103,6 +100,12 @@ export function installLabelControls(
       );
     }
     const s = renderer.labelStats;
+    if (!s) {
+      $('label-message').textContent = specs.length
+        ? '点注记默认位于正上方，附加偏移为零。拉远时字号最低 12px；基准字号小于 12px 时按基准字号显示。'
+        : '加载矢量数据后选择字段。注记不会新增图层。';
+      return;
+    }
     const msdf = s as typeof s & {
       mode?: string;
       glyphCount?: number;
@@ -153,7 +156,7 @@ export function installLabelControls(
             color: $<HTMLInputElement>('label-color').value,
             haloColor: $<HTMLInputElement>('label-halo-color').value,
             haloWidth: Number($<HTMLInputElement>('label-halo').value),
-            allowOverlap: $<HTMLInputElement>('label-overlap').checked,
+            allowOverlap: !$<HTMLInputElement>('label-collision').checked,
             placement: $<HTMLSelectElement>('label-placement').value as LabelOptions['placement'],
           };
           const url = $<HTMLInputElement>('label-font-url').value.trim();

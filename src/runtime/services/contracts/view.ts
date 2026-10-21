@@ -9,6 +9,7 @@ import type {
 import type { Projection } from '../../../domain/geo/projection';
 import type { AffineTransform } from '../../../domain/geo/transform';
 import type { Viewport } from '../../../domain/geo/viewport';
+import type { MapOptions } from '../../../engine/map/types';
 
 /** Explicit service contract. Providers implement this boundary; consumers do not import implementations. */
 export interface ViewContract {
@@ -24,6 +25,8 @@ export interface ViewContract {
   getTransform(): AffineTransform;
   getExtent(): Bounds;
   setExtent(bounds: Bounds): void;
+  setGeometryLod(options?: MapOptions['geometryLod']): void;
+  setScreenPathFiltering(enabled?: boolean): void;
   reset(): void;
   zoomIn(): void;
   zoomOut(): void;

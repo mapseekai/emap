@@ -33,7 +33,12 @@ export interface PlacedLabel extends LabelPose {
   text: string;
   raster: TextRaster;
   bounds: Box;
-  /** Ground anchor + CSS offset allow camera replay without scaling glyphs. */
+  /** Glyph/halo scale, independent of the ground anchor and explicit CSS offset. */
+  scale?: number;
+  /** Per-label floor keeps zoomed-out text readable without enlarging small configured fonts. */
+  minSizeScale?: number;
+  pointRadius?: number;
+  /** Ground anchor + CSS offset keep placement stable during camera replay. */
   anchor?: XY;
   screenOffset?: XY;
   priority?: number;
@@ -120,6 +125,7 @@ export class BoundLabelManager {
   private frame: LabelFrame = EMPTY;
   private priorityLabels: readonly PlacedLabel[] = [];
   private frameView: AffineTransform | null = null;
+  private frameScale = 1;
   private requestedContent = '';
   private frameContent = '';
   private controller: AbortController | null = null;
@@ -180,6 +186,7 @@ export class BoundLabelManager {
     height: number,
     dpr: number,
     navigating = false,
+    scale = 1,
   ): LabelFrame {
     if (this.disposed) return EMPTY;
     const active = bindings.filter(
@@ -217,11 +224,12 @@ export class BoundLabelManager {
       width,
       height,
       content,
+      scale,
     ]);
     // Do not starve a long initial index/layout by cancelling it on every pointer
     // event. Only content changes supersede an in-flight navigation layout.
     if (navigating && this.stats.pending && this.requestedContent === content)
-      return this.frameContent === content ? this.preview(view, width, height) : EMPTY;
+      return this.frameContent === content ? this.preview(view, width, height, scale) : EMPTY;
     if (!this.paused && key !== this.requested) {
       this.controller?.abort();
       const controller = (this.controller = new AbortController());
@@ -235,7 +243,17 @@ export class BoundLabelManager {
         .then(async () => {
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
           controller.signal.throwIfAborted();
-          await this.layout(active, camera, width, height, dpr, key, controller.signal, content);
+          await this.layout(
+            active,
+            camera,
+            width,
+            height,
+            dpr,
+            key,
+            controller.signal,
+            content,
+            scale,
+          );
         })
         .catch((error) => {
           if (!controller.signal.aborted && !this.disposed) {
@@ -247,13 +265,13 @@ export class BoundLabelManager {
     return this.frame.key === key
       ? this.frame
       : this.frameContent === content
-        ? this.preview(view, width, height)
+        ? this.preview(view, width, height, scale)
         : EMPTY;
   }
-  /** Cheap camera-only text refresh between full layouts. Positions/collision
-   * bounds change, but glyph scale, halo and point-label offsets remain CSS-sized.
+  /** Cheap camera-only text refresh between full layouts. Glyphs, halos and
+   * collision bounds share the same scale; explicit offsets remain CSS-sized.
    * New candidates are discovered by the asynchronous throttled request() path. */
-  preview(view: AffineTransform, width: number, height: number): LabelFrame {
+  preview(view: AffineTransform, width: number, height: number, scale = 1): LabelFrame {
     if (!this.frameView || this.frameContent !== this.requestedContent || this.disposed)
       return EMPTY;
     const previous = this.frameView;
@@ -262,12 +280,14 @@ export class BoundLabelManager {
       view.my === previous.my &&
       view.bx === previous.bx &&
       view.by === previous.by &&
+      scale === this.frameScale &&
       cameraUniforms(view).every((value, i) => value === cameraUniforms(previous)[i])
     )
       return this.frame;
     const grid = new LabelCollisionGrid(),
       accepted = new Map<PlacedLabel, PlacedLabel>();
     for (const label of this.priorityLabels) {
+      const labelScale = Math.max(label.minSizeScale ?? 0, Math.min(1, scale));
       const ground = label.anchor ?? previous.unproject(label.x, label.y);
       const [x, y] = view.project(...ground),
         offset = label.screenOffset ?? [0, 0];
@@ -276,18 +296,34 @@ export class BoundLabelManager {
         (Math.sin(label.angle) * view.my) / previous.my,
         (Math.cos(label.angle) * view.mx) / previous.mx,
       );
-      const pose = { x: x + offset[0], y: y + offset[1], angle };
-      const bounds = poseBounds(pose, label.raster.width, label.raster.height, label.padding ?? 2);
+      const pose = {
+        x: x + offset[0],
+        y:
+          y +
+          offset[1] +
+          (label.pointRadius === undefined
+            ? 0
+            : (label.raster.height * ((label.scale ?? 1) - labelScale)) / 2),
+        angle,
+      };
+      const bounds = poseBounds(
+        pose,
+        label.raster.width * labelScale,
+        label.raster.height * labelScale,
+        label.padding ?? 2,
+      );
       if (bounds[0] < 0 || bounds[1] < 0 || bounds[2] > width || bounds[3] > height) continue;
       if (!label.allowOverlap && grid.collides(bounds)) continue;
       grid.insert(bounds);
-      accepted.set(label, { ...label, ...pose, bounds });
+      accepted.set(label, { ...label, ...pose, bounds, scale: labelScale });
     }
     return {
       key:
         this.frame.key +
         ':nav:' +
-        [view.mx, view.my, view.bx, view.by, ...cameraUniforms(view), width, height].join(':'),
+        [view.mx, view.my, view.bx, view.by, ...cameraUniforms(view), width, height, scale].join(
+          ':',
+        ),
       labels: this.frame.labels.flatMap((label) => {
         const next = accepted.get(label);
         return next ? [next] : [];
@@ -366,12 +402,13 @@ export class BoundLabelManager {
     key: string,
     signal: AbortSignal,
     content: string,
+    scale: number,
   ): Promise<void> {
     let active = bindings;
     for (;;) {
       signal.throwIfAborted();
       try {
-        await this.layoutBindings(active, view, width, height, dpr, key, signal, content);
+        await this.layoutBindings(active, view, width, height, dpr, key, signal, content, scale);
         return;
       } catch (error) {
         signal.throwIfAborted();
@@ -395,6 +432,7 @@ export class BoundLabelManager {
     key: string,
     signal: AbortSignal,
     content: string,
+    scale: number,
   ): Promise<void> {
     const start = performance.now(),
       alive = new Set(bindings.map((b) => b.layer));
@@ -495,6 +533,9 @@ export class BoundLabelManager {
       signal.throwIfAborted();
       const { binding, id, text, order } = candidate,
         { dataset, layer, options } = binding;
+      const minSizeScale = Math.min(1, 12 / (options.fontSize ?? 14)),
+        labelScale = Math.max(minSizeScale, Math.min(1, scale)),
+        pointRadius = layer.geometry_type === 'point' ? (binding.pointRadius ?? 4) : undefined;
       if (
         accepted.length >= MAX_LABELS ||
         (counts.get(binding.id) ?? 0) >= (options.maxLabels ?? 1000)
@@ -512,23 +553,12 @@ export class BoundLabelManager {
         for (const p of normalizePointShape(layer.shapes?.[id])) {
           const [x, y] = view.project(p[0], p[1]);
           if (!Number.isFinite(x + y)) continue;
-          const gap = (binding.pointRadius ?? 4) + 3;
-          for (const [dx, dy] of [
-            [1, -1],
-            [1, 0],
-            [1, 1],
-            [0, -1],
-            [0, 1],
-            [-1, -1],
-            [-1, 0],
-            [-1, 1],
-          ])
-            poses.push({
-              x: x + dx * (measured.width / 2 + gap),
-              y: y + dy * (measured.height / 2 + gap),
-              angle: 0,
-              anchor: [p[0], p[1]],
-            });
+          poses.push({
+            x,
+            y: y - (measured.height * labelScale) / 2 - pointRadius! - 3,
+            angle: 0,
+            anchor: [p[0], p[1]],
+          });
           if (poses.length >= 64) break;
         }
       } else {
@@ -549,7 +579,7 @@ export class BoundLabelManager {
             view,
             width,
             height,
-            measured.width,
+            measured.width * labelScale,
             options.placement !== 'horizontal',
             signal,
           );
@@ -563,7 +593,12 @@ export class BoundLabelManager {
           x: p.x + (options.offset?.[0] ?? 0),
           y: p.y + (options.offset?.[1] ?? 0),
         };
-        const box = poseBounds(pose, measured.width, measured.height, options.padding ?? 2);
+        const box = poseBounds(
+          pose,
+          measured.width * labelScale,
+          measured.height * labelScale,
+          options.padding ?? 2,
+        );
         if (box[0] < 0 || box[1] < 0 || box[2] > width || box[3] > height) continue;
         if (!options.allowOverlap && grid.collides(box)) continue;
         if (forLabelLayer(binding.id, () => this.atlas.reserve?.(text, options)) === false) {
@@ -575,6 +610,9 @@ export class BoundLabelManager {
           at = view.project(...anchor);
         accepted.push({
           ...pose,
+          scale: labelScale,
+          minSizeScale,
+          pointRadius,
           anchor,
           screenOffset: [pose.x - at[0], pose.y - at[1]],
           priority: candidate.priority,
@@ -618,6 +656,7 @@ export class BoundLabelManager {
     this.frame = { key, labels };
     this.priorityLabels = [...labels].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this.frameView = view.clone();
+    this.frameScale = scale;
     this.frameContent = content;
     Object.assign(this.stats, {
       pending: false,
@@ -689,6 +728,7 @@ export function drawCanvasLabels(
     ctx.save();
     ctx.translate(label.x, label.y);
     ctx.rotate(label.angle);
+    ctx.scale(label.scale ?? 1, label.scale ?? 1);
     if ('mode' in raster) {
       const rgba = (c: readonly number[]) =>
         `rgba(${c[0] * 255},${c[1] * 255},${c[2] * 255},${c[3]})`;

@@ -14,6 +14,7 @@ engine built on `mapshaper` data structures and HTML5 Canvas.
 | Change expression execution or untrusted input handling; report a vulnerability | [SECURITY.md](SECURITY.md) |
 | Publish a package, deploy docs, or prepare a release | [Release checklist](docs/release-checklist.md) and relevant `.github/workflows/` file |
 | Navigate/refactor code with graph tools | [Code intelligence](docs/agent-tools.md#code-intelligence) |
+| Investigate WebGL2/WebGPU performance, GPU memory, or resource leaks | [luma.gl profiling guide](https://luma.gl/docs/developer-guide/profiling) and the installed `lumagl` skill |
 | Use or maintain a skill | [Skill selection and maintenance](docs/agent-tools.md#skills) |
 
 Read only the relevant sections and follow deeper references as needed. This is a
@@ -91,6 +92,14 @@ then verify the intended contract. Select checks for the affected area:
 Once applicable checks pass, repeat or broaden them only for new changes,
 failures, or unresolved concerns. Do not add tests that merely mirror prose edits.
 Summarize changes, verification evidence, and remaining blockers concisely.
+
+For GPU performance investigations, check the installed luma.gl version before
+using the profiling guide. Inspect probe.gl resource/memory counters and use
+asynchronous GPU timestamp queries when supported; report unavailable or disjoint
+samples. Separate CPU submission time, GPU duration, completion latency, and FPS.
+Compare the same data, view, DPR, and filtering settings, and destroy owned query
+resources after profiling. Typechecking or CPU timings alone do not verify GPU
+performance or rendering correctness.
 
 ## Issue tracking — Multica
 

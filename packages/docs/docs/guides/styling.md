@@ -3,7 +3,7 @@ id: styling
 slug: /guides/styling
 title: 样式图层
 api: ["SymbolStyle", "SymbolLayout", "SymbolPaint", "SymbolImage", "SymbolLabeling", "SymbolIconSettings", "Emap.setLayerSymbol", "Emap.removeLayerSymbol", "Emap.setSymbolLayoutProperty", "Emap.setSymbolPaintProperty", "IconOptions", "Emap.setLayerIcon", "LabelOptions", "Emap.setLayerLabel", "ClassificationResult", "ClassifyFeaturesOptions", "Emap.setPaintProperty", "FillPaint", "LayerSpecification", "LineDashStyle", "LinePaint", "PointMarkerShape", "StyleExpression", "Emap", "CirclePaint"]
-examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
+examples: ["getting-started/lines","getting-started/point-style","labels","point-icons","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -203,13 +203,17 @@ map.setLayerLabel('city-points', null); // 移除注记，不移除城市图层
 ```
 
 `setLayerLabel` 替换整个配置。`field` 与 `text` 二选一，后者支持字符串或已有的安全
-样式表达式子集。空值不显示；字号和描边使用 CSS 像素，`offset` 是像素偏移。
-点注记尝试周边位置，线注记整体沿线旋转且保持正向，面注记使用排除孔洞的内部锚点。
+样式表达式子集。空值不显示；`fontSize` 是全图视图下的基准 CSS 像素字号。
+缩小至全图视图以下时，文字、描边及碰撞范围同步缩小，字号最低为 12px；
+配置字号小于 12px 时保持配置字号。放大最多恢复到基准字号。
+`offset` 是独立的附加屏幕像素偏移，默认为 `[0, 0]`。点注记默认位于点正上方、水平居中，保留点半径外 3px 的间距；
+线注记整体沿线旋转且保持正向，面注记使用排除孔洞的内部锚点。
+默认开启跨图层避让，发生碰撞时隐藏低优先级注记；`allowOverlap: true` 允许重叠。
 `placement: 'horizontal'` 使线注记保持水平。当前排布以完整文字串为单位，支持上述点、线、面锚点；
 逐字曲线、引线、规则式注记和 QGIS PAL 排布需由应用另行集成。面锚点位于有效面内，文字矩形可延伸至面外。
 
 Canvas2D 支持该配置；luma 分支在现有 GPU RenderPass 中批量绘制字体图集。
-本地 `luma-benchmark`、`luma-25d` 和 `luma-vertex-editing` 示例包含父图层注记面板。
+本地[文字注记](/mapseekai/emap/examples/labels/)、`luma-25d` 和 `luma-vertex-editing` 示例包含父图层注记面板。
 未启用时不建立字体图集/注记索引；已启用时跨图层避让，最多显示 2,000 条/视图，
 默认 1,000 条/图层，候选最多 20,000。预算外候选不参与优先级全局比较。
 文字图集最多四张 1024×1024 RGBA 纹理，CPU/GPU 各约 16 MiB 上限，不含源索引。

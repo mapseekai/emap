@@ -200,6 +200,10 @@ export class CanvasRenderService {
   _endNavGesture(): void {
     this._cancelNavigationRefresh();
     const hasPendingNav = this._pendingAction === 'nav' && this._pendingRender > 0;
+    const refreshLabels =
+      this._navSnapshotTransform !== null &&
+      this._labels !== null &&
+      !this._painter?.renderNavigation;
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) {
       clearTimeout(this._wheelSettleTimer);
@@ -207,6 +211,8 @@ export class CanvasRenderService {
     }
     this._painter?.setInteracting?.(false);
     this._scheduler.notifyInteractionEnd(hasPendingNav);
+    // Adaptive Canvas frames can leave labels paused without a queued settle redraw.
+    if (refreshLabels) this._scheduleRender('redraw', undefined, true);
     this.deps.events.fire('interactionend');
   }
 
@@ -259,8 +265,7 @@ export class CanvasRenderService {
   private _schedulePreparedRender(): void {
     if (this._disposed) return;
     // The pending settle redraw consumes geometry, icons and labels prepared mid-gesture.
-    if (this._navSnapshotTransform && this._scheduler.fastActive && this._canvas.style.transform)
-      return;
+    if (this._navSnapshotTransform && this._scheduler.fastActive) return;
     this._scheduleRender();
   }
 
@@ -372,6 +377,7 @@ export class CanvasRenderService {
     this._syncLiveEditGeometry();
     this._prepareIcons();
     const transform = this.deps.view._viewport.transform;
+    this._painter.setScreenPathFiltering?.(this.deps.view._viewport.screenPathFiltering ?? true);
     this._painter.setTransform(transform);
 
     this._painter.clear();
@@ -448,13 +454,20 @@ export class CanvasRenderService {
         SLOW_FRAME_MS &&
       this._painter.renderNavigation?.(
         view.transform,
-        this._labels?.preview(view.transform, view.width, view.height),
+        this._labels?.preview(
+          view.transform,
+          view.width,
+          view.height,
+          Math.min(1, view.getMapScale()),
+        ),
       )
     ) {
       this._clearFastTransform();
       const { mx, my, bx, by } = view.transform;
       this._paintedTransform = { mx, my, bx, by };
       if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
+      // Healthy camera replay refines geometry only after input pauses.
+      this._cancelNavigationRefresh();
       this._refreshNavigationSoon();
     } else {
       // A slow/unknown sample must not lock out the very frames that can replace
@@ -577,6 +590,7 @@ export class CanvasRenderService {
         view.height,
         window.devicePixelRatio || 1,
         this._navSnapshotTransform !== null && !!this._painter.renderNavigation,
+        Math.min(1, view.getMapScale()),
       ),
     );
   }
@@ -590,6 +604,7 @@ export class CanvasRenderService {
       lineScale,
       visibleKeys,
       this.deps.layers._featureMaskForPick,
+      this.deps.view._viewport.geometryLodTolerance,
     );
   }
 

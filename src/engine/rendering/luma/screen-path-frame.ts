@@ -3,8 +3,8 @@ import type { Rect } from '../../../integrations/luma/types';
 /** A source-anchored, conservative detail frame for half-device-pixel paths.
  * Panning changes only the final projection, not these vertex buffers. A level
  * is never coarser than the requested physical resolution; eight levels per
- * octave keep overdraw/storage overhead bounded. This changes snapping phase,
- * not the original source coordinates or the half-pixel approximation bound.
+ * octave keep overdraw/storage overhead bounded. Cells select interior vertices;
+ * retained coordinates and path endpoints keep their source positions.
  */
 export function screenPathFrame(
   view: AffineTransform,

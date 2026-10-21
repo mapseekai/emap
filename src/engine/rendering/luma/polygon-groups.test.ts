@@ -20,6 +20,41 @@ const part = (
 const signal = () => new AbortController().signal;
 
 describe('polygon presentation dependencies', () => {
+  it('keeps replacement strokes independent when their identical resident fill is retained', async () => {
+    const fill = partition([0, 0]),
+      lines = partition([0, 1]),
+      stable = { ...part('fill', fill, 0, [0, 1]), stableFill: true };
+    expect(
+      await polygonPresentationGroups(
+        [stable, part('path', lines, 0, [0]), part('path', lines, 1, [~1])],
+        [stable, part('path', lines, 0, [0]), part('path', lines, 1, [~1])],
+        [[[0]], [[~1]]],
+        signal(),
+      ),
+    ).toEqual([
+      { targets: [0], previous: [0] },
+      { targets: [1], previous: [1] },
+      { targets: [2], previous: [2] },
+    ]);
+  });
+  it('does not bridge changing fill chunks through a stable fill covering the same features', async () => {
+    const fill = partition([0, 0]),
+      changed = partition([0, 1]),
+      lines = partition([0, 1]),
+      stable = { ...part('fill', fill, 0, [0, 1]), stableFill: true };
+    const frame = () => [
+      stable,
+      part('fill', changed, 0, [0]),
+      part('fill', changed, 1, [1]),
+      part('path', lines, 0, [0]),
+      part('path', lines, 1, [~1]),
+    ];
+    expect(await polygonPresentationGroups(frame(), frame(), [[[0]], [[~1]]], signal())).toEqual([
+      { targets: [0], previous: [0] },
+      { targets: [1, 3], previous: [1, 3] },
+      { targets: [2, 4], previous: [2, 4] },
+    ]);
+  });
   it('pairs feature chunks with their actual arc chunks and keeps independent areas progressive', async () => {
     const f = partition([0, 1]),
       s = partition([7, 3]);

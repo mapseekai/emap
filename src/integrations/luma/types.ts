@@ -17,6 +17,8 @@ export interface GeometryBuffer {
   vertices: Float32Array;
   indices?: Uint16Array | Uint32Array;
   count: number;
+  /** Synchronous derived screen paths use the same source-anchored frame as Worker chunks. */
+  screenView?: readonly [number, number, number, number];
 }
 export type Rgba = [number, number, number, number];
 export type Rect = readonly [number, number, number, number];

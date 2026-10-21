@@ -16,6 +16,7 @@ export interface CachedGeometry {
   preparationBytes: number;
   key: GeometryKey;
   mesh: GpuMesh | null;
+  screenView?: GeometryBuffer['screenView'];
   ranges?: PathRangeIndex;
   bytes: number;
   used: number;
@@ -157,6 +158,7 @@ export class PainterGeometryCache {
         preparationKey: preparedSnapshot,
         preparationBytes,
         mesh,
+        screenView: geometry.screenView,
         ranges,
         bytes,
         used: this.frame,

@@ -51,7 +51,8 @@ for(const gpu of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-2
  expect(state.label.textureUploads).toBe(warm.label.textureUploads);
  const rejected=await page.evaluate(({name,id})=>{const a=window[name],before=JSON.stringify(a.layers);let message='';try{a.setSymbolLayoutProperty(id,'icon-image','unregistered');}catch(e){message=e.message;}return {message,unchanged:before===JSON.stringify(a.layers)};},{name,id:pointId});
  expect(rejected.message).toContain('unregistered');expect(rejected.unchanged).toBe(true);
- // Existing panels now write the canonical layout/paint object, preserving the other channel.
+ // The 2.5D panels write the canonical layout/paint object, preserving the other channel.
+ if(route==='luma-25d') {
  await page.locator('#label-settings>summary').click();await page.locator('#label-owner').selectOption(pointId);
  await page.locator('#label-size').fill('22');await page.locator('#label-size').dispatchEvent('change');await settle(page,name);
  expect(await page.evaluate(({name,id})=>window[name].layers.find(l=>l.id===id).symbol.layout['text-size'],{name,id:pointId})).toBe(22);
@@ -62,6 +63,7 @@ for(const gpu of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-2
  const other=native.find(l=>l.type!=='circle').id;await page.locator('#label-owner').selectOption(other);
  expect(JSON.parse(await page.locator('#label-symbol-json').textContent())).toEqual(await page.evaluate(({name,id})=>window[name].layers.find(l=>l.id===id).symbol,{name,id:other}));
  await page.locator('#label-owner').selectOption(pointId);
+ }
  await page.screenshot({path:info.outputPath('symbol-mapping.png')});
  await page.evaluate(name=>window[name].dispose(),name);expect(errors).toEqual([]);
  console.log('SYMBOL_MAPPING',JSON.stringify({gpu,route,pixelEquivalent:true,geometryUploads:warm.gpu.uploads,unchangedAtlas:true}));
@@ -87,21 +89,21 @@ test('public Emap addLayer symbol maps settings with no new layer, keeps parent 
 
 
 test('local image URLs live as long as their named symbol resource, not only its visible icon',async({page})=>{
- await page.goto('/mapseekai/emap/examples/luma-benchmark/?nav=off');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-25d/');await page.waitForFunction(()=>window.luma25d&&['idle','ready'].includes(luma25d.state));
  await page.locator('#file-input').setInputFiles({name:'points.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify({...data,features:data.features.slice(0,2)}))});
- await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));await page.waitForFunction(()=>lumaBenchmark.state==='ready');
+ await page.waitForFunction(()=>luma25d.state==='ready');
  await page.locator('#icon-settings>summary').click();
  await page.locator('#icon-file').setInputFiles({name:'pin.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="blue"/></svg>')});
- await settle(page,'lumaBenchmark');
- const image=await page.evaluate(()=>{const l=lumaBenchmark.layers[0],name=l.symbol.layout['icon-image'];return {id:l.id,name,url:l.symbol.images[name].url};});
+ await settle(page,'luma25d');
+ const image=await page.evaluate(()=>{const l=luma25d.layers[0],name=l.symbol.layout['icon-image'];return {id:l.id,name,url:l.symbol.images[name].url};});
  expect(image.url.startsWith('blob:')).toBe(true);
- await page.evaluate(({id})=>{lumaBenchmark.setSymbolLayoutProperty(id,'icon-image',null);lumaBenchmark.draw('luma');},image);
- await page.waitForFunction(()=>lumaBenchmark.iconStats.images===0);
+ await page.evaluate(({id})=>{luma25d.setSymbolLayoutProperty(id,'icon-image',null);luma25d.draw('luma');},image);
+ await page.waitForFunction(()=>luma25d.iconStats.images===0);
  // Allow the normal UI refresh that used to revoke still-declared resources.
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  expect(await page.evaluate(async({url})=>{try{return (await fetch(url)).ok;}catch{return false;}},image)).toBe(true);
- await page.evaluate(({id,name})=>lumaBenchmark.setSymbolLayoutProperty(id,'icon-image',name),image);await settle(page,'lumaBenchmark');
- expect(await page.evaluate(()=>lumaBenchmark.iconStats.errors)).toEqual([]);expect(await page.evaluate(()=>lumaBenchmark.iconStats.images)).toBe(1);
- await page.evaluate(()=>lumaBenchmark.dispose());
+ await page.evaluate(({id,name})=>luma25d.setSymbolLayoutProperty(id,'icon-image',name),image);await settle(page,'luma25d');
+ expect(await page.evaluate(()=>luma25d.iconStats.errors)).toEqual([]);expect(await page.evaluate(()=>luma25d.iconStats.images)).toBe(1);
+ await page.evaluate(()=>luma25d.dispose());
  expect(await page.evaluate(async({url})=>{try{return (await fetch(url)).ok;}catch{return false;}},image)).toBe(false);
 });

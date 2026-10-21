@@ -296,8 +296,8 @@ export class GpuTextRenderer {
         at = i * 10;
       data[at] = l.x;
       data[at + 1] = l.y;
-      data[at + 2] = r.width;
-      data[at + 3] = r.height;
+      data[at + 2] = r.width * (l.scale ?? 1);
+      data[at + 3] = r.height * (l.scale ?? 1);
       data[at + 4] = Math.cos(l.angle);
       data[at + 5] = Math.sin(l.angle);
       data[at + 6] = x / source.canvas.width;

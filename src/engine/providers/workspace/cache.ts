@@ -87,6 +87,7 @@ export class WorkspaceCache {
       () => this.deps.view._viewport.transform,
       () => ({ width: this.deps.view._viewport.width, height: this.deps.view._viewport.height }),
       () => this.deps.view._viewport.initialMX,
+      () => this.deps.view._viewport.geometryLodTolerance,
     );
   }
 }

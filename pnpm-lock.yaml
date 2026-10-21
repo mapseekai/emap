@@ -20,7 +20,8 @@ overrides:
   webpack-dev-server>compression: 1.8.2
 
 patchedDependencies:
-  '@luma.gl/webgl@10.0.0-alpha.4': 741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de
+  '@luma.gl/webgl@10.0.0-alpha.4': 6f38e3e2ff59f6c3b67892afc9318bfa8a3ee9cf0515019eb84fe27d7216e1d5
+  '@luma.gl/webgpu@10.0.0-alpha.4': dec97a40e2b0393132b21a105263e97d233e7c9bb7d19b8a0df91fb74aa638ef
   apache-arrow@17.0.0: f4a2f3a4aa360f366808f6ed229209c19761b8d49412347605ff3d36e7a5e7ab
   braces@3.0.3: f88eda1747e35c8c157c88eb89a7c0a760eb9755da8a4186e5f3841070c5ab11
   http-cache-semantics@4.2.0: ef2cae195cf74cc0a615d306758a9273895e19930632e9b29addea2b924c1dc4
@@ -42,10 +43,10 @@ importers:
         version: 10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4)
       '@luma.gl/webgl':
         specifier: 10.0.0-alpha.4
-        version: 10.0.0-alpha.4(patch_hash=741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de)(@luma.gl/core@10.0.0-alpha.4)
+        version: 10.0.0-alpha.4(patch_hash=6f38e3e2ff59f6c3b67892afc9318bfa8a3ee9cf0515019eb84fe27d7216e1d5)(@luma.gl/core@10.0.0-alpha.4)
       '@luma.gl/webgpu':
         specifier: 10.0.0-alpha.4
-        version: 10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4)(@luma.gl/shadertools@10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4))
+        version: 10.0.0-alpha.4(patch_hash=dec97a40e2b0393132b21a105263e97d233e7c9bb7d19b8a0df91fb74aa638ef)(@luma.gl/core@10.0.0-alpha.4)(@luma.gl/shadertools@10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4))
       '@mapseekai/tasklane':
         specifier: 0.2.0-beta.2
         version: 0.2.0-beta.2
@@ -10676,13 +10677,13 @@ snapshots:
       '@math.gl/core': 5.0.0-alpha.15
       '@math.gl/types': 5.0.0-alpha.18
 
-  '@luma.gl/webgl@10.0.0-alpha.4(patch_hash=741587d3917896b3c53c76aebe9eea6ed3829f40ad5988912489bf82c755d0de)(@luma.gl/core@10.0.0-alpha.4)':
+  '@luma.gl/webgl@10.0.0-alpha.4(patch_hash=6f38e3e2ff59f6c3b67892afc9318bfa8a3ee9cf0515019eb84fe27d7216e1d5)(@luma.gl/core@10.0.0-alpha.4)':
     dependencies:
       '@luma.gl/core': 10.0.0-alpha.4
       '@math.gl/types': 5.0.0-alpha.18
       '@probe.gl/env': 4.1.2
 
-  '@luma.gl/webgpu@10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4)(@luma.gl/shadertools@10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4))':
+  '@luma.gl/webgpu@10.0.0-alpha.4(patch_hash=dec97a40e2b0393132b21a105263e97d233e7c9bb7d19b8a0df91fb74aa638ef)(@luma.gl/core@10.0.0-alpha.4)(@luma.gl/shadertools@10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4))':
     dependencies:
       '@luma.gl/core': 10.0.0-alpha.4
       '@luma.gl/shadertools': 10.0.0-alpha.4(@luma.gl/core@10.0.0-alpha.4)

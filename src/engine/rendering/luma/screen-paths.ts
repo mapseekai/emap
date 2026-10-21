@@ -48,7 +48,7 @@ export const emptyScreenPathStats = (): ScreenPathStats => ({
 export interface ScreenPathPacket {
   /** GPU coordinates are CSS pixels, never source coordinates. */
   geometry: GeometryBuffer;
-  /** Canvas command coordinates are physical device pixels; do not snap them twice. */
+  /** Canvas command coordinates retain source precision in physical device pixels. */
   coordinates: Float64Array;
   offsets: Uint32Array;
   /** Stable original arc identity per retained path, including collapsed arcs. */
@@ -82,7 +82,7 @@ export function validateScreenPathRequest(r: ScreenPathRequest): void {
     throw new Error('Invalid perspective screen-filter request');
 }
 /** Match CanvasPainter._traceSnapped/drawPathSnapping without touching source arcs.
- * Only consecutive equal half-device-pixel commands are dropped (A-B-A is retained).
+ * Half-device-pixel cells drop consecutive interior duplicates, retaining exact endpoints.
  * Overflow falls back to the original GPU chunk, rather than wrapping distant coordinates.
  */
 export function buildScreenPaths(
@@ -168,9 +168,11 @@ export function buildScreenPaths(
     }
     const path: Point[] = [];
     let lastX = NaN,
-      lastY = NaN;
+      lastY = NaN,
+      x = NaN,
+      y = NaN;
     for (let i = start; i < end; i++) {
-      let [x, y] = perspective?.active
+      [x, y] = perspective?.active
         ? perspective.project(xx[i], yy[i])
         : pixelView.project(xx[i], yy[i]);
       if (perspective?.active) {
@@ -182,22 +184,27 @@ export function buildScreenPaths(
         // Canvas uses ToInt32, not Math.round/floor; preserve negative-coordinate truncation.
         if (x * 2 < -2147483648 || x * 2 > 2147483647 || y * 2 < -2147483648 || y * 2 > 2147483647)
           return fallback();
-        x = ((x * 2) | 0) / 2;
-        y = ((y * 2) | 0) / 2;
-        if (path.length && x === lastX && y === lastY) {
+        const cellX = (x * 2) | 0,
+          cellY = (y * 2) | 0;
+        if (path.length && cellX === lastX && cellY === lastY) {
           stats.duplicateVertices++;
           continue;
         }
+        lastX = cellX;
+        lastY = cellY;
       }
       path.push([x / r.pixelRatio, y / r.pixelRatio]);
       coordinates.push(x, y);
-      lastX = x;
-      lastY = y;
+    }
+    if (r.halfPixel && (coordinates.at(-2) !== x || coordinates.at(-1) !== y)) {
+      path.push([x / r.pixelRatio, y / r.pixelRatio]);
+      coordinates.push(x, y);
+      stats.duplicateVertices--;
     }
     if (r.halfPixel && path.length === 1) {
       // Canvas emits a 0.1-device-pixel line when every command collapses; retain its round-cap dot.
-      path.push([(lastX + 0.1) / r.pixelRatio, lastY / r.pixelRatio]);
-      coordinates.push(lastX + 0.1, lastY);
+      path.push([(x + 0.1) / r.pixelRatio, y / r.pixelRatio]);
+      coordinates.push(x + 0.1, y);
       stats.collapsedArcs++;
     }
     paths.push(path);

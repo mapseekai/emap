@@ -124,3 +124,64 @@ it('retains a cheap contiguous crop even when more than eighty percent is visibl
   expect(result.ranges).toEqual([{ firstInstance: 0, count: 90 }]);
   expect(result.rejected).toBe(10);
 });
+
+it('retains conservative join neighbors across a raw range boundary', () => {
+  const path: Point[] = Array.from({ length: 2052 }, (_, i) => [i + 100.123456, 100.987654]);
+  path[1025] = [0, 0];
+  const geometry = pathGeometry([path]),
+    selected = new PathRangeIndex(geometry.pathRanges!, geometry.count).selectBounds([
+      -1, -1, 1, 1,
+    ]);
+  // Instances 1023 and 1026 only touch the view through their join-neighbor records.
+  for (const first of [1023, 1024, 1025, 1026])
+    expect(
+      selected.ranges!.some(
+        (range) => range.firstInstance <= first && range.firstInstance + range.count > first,
+      ),
+    ).toBe(true);
+  expect(selected.ranges!.at(-1)!.firstInstance + selected.ranges!.at(-1)!.count).toBeLessThan(
+    geometry.count,
+  );
+});
+
+it('keeps visible and uncullable instances ordered within a bounded aggregate draw budget', () => {
+  let draws = 0;
+  for (const offset of [0, 256, 512]) {
+    const count = 65536,
+      segments = Uint32Array.from({ length: count }, (_, i) => (i % 5 === 4 ? 0 : 1)),
+      bounds = new Float64Array(count * 4),
+      uncullable = new Uint8Array(count);
+    for (let i = 0; i < count; i++)
+      bounds.set(i % 1536 === offset ? [0, 0, 1, 1] : [100, 100, 101, 101], i * 4);
+    uncullable[count - 1] = 1;
+    const selected = new PathRangeIndex(
+      { blockSize: 1, segments, bounds, uncullable },
+      count,
+    ).selectBounds([-1, -1, 2, 2]);
+    const ranges = selected.ranges!;
+    draws += ranges.length;
+    expect(ranges.length).toBeLessThanOrEqual(8);
+    for (let i = offset; i < count; i += 1536)
+      if (segments[i])
+        expect(
+          ranges.some((range) => range.firstInstance <= i && range.firstInstance + range.count > i),
+        ).toBe(true);
+    expect(ranges.at(-1)!.firstInstance + ranges.at(-1)!.count).toBe(count);
+    let submitted = 0;
+    for (const [i, range] of ranges.entries()) {
+      if (i)
+        expect(range.firstInstance).toBeGreaterThan(
+          ranges[i - 1].firstInstance + ranges[i - 1].count,
+        );
+      for (
+        let instance = range.firstInstance;
+        instance < range.firstInstance + range.count;
+        instance++
+      )
+        submitted += segments[instance];
+    }
+    expect(selected.segments).toBe(submitted);
+    expect(selected.segments + selected.rejected).toBe(segments.reduce((sum, n) => sum + n, 0));
+  }
+  expect(draws).toBeLessThanOrEqual(24);
+});

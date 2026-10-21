@@ -117,6 +117,57 @@ describe('navigation recovery during a continuous gesture', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('keeps healthy camera replay free of geometry preparation during continuous navigation', () => {
+    const f = fixture();
+    f.render._renderImpl();
+    const before = f.redraws;
+    for (let i = 0; i < 125; i++) f.step();
+    expect(f.replays).toBeGreaterThan(100);
+    expect(f.redraws).toBe(before);
+    f.render.endNavigation();
+    vi.advanceTimersByTime(32);
+    expect(f.redraws).toBe(before + 1);
+    f.render.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('defers prepared-geometry notifications during camera replay without blocking explicit redraws', () => {
+    const f = fixture();
+    f.render._renderImpl();
+    f.step();
+    const before = f.redraws;
+    Reflect.get(f.render, '_schedulePreparedRender').call(f.render);
+    f.step();
+    expect(f.redraws).toBe(before);
+    f.render._scheduleRender();
+    vi.advanceTimersByTime(16);
+    expect(f.redraws).toBe(before + 1);
+    f.render.endNavigation();
+    f.render.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('refreshes paused Canvas2D labels after an adaptive gesture that needed no snapshot redraw', () => {
+    const f = fixture();
+    Reflect.set(f.render._painter, 'renderNavigation', undefined);
+    Reflect.set(f.render, '_labels', {});
+    f.render._scheduler = new RenderScheduler({
+      fullRedraw: () => f.render._renderFull(),
+      requestRedraw: () => f.render._scheduleRender('redraw', undefined, true),
+      fastNav: (delta) => f.render._applyFastTransform(delta),
+      getSnapshot: () => f.render._captureRenderSnapshot(),
+    });
+    f.render._scheduler.recordFrame(5, f.render._captureRenderSnapshot());
+    f.step();
+    expect(f.redraws).toBe(1);
+    const before = f.redraws;
+    f.render.endNavigation();
+    vi.advanceTimersByTime(32);
+    expect(f.redraws).toBe(before + 1);
+    Reflect.set(f.render, '_labels', null);
+    f.render.dispose();
+  });
+
   it('does not pile recovery frames onto a GPU queue that has not completed', () => {
     const f = fixture();
     Object.defineProperty(f.render._painter, 'navigationPending', {

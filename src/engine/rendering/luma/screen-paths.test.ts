@@ -1,10 +1,12 @@
+// @vitest-environment jsdom
 import { PerspectiveTransform } from '../../../domain/geo/perspective-transform';
 import { describe, expect, it } from 'vitest';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { Viewport } from '../../../domain/geo/viewport';
-import { CanvasPainter } from '../canvas-painter';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import { buildScreenPaths, canvasMinArcLength, type ScreenPathRequest } from './screen-paths';
+import { screenPathFrame } from './screen-path-frame';
+import { createCanvasPainterHarness } from '../../../../test/utils/canvas-painter';
 const request = (patch: Partial<ScreenPathRequest> = {}): ScreenPathRequest => ({
   view: [1, -1, 20, 30],
   width: 200,
@@ -27,7 +29,8 @@ function arcs(paths: number[][][]) {
   }
   return i.done().arcs!;
 }
-function canvasCommands(path: number[][], r: ScreenPathRequest) {
+const sourceBounds = [-10, -10, 10, 10] as const;
+function canvasCommands(path: number[][], view: AffineTransform, pixelRatio: number) {
   const commands: number[][] = [];
   let i = 0;
   const iter = {
@@ -43,11 +46,10 @@ function canvasCommands(path: number[][], r: ScreenPathRequest) {
     moveTo: (x: number, y: number) => commands.push([x, y]),
     lineTo: (x: number, y: number) => commands.push([x, y]),
   };
-  const painter = Object.assign(Object.create(CanvasPainter.prototype), {
-    _transform: new AffineTransform(...r.view),
-    _pixelRatio: r.pixelRatio,
-  });
-  Reflect.get(painter, 'drawPathSnapping').call(painter, iter, ctx);
+  const { painter } = createCanvasPainterHarness(ctx, { pixelRatio });
+  painter.setTransform(view);
+  painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, bounds: sourceBounds });
+  Reflect.get(painter, 'drawPathSnapping').call(painter, iter, ctx, true);
   return commands;
 }
 describe('Canvas screen-path parity (not geometry LOD)', () => {
@@ -74,14 +76,23 @@ describe('Canvas screen-path parity (not geometry LOD)', () => {
         [4, -3, 20.17, 11.1],
         [-2, 3, -0.1, -0.2],
       ] as [number, number, number, number][]) {
-        const r = request({ view, pixelRatio: pr });
+        const display = new AffineTransform(...view);
+        const r = request({ view: screenPathFrame(display, sourceBounds, pr), pixelRatio: pr });
+        const frame = new AffineTransform(...r.view);
         const out = buildScreenPaths(source.getVertexData!(), new Uint32Array([0, 1]), r);
         expect(out.fallback).toBe(false);
         for (let i = 0; i < paths.length; i++) {
           const coords = Array.from(
             out.coordinates.subarray(out.offsets[i] * 2, out.offsets[i + 1] * 2),
           );
-          expect(coords).toEqual(canvasCommands(paths[i], r).flat());
+          const expected: number[] = [];
+          for (let j = 0; j < coords.length; j += 2) {
+            const sourcePoint = frame.unproject(coords[j] / pr, coords[j + 1] / pr);
+            expected.push(...display.project(...sourcePoint).map((value) => value * pr));
+          }
+          const actual = canvasCommands(paths[i], display, pr).flat();
+          expect(actual).toHaveLength(expected.length);
+          for (let j = 0; j < actual.length; j++) expect(actual[j]).toBeCloseTo(expected[j], 8);
         }
       }
   });
@@ -121,7 +132,7 @@ describe('Canvas screen-path parity (not geometry LOD)', () => {
     expect([...out.arcIds]).toEqual([1, 2]);
     expect(out.stats.tinyArcs).toBe(1);
   });
-  it('retains the Canvas 0.1-device-pixel stroke when all projected points collapse', () => {
+  it('keeps exact endpoints even when every point falls in the same screen cell', () => {
     const p = [
         [0, 0],
         [0.01, 0.01],
@@ -130,10 +141,13 @@ describe('Canvas screen-path parity (not geometry LOD)', () => {
       r = request({ pixelRatio: 2, view: [1, 1, 0, 0] });
     const source = arcs([p]);
     const out = buildScreenPaths(source.getVertexData!(), new Uint32Array([0]), r);
-    expect([...out.coordinates]).toEqual(canvasCommands(p, r).flat());
-    expect(out.stats.collapsedArcs).toBe(1);
+    expect([...out.coordinates]).toEqual(
+      canvasCommands(p, new AffineTransform(...r.view), r.pixelRatio).flat(),
+    );
+    expect([...out.coordinates]).toEqual([0, 0, 0.04, 0.04]);
+    expect(out.stats.collapsedArcs).toBe(0);
     expect(out.stats.outputSegments).toBe(1);
-    expect(out.stats.duplicateVertices).toBe(2);
+    expect(out.stats.duplicateVertices).toBe(1);
   });
   it('keeps closed rings and A-B-A commands and never changes original storage or retained interval', () => {
     const source = arcs([
@@ -233,10 +247,12 @@ it('filters perspective commands in actual screen pixels, preserving source coor
     r.perspective,
   );
   const expected: number[] = [];
+  let lastCell: number[] = [];
   for (let i = 0; i < raw.xx.length; i++) {
-    const p = camera.project(raw.xx[i], raw.yy[i]).map((v) => Math.trunc(v * r.pixelRatio * 2) / 2);
-    if (!expected.length || p[0] !== expected.at(-2) || p[1] !== expected.at(-1))
-      expected.push(...p);
+    const p = camera.project(raw.xx[i], raw.yy[i]).map((v) => v * r.pixelRatio);
+    const cell = p.map((v) => Math.trunc(v * 2));
+    if (!expected.length || cell[0] !== lastCell[0] || cell[1] !== lastCell[1]) expected.push(...p);
+    lastCell = cell;
   }
   const result = buildScreenPaths(raw, new Uint32Array([0]), r);
   expect(result.fallback).toBe(false);

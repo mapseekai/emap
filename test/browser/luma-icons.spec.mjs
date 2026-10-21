@@ -44,10 +44,12 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
  expect((await page.evaluate(name=>window[name].iconStats,name)).loads).toBe(1);
  await page.evaluate(async name=>{const a=window[name];a.setLayerLabel(a.layers[0].id,{field:'name',fontSize:14});a.draw('luma');await a.settleLabels();a.draw('luma');},name);
  expect((await page.evaluate(name=>window[name].labelPlacements,name)).length).toBeGreaterThan(0);
- await page.locator('#icon-settings summary').click();await expect(page.locator('#icon-owner option')).toHaveCount(1);
- await page.locator('#icon-preset').selectOption('pin');await page.evaluate(async name=>{const a=window[name];a.draw('luma');await a.settleIcons();a.draw('luma');},name);
- expect((await page.evaluate(name=>window[name].iconStats,name)).errors).toEqual([]);
- expect((await page.evaluate(name=>window[name].iconStats,name)).instances).toBe(4);
+ if(route==='luma-25d') {
+  await page.locator('#icon-settings summary').click();await expect(page.locator('#icon-owner option')).toHaveCount(1);
+  await page.locator('#icon-preset').selectOption('pin');await page.evaluate(async name=>{const a=window[name];a.draw('luma');await a.settleIcons();a.draw('luma');},name);
+  expect((await page.evaluate(name=>window[name].iconStats,name)).errors).toEqual([]);
+  expect((await page.evaluate(name=>window[name].iconStats,name)).instances).toBe(4);
+ }
  await page.evaluate(async name=>{const a=window[name];a.draw('luma');await a.settleLabels();a.draw('luma');},name);
  await page.screenshot({path:info.outputPath('point-icons.png')});
  await setIcon(page,name,null);const removed=await page.evaluate(name=>window[name].iconStats,name);expect(removed.images).toBe(0);expect(removed.imageBytes).toBe(0);expect(removed.instances).toBe(0);

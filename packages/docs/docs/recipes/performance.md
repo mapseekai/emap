@@ -2,8 +2,8 @@
 id: performance
 slug: /recipes/performance
 title: 性能
-api: ["Emap", "MapOptions", "SimplifyOptions"]
-examples: ["simplify", "simplify-control", "web-worker", "point-lod", "luma-benchmark"]
+api: ["Emap", "Emap.setGeometryLod", "Emap.setScreenPathFiltering", "MapOptions", "SimplifyOptions"]
+examples: ["simplify", "simplify-control", "web-worker", "point-lod", "geometry-lod", "luma-benchmark"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -74,9 +74,46 @@ await map.ops.simplifyLayer({
 
 ### 显示弧 LOD
 
-`DisplayArcs` 是 source 内部渲染 LOD，无额外参数。弧顶点超过 `500000` 时创建低细节副本：已有阈值保留约 `8%` 顶点，否则按平均线段长度四倍快速简化。`unitsPerPixel > 低细节平均线段长 × 1.5` 时绘制副本，放大时使用完整弧。
+`geometryLod` 控制当前地图的线、面自动显示简化，Canvas2D、WebGL2 和 WebGPU 共用设置。省略时使用 `{ pixelTolerance: 0.5 }`；`false` 关闭自动简化。运行时可直接调整，无需重新加载数据：
 
-每帧将保留阈值设为 `max(retainedInterval, pixelSize × 0.5)`，保留用户简化下限。原地编辑标记显示弧为脏；需要低细节副本时重建。导出临时恢复完整精度。
+```ts
+const map = await Emap.create({
+  container: 'map',
+  geometryLod: { pixelTolerance: 0.5 },
+});
+map.setGeometryLod({ pixelTolerance: 2 }); // 更倾向于简化
+map.setGeometryLod(false); // 恢复源数据允许的细节
+map.setGeometryLod(); // 恢复默认 0.5
+```
+
+`pixelTolerance` 是大于 `0`、不超过 `64` 的 CSS 像素简化强度。已有顶点阈值时，每帧使用 `max(用户手动简化下限, pixelSize × pixelTolerance)`；数值越大，显示细节越少。关闭后仍保留用户已应用的数据简化。绘制、拾取和高亮使用相同 LOD 设置，原始坐标、属性和要素数量不变。
+
+弧顶点超过 `500000` 时，`DisplayArcs` 创建低细节副本：已有阈值保留约 `8%` 顶点，否则按平均线段长度四倍快速简化。副本切换条件为 `unitsPerPixel × (pixelTolerance / 0.5) > 低细节平均线段长 × 1.5`。它不是严格的最大误差保证；未含顶点阈值的小文件不会自动新增逐顶点简化预计算。
+
+微小弧过滤阈值也按 `pixelTolerance / 0.5` 缩放。`geometryLod: false` 跳过低细节副本、自动顶点阈值和微小弧过滤，仍保留视口裁剪。它不改变独立的 `screenPathFiltering` 设置。原地编辑会标记副本为脏并按需重建；导出临时恢复完整精度。
+
+### 屏幕同像素去重
+
+`screenPathFiltering` 默认开启，与几何简化独立。Canvas2D、WebGL2 和 WebGPU 对不透明实线及面描边使用相同的源锚定参考网格：半设备像素网格仅用于合并连续重复的内部顶点，保留折返、原坐标和弧的首尾端点，不把线位置吸附到网格。平移复用参考网格，放大时更新去重精度。小图层和大数据使用同一规则。
+
+GPU 整层线缓存在缩小时可复用物理分辨率不超过请求两倍、且平均每条非空弧不超过两个线段的较细结果，减少逐级重新准备和上传；已有精确级别优先使用。线段数限制避免缩小时保留过多绘制工作。超出条件或放大到缓存精度不足时仍会更新，源坐标和端点保持不变。
+
+```ts
+const map = await Emap.create({
+  container: 'map',
+  geometryLod: false,
+  screenPathFiltering: true,
+});
+map.setScreenPathFiltering(false); // 关闭屏幕去重，几何简化设置不变
+map.setScreenPathFiltering(); // 恢复默认开启
+map.setGeometryLod(false);
+map.setScreenPathFiltering(false); // 两项均关闭：保留源数据允许的完整精度
+```
+
+去重不修改源坐标、要素、导出或几何 LOD 顶点数。虚线、箭头、半透明描边和面填充在两端均保留几何精度，避免改变虚线距离、透明叠加或孔洞。比较性能时，两项设置、数据、视口和 DPR 应保持一致；CPU 提交耗时不能直接当作 GPU 耗时或 FPS。
+
+[线面自动简化示例](/mapseekai/emap/examples/geometry-lod/)提供两个独立开关、简化强度和顶点数对比。首次启用几何简化时，示例才为缺少阈值的数据执行保留 `100%` 顶点的阈值计算；关闭简化导入会直接显示完整精度。
+也支持本地 GeoPackage：可先填写需要导入的表名（逗号分隔），再选择 `.gpkg` 文件；留空导入全部表。导入在 Worker 中完成，文件不会上传。
 
 ### 视口裁剪参数
 
@@ -290,7 +327,7 @@ GPU 缓存数值纹理，shader 负责 NoData-aware 最近邻/双线性、源统
 ## 正式 WebGL2 / WebGPU 的导航与缓存
 
 正式地图选择 `renderer: 'webgl2'` 或 `'webgpu'` 后，这些优化默认启用，不依赖实验示例的私有开关。
-轻量场景平移和缩放使用已驻留 GPU 缓冲按当前相机绘制，并约每 80 ms 合并一次新视口规划。
+轻量场景平移和缩放使用已驻留 GPU 缓冲按当前相机绘制，输入暂停约 80 ms 或手势结束后再规划新视口，连续操作期间不反复准备几何。
 CPU 绘制或异步 GPU 完成延迟超过 33.3 ms 时，导航改为复用已绘制画面，停止后按当前视图重绘；
 不会每个指针事件再次提交密集几何。完成延迟最多每 250 ms 采样一次，包含异步完成与调度延迟，GPU timestamp 单独记录。
 快照期间后台几何、图标和标签完成通知合并到手势结束后的重绘，样式更新和设备恢复仍立即刷新。
@@ -302,12 +339,15 @@ CPU 绘制或异步 GPU 完成延迟超过 33.3 ms 时，导航改为复用已�
 不需要逐个示例安装基准页的开关；微小 arc 与半像素规则仅影响显示，不改写原始拓扑。
 
 稳定视图复用弧段可见性和候选边界准备结果，不再每次命中 GPU mesh 前都重新展平/过滤。
+线描边按整层缓存，用绘制范围索引和 GPU 视口裁剪；平移不会因可见道路变化而重新准备或上传已有几何。面填充的视口边缘仍保留完整空间块。
+关闭屏幕过滤时，不透明实线的 MSAA 路径按空间邻近顺序排列每个准备批次内部的 GPU 数据，使范围裁剪更有效；原始坐标、拓扑、要素顺序和整层呈现保持不变。虚线、箭头、半透明及其他依赖绘制顺序的路径保留原顺序。
 缓存仍检查输入 ID 内容和几何版本，保留原有虚线方向、点密度、图层顺序和选择/编辑语义；
 新增选择缓存计入原有几何预算，不通过放大显存预算换取速度。
 
-首次大数据绘制现在使用稳定空间分块和独立几何 Worker。主线程按时间片复制选中块的 XY，
-Worker 进行三角化和 GPU 数据布局，不再复制整份 source 或属性表。首批就绪即可呈现，
-后续按图层顺序重绘整个可用场景，不重复叠画半透明内容。
+大数据使用独立几何 Worker，主线程按时间片复制有界 XY 批次，Worker 进行三角化和 GPU 数据布局，不复制整份 source 或属性表。
+线描边不按空间网格分区加载，整层准备完成后统一呈现；精度更新期间复用完整旧层，新层全部就绪后统一替换。
+面填充复用同一份缓存时，不再把无关的描边更新绑成一个大交接组；发生几何变更的填充与边界仍成对交接，避免临时显存不足阻塞后续更新。
+内部仍按顶点数和缓冲大小分批准备、上传，避免一次巨额分配。面填充和点保留渐进呈现，按图层顺序重绘整个可用场景，不重复叠画半透明内容。
 图标保留原始重叠顺序；源替换、编辑和取消会清理过期任务。
 
 ```ts
@@ -319,9 +359,10 @@ const map = await Emap.create({
 });
 ```
 
-`screenPathFiltering` 默认对大数据不透明实线开启半设备像素显示过滤，保留源坐标，
-显示边缘允许上述像素近似。虚线、箭头、半透明描边保留原始路径；设为 false 可关闭。
-小图层、临时编辑高亮继续同步绘制。几何 Worker 不受数据操作的 `useWorker` 控制。
+`screenPathFiltering` 在所有渲染器默认对不透明实线及面描边开启半设备像素显示过滤，保留源坐标，
+网格只用于去重判断，保留点及端点不发生网格位移。它与 `geometryLod` 独立，运行时可用 `setScreenPathFiltering(false)` 关闭。
+虚线、箭头、半透明描边和面填充保留几何精度；小图层、临时编辑高亮继续同步绘制。
+几何 Worker 不受数据操作的 `useWorker` 控制。
 
 软几何预算 256 MiB，保护当前可见块但总工作集不超过 512 MiB；超限通过 error 报告，不裁掉要素。
 单个几何包最多两百万 XY 顶点，空间成员索引另有上限。源数据、JS/Worker 临时堆和驱动开销另计，
@@ -354,7 +395,7 @@ GPU 与 Canvas2D 的速度和可容纳规模需在各目标配置上比较。
 空间子块使用紧包围盒；计算批次与小 GPU 缓冲独立，队列和淘汰候选增量维护，渐进刷新按提交成本合并。
 不透明实线使用源坐标锚点和不低于请求分辨率的精度档位。已有覆盖内的平移只更新投影，
 不重建这些屏幕缓冲；进入新区域、成员/版本/显示精度变化时继续准备。
-显示误差保持半设备像素上限；网格相位变化可产生与旧版描边不同的边缘像素。
+网格只选择内部顶点，保留原坐标及首尾端点；缩放切换精度时，道路交点不会随网格相位移动。
 `screenPathFiltering: false` 关闭这种显示近似；源拓扑、导出和编辑仍使用原始坐标。
 同一几何的元数据注册复用 DisplayArcs，避免刚导入又重复构建低细节副本。
 
