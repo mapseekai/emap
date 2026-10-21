@@ -7,11 +7,15 @@ import type {
   MapshaperLayer,
   ArcCollection,
   FeatureShape,
+  PathShape,
 } from '../../../shared/types/mapshaper-types';
 import { getDefaultMapshaperAdapter } from '../../../integrations/mapshaper/adapter';
 import type { EditHandlerHost } from './edit-handler-host';
 import { EMAP_THEME_COLORS } from '../../../ui/theme/colors';
 import { markShapeCountChanged } from '../../../domain/edit/commands/_shared';
+import { Err } from '../../map/op-result';
+import { validatePolygon } from '../../map/ops/geometry-2d';
+import { SplitGeometryValidationError } from '../../map/ops/split-selected-error';
 
 export type DrawGeometryType = 'polygon' | 'polyline' | 'point';
 
@@ -355,17 +359,12 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     if (!layer) return;
     const layerIndex = dataset.layers.indexOf(layer);
 
-    if (!layer.shapes) {
-      layer.shapes = [];
-    }
-
     let appendedShape: FeatureShape;
     let arcVertices: [number, number][] | undefined;
     let arcs: ArcCollection | undefined;
 
     if (this._opts.type === 'point') {
       appendedShape = [this._vertices[0]];
-      layer.shapes.push(appendedShape);
     } else {
       // Polyline or polygon: create new arc
       arcVertices =
@@ -379,10 +378,44 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
         return;
       }
 
+      if (this._opts.type === 'polygon') {
+        const adapter = getDefaultMapshaperAdapter();
+        try {
+          if (!arcVertices.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)))
+            throw new SplitGeometryValidationError(
+              'geometry',
+              'polygon coordinates must be finite',
+            );
+          // Normalize a detached shell so shared arcs and the redo snapshot stay consistent.
+          const importer = adapter.createPathImporter({ type: 'polygon' });
+          importer.startShape();
+          importer.importRing(arcVertices, false);
+          const normalized = importer.done();
+          const shape = normalized.layers[0]?.shapes?.[0] as PathShape | null;
+          if (!normalized.arcs || !shape)
+            throw new SplitGeometryValidationError(
+              'geometry',
+              'polygon must enclose a non-zero area',
+            );
+          validatePolygon(shape, normalized.arcs, adapter);
+          arcVertices = adapter.exportPathData(shape, normalized.arcs, 'polygon').pathData[0]!
+            .points;
+        } catch (error) {
+          if (!(error instanceof SplitGeometryValidationError)) throw error;
+          this._clearDrawState();
+          this._map.clearEditDrawState();
+          const result = Err.validation('geometry', error.reason);
+          if (!result.ok) this._map.fire('error', { error: result.error });
+          this._map.render();
+          return;
+        }
+      }
+
       const newArcId = this._appendArc(arcs, arcVertices);
       appendedShape = [[newArcId]];
-      layer.shapes.push(appendedShape);
     }
+
+    (layer.shapes ??= []).push(appendedShape);
 
     // Add empty record to data table
     let appendedRecord: Record<string, unknown> | null = null;

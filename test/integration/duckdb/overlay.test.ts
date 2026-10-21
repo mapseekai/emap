@@ -11,6 +11,8 @@ import {
 } from '../../../src/integrations/duckdb/runtime';
 import { difference, intersect } from '../../../src/integrations/duckdb/overlay/index';
 import { OVERLAY_OPERATIONS } from '../../../src/integrations/duckdb/overlay/_shared';
+import { createPolygonDrawing } from '../../utils/drawn-polygon';
+import type { PathShape } from '../../../src/shared/types/mapshaper-types';
 
 const INPUT_FC = {
   type: 'FeatureCollection',
@@ -101,6 +103,26 @@ async function runtimeFor(dataset: MapshaperDataset): Promise<CaptureRuntime> {
 }
 
 describe('DuckDB overlay operations', () => {
+  it('rejects an invalid legacy mask before executing SQL without mutating its rings', async () => {
+    const input = await inputDataset();
+    const mask = await maskDataset();
+    const layer = mask.layers[0]!;
+    layer.name = 'legacy-mask';
+    layer.shapes![0] = (layer.shapes![0] as PathShape).map((ring) =>
+      ring
+        .slice()
+        .reverse()
+        .map((id) => ~id),
+    );
+    const before = structuredClone(layer.shapes);
+    const runtime = await runtimeFor(input);
+    await expect(intersect(input, mask, {}, runtime)).rejects.toMatchObject({
+      cause: { cause: { message: expect.stringMatching(/legacy-mask.*feature 0.*ring/i) } },
+    });
+    expect(runtime.connection.queries).toEqual([]);
+    expect(layer.shapes).toEqual(before);
+  });
+
   it('defines the canonical intersect and difference descriptors', () => {
     expect(OVERLAY_OPERATIONS).toEqual({
       intersect: { id: 'intersect', duckDbFunction: 'ST_Intersection' },
@@ -314,6 +336,38 @@ const bound = {
 };
 
 describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
+  it.each([
+    false,
+    true,
+  ])('clips with a freshly drawn mask in either direction (reverse=%s), including redo and persistence', async (reverse) => {
+    const { source, host, draw } = await createPolygonDrawing();
+    const points: [number, number][] = [
+      [0, 0],
+      [5, 0],
+      [5, 10],
+      [0, 10],
+    ];
+    draw(reverse ? points.reverse() : points);
+    const input = await polygonDataset('EPSG:4326');
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const result = await bound.intersect(input, source.getDataset()!);
+      expect(result.layers[0]?.shapes).toHaveLength(1);
+      expect(records(result)).toEqual([{ id: 1, name: 'keep' }]);
+      expect(firstRingCoordinateKeys(result)).toEqual(
+        expect.arrayContaining(['0,0', '5,0', '5,10', '0,10']),
+      );
+      const adapter = getDefaultMapshaperAdapter();
+      const file = adapter.exportFileContent(result, { format: 'topojson' })[0]!;
+      const reopened = await adapter.runImport('-i result.topojson', {
+        'result.topojson': String(file.content),
+      });
+      expect(reopened.layers[0]?.shapes).toHaveLength(1);
+      expect(records(reopened)).toEqual([{ id: 1, name: 'keep' }]);
+      host._history.undo();
+      host._history.redo();
+    }
+  }, 60_000);
+
   it('clips polygon geometry with the mask, preserves input attributes, and inherits input CRS', async () => {
     const input = await polygonDataset('EPSG:26910');
     const mask = await integrationMaskDataset('EPSG:26910');
