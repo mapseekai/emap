@@ -21,7 +21,8 @@ const catalogCopy = {
   en: {
     title: 'Emap Documentation Example',
     eyebrow: 'Emap examples',
-    intro: 'Open an example by task: load data, style it, query and edit, analyze geometry, or run DuckDB.',
+    intro:
+      'Open an example by task: load data, style it, query and edit, analyze geometry, or run DuckDB.',
     catalogLabel: 'Example catalog',
     allCategories: 'All',
     languageLabel: 'Language',
