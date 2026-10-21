@@ -1,4 +1,5 @@
 import { DuckDbRuntimeScope } from './runtime-scope';
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { tableFromArrays, tableFromIPC, type Table } from 'apache-arrow';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -261,6 +262,40 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:duckdb-worker');
   });
 
+  it('serializes a connection through cancelled-query cleanup before starting the next query', async () => {
+    const runtime = await makeRuntime();
+    const connection = await runtime.connect();
+    const raw = FakeAsyncDuckDB.instances[0]!.connections[0];
+    let acknowledge!: (value: boolean) => void;
+    const bindings = {
+      startPendingQuery: vi.fn(async () => null),
+      cancelPendingQuery: vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            acknowledge = resolve;
+          }),
+      ),
+    };
+    (raw as unknown as Pick<AsyncDuckDBConnection, 'useUnsafe'>).useUnsafe = (callback) =>
+      callback(bindings as never, 7);
+    const controller = new AbortController();
+    bindings.startPendingQuery.mockImplementation(async () => {
+      controller.abort();
+      return null;
+    });
+    const cancelled = connection.query('long', controller.signal);
+    const failed = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+    const next = connection.query('next');
+    await vi.waitFor(() => expect(bindings.cancelPendingQuery).toHaveBeenCalledOnce());
+    expect(raw.queries).toEqual([]);
+    acknowledge(true);
+    await failed;
+    await next;
+    expect(raw.queries).toEqual(['next']);
+    await connection.close!();
+    expect(raw.closed).toBe(true);
+  });
+
   it('runs INSTALL spatial and LOAD spatial only once', async () => {
     const runtime = await makeRuntime();
 
@@ -271,6 +306,34 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     expect(db.connections).toHaveLength(1);
     expect(db.connections[0]?.queries).toEqual(['INSTALL spatial; LOAD spatial;']);
     expect(db.connections[0]?.closed).toBe(true);
+  });
+
+  it('keeps the Worker script URL alive until initialization finishes', async () => {
+    const duckdb = fakeDuckDbModule();
+    const revoke = vi.fn();
+    let finish!: () => void;
+    const instantiate = vi.spyOn(FakeAsyncDuckDB.prototype, 'instantiate').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    try {
+      const pending = createDuckDbRuntimeFromJsDelivr({
+        duckdb,
+        workerFactory: () => ({ terminate: vi.fn() }) as unknown as Worker,
+        createObjectURL: () => 'blob:initializing-worker',
+        revokeObjectURL: revoke,
+      });
+      await vi.waitFor(() => expect(instantiate).toHaveBeenCalledOnce());
+      expect(revoke).not.toHaveBeenCalled();
+      finish();
+      const runtime = await pending;
+      expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:initializing-worker');
+      await runtime.close!();
+    } finally {
+      instantiate.mockRestore();
+    }
   });
 
   it('sets a custom extension repository before loading spatial', async () => {

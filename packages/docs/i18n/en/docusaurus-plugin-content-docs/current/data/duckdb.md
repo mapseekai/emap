@@ -146,6 +146,28 @@ const result = await duckDbToolbox.execute('buffer', {
 
 Tool definitions include inputs, parameters, CRS/units, outputs, cost, and agent metadata.
 
+### Cancel one tool run
+
+Pass the caller signal as `DuckDbToolExecutionContext.signal`, or `options.signal` when calling a processing function directly:
+
+```ts
+const controller = new AbortController();
+const work = duckDbToolbox.execute('buffer', {
+  inputs: { input: roads }, params: { distance: 50 }, runtime,
+  signal: controller.signal,
+});
+controller.abort();
+try { await work; } catch (error) {
+  if (error !== controller.signal.reason) throw error;
+}
+```
+
+`signal.aborted` indicates logical cancellation. The returned Promise finishes after pending-query cancellation is acknowledged, in-flight polling/result reads finish, temporary tables are dropped and the connection closes. It normally rejects with the signal's reason. Await it before retrying with a new controller. A cleanup failure includes the cleanup error and must not be treated as confirmation that retry is safe.
+
+Runtime connections use DuckDB's pending-query API for `query(sql, signal?)` when a signal is supplied. Cancellation stops further polling and consumption, waits for the current request and cancellation acknowledgement, and releases the Arrow reader. Queries, inserts and close calls on one connection run in order, so an old signal cannot cancel the next query. Ordinary cancellation affects only that operation's connection; other connections and the shared runtime remain usable. Custom `DuckDbRuntime` implementations must implement the query signal contract themselves; outer checks can only suppress results when an implementation ignores the signal.
+
+Shared runtime initialization and spatial-extension loading belong to the runtime. A cancelled operation waits for shared initialization already in progress, then skips its connection/query without closing the database. Synchronous Arrow preparation and Dataset conversion cannot be preempted by a signal either. `runtime.close()` releases the database for its owner and is not a per-query cancel API.
+
 
 ## More GeoParquet queries
 

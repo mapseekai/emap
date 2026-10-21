@@ -1,4 +1,6 @@
 import { tableToIPC, type Table } from 'apache-arrow';
+import { runPendingQuery } from './pending-query';
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 
 /**
  * @example
@@ -6,7 +8,8 @@ import { tableToIPC, type Table } from 'apache-arrow';
  */
 export interface DuckDbConnection {
   insertArrowTable(table: Table, opts: { name: string }): Promise<void>;
-  query(sql: string): Promise<Table>;
+  /** With a signal, completion includes pending-query cancellation and result cleanup. */
+  query(sql: string, signal?: AbortSignal): Promise<Table>;
   close?(): Promise<void>;
 }
 
@@ -67,6 +70,7 @@ type DuckDbWasmConnectionLike = {
     opts: { name: string; create?: boolean },
   ): Promise<void>;
   query(sql: string): Promise<Table>;
+  useUnsafe: AsyncDuckDBConnection['useUnsafe'];
   close(): Promise<void>;
 };
 
@@ -140,30 +144,23 @@ function createJsDelivrWorkerUrl(
 async function createDuckDbWorker(
   workerScriptUrl: string,
   opts: CreateDuckDbRuntimeOptions,
-): Promise<Worker> {
-  if (opts.workerFactory) {
-    const createObjectURL = opts.createObjectURL ?? URL.createObjectURL.bind(URL);
-    const revokeObjectURL = opts.revokeObjectURL ?? URL.revokeObjectURL.bind(URL);
-    const workerUrl = createJsDelivrWorkerUrl(workerScriptUrl, createObjectURL);
-    try {
-      return await opts.workerFactory(workerUrl);
-    } finally {
-      revokeObjectURL(workerUrl);
-    }
+): Promise<{ worker: Worker; revoke: () => void }> {
+  if (!opts.workerFactory && typeof Worker === 'undefined') {
+    throw new Error(
+      `DuckDB-Wasm jsDelivr runtime requires a browser Worker or a workerFactory option for ${workerScriptUrl}`,
+    );
   }
-
-  if (typeof Worker !== 'undefined') {
-    const workerUrl = createJsDelivrWorkerUrl(workerScriptUrl, URL.createObjectURL.bind(URL));
-    try {
-      return new Worker(workerUrl);
-    } finally {
-      URL.revokeObjectURL(workerUrl);
-    }
+  const createObjectURL = opts.createObjectURL ?? URL.createObjectURL.bind(URL);
+  const revokeObjectURL = opts.revokeObjectURL ?? URL.revokeObjectURL.bind(URL);
+  const workerUrl = createJsDelivrWorkerUrl(workerScriptUrl, createObjectURL);
+  const revoke = () => revokeObjectURL(workerUrl);
+  try {
+    const worker = opts.workerFactory ? await opts.workerFactory(workerUrl) : new Worker(workerUrl);
+    return { worker, revoke };
+  } catch (error) {
+    revoke();
+    throw error;
   }
-
-  throw new Error(
-    `DuckDB-Wasm jsDelivr runtime requires a browser Worker or a workerFactory option for ${workerScriptUrl}`,
-  );
 }
 
 function terminateWorker(worker: Worker): void {
@@ -206,11 +203,12 @@ export async function createDuckDbRuntimeFromJsDelivr(
   if (!bundle.mainWorker) {
     throw new Error('Selected DuckDB-Wasm bundle does not include a worker script');
   }
-  const worker = await createDuckDbWorker(bundle.mainWorker, opts);
+  const { worker, revoke } = await createDuckDbWorker(bundle.mainWorker, opts);
   let db: DuckDbWasmDatabaseLike;
   try {
     db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
   } catch (err) {
+    revoke();
     terminateWorker(worker);
     throw err;
   }
@@ -220,6 +218,9 @@ export async function createDuckDbRuntimeFromJsDelivr(
   } catch (err) {
     await terminateDuckDbAfterFailure(db, worker);
     throw err;
+  } finally {
+    // WebKit can still be loading the Blob URL after the Worker constructor returns.
+    revoke();
   }
 
   let spatialReady: Promise<void> | null = null;
@@ -302,18 +303,30 @@ export async function createDuckDbRuntimeFromJsDelivr(
     async connect(): Promise<DuckDbConnection> {
       assertOpen();
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
+      let pending = Promise.resolve();
+      function serial<T>(run: () => Promise<T>): Promise<T> {
+        const result = pending.then(run);
+        pending = result.then(
+          () => {},
+          () => {},
+        );
+        return result;
+      }
       return {
         insertArrowTable(table, insertOpts) {
-          return conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), {
-            name: insertOpts.name,
-            create: true,
-          });
+          return serial(() =>
+            conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), {
+              name: insertOpts.name,
+              create: true,
+            }),
+          );
         },
-        query(sql) {
-          return conn.query(sql);
+        async query(sql, signal) {
+          signal?.throwIfAborted();
+          return serial(() => (signal ? runPendingQuery(conn, sql, signal) : conn.query(sql)));
         },
         close() {
-          return conn.close();
+          return serial(() => conn.close());
         },
       };
     },

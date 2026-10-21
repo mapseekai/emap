@@ -101,6 +101,7 @@ export async function runAttribute(
   return runAttributeTool(
     input,
     {
+      signal: options.signal,
       layer: options.layer,
       outputLayer: options.outputLayer,
       geometryColumn: options.geometryColumn,

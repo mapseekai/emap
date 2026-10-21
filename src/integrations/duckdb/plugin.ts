@@ -23,11 +23,16 @@ export function duckDbPlugin(options: DuckDbRuntimeOptions = {}): Plugin.Object 
         yield ctx.provide('duckDb', runtime);
         yield ctx.provide('duckDbProcessing', {
           async execute(id, input) {
-            signal.throwIfAborted();
+            const operationSignal = input.signal ? AbortSignal.any([signal, input.signal]) : signal;
+            operationSignal.throwIfAborted();
             const active = await runtime.get();
-            signal.throwIfAborted();
-            const result = await duckDbToolbox.execute(id, { ...input, runtime: active });
-            signal.throwIfAborted();
+            operationSignal.throwIfAborted();
+            const result = await duckDbToolbox.execute(id, {
+              ...input,
+              runtime: active,
+              signal: operationSignal,
+            });
+            operationSignal.throwIfAborted();
             return result;
           },
         });

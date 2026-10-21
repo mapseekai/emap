@@ -12,6 +12,7 @@ import { type DuckDbRuntime } from '../../runtime';
 import { buildAttributeSql } from '../sql/attribute';
 
 export interface AttributeRunnerOptions {
+  signal?: AbortSignal;
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
@@ -35,6 +36,7 @@ export async function runAttributeTool(
   operation: AttributeOperation,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const requestedOutputColumn = opts.outputColumn ?? `duckdb_${operation.id}`;
@@ -51,6 +53,7 @@ export async function runAttributeTool(
   return runPipeline({
     label: operation.id,
     runtime: rt,
+    signal: opts.signal,
     inputs: [{ table: input, prefix: 'emap_duckdb_attribute_input' }],
     buildSql: ([tableName]) =>
       buildAttributeSql({

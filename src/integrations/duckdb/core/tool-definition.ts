@@ -100,6 +100,7 @@ export interface DuckDbToolExecutionContext {
   inputs: Readonly<Record<string, MapshaperDataset>>;
   params?: Readonly<Record<string, unknown>>;
   runtime?: DuckDbRuntime | null;
+  signal?: AbortSignal;
 }
 
 /**
@@ -136,5 +137,6 @@ export function requireToolInput(
 }
 
 export function toolParams<T extends object>(context: DuckDbToolExecutionContext): T {
-  return (context.params ?? {}) as T;
+  context.signal?.throwIfAborted();
+  return { ...context.params, ...(context.signal ? { signal: context.signal } : {}) } as T;
 }
