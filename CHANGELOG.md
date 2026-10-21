@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-21
+
+### Added
+
+- Add per-operation Mapshaper cancellation with `map.ops.withSignal(signal)` and
+  task-specific Worker cancellation, plus optional signals for DuckDB operations,
+  pipelines, and direct connection queries. Settlement waits for physical Worker
+  execution and query resource cleanup before retrying with a fresh controller.
+
+### Fixed
+
+- Normalize newly drawn polygon winding so clipping and hole tools retain valid
+  shells, holes, and islands. Reject orphan rings at Arrow conversion instead of
+  silently returning empty geometry. Existing wrong-winding data requires explicit
+  `cleanLayer({ rewind: true, onlyArcs: true, noArcDissolve: true, allowEmpty: true,
+  noSnap: true })` with the desired source and target; no automatic migration runs.
+- Keep cancellation active through Worker result decoding, release DuckDB's unread
+  remote streams without losing connection or transaction state, and preserve the
+  cancellation reason across CRS alignment and empty-input paths.
+- Isolate task cancellation from siblings and later runs, retain cleanup failures,
+  and release signal listeners after settlement on all supported browsers.
+- Keep WebKit Worker Blob URLs alive through initialization.
+
+### Build
+
+- Preserve type-lint diagnostic assertions under CI's immutable-program inference;
+  update example browser coverage and development dependency security patches.
+
+### Compatibility
+
+- Existing calls without a signal remain valid. Synchronous main-thread algorithms,
+  copying and packing cannot be preempted; shared runtime initialization is also not
+  cancelled by an individual operation. Safari/WebGPU retains the existing deferred
+  acceptance scope.
+
 ## [0.14.3] - 2026-10-19
 
 ### Fixed
