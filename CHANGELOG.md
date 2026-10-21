@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Preserve type-lint diagnostic assertions under CI's immutable-program inference;
   update example browser coverage and development dependency security patches.
+- Reuse the browser-patched Mapshaper vendor in the DuckDB ESM entry so browser
+  pre-bundlers can import its published APIs without activating Node require helpers.
 
 ### Compatibility
 
