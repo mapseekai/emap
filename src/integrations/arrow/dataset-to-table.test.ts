@@ -4,6 +4,8 @@ import { fromArrowTable } from './table-to-dataset';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import { decodeWkb } from './wkb';
 import { datasetFromGeoJSON } from '../../../test/utils/arrow';
+import type { PathShape } from '../../shared/types/mapshaper-types';
+import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
 
 const TWO_LAYER_INPUT = {
   type: 'FeatureCollection',
@@ -18,6 +20,69 @@ const TWO_LAYER_INPUT = {
 
 describe('toArrowTable', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    'native',
+    'wkb',
+  ] as const)('keeps null, empty and zero-area polygon semantics (%s)', async (encoding) => {
+    const adapter = getDefaultMapshaperAdapter();
+    const arcs = adapter.createArcCollection([
+      { xx: Float64Array.from([0, 1, 2, 0]), yy: Float64Array.from([0, 0, 0, 0]) },
+    ]);
+    const table = toArrowTable(
+      { layers: [{ name: 'empty', geometry_type: 'polygon', shapes: [null, [], [[0]]] }], arcs },
+      { encoding },
+    );
+    expect(table.numRows).toBe(3);
+    const geometry = table.getChild('geometry')!;
+    expect([0, 1, 2].map((id) => geometry.isValid(id))).toEqual([false, false, false]);
+  });
+
+  it.each([
+    'native',
+    'wkb',
+  ] as const)('rejects orphan rings instead of silently dropping geometry (%s)', async (encoding) => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'MultiPolygon',
+      coordinates: [
+        [
+          [
+            [0, 0],
+            [4, 0],
+            [4, 4],
+            [0, 4],
+            [0, 0],
+          ],
+        ],
+        [
+          [
+            [10, 0],
+            [14, 0],
+            [14, 4],
+            [10, 4],
+            [10, 0],
+          ],
+        ],
+      ],
+    });
+    const layer = dataset.layers[0]!;
+    layer.name = 'bad-mask';
+    const shape = layer.shapes![0] as PathShape;
+    const original = structuredClone(shape);
+    const reverse = (ring: number[]) =>
+      ring
+        .slice()
+        .reverse()
+        .map((id) => ~id);
+    // Both complete loss (all holes) and partial loss (one orphan hole) must fail.
+    for (const count of [2, 1]) {
+      layer.shapes![0] = original.map((ring, index) => (index < count ? reverse(ring) : ring));
+      expect(() => toArrowTable(dataset, { encoding })).toThrow(/bad-mask.*feature 0.*ring/i);
+      expect(layer.shapes![0]).toEqual(
+        original.map((ring, index) => (index < count ? reverse(ring) : ring)),
+      );
+    }
+  });
 
   it('builds nullable attribute columns with inferred types', async () => {
     const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
