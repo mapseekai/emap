@@ -270,6 +270,45 @@ describe('tasklane Mapshaper ownership', () => {
     respond(worker, packed);
     await expect(work).resolves.toEqual(packed);
   });
+  it('keeps work submitted by cancellation callbacks outside the old generation and cleanup barrier', async () => {
+    const client = pool();
+    let finish!: () => void;
+    const preparation = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let retry: Promise<unknown> | undefined;
+    const old = client.dispatchPreparedWithId(client.reserveId(), '-clean', async (signal) => {
+      signal.addEventListener(
+        'abort',
+        () => {
+          retry = client.run('-clean', { datasets: [] }).then(
+            (value: unknown) => value,
+            (error: unknown) => error,
+          );
+        },
+        { once: true },
+      );
+      await preparation;
+      return { datasets: [] };
+    });
+    const cancelled = expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await flushTasks();
+    client.cancelAll();
+    let closed = false;
+    const stopped = client.closed.then(() => {
+      closed = true;
+    });
+    finish();
+    await cancelled;
+    await flushTasks();
+    expect(closed).toBe(true);
+    expect(retry).toBeDefined();
+    const worker = TasklaneTestWorker.instances.find((candidate) => candidate.pending.length > 0);
+    if (worker) respond(worker, { datasets: ['fresh'] });
+    expect(await retry).toEqual({ datasets: ['fresh'] });
+    await stopped;
+  });
+
   it('cancelAll rejects running and queued tasks and permits a fresh generation', async () => {
     const client = pool();
     const a = client.run('-clean', { datasets: [] }),

@@ -207,14 +207,15 @@ export class MapshaperWorkerPool {
     this.closeScopes();
   }
   private closeScopes(): void {
-    for (const task of this.tasks.values()) task.controller.abort();
+    const tasks = [...this.tasks.values()];
+    for (const task of tasks) task.controller.abort();
     this.closing = Promise.all([
       ...[...this.retiredScopes].map((scope) =>
         scope.dispose().then(() => {
           this.retiredScopes.delete(scope);
         }),
       ),
-      ...[...this.tasks.values()].map((task) => task.settled),
+      ...tasks.map((task) => task.settled),
       this.destroyed && !this.options.workerRuntime ? this.runtime.dispose() : undefined,
     ]).then(() => {});
     void this.closing.catch(reportWorkerCleanupFailure);
