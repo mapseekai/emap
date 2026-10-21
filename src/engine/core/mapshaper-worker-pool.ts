@@ -1,4 +1,5 @@
 import type { WorkerRuntime, RuntimeScope } from '@mapseekai/tasklane';
+import { createAbortScope } from '../../shared/abort-scope';
 import type { PackedSession } from '../../integrations/mapshaper/adapter';
 import {
   encodeWorkerPacket,
@@ -132,50 +133,59 @@ export class MapshaperWorkerPool {
     if (this.destroyed) throw new Error('MapshaperWorkerPool: destroyed');
     if (this.tasks.has(id)) throw new Error('MapshaperWorkerPool: duplicate active task id');
     const controller = new AbortController();
-    const taskSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-    const handle = this.scope.enqueuePrepared('mapshaper', {
-      pool: 'mapshaper',
-      group: String(id),
-      cancellation: 'terminate',
-      signal: taskSignal,
-      budget: { inputBytes: inputByteLimit, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
-      preparationScratchBytes: IMPORT_BYTES,
-      executionTimeoutMs: this.timeout,
-      prepareAsync: async ({ signal }) => {
-        signal.throwIfAborted();
-        const packed = await prepare(signal);
-        signal.throwIfAborted();
-        // A binary envelope avoids tasklane's object-graph limit for millions of shapes.
-        const bytes = encodeWorkerPacket(packed);
-        return {
-          payload: {
-            bytes,
-            cmd: typeof cmd === 'string' ? cmd : undefined,
-            commands: typeof cmd === 'string' ? undefined : cmd,
-            inputFiles,
-          },
-          transfer: workerPacketTransfers(bytes),
-        };
-      },
-    });
-    let finish!: () => void;
-    const settled = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    this.tasks.set(id, { controller, settled });
+    const cancellation = createAbortScope([signal, controller.signal]);
+    const taskSignal = cancellation.signal;
     try {
-      const result = await taskValue<PackedSession>(handle, (bytes: Uint8Array) =>
-        decodeWorkerData(bytes),
-      );
-      taskSignal.throwIfAborted();
-      return result;
-    } finally {
+      const handle = this.scope.enqueuePrepared('mapshaper', {
+        pool: 'mapshaper',
+        group: String(id),
+        cancellation: 'terminate',
+        signal: taskSignal,
+        budget: {
+          inputBytes: inputByteLimit,
+          outputBytes: IMPORT_BYTES,
+          scratchBytes: IMPORT_BYTES,
+        },
+        preparationScratchBytes: IMPORT_BYTES,
+        executionTimeoutMs: this.timeout,
+        prepareAsync: async ({ signal }) => {
+          signal.throwIfAborted();
+          const packed = await prepare(signal);
+          signal.throwIfAborted();
+          // A binary envelope avoids tasklane's object-graph limit for millions of shapes.
+          const bytes = encodeWorkerPacket(packed);
+          return {
+            payload: {
+              bytes,
+              cmd: typeof cmd === 'string' ? cmd : undefined,
+              commands: typeof cmd === 'string' ? undefined : cmd,
+              inputFiles,
+            },
+            transfer: workerPacketTransfers(bytes),
+          };
+        },
+      });
+      let finish!: () => void;
+      const settled = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      this.tasks.set(id, { controller, settled });
       try {
-        await handle.settled;
+        const result = await taskValue<PackedSession>(handle, (bytes: Uint8Array) =>
+          decodeWorkerData(bytes),
+        );
+        taskSignal.throwIfAborted();
+        return result;
       } finally {
-        this.tasks.delete(id);
-        finish();
+        try {
+          await handle.settled;
+        } finally {
+          this.tasks.delete(id);
+          finish();
+        }
       }
+    } finally {
+      cancellation.dispose();
     }
   }
   /** Cancel one job and wait for preparation, execution and result consumption to end. */

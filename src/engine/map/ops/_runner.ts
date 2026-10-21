@@ -21,7 +21,8 @@ import { DatasetReplaceSelectionCommand } from '../../../domain/edit/commands/da
 import type { EditCommand } from '../../../domain/edit/edit-command';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
-import { operationSignal } from '../operation-scope';
+import { operationSignals } from '../operation-scope';
+import { createAbortScope } from '../../../shared/abort-scope';
 import type { MutableTopologySource } from '../../../domain/source/source';
 import type { TransactionInternal } from '../../../domain/edit/transaction';
 import { Err, OK, okValue, type OpResult } from '../op-result';
@@ -741,8 +742,9 @@ async function _runViaWorker(
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   host.fire('workerjobstart', { id, cmd: request.cmd, label, datasetVertexCount });
 
+  const cancellation = createAbortScope(operationSignals(host));
   try {
-    operationSignal(host)?.throwIfAborted();
+    cancellation.signal.throwIfAborted();
     const adapter = getDefaultMapshaperAdapter();
     const inputByteLimit = workerDataByteBound({
       commands: request.commands,
@@ -767,16 +769,16 @@ async function _runViaWorker(
       request.commands,
       async () => {
         const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
-        operationSignal(host)?.throwIfAborted();
+        cancellation.signal.throwIfAborted();
         crsLabel = await sanitizePackedSessionCrs(packed);
-        operationSignal(host)?.throwIfAborted();
+        cancellation.signal.throwIfAborted();
         return packed;
       },
       inputFiles,
       inputByteLimit,
-      operationSignal(host),
+      cancellation.signal,
     );
-    operationSignal(host)?.throwIfAborted();
+    cancellation.signal.throwIfAborted();
     const restored = await adapter.restoreSessionData(resultPacked);
     if (!restored.datasets || restored.datasets.length === 0) {
       throw new Error('worker: no dataset in response');
@@ -803,6 +805,8 @@ async function _runViaWorker(
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     throw err;
+  } finally {
+    cancellation.dispose();
   }
 }
 

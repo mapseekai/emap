@@ -33,6 +33,27 @@ const respond = (worker: TasklaneTestWorker, value: unknown) => {
 };
 
 describe('tasklane Mapshaper ownership', () => {
+  it('runs and releases caller listeners when AbortSignal.any is unavailable', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any')!;
+    Object.defineProperty(AbortSignal, 'any', { ...descriptor, value: undefined });
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    try {
+      const pending = pool().run('-clean', { datasets: [] }, undefined, controller.signal);
+      const outcome = pending.then(
+        (value: unknown) => value,
+        (error: unknown) => error,
+      );
+      await flushTasks();
+      if (TasklaneTestWorker.instances[0]?.pending.length) {
+        respond(TasklaneTestWorker.instances[0], { datasets: ['result'] });
+      }
+      expect(await outcome).toEqual({ datasets: ['result'] });
+      expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    } finally {
+      Object.defineProperty(AbortSignal, 'any', descriptor);
+    }
+  });
   it.each([
     'task',
     'signal',
