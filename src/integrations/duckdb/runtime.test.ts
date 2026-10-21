@@ -267,12 +267,21 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     const connection = await runtime.connect();
     const raw = FakeAsyncDuckDB.instances[0]!.connections[0];
     let acknowledge!: (value: boolean) => void;
+    let releaseStream!: (value: Uint8Array) => void;
     const bindings = {
       startPendingQuery: vi.fn(async () => null),
-      cancelPendingQuery: vi.fn(
+      cancelPendingQuery: vi
+        .fn(async () => true)
+        .mockImplementationOnce(
+          () =>
+            new Promise<boolean>((resolve) => {
+              acknowledge = resolve;
+            }),
+        ),
+      runQuery: vi.fn(
         () =>
-          new Promise<boolean>((resolve) => {
-            acknowledge = resolve;
+          new Promise<Uint8Array>((resolve) => {
+            releaseStream = resolve;
           }),
       ),
     };
@@ -289,6 +298,9 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     await vi.waitFor(() => expect(bindings.cancelPendingQuery).toHaveBeenCalledOnce());
     expect(raw.queries).toEqual([]);
     acknowledge(true);
+    await vi.waitFor(() => expect(bindings.runQuery).toHaveBeenCalledWith(7, ''));
+    expect(raw.queries).toEqual([]);
+    releaseStream(new Uint8Array());
     await failed;
     await next;
     expect(raw.queries).toEqual(['next']);

@@ -5,7 +5,7 @@ title: 数据操作
 api: ["AffineLayerOptions", "ApplyExpressionOptions", "BufferOptions", "CheckGeometryOptions", "CleanOptions", "ClipEraseOptions", "DataFillOptions", "DissolveOptions", "DivideOptions", "DragSessionOptions", "DropLayerOptions", "Emap", "ExplodeOptions", "ExportSnapshotOptions", "ExpressionEvaluationPolicy", "FeatureAffineSession", "FeatureRef", "FeatureTranslateSession", "FilterFieldsOptions", "FilterGeomOptions", "FilterIslandsOptions", "FilterOptions", "FilterSliversOptions", "GeometryCheckReport", "HighlightStyle", "InnerlinesOptions", "IntersectionPointsLayerOptions", "JoinTableData", "JoinTableOptions", "LinesOptions", "LoadSnapshotOptions", "MapOptions", "MergeLayersOptions", "MosaicOptions", "PointsMode", "PointsOptions", "PolygonsOptions", "ProjectLayerExport", "ProjectLayerOutputOptions", "ProjectOptions", "QueriedFeature", "QueryFeaturesOptions", "RebuildTopologyOptions", "RenameFieldsOptions", "RenameLayerOptions", "SimplifyMethod", "SimplifyOptions", "SnapOptions", "SortFeaturesOptions", "SplitCutter", "SplitFeatureHandler", "SplitFeatureOptions", "SplitLayerOptions", "SplitSelectedOptions", "SplitSelectedResult", "UnionOptions", "UniqueFeaturesOptions", "OpResult", "OpError", "ClassifyFeaturesOptions"]
 examples: ["buffer","clip","erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
-verifiedVersion: 0.14.0
+verifiedVersion: unreleased
 ---
 
 # 数据操作
@@ -48,7 +48,7 @@ const result = await ops.simplifyLayer({ source: 'main', percentage: 25 });
 
 逻辑取消与清理完成是两个时点：signal 的 `aborted` 表示提交资格已撤销；等待操作 Promise 完成，才表示该次输入准备、Worker 执行和结果资源处理已经结束。异步输入准备必须返回或响应其 signal，无法强制终止主线程 Promise。同步主线程算法、复制和打包会阻塞事件循环，无法由 AbortSignal 抢占；需要可中断的长算法时请配置 Worker 路由。
 
-直接使用 `MapshaperWorkerPool` 时，`run(cmd, packed, inputFiles?, signal?)` 和 `runWithId(...)` 接受调用方 signal。`runWithId()` 返回 `{ id, promise }`；`await pool.cancel(id)` 仅取消指定活动任务并等待 tasklane 的物理完成，重复调用幂等，结果 Promise 在资源清理后结束。`dispatchWithId()` 的 signal 是第六个参数，`dispatchPreparedWithId()` 的 signal 也是第六个参数，其 prepare 回调接收任务 signal。`map.cancelWorkerJobs()` / `pool.cancelAll()` 仍取消整个池作用域，调用 `await pool.closed` 等待整批清理。
+直接使用 `MapshaperWorkerPool` 时，`run(cmd, packed, inputFiles?, signal?)` 和 `runWithId(...)` 接受调用方 signal。`runWithId()` 返回 `{ id, promise }`；`await pool.cancel(id)` 仅取消指定活动任务并等待准备、物理执行和结果解码消费结束，重复调用幂等。即使 Worker 已返回，取消仍会阻止解码中的结果交付，结果 Promise 在资源清理后结束。`dispatchWithId()` 的 signal 是第六个参数，`dispatchPreparedWithId()` 的 signal 也是第六个参数，其 prepare 回调接收任务 signal。`map.cancelWorkerJobs()` / `pool.cancelAll()` 仍取消整个池作用域，调用 `await pool.closed` 等待整批任务消费与清理。
 
 ## 更多操作
 

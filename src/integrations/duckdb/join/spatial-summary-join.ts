@@ -87,6 +87,7 @@ export async function spatialSummaryJoin(
   let joinTable: Table;
   try {
     const alignedJoinDataset = await alignSecondaryDatasetCrs(targetDataset, joinDataset);
+    opts.signal?.throwIfAborted();
     if (featureCount(join.layer) === 0) {
       for (const [index, aggregation] of aggregations.entries()) {
         if (aggregation.operation !== 'count') {
@@ -124,6 +125,7 @@ export async function spatialSummaryJoin(
     });
     validateAggregationFieldTypes(joinTable, joinGeometryColumn, aggregations);
   } catch (err) {
+    opts.signal?.throwIfAborted();
     if (err instanceof DuckDbOperationError) throw err;
     throw new DuckDbOperationError(
       'conversion-failed',
@@ -132,6 +134,7 @@ export async function spatialSummaryJoin(
     );
   }
 
+  opts.signal?.throwIfAborted();
   if (rowCount === 0 || joinTable.numRows === 0) {
     const rowIds = joinType === 'left' ? Array.from({ length: rowCount }, (_, index) => index) : [];
     return rebuildSpatialSummaryDataset(

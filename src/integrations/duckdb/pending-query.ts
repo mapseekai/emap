@@ -8,7 +8,7 @@ export async function runPendingQuery(
   signal: AbortSignal,
 ): Promise<Table> {
   signal.throwIfAborted();
-  return connection.useUnsafe(async (db, id) => {
+  const result = await connection.useUnsafe(async (db, id) => {
     let cancellation: Promise<boolean> | undefined;
     const cancel = () => {
       cancellation ??= db.cancelPendingQuery(id);
@@ -61,6 +61,19 @@ export async function runPendingQuery(
       } catch (error) {
         cleanupErrors.push(error);
       }
+      if (!completed) {
+        try {
+          // Empty SQL releases an unread remote stream without changing transaction state.
+          await db.runQuery(id, '');
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+        try {
+          await db.cancelPendingQuery(id);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
       if (cleanupErrors.length) {
         throw new AggregateError(
           [primaryError, ...cleanupErrors],
@@ -69,4 +82,6 @@ export async function runPendingQuery(
       }
     }
   });
+  signal.throwIfAborted();
+  return result;
 }

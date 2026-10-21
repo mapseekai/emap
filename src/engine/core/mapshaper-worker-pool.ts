@@ -1,4 +1,4 @@
-import type { WorkerRuntime, RuntimeScope, TaskHandle } from '@mapseekai/tasklane';
+import type { WorkerRuntime, RuntimeScope } from '@mapseekai/tasklane';
 import type { PackedSession } from '../../integrations/mapshaper/adapter';
 import {
   encodeWorkerPacket,
@@ -59,7 +59,10 @@ export class MapshaperWorkerPool {
   readonly poolSize: number;
   private closing: Promise<void> = Promise.resolve();
   private readonly retiredScopes = new Set<RuntimeScope>();
-  private readonly tasks = new Map<number, TaskHandle<unknown>>();
+  private readonly tasks = new Map<
+    number,
+    { controller: AbortController; settled: Promise<void> }
+  >();
   constructor(private readonly options: MapshaperWorkerPoolOptions) {
     this.poolSize = Math.max(1, Math.floor(options.poolSize ?? 1));
     this.timeout = options.jobTimeoutMs ?? 120_000;
@@ -128,11 +131,13 @@ export class MapshaperWorkerPool {
     signal?.throwIfAborted();
     if (this.destroyed) throw new Error('MapshaperWorkerPool: destroyed');
     if (this.tasks.has(id)) throw new Error('MapshaperWorkerPool: duplicate active task id');
+    const controller = new AbortController();
+    const taskSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const handle = this.scope.enqueuePrepared('mapshaper', {
       pool: 'mapshaper',
       group: String(id),
       cancellation: 'terminate',
-      signal,
+      signal: taskSignal,
       budget: { inputBytes: inputByteLimit, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
       preparationScratchBytes: IMPORT_BYTES,
       executionTimeoutMs: this.timeout,
@@ -153,23 +158,31 @@ export class MapshaperWorkerPool {
         };
       },
     });
-    this.tasks.set(id, handle);
+    let finish!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.tasks.set(id, { controller, settled });
     try {
       const result = await taskValue<PackedSession>(handle, (bytes: Uint8Array) =>
         decodeWorkerData(bytes),
       );
-      signal?.throwIfAborted();
+      taskSignal.throwIfAborted();
       return result;
     } finally {
-      await handle.settled;
-      this.tasks.delete(id);
+      try {
+        await handle.settled;
+      } finally {
+        this.tasks.delete(id);
+        finish();
+      }
     }
   }
-  /** Request cancellation of one job and wait for its physical execution/preparation to end. */
+  /** Cancel one job and wait for preparation, execution and result consumption to end. */
   async cancel(id: number, reason?: unknown): Promise<void> {
-    const handle = this.tasks.get(id);
-    handle?.cancel(reason);
-    await handle?.settled;
+    const task = this.tasks.get(id);
+    task?.controller.abort(reason);
+    await task?.settled;
   }
   cancelAll(): void {
     if (this.destroyed) return;
@@ -184,12 +197,14 @@ export class MapshaperWorkerPool {
     this.closeScopes();
   }
   private closeScopes(): void {
+    for (const task of this.tasks.values()) task.controller.abort();
     this.closing = Promise.all([
       ...[...this.retiredScopes].map((scope) =>
         scope.dispose().then(() => {
           this.retiredScopes.delete(scope);
         }),
       ),
+      ...[...this.tasks.values()].map((task) => task.settled),
       this.destroyed && !this.options.workerRuntime ? this.runtime.dispose() : undefined,
     ]).then(() => {});
     void this.closing.catch(reportWorkerCleanupFailure);

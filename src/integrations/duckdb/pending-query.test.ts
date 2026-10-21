@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { tableFromArrays, tableToIPC } from 'apache-arrow';
+import { tableFromArrays, tableToIPC, type Table } from 'apache-arrow';
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { runPendingQuery } from './pending-query';
 
@@ -19,6 +19,7 @@ function setup() {
     pollPendingQuery: vi.fn(async () => bytes as Uint8Array | null),
     fetchQueryResults: vi.fn(async () => new Uint8Array() as Uint8Array | null),
     cancelPendingQuery: vi.fn(async () => true),
+    runQuery: vi.fn(async () => new Uint8Array()),
   };
   const connection: Pick<AsyncDuckDBConnection, 'useUnsafe'> = {
     useUnsafe: (callback) => callback(bindings as unknown as AsyncDuckDB, 42),
@@ -84,7 +85,7 @@ describe('cancellable pending queries', () => {
     controller.abort();
     fetch.resolve(bytes.subarray(8));
     await failed;
-    expect(bindings.cancelPendingQuery).toHaveBeenCalledOnce();
+    expect(bindings.cancelPendingQuery).toHaveBeenCalledTimes(2);
     expect(bindings.fetchQueryResults).toHaveBeenCalledOnce();
     bindings.startPendingQuery.mockResolvedValue(bytes);
     await expect(
@@ -95,8 +96,8 @@ describe('cancellable pending queries', () => {
     const { bindings, connection, controller } = setup();
     bindings.startPendingQuery.mockRejectedValue(new Error('bad SQL'));
     await expect(runPendingQuery(connection, 'bad', controller.signal)).rejects.toThrow('bad SQL');
-    expect(bindings.cancelPendingQuery).toHaveBeenCalledOnce();
-    bindings.cancelPendingQuery.mockRejectedValue(new Error('cancel failed'));
+    expect(bindings.cancelPendingQuery).toHaveBeenCalledTimes(2);
+    bindings.cancelPendingQuery.mockRejectedValueOnce(new Error('cancel failed'));
     await expect(runPendingQuery(connection, 'bad', controller.signal)).rejects.toMatchObject({
       name: 'AggregateError',
       errors: [
@@ -104,5 +105,31 @@ describe('cancellable pending queries', () => {
         expect.objectContaining({ message: 'cancel failed' }),
       ],
     });
+  });
+  it('attempts every remote cleanup step and retains their failures', async () => {
+    const { bindings, connection, controller } = setup();
+    const primary = new Error('query failed');
+    const cancellation = new Error('cancel failed');
+    const stream = new Error('stream release failed');
+    const pending = new Error('pending release failed');
+    bindings.startPendingQuery.mockRejectedValue(primary);
+    bindings.cancelPendingQuery.mockRejectedValueOnce(cancellation).mockRejectedValueOnce(pending);
+    bindings.runQuery.mockRejectedValue(stream);
+    await expect(runPendingQuery(connection, 'bad', controller.signal)).rejects.toMatchObject({
+      errors: [primary, cancellation, stream, pending],
+    });
+  });
+  it('revokes delivery if cancellation arrives after result cleanup', async () => {
+    const { bindings, connection, controller } = setup();
+    const reason = new Error('cancel at delivery');
+    const delayed = {
+      async useUnsafe(callback: (bindings: AsyncDuckDB, id: number) => Promise<Table>) {
+        const result = await connection.useUnsafe(callback);
+        controller.abort(reason);
+        return result;
+      },
+    } as unknown as Pick<AsyncDuckDBConnection, 'useUnsafe'>;
+    await expect(runPendingQuery(delayed, 'SELECT 1', controller.signal)).rejects.toBe(reason);
+    expect(bindings.cancelPendingQuery).not.toHaveBeenCalled();
   });
 });

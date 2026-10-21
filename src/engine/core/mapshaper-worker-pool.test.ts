@@ -3,6 +3,7 @@ import { output } from '@mapseekai/tasklane/host';
 import { MapshaperWorkerPool } from './mapshaper-worker-pool';
 import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import { encodeWorkerData, decodeWorkerData } from '../../integrations/mapshaper/binary';
+import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
 
 const pools: MapshaperWorkerPool[] = [];
 function pool(size = 1, timeout = 120000) {
@@ -32,6 +33,76 @@ const respond = (worker: TasklaneTestWorker, value: unknown) => {
 };
 
 describe('tasklane Mapshaper ownership', () => {
+  it.each([
+    'task',
+    'signal',
+    'all',
+    'destroy',
+  ] as const)('keeps %s cancellation pending through result decoding and rejects delivery', async (mode) => {
+    const client = pool();
+    const controller = new AbortController();
+    const adapter = getDefaultMapshaperAdapter();
+    const unpack = adapter.unpackSessionData.bind(adapter);
+    let decoding!: () => void;
+    let resume!: () => void;
+    const started = new Promise<void>((resolve) => {
+      decoding = resolve;
+    });
+    const paused = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const spy = vi.spyOn(adapter, 'unpackSessionData').mockImplementationOnce(async (bytes) => {
+      decoding();
+      await paused;
+      return unpack(bytes);
+    });
+    const job = client.runWithId('-clean', { datasets: [] }, undefined, controller.signal);
+    const outcome = job.promise.then(
+      () => 'delivered',
+      (error: unknown) => error,
+    );
+    try {
+      await flushTasks();
+      respond(TasklaneTestWorker.instances[0], { datasets: ['cancelled'] });
+      await started;
+      let stop: Promise<void>;
+      if (mode === 'task') stop = client.cancel(job.id);
+      else if (mode === 'signal') {
+        controller.abort();
+        stop = client.cancel(job.id);
+      } else {
+        if (mode === 'all') client.cancelAll();
+        else client.destroy();
+        stop = client.closed;
+      }
+      let stopped = false;
+      const finished = stop.then(() => {
+        stopped = true;
+      });
+      await flushTasks();
+      const stoppedBeforeDecode = stopped;
+      resume();
+      await finished;
+      const result = await outcome;
+      expect(stoppedBeforeDecode).toBe(false);
+      expect(result).toMatchObject({ name: 'AbortError' });
+      if (mode !== 'destroy') {
+        const retry = client.run(
+          '-clean',
+          { datasets: [] },
+          undefined,
+          new AbortController().signal,
+        );
+        await flushTasks();
+        respond(TasklaneTestWorker.instances.at(-1)!, { datasets: ['retry'] });
+        await expect(retry).resolves.toEqual({ datasets: ['retry'] });
+      }
+    } finally {
+      resume();
+      await outcome;
+      spy.mockRestore();
+    }
+  });
   it('rejects a pre-aborted signal without preparing or transferring input', async () => {
     const client = pool();
     const controller = new AbortController();
