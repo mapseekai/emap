@@ -128,6 +128,9 @@ importers:
       '@types/jsdom':
         specifier: ^30.0.0
         version: 30.0.0
+      '@types/node':
+        specifier: 24.13.1
+        version: 24.13.1
       '@webgpu/types':
         specifier: 0.1.72
         version: 0.1.72
