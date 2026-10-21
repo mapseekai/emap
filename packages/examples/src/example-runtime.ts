@@ -8,6 +8,7 @@ import {
   type RuntimeAssetOptions,
   type RuntimeAssetSet,
 } from './runtime-assets';
+import { examples } from '../../../docs-meta/examples';
 import { fixtureManifest, fixtureUrl } from './fixture-manifest';
 import type { Control, Emap } from '@mapseekai/emap';
 export type { RuntimeAssetOptions } from './runtime-assets';
@@ -178,6 +179,35 @@ function openExampleSourceDialog(sourceText: string, root: Document): void {
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
 }
+function installExampleIntro(root: Document): void {
+  const body = root.querySelector('.emap-example-workbench-body');
+  if (!body || body.querySelector('.emap-example-lede')) return;
+  const path = root.location?.pathname ?? '';
+  const marker = '/examples/';
+  const index = path.lastIndexOf(marker);
+  if (index === -1) return;
+  const id = decodeURIComponent(path.slice(index + marker.length).replace(/\/+$/, ''));
+  const example = examples.find((item) => item.id === id);
+  if (!example) return;
+  const lede = root.createElement('p');
+  lede.className = 'emap-example-lede';
+  lede.textContent = example.description.zh;
+  const meta = root.createElement('p');
+  meta.className = 'emap-example-doc-link';
+  const api = root.createElement('code');
+  api.textContent = example.api[0] ?? '';
+  meta.append(api);
+  const doc = example.docs[0];
+  if (doc) {
+    meta.append(' · ');
+    const link = root.createElement('a');
+    link.href = `/mapseekai/emap${doc.replace(/^\/docs/, '')}`;
+    link.textContent = '查看文档';
+    meta.append(link);
+  }
+  body.prepend(lede, meta);
+}
+
 export async function installExampleMapUi(
   map: Emap,
   runtime: ExampleUiRuntime = globalThis.emap,
@@ -187,6 +217,7 @@ export async function installExampleMapUi(
   if (!!!map.ctx.get('mapLibre')) await map.ctx.plugin(mapLibrePlugin);
   const header = root.querySelector<HTMLElement>('#header');
   if (!header) throw new Error('Example pages must provide a #header banner');
+  installExampleIntro(root);
   mapsWithExampleUi.add(map);
   monitorExampleMap(map, root);
   const shell = installExampleRendererToolbar(root)!;

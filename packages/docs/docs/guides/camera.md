@@ -3,7 +3,7 @@ id: camera
 slug: /guides/camera
 title: 相机
 api: ["Emap", "Bounds", "Viewport", "CameraOptions", "AnimationOptions", "FlyToOptions", "FitBoundsOptions"]
-examples: ["getting-started/geojson-viewer","crs-switch"]
+examples: ["getting-started/vector-file","crs-switch"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -105,5 +105,5 @@ map.on('moveend', (event) => {
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)
 - [CRS 切换](/mapseekai/emap/examples/crs-switch/)

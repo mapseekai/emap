@@ -3,7 +3,7 @@ id: fit-bounds
 slug: /recipes/fit-bounds
 title: Fit bounds
 api: ["Emap", "Bounds", "FitBoundsOptions"]
-examples: ["getting-started/geojson-viewer", "getting-started/polygon-fill"]
+examples: ["getting-started/vector-file", "getting-started/polygon-fill"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -79,5 +79,5 @@ if (district.hasBounds()) {
 
 ## Runnable examples
 
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)
 - [Polygon fill](/mapseekai/emap/examples/getting-started/polygon-fill/)

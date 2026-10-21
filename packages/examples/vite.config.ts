@@ -414,6 +414,18 @@ function examplesBrandPlugin(): Plugin {
               padding: 16px;
             }
 
+            .emap-example-lede,
+            .emap-example-doc-link {
+              margin: 0 0 12px;
+              color: var(--emap-example-muted-foreground);
+              font-size: 12px;
+              line-height: 1.45;
+            }
+
+            .emap-example-doc-link code {
+              color: var(--emap-banner-ink);
+            }
+
             .emap-example-workbench-body h2 {
               margin: 0 0 12px;
               font-size: 13px;

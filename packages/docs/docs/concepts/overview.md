@@ -3,7 +3,7 @@ id: overview
 slug: /concepts/overview
 title: 核心概念
 api: ["Emap", "TopologySource", "LayerSpecification"]
-examples: ["getting-started/geojson-viewer"]
+examples: ["getting-started/vector-file"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -157,4 +157,4 @@ render layer API 以图层 ID 管理显示；`addLayer` 的 `source` 必须已�
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)

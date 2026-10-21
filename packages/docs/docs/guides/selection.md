@@ -3,7 +3,7 @@ id: selection
 slug: /guides/selection
 title: 选择
 api: ["BoxSelectHandler", "BoxSelectHandlerOptions", "BoxSelectStyle", "ClickSelectHandler", "DragPanHandler", "DragPanOptions", "DrawFeatureHandler", "DrawFeatureOptions", "DrawGeometryType", "Emap", "featureMatchesLasso", "LassoSelectHandler", "LassoSelectHandlerOptions", "LassoSelectStyle", "MergeSelectedOptions", "ModifierCombo", "pointInPolygon", "resolveMode", "ScrollZoomHandler", "ScrollZoomOptions", "SelectHandlerOptions", "Selection", "SelectionDiff", "SelectionSnapshot", "SelectMode", "TransformFeatureHandler", "TransformFeatureOptions", "VertexEditHandler", "VertexEditOptions", "FeatureQuery"]
-examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
+examples: ["lasso-select","feature-rotate","feature-scale","feature-selection","feature-translate","merge-selected"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -159,5 +159,5 @@ map.on('selectionchange', ({ selected, added, removed }) => {
 ## 可运行示例
 
 - [要素选择](/mapseekai/emap/examples/feature-selection/)
-- [框选](/mapseekai/emap/examples/box-select/)
+- [框选](/mapseekai/emap/examples/lasso-select/)
 - [套索选择](/mapseekai/emap/examples/lasso-select/)

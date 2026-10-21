@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 重命名字段</title>
+  
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>重命名字段</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>重命名字段</h1></summary>
+    <div class="emap-example-workbench-body">
+      
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">目标图层</label>
+          <select id="target"></select>
+        </div>
+        
+        <div class="emap-example-field">
+          <label for="rf-map">映射</label>
+          <input id="rf-map" type="text" placeholder="逗号分隔 old=new，例如 fips=FIPS" />
+        </div>
+        <button id="run" class="emap-example-primary-button" disabled>重命名字段</button>
+        <p id="status" class="emap-example-status">加载数据后选择目标图层。</p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'rename-fields';
+const targetSel = document.getElementById('target');
+const status = document.getElementById('status');
+const runButton = document.getElementById('run');
+function populate(source) {
+  targetSel.innerHTML = '';
+  source.getLayers().forEach((layer, index) => {
+    const name = layer?.name || layer?.id || `layer-${index}`;
+    targetSel.appendChild(new Option(`${name} (${layer?.geometry_type ?? '?'})`, name));
+  });
+  runButton.disabled = source.getLayers().length === 0;
+}
+document.getElementById('file-input').addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  status.textContent = `正在加载 ${file.name}...`;
+  const reader = new FileReader();
+  reader.onload = async (loadEvent) => {
+    try {
+      const source = new TopologySource(SOURCE_ID);
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      await source.setData({ filename: file.name, content: new Uint8Array(loadEvent.target.result) });
+      await map.addSource(SOURCE_ID, source);
+      map.setExtent(source.getExtent());
+      populate(source);
+      status.textContent = `已加载 ${file.name}。`;
+    } catch (error) {
+      console.error(error);
+      status.textContent = `错误: ${error?.message ?? error}`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+runButton.addEventListener('click', async () => {
+  const target = targetSel.value;
+  if (!target) return;
+  runButton.disabled = true;
+  status.textContent = '执行中...';
+  try {
+    const result = await ((target) => {
+    const raw = document.getElementById('rf-map').value.trim();
+    if (!raw) return false;
+    const mapping = {};
+    for (const pair of raw.split(',').map((item) => item.trim()).filter(Boolean)) {
+      const [from, to] = pair.split('=').map((item) => item.trim());
+      if (from && to) mapping[from] = to;
+    }
+    return map.ops.renameFields({ source: SOURCE_ID, target, mapping });
+  })(target);
+    status.textContent = result !== false && result.ok ? '完成。Ctrl+Z 撤销。' : '失败 (检查参数)。';
+    const source = map.getSource(SOURCE_ID);
+    if (source) populate(source);
+  } catch (error) {
+    status.textContent = `错误: ${error?.message ?? error}`;
+    console.error(error);
+  } finally {
+    runButton.disabled = false;
+  }
+});
+await autoLoadExampleFixtures('rename-fields');
+
+</script>
+</body>
+</html>

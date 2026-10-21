@@ -3,7 +3,7 @@ id: source-layer
 slug: /concepts/source-layer
 title: Sources and layers
 api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ImportResourceLimits", "ZipExtractionLimits"]
-examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
+examples: ["getting-started/vector-file","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -149,7 +149,7 @@ if (result.status === 'ready') await map.confirmSource(result.plan); // confirm 
 
 ## Runnable examples
 
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)
 - [Line layers](/mapseekai/emap/examples/getting-started/lines/)
 - [Point layers](/mapseekai/emap/examples/getting-started/points/)
 - [Merge layers](/mapseekai/emap/examples/merge-layers/)

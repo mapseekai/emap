@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 裁剪</title>
+  <style>.emap-example-workbench button.danger { border-color: var(--emap-example-error); color: var(--emap-example-error); }</style>
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>裁剪</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>裁剪</h1></summary>
+    <div class="emap-example-workbench-body">
+      
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">目标图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="mask">蒙版图层</label>
+          <select id="mask"></select>
+        </div>
+        <button id="run" class="emap-example-primary-button" disabled>裁剪</button>
+        <p id="status" class="emap-example-status">上传目标图层和多边形蒙版。</p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
+await map.addControl(new NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+await map.addControl(new HistoryControl(), 'top-left');
+map.bindHistoryShortcuts();
+const SOURCE_ID = 'clip-source';
+const fileInput = document.getElementById('file-input');
+const targetSel = document.getElementById('target');
+const maskSel = document.getElementById('mask');
+const runButton = document.getElementById('run');
+const status = document.getElementById('status');
+const uploaded = new Map();
+function readFile(file) {
+  return new Promise((resolveFile, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolveFile(new Uint8Array(event.target.result));
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+function populate(source) {
+  const layers = source.getLayers();
+  targetSel.innerHTML = '';
+  maskSel.innerHTML = '';
+  layers.forEach((layer, index) => {
+    const name = layer?.name || layer?.id || `layer-${index}`;
+    targetSel.appendChild(new Option(`${name} (${layer?.geometry_type ?? '?'})`, name));
+    if (layer?.geometry_type === 'polygon') maskSel.appendChild(new Option(name, name));
+  });
+  runButton.disabled = !(layers.length >= 2 && maskSel.options.length >= 1);
+}
+async function reimportAll() {
+  const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+  const source = new TopologySource(SOURCE_ID);
+  if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+  await source.setData(entries);
+  await map.addSource(SOURCE_ID, source);
+  map.setExtent(source.getExtent());
+  populate(source);
+  status.textContent = `已加载 ${entries.map((entry) => entry.filename).join(', ')}。`;
+}
+fileInput.addEventListener('change', async (event) => {
+  for (const file of Array.from(event.target.files || [])) uploaded.set(file.name, await readFile(file));
+  fileInput.value = '';
+  try {
+    await reimportAll();
+  } catch (error) {
+    status.textContent = `加载失败: ${error?.message ?? error}`;
+  }
+});
+runButton.addEventListener('click', async () => {
+  const target = targetSel.value;
+  const mask = maskSel.value;
+  if (!target || !mask || target === mask) {
+    status.textContent = '目标和蒙版必须是不同的图层。';
+    return;
+  }
+  runButton.disabled = true;
+  try {
+    const result = await map.ops.clipLayer({ source: SOURCE_ID, target, mask });
+    status.textContent = result.ok ? '裁剪完成，Ctrl+Z 撤销。' : '裁剪失败。';
+    const source = map.getSource(SOURCE_ID);
+    if (source) populate(source);
+  } catch (error) {
+    status.textContent = `错误: ${error?.message ?? error}`;
+  } finally {
+    runButton.disabled = false;
+  }
+});
+await autoLoadExampleFixtures('clip');
+
+</script>
+</body>
+</html>

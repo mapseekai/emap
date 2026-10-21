@@ -3,7 +3,7 @@ id: emap
 slug: /concepts/emap
 title: Emap 地图实例
 api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
-examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
+examples: ["getting-started/vector-file","interaction-handlers","undo-redo"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -195,6 +195,6 @@ if (!result.ok) console.error(result.error);
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)
 - [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
 - [撤销与重做](/mapseekai/emap/examples/undo-redo/)

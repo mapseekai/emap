@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 async function openInspector(page) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/mapseekai/emap/examples/plugin-runtime/');
+  await page.goto('/mapseekai/emap/examples/plugin-install/');
   await expect(page.locator('#runtime-proof')).toContainText('Context.is(map.ctx) = true');
   await expect(page.locator('#runtime-proof')).toContainText('cordis@4.0.0-rc.10');
   await expect(page.locator('#selected-status')).toContainText('ACTIVE');

@@ -3,7 +3,7 @@ id: operations
 slug: /data/operations
 title: Data operations
 api: ["AffineLayerOptions", "ApplyExpressionOptions", "BufferOptions", "CheckGeometryOptions", "CleanOptions", "ClipEraseOptions", "DataFillOptions", "DissolveOptions", "DivideOptions", "DragSessionOptions", "DropLayerOptions", "Emap", "ExplodeOptions", "ExportSnapshotOptions", "ExpressionEvaluationPolicy", "FeatureAffineSession", "FeatureRef", "FeatureTranslateSession", "FilterFieldsOptions", "FilterGeomOptions", "FilterIslandsOptions", "FilterOptions", "FilterSliversOptions", "GeometryCheckReport", "HighlightStyle", "InnerlinesOptions", "IntersectionPointsLayerOptions", "JoinTableData", "JoinTableOptions", "LinesOptions", "LoadSnapshotOptions", "MapOptions", "MergeLayersOptions", "MosaicOptions", "PointsMode", "PointsOptions", "PolygonsOptions", "ProjectLayerExport", "ProjectLayerOutputOptions", "ProjectOptions", "QueriedFeature", "QueryFeaturesOptions", "RebuildTopologyOptions", "RenameFieldsOptions", "RenameLayerOptions", "SimplifyMethod", "SimplifyOptions", "SnapOptions", "SortFeaturesOptions", "SplitCutter", "SplitFeatureHandler", "SplitFeatureOptions", "SplitLayerOptions", "SplitSelectedOptions", "SplitSelectedResult", "UnionOptions", "UniqueFeaturesOptions", "OpResult", "OpError", "ClassifyFeaturesOptions"]
-examples: ["buffer","clip-erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
+examples: ["buffer","clip","erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -229,7 +229,8 @@ Feature-count changes clear or remap selection; attribute and CRS operations pre
 ## Runnable examples
 
 - [Buffer](/mapseekai/emap/examples/buffer/)
-- [Clip and erase](/mapseekai/emap/examples/clip-erase/)
+- [Clip](/mapseekai/emap/examples/clip/)
+- [Erase](/mapseekai/emap/examples/erase/)
 - [Dissolve](/mapseekai/emap/examples/dissolve/)
 - [Filter features](/mapseekai/emap/examples/filter-features/)
 - [Merge selected features](/mapseekai/emap/examples/merge-selected/)

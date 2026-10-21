@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 打开矢量文件</title>
+  
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>打开矢量文件</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>打开矢量文件</h1></summary>
+    <div class="emap-example-workbench-body">
+      
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.kml,.zip,application/geo+json,application/vnd.google-earth.kml+xml,application/zip" />
+        </div>
+        <div id="crs-field" class="emap-example-field" hidden>
+          <label for="crs-preset">输入坐标系</label>
+          <select id="crs-preset">
+            <option value="">自动识别</option>
+            <option value="EPSG:4326">EPSG:4326</option>
+            <option value="EPSG:4490">EPSG:4490</option>
+            <option value="EPSG:3857">EPSG:3857</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+        <div id="crs-custom-field" class="emap-example-field" hidden>
+          <label for="crs-custom">自定义 CRS</label>
+          <input id="crs-custom" type="text" placeholder="EPSG:32650 或 +proj=..." autocomplete="off" />
+        </div>
+        <button id="load-zip" class="emap-example-primary-button" type="button" hidden>加载 Shapefile</button>
+        <p id="status" class="emap-example-status">选择 GeoJSON、TopoJSON、KML 或 ZIP Shapefile。</p>
+        <p class="emap-example-hint">KML 按 WGS84 读取。ZIP 没有 .prj 时，先选择输入坐标系再加载。</p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const SOURCE_ID = 'vector-file';
+const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+const fileInput = document.getElementById('file-input');
+const status = document.getElementById('status');
+const crsField = document.getElementById('crs-field');
+const crsPreset = document.getElementById('crs-preset');
+const crsCustomField = document.getElementById('crs-custom-field');
+const crsCustom = document.getElementById('crs-custom');
+const loadZip = document.getElementById('load-zip');
+let selectedFile = null;
+function selectedCrs() {
+  if (crsPreset.value !== 'custom') return crsPreset.value.trim();
+  return crsCustom.value.trim();
+}
+function validCrs(value) {
+  return value === '' || value === 'EPSG:4326' || value === 'EPSG:3857' || value === 'EPSG:4490' || /^EPSG:\d{4,6}$/i.test(value) || /^\+proj=\S+/.test(value);
+}
+function showCrs(file) {
+  const zip = Boolean(file && file.name.toLowerCase().endsWith('.zip'));
+  crsField.hidden = !zip;
+  loadZip.hidden = !zip;
+  crsCustomField.hidden = !zip || crsPreset.value !== 'custom';
+  return zip;
+}
+async function showDataset(file) {
+  const source = map.getSource(SOURCE_ID);
+  map.setExtent(source.getExtent());
+  status.textContent = `当前: ${file.name}`;
+}
+async function loadVector(file) {
+  const zip = file.name.toLowerCase().endsWith('.zip');
+  const crs = zip ? selectedCrs() : '';
+  if (zip && !validCrs(crs)) {
+    status.textContent = '请输入合法的 EPSG 或 Proj.4 坐标系。';
+    return;
+  }
+  status.textContent = `处理 ${file.name} 中...`;
+  const source = new TopologySource(SOURCE_ID);
+  const content = new Uint8Array(await file.arrayBuffer());
+  await source.setData({ filename: file.name, content });
+  if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+  if (!zip) {
+    await map.addSource(SOURCE_ID, source);
+    await showDataset(file);
+    return;
+  }
+  const request = { id: SOURCE_ID, source, ...(crs ? { sourceCrs: crs } : {}) };
+  const result = await map.preflightSource(request);
+  if (result.status === 'needs-input' && !crs) {
+    status.textContent = 'ZIP 中没有可用的 .prj。请选择一个输入 CRS 后重试。';
+    return;
+  }
+  if (result.status !== 'ready') {
+    throw new Error(result.diagnostics?.[0]?.message || result.requirements?.[0]?.reason || '数据源预检未通过。');
+  }
+  await map.confirmSource(result.plan);
+  await showDataset(file);
+}
+fileInput.addEventListener('change', async (event) => {
+  selectedFile = event.target.files?.[0] ?? null;
+  if (!selectedFile) return;
+  if (showCrs(selectedFile)) {
+    status.textContent = `${selectedFile.name} 已选择。确认坐标系后加载。`;
+    return;
+  }
+  try {
+    await loadVector(selectedFile);
+  } catch (error) {
+    console.error(error);
+    status.textContent = `加载失败：${error?.message ?? error}`;
+  }
+});
+crsPreset.addEventListener('change', () => {
+  crsCustomField.hidden = crsPreset.value !== 'custom';
+});
+loadZip.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  try {
+    await loadVector(selectedFile);
+  } catch (error) {
+    console.error(error);
+    status.textContent = `加载失败：${error?.message ?? error}`;
+  }
+});
+window.addEventListener('resize', () => map.resize());
+await autoLoadExampleFixtures('getting-started/vector-file');
+
+</script>
+</body>
+</html>

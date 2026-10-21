@@ -1,16 +1,16 @@
 ---
 id: architecture
 slug: /concepts/architecture
-title: 当前技术架构与源码组织
+title: 源码组织
 api: ["Emap", "Context", "TopologySource"]
-examples: ["plugin-runtime", "getting-started/geojson-viewer"]
+examples: ["plugin-install", "getting-started/vector-file"]
 stability: experimental
 verifiedVersion: 0.14.0
 ---
 
-# 当前技术架构与源码组织
+# 源码组织
 
-Emap 以 Cordis 原生插件运行时组合 GIS 领域内核、可选 Canvas2D / luma GPU 渲染和可选集成；公共 API 由 `Emap` 门面提供。
+这一页给改仓库的人看。地图对象和源码目录的对应关系见[运行时组成](./runtime.md)。
 
 ```ts
 const map = await Emap.create({ container: 'map', preset: 'viewer' }); // 创建浏览器地图和浏览能力
@@ -178,5 +178,5 @@ pnpm run release:verify
 
 ## 可运行示例
 
-- [插件运行时](/mapseekai/emap/examples/plugin-runtime/)
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [安装插件](/mapseekai/emap/examples/plugin-install/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)

@@ -27,8 +27,18 @@
           <select id="target"></select>
         </div>
         <div class="emap-example-field">
+          <label for="geometry">绘制为</label>
+          <select id="geometry">
+            <option value="fill">面</option>
+            <option value="line">线</option>
+            <option value="circle">点</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
           <label class="emap-example-check"><input type="radio" name="mode" value="baked" checked /> 分级烘焙</label>
           <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 表达式</label>
+          <label id="mode-dash" class="emap-example-check" hidden><input type="radio" name="mode" value="dashstyle" /> 线型表达式</label>
+          <label id="mode-shape" class="emap-example-check" hidden><input type="radio" name="mode" value="shape" /> 点型表达式</label>
         </div>
       </section>
       <section class="emap-example-section" id="baked-group">
@@ -117,6 +127,23 @@ const templateSel = document.getElementById('template');
 const exprInput = document.getElementById('expr');
 const exprBtn = document.getElementById('expr-btn');
 const status = document.getElementById('status');
+const geometrySel = document.getElementById('geometry');
+function geometryKind() {
+    return geometrySel.value;
+}
+function paintProperty() {
+    const kind = geometryKind();
+    return kind === 'line' ? 'line-color' : kind === 'circle' ? 'circle-color' : 'fill-color';
+}
+function syncGeometryModes() {
+    const kind = geometryKind();
+    document.getElementById('mode-dash').hidden = kind !== 'line';
+    document.getElementById('mode-shape').hidden = kind !== 'circle';
+    const mode = currentMode();
+    if ((mode === 'dashstyle' && kind !== 'line') || (mode === 'shape' && kind !== 'circle')) {
+        document.querySelector('input[name="mode"][value="baked"]').checked = true;
+    }
+}
 function currentMode() {
     return document.querySelector('input[name="mode"]:checked').value;
 }
@@ -134,28 +161,38 @@ function fieldValues(field) {
 // Layer spec re-issue (remove → add), matching polygon-fill conventions.
 // Baked mode omits `fill-color` so the styleSource opt-in reads the
 // per-record `fill` field; expression mode puts it in paint instead.
-function applyStyle(expression) {
+function applyStyle(expression, extra) {
     const target = targetSel.value;
+    const kind = geometryKind();
     if (!target) {
-        status.textContent = '没有 polygon 图层可渲染';
+        status.textContent = '没有可渲染的图层';
         return;
     }
     for (const id of [OUTLINE_ID, FILL_ID])
         if (map.getLayer(id))
             map.removeLayer(id);
-    const spec = { id: FILL_ID, type: 'fill', source: SOURCE_ID, 'source-layer': target };
-    if (expression)
-        spec.paint = { 'fill-color': expression, 'fill-opacity': 0.85 };
-    else
+    const spec = { id: FILL_ID, type: kind, source: SOURCE_ID, 'source-layer': target };
+    if (expression) {
+        spec.paint = { [paintProperty()]: expression };
+        if (kind === 'fill') spec.paint['fill-opacity'] = 0.85;
+        if (kind === 'line') spec.paint['line-width'] = 3;
+        if (kind === 'circle') spec.paint['circle-radius'] = 6;
+        if (extra && kind === 'line') spec.paint['line-dashstyle'] = extra;
+        if (extra && kind === 'circle') spec.paint['circle-shape'] = extra;
+    }
+    else {
         spec.styleSource = 'mapshaper';
+    }
     map.addLayer(spec);
-    map.addLayer({
-        id: OUTLINE_ID,
-        type: 'line',
-        source: SOURCE_ID,
-        'source-layer': target,
-        paint: { 'line-color': '#ffffff', 'line-width': 0.5 },
-    });
+    if (kind === 'fill') {
+        map.addLayer({
+            id: OUTLINE_ID,
+            type: 'line',
+            source: SOURCE_ID,
+            'source-layer': target,
+            paint: { 'line-color': '#ffffff', 'line-width': 0.5 },
+        });
+    }
 }
 function clampClasses() {
     return Math.max(2, Math.min(RAMP.length, Number(classesInput.value) || 4));
@@ -167,7 +204,14 @@ async function runClassify() {
         return;
     const method = methodSel.value;
     const classes = clampClasses();
-    const opts = { source: SOURCE_ID, target, field, method, nullValue: NULL_COLOR };
+    const opts = {
+        source: SOURCE_ID,
+        target,
+        field,
+        method,
+        nullValue: NULL_COLOR,
+        saveAs: geometryKind() === 'line' ? 'stroke' : 'fill',
+    };
     if (method === 'categorical') {
         const seen = [];
         for (const v of fieldValues(field)) {
@@ -246,7 +290,7 @@ function refreshExpression() {
 function applyExpression() {
     try {
         applyStyle(JSON.parse(exprInput.value));
-        status.textContent = '已应用 fill-color 表达式。';
+        status.textContent = `已应用 ${paintProperty()} 表达式。`;
     }
     catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
@@ -254,21 +298,24 @@ function applyExpression() {
 }
 async function populate(source) {
     targetSel.innerHTML = '';
-    const polygonLayers = source.getLayers().filter((l) => l?.geometry_type === 'polygon');
-    polygonLayers.forEach((lyr, i) => {
-        const name = lyr?.name || `layer-${i}`;
-        targetSel.appendChild(new Option(name, name));
+    const layers = source.getLayers();
+    layers.forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
     });
+    const first = layers[0];
+    geometrySel.value = first?.geometry_type === 'polyline' ? 'line' : first?.geometry_type === 'point' ? 'circle' : 'fill';
+    syncGeometryModes();
     fieldSel.innerHTML = '';
     exprFieldSel.innerHTML = '';
-    const records = polygonLayers[0]?.data?.getRecords?.() ?? [];
+    const records = first?.data?.getRecords?.() ?? [];
     Object.keys(records[0] || {}).forEach((field) => {
         fieldSel.appendChild(new Option(field, field));
         exprFieldSel.appendChild(new Option(field, field));
     });
     fieldSel.value = 'pop';
     exprFieldSel.value = 'pop';
-    const ready = polygonLayers.length > 0;
+    const ready = layers.length > 0;
     classifyBtn.disabled = !ready;
     exprBtn.disabled = !ready;
     if (ready) {
@@ -277,7 +324,7 @@ async function populate(source) {
         await runClassify();
     }
     else {
-        status.textContent = '此文件没有 polygon 图层';
+        status.textContent = '此文件没有可渲染图层';
     }
 }
 fileInput.addEventListener('change', (e) => {
@@ -305,13 +352,32 @@ fileInput.addEventListener('change', (e) => {
     };
     reader.readAsArrayBuffer(file);
 });
+function buildDashExpression() {
+    const field = fieldSel.value;
+    const { min, max } = numericStats(field);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max)
+        return ['match', ['get', 'group'], 'a', 'solid', 'b', 'dash', 'dot'];
+    return ['step', ['get', field], 'solid', +(min + (max - min) / 3).toFixed(2), 'dash', +(min + ((max - min) * 2) / 3).toFixed(2), 'dot'];
+}
+function buildShapeExpression() {
+    const field = fieldSel.value;
+    const { min, max } = numericStats(field);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max)
+        return ['match', ['get', 'group'], 'a', 'circle', 'b', 'star', 'square'];
+    return ['step', ['get', field], 'circle', +(min + (max - min) / 3).toFixed(2), 'star', +(min + ((max - min) * 2) / 3).toFixed(2), 'square'];
+}
 targetSel.addEventListener('change', () => { applyStyle(); });
+geometrySel.addEventListener('change', () => {
+    syncGeometryModes();
+    applyStyle();
+});
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', () => {
-    const baked = currentMode() === 'baked';
-    bakedGroup.hidden = !baked;
-    expressionGroup.hidden = baked;
-    if (baked)
-        applyStyle();
+    const mode = currentMode();
+    bakedGroup.hidden = mode !== 'baked';
+    expressionGroup.hidden = mode !== 'expression';
+    if (mode === 'baked') applyStyle();
+    if (mode === 'dashstyle') applyStyle(buildExpression(), buildDashExpression());
+    if (mode === 'shape') applyStyle(buildExpression(), buildShapeExpression());
 }));
 classifyBtn.addEventListener('click', runClassify);
 exprFieldSel.addEventListener('change', refreshExpression);

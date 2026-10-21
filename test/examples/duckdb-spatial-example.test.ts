@@ -215,33 +215,12 @@ const geometryPages = [
   ['duckdb/geometry/make-valid', 'repairGeometry'],
 ] as const;
 const attributePages = [
-  ['duckdb/attribute/area', 'area'],
-  ['duckdb/attribute/length', 'length'],
-  ['duckdb/attribute/perimeter', 'perimeter'],
+  ['duckdb/attribute/measures', 'area'],
+  ['duckdb/attribute/coordinates', 'x'],
+  ['duckdb/attribute/geometry-checks', 'isValid'],
   ['duckdb/attribute/geometry-type', 'geometryType'],
-  ['duckdb/attribute/is-valid', 'isValid'],
-  ['duckdb/attribute/is-empty', 'isEmpty'],
-  ['duckdb/attribute/is-simple', 'isSimple'],
-  ['duckdb/attribute/x', 'x'],
-  ['duckdb/attribute/y', 'y'],
-  ['duckdb/attribute/centroid-x', 'centroidX'],
-  ['duckdb/attribute/centroid-y', 'centroidY'],
 ] as const;
-const relationPages = [
-  ['duckdb/relation/intersects', 'intersects'],
-  ['duckdb/relation/contains', 'contains'],
-  ['duckdb/relation/within', 'within'],
-  ['duckdb/relation/touches', 'touches'],
-  ['duckdb/relation/disjoint', 'disjoint'],
-  ['duckdb/relation/overlaps', 'overlaps'],
-  ['duckdb/relation/equals', 'equals'],
-  ['duckdb/relation/crosses', 'crosses'],
-  ['duckdb/relation/covers', 'covers'],
-  ['duckdb/relation/covered-by', 'coveredBy'],
-  ['duckdb/relation/contains-properly', 'containsProperly'],
-  ['duckdb/relation/distance', 'distance'],
-  ['duckdb/relation/distance-within', 'distanceWithin'],
-] as const;
+const relationPages = [['duckdb/relation/spatial-relations', 'intersects']] as const;
 const densifyPage = [['duckdb/geometry/densify', 'densify']] as const;
 const unaryGeometryPages = [
   ['duckdb/geometry/multipart-to-singlepart', 'multipartToSinglepart'],
@@ -321,51 +300,35 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
-  it.each(relationPages.slice(0, -2))('%s exposes fixed relation controls', async (id) => {
-    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+  it('exposes every spatial predicate and the controls those predicates share', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/duckdb/relation/spatial-relations/index.html'),
+      'utf8',
+    );
     const page = new DOMParser().parseFromString(html, 'text/html');
     expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
     expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
-    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
-    expect(page.querySelector('#target')).not.toBeNull();
-    expect(page.querySelector('#mask-layer')).not.toBeNull();
-    expect(page.querySelector('#relation-mode')).not.toBeNull();
     expect(
       Array.from(
-        page.querySelectorAll<HTMLOptionElement>('#relation-mode option'),
+        page.querySelectorAll<HTMLOptionElement>('#spatial-operation option'),
         ({ value }) => value,
       ),
-    ).toEqual(['filter', 'attribute']);
-    for (const selector of ['#distance', '#tolerance', '#allow-geographic']) {
-      expect(page.querySelector(selector)).toBeNull();
-    }
-  });
-  it('gives distance only its fixed target, mask, and distance controls', async () => {
-    const html = await readFile(
-      resolve('packages/examples/examples/duckdb/relation/distance/index.html'),
-      'utf8',
-    );
-    const page = new DOMParser().parseFromString(html, 'text/html');
-    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
-    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
-    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
-    for (const selector of ['#target', '#mask-layer', '#distance']) {
-      expect(page.querySelector(selector)).not.toBeNull();
-    }
-    for (const selector of ['#relation-mode', '#tolerance', '#allow-geographic']) {
-      expect(page.querySelector(selector)).toBeNull();
-    }
-  });
-  it('gives distance-within its filter-or-attribute relation controls', async () => {
-    const html = await readFile(
-      resolve('packages/examples/examples/duckdb/relation/distance-within/index.html'),
-      'utf8',
-    );
-    const page = new DOMParser().parseFromString(html, 'text/html');
-    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
-    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
-    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
-    for (const selector of ['#target', '#mask-layer', '#distance', '#relation-mode']) {
+    ).toEqual([
+      'intersects',
+      'contains',
+      'within',
+      'touches',
+      'disjoint',
+      'overlaps',
+      'equals',
+      'crosses',
+      'covers',
+      'coveredBy',
+      'containsProperly',
+      'distance',
+      'distanceWithin',
+    ]);
+    for (const selector of ['#file', '#target', '#mask-layer', '#relation-mode', '#distance']) {
       expect(page.querySelector(selector)).not.toBeNull();
     }
     expect(
@@ -374,9 +337,6 @@ describe('DuckDB spatial example runner', () => {
         ({ value }) => value,
       ),
     ).toEqual(['filter', 'attribute']);
-    for (const selector of ['#tolerance', '#allow-geographic']) {
-      expect(page.querySelector(selector)).toBeNull();
-    }
   });
   it.each([
     ...geometryPages,
@@ -994,7 +954,7 @@ describe('DuckDB spatial example runner', () => {
           : Promise.resolve(),
     });
     exampleRuntime.autoLoadExampleFixtures.mockImplementationOnce(async (id: string) => {
-      expect(id).toBe('duckdb/relation/distance');
+      expect(id).toBe('duckdb/relation/spatial-relations');
       const input = document.getElementById('file') as HTMLInputElement;
       const mask = document.getElementById('mask-file') as HTMLInputElement;
       Object.defineProperty(input, 'files', { value: [new File(['target'], 'target.geojson')] });
@@ -1002,7 +962,10 @@ describe('DuckDB spatial example runner', () => {
       input.dispatchEvent(new Event('change'));
       mask.dispatchEvent(new Event('change'));
     });
-    await executePage('duckdb/relation/distance', mountDuckDbSpatialExample);
+    await mountDuckDbSpatialExample({
+      id: 'duckdb/relation/spatial-relations',
+      operation: 'distance',
+    });
     await vi.waitFor(() => expect(uploadResolvers.size).toBe(2));
     delayInitialUploads = false;
     uploadResolvers.get('duckdb-spatial-mask')!();

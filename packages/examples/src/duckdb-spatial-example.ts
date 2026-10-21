@@ -230,7 +230,15 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConfig): Promise<void> {
-  const operation = getDuckDbSpatialOperationDefinition(config.operation);
+  let operation = getDuckDbSpatialOperationDefinition(config.operation);
+  const operationSelect = document.getElementById('spatial-operation') as HTMLSelectElement | null;
+  function control<T extends HTMLElement>(id: string, required: boolean): T | null {
+    const element = document.getElementById(id) as T | null;
+    if (!element && required) {
+      throw new Error(`DuckDB spatial example is missing required control: #${id}`);
+    }
+    return element;
+  }
   const fileInput = requireElement<HTMLInputElement>('file');
   const targetSelect = requireElement<HTMLSelectElement>('target');
   const maskFileInput = document.getElementById('mask-file') as HTMLInputElement | null;
@@ -238,36 +246,30 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   const crsRecoveryLabel = requireElement<HTMLLabelElement>('crs-recovery-label');
   const crsRecoveryInput = requireElement<HTMLInputElement>('crs-recovery-input');
   const crsRecoveryApply = requireElement<HTMLButtonElement>('crs-recovery-apply');
-  const allowGeographicInput = operation.controls.geographicGuard
-    ? requireElement<HTMLInputElement>('allow-geographic')
-    : null;
+  const allowGeographicInput = control<HTMLInputElement>(
+    'allow-geographic',
+    operation.controls.geographicGuard,
+  );
   const runButton = requireElement<HTMLButtonElement>('run');
   const status = requireElement<HTMLElement>('status');
   const pickedAttributes = requireElement<HTMLElement>('picked-attributes');
-  const toleranceInput = operation.controls.tolerance
-    ? requireElement<HTMLInputElement>('tolerance')
-    : null;
+  const toleranceInput = control<HTMLInputElement>('tolerance', operation.controls.tolerance);
   const toleranceLabel = document.getElementById('tolerance-label');
-  const distanceInput = operation.controls.distance
-    ? requireElement<HTMLInputElement>('distance')
-    : null;
+  const distanceInput = control<HTMLInputElement>('distance', operation.controls.distance);
   const distanceLabel = document.getElementById('distance-label');
-  const predicateSelect = operation.controls.predicate
-    ? requireElement<HTMLSelectElement>('predicate')
-    : null;
-  const fieldInput = operation.controls.field ? requireElement<HTMLInputElement>('field') : null;
-  const joinFieldInput = operation.controls.joinField
-    ? requireElement<HTMLInputElement>('join-field')
-    : null;
-  const crsInput = operation.controls.crs ? requireElement<HTMLInputElement>('crs') : null;
-  const relationMode = operation.controls.relationMode
-    ? requireElement<HTMLSelectElement>('relation-mode')
-    : null;
+  const predicateSelect = control<HTMLSelectElement>('predicate', operation.controls.predicate);
+  const fieldInput = control<HTMLInputElement>('field', operation.controls.field);
+  const joinFieldInput = control<HTMLInputElement>('join-field', operation.controls.joinField);
+  const crsInput = control<HTMLInputElement>('crs', operation.controls.crs);
+  const relationMode = control<HTMLSelectElement>('relation-mode', operation.controls.relationMode);
   const relationModeLabel = document.getElementById('relation-mode-label');
-  const maskLayerSelect = operation.controls.mask
-    ? requireElement<HTMLSelectElement>('mask-layer')
-    : null;
+  const maskLayerSelect = control<HTMLSelectElement>('mask-layer', operation.controls.mask);
   const maskLayerLabel = document.getElementById('mask-layer-label');
+  if (operationSelect?.value) {
+    operation = getDuckDbSpatialOperationDefinition(
+      operationSelect.value as DuckDbSpatialOperation,
+    );
+  }
   const emap = await loadExampleRuntime();
   const { Emap, TopologySource, NavigationControl } = emap;
   const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map' });
@@ -410,7 +412,17 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     );
     maskLayerSelect.disabled = layerPickerEntries.length === 0;
   }
+  function showField(element: HTMLElement | null, visible: boolean): void {
+    const field = element?.closest<HTMLElement>('.emap-example-field');
+    if (field) field.hidden = !visible;
+  }
   function updateControls() {
+    showField(toleranceInput, operation.controls.tolerance);
+    showField(allowGeographicInput, operation.controls.geographicGuard);
+    showField(relationMode, operation.controls.relationMode);
+    showField(maskLayerSelect, operation.controls.mask);
+    showField(maskFileInput, operation.controls.mask);
+    showField(distanceInput, operation.controls.distance);
     if (toleranceLabel)
       toleranceLabel.style.display = operation.controls.tolerance ? 'inline-flex' : 'none';
     if (toleranceInput) toleranceInput.disabled = !operation.controls.tolerance;
@@ -436,6 +448,13 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     crsRecoveryInput.disabled = applyingCrsRecovery;
     crsRecoveryApply.disabled = !pending || applyingCrsRecovery;
   }
+  operationSelect?.addEventListener('change', () => {
+    if (!operationSelect.value) return;
+    operation = getDuckDbSpatialOperationDefinition(operationSelect.value as DuckDbSpatialOperation);
+    updateControls();
+    syncControls();
+  });
+  updateControls();
   function getPendingCrsLoad(): PendingCrsLoad | undefined {
     return pendingCrsLoads.values().next().value;
   }

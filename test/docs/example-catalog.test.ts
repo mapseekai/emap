@@ -7,10 +7,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { examples, exampleTopics, type ExampleDefinition } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
 const expectedModules = [
-  { key: 'map-data', zh: '地图与数据' },
-  { key: 'style-interaction', zh: '样式与交互' },
-  { key: 'data-editing', zh: '数据编辑' },
-  { key: 'data-analysis', zh: '数据分析' },
+  { key: 'getting-started', zh: '入门' },
+  { key: 'data-layers', zh: '数据与图层' },
+  { key: 'style', zh: '样式' },
+  { key: 'interaction', zh: '交互' },
+  { key: 'editing', zh: '编辑' },
+  { key: 'analysis', zh: '几何分析' },
+  { key: 'duckdb', zh: 'DuckDB' },
+  { key: 'rendering', zh: '渲染与性能' },
+  { key: 'extension', zh: '扩展' },
 ] as const;
 function createTopicFixture(
   id: string,
@@ -21,7 +26,7 @@ function createTopicFixture(
 ): ExampleDefinition {
   return {
     id,
-    category: 'data-analysis',
+    category: 'duckdb',
     title: { zh: id, en: id },
     description: { zh: id, en: id },
     learningGoals: { zh: ['目标'], en: ['Goal'] },
@@ -274,9 +279,9 @@ describe('example catalog metadata', () => {
     expect(examplePublicHref('/buffer/')).toBe('/mapseekai/emap/examples/buffer/');
   });
   it('defines the complete metadata-only catalog', () => {
-    expect(Array.from(new Set(examples.map(({ category }) => category)))).toEqual(
-      expectedModules.map(({ key }) => key),
-    );
+    const seenCategories = Array.from(new Set(examples.map(({ category }) => category)));
+    expect(seenCategories).toHaveLength(expectedModules.length);
+    expect(seenCategories).toEqual(expect.arrayContaining(expectedModules.map(({ key }) => key)));
     for (const { key } of expectedModules) {
       expect(
         examples.some(({ category }) => category === key),
@@ -334,61 +339,38 @@ describe('example catalog metadata', () => {
       'fixtures/task-6-polygons.geojson',
       'fixtures/task-6-polygons-alt.geojson',
     ]);
-    expect(byId.get('clip-erase')?.fixtures).toEqual([
+    expect(byId.get('clip')?.fixtures).toEqual([
       'fixtures/task-7-polygons.geojson',
       'fixtures/task-7-mask.geojson',
     ]);
+    expect(byId.get('erase')?.fixtures).toEqual([
+      'fixtures/task-7-polygons.geojson',
+      'fixtures/task-7-mask.geojson',
+    ]);
+    expect(byId.get('getting-started/vector-file')?.fixtures).toEqual([
+      'fixtures/getting-started-geojson-viewer.geojson',
+    ]);
+    expect(byId.get('export-formats')?.fixtures).toEqual(['fixtures/task-6-polygons.geojson']);
     expect(byId.get('geoparquet-viewer')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
-    expect(byId.get('getting-started/topojson-viewer')?.fixtures).toEqual([]);
-    expect(byId.get('export-formats')?.fixtures).toEqual(['fixtures/task-6-polygons.geojson']);
-    expect(byId.get('join')?.category).toBe('data-analysis');
-    expect(byId.get('web-worker')?.category).toBe('data-analysis');
+    expect(byId.get('join')?.category).toBe('analysis');
+    expect(byId.get('web-worker')?.category).toBe('rendering');
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
-    for (const id of [
-      'duckdb/relation/intersects',
-      'duckdb/relation/contains',
-      'duckdb/relation/within',
-      'duckdb/relation/touches',
-      'duckdb/relation/disjoint',
-      'duckdb/relation/overlaps',
-      'duckdb/relation/equals',
-      'duckdb/relation/crosses',
-      'duckdb/relation/covers',
-      'duckdb/relation/covered-by',
-      'duckdb/relation/contains-properly',
-    ]) {
-      expect(byId.get(id)).toMatchObject({
-        docs: ['/docs/data/duckdb', '/docs/data/operations'],
-        fixtures: ['fixtures/task-7-polygons.geojson'],
-        topic: { id: 'duckdb', section: 'relation' },
-      });
-      expect(byId.get(id)?.tags).toEqual(expect.arrayContaining(['duckdb', 'spatial', 'relation']));
-      expect(byId.get(id)?.featureFlags).toEqual([
-        'duckdb',
-        'spatial',
-        'relation',
-        id.slice(id.lastIndexOf('/') + 1),
-      ]);
-    }
-    for (const id of ['duckdb/relation/distance', 'duckdb/relation/distance-within']) {
-      expect(byId.get(id)).toMatchObject({
-        docs: ['/docs/data/duckdb', '/docs/data/operations'],
-        fixtures: [
-          'fixtures/duckdb-distance-target.geojson',
-          'fixtures/duckdb-distance-mask.geojson',
-        ],
-        topic: { id: 'duckdb', section: 'relation' },
-        featureFlags: ['duckdb', 'spatial', 'relation', 'distance'],
-      });
-    }
+    expect(byId.get('duckdb/relation/spatial-relations')).toMatchObject({
+      docs: ['/docs/data/duckdb', '/docs/data/operations'],
+      fixtures: ['fixtures/task-7-polygons.geojson', 'fixtures/task-7-mask.geojson'],
+      topic: { id: 'duckdb', section: 'relation' },
+    });
+    expect(byId.get('duckdb/relation/spatial-relations')?.tags).toEqual(
+      expect.arrayContaining(['duckdb', 'spatial', 'relation']),
+    );
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
     expect(byId.get('online-map-services')).toMatchObject({
-      category: 'map-data',
+      category: 'data-layers',
       docs: ['/docs/guides/controls'],
       api: ['MapLibreServiceManager'],
       featureFlags: ['maplibre', 'basemap', 'overlay', 'controls'],
@@ -419,11 +401,11 @@ describe('example catalog metadata', () => {
     expect(
       Array.from(root.querySelectorAll('.catalog-group-title'), ({ textContent }) => textContent),
     ).toEqual(expectedModules.map(({ zh }) => zh));
-    const mapDataCount = examples.filter(({ category }) => category === 'map-data').length;
-    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
-    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('地图与数据');
+    const mapDataCount = examples.filter(({ category }) => category === 'data-layers').length;
+    root.querySelector<HTMLButtonElement>('[data-category="data-layers"]')?.click();
+    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('数据与图层');
     expect(root.querySelectorAll('a.example-card')).toHaveLength(mapDataCount);
-    expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
+    expect(root.querySelector('[data-category="data-layers"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain(
@@ -495,8 +477,8 @@ describe('example catalog metadata', () => {
   it('renders category-mismatched topic cards as direct cards', () => {
     const topicFixture: ExampleDefinition[] = [
       {
-        ...createTopicFixture('duckdb-in-map-data', { id: 'duckdb', section: 'query' }),
-        category: 'map-data',
+        ...createTopicFixture('duckdb-in-data-layers', { id: 'duckdb', section: 'query' }),
+        category: 'data-layers',
       },
     ];
     const root = document.createElement('div');
@@ -504,7 +486,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
     expect(root.querySelectorAll('.catalog-topic')).toHaveLength(0);
     expect(root.querySelector('.catalog-direct-examples .example-card-title')?.textContent).toBe(
-      'duckdb-in-map-data',
+      'duckdb-in-data-layers',
     );
   });
   it('omits empty DuckDB topic sections after filtering to one card', () => {
@@ -536,7 +518,7 @@ describe('example catalog metadata', () => {
     search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
-    ).toEqual(['GeoJSON 查看器']);
+    ).toEqual(['打开矢量文件']);
     search.value = '  topologySOURCE.FROMbytes  ';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(
@@ -547,7 +529,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
     search.value = 'box-select';
     search.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(2);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
     const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
     if (!language) throw new Error('Catalog language selector was not rendered');
     language.value = 'en';
@@ -563,7 +545,7 @@ describe('example catalog metadata', () => {
   it('combines filters, clears search, and renders an empty result', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
-    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
+    root.querySelector<HTMLButtonElement>('[data-category="data-layers"]')?.click();
     const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!search) throw new Error('Catalog search was not rendered');
     search.value = 'TopologySource.fromBytes';
@@ -574,7 +556,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-empty')).not.toBeNull();
     root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
     expect(root.querySelectorAll('a.example-card')).toHaveLength(
-      examples.filter(({ category }) => category === 'map-data').length,
+      examples.filter(({ category }) => category === 'data-layers').length,
     );
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
   });
@@ -583,12 +565,12 @@ describe('example catalog metadata', () => {
     document.body.append(root);
     try {
       renderCatalog(root, examples);
-      const mapDataButton = root.querySelector<HTMLButtonElement>('[data-category="map-data"]');
+      const mapDataButton = root.querySelector<HTMLButtonElement>('[data-category="data-layers"]');
       if (!mapDataButton) throw new Error('Map & Data category button was not rendered');
       mapDataButton.focus();
       mapDataButton.click();
       expect(document.activeElement).toBe(
-        root.querySelector<HTMLButtonElement>('[data-category="map-data"]'),
+        root.querySelector<HTMLButtonElement>('[data-category="data-layers"]'),
       );
       const liveRegion = root.querySelector('.catalog-results-summary');
       const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
@@ -619,19 +601,19 @@ describe('example catalog metadata', () => {
       String(examples.length),
     );
     const firstCard = root.querySelector<HTMLAnchorElement>(
-      'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
+      'a.example-card[href="/mapseekai/emap/examples/getting-started/vector-file/"]',
     );
-    expect(firstCard?.querySelector('.example-api-chip')?.textContent).toBe('Emap');
+    expect(firstCard?.querySelector('.example-api-chip')?.textContent).toBe('TopologySource');
     expect(firstCard?.querySelector('.example-card-arrow')?.getAttribute('aria-hidden')).toBe(
       'true',
     );
     const mobileCategory = root.querySelector<HTMLSelectElement>('.catalog-mobile-category select');
-    expect(mobileCategory?.options).toHaveLength(5);
+    expect(mobileCategory?.options).toHaveLength(expectedModules.length + 1);
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
-    mobileCategory.value = 'data-analysis';
+    mobileCategory.value = 'duckdb';
     mobileCategory.dispatchEvent(new Event('change'));
     expect(root.querySelectorAll('a.example-card')).toHaveLength(
-      examples.filter(({ category }) => category === 'data-analysis').length,
+      examples.filter(({ category }) => category === 'duckdb').length,
     );
   });
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -668,7 +650,7 @@ describe('example catalog metadata', () => {
   it('preserves the selected category and query when switching locale', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
-    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
+    root.querySelector<HTMLButtonElement>('[data-category="data-layers"]')?.click();
     const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!search) throw new Error('Catalog search was not rendered');
     search.value = 'export';
@@ -678,7 +660,7 @@ describe('example catalog metadata', () => {
     language.value = 'en';
     language.dispatchEvent(new Event('change'));
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('export');
-    expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
+    expect(root.querySelector('[data-category="data-layers"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
     expect(
@@ -707,7 +689,7 @@ describe('example catalog metadata', () => {
           ?.getAttribute('src'),
         `${example.id} uses the canonical emap brand asset`,
       ).toBe('/mapseekai/emap/examples/emap.svg');
-      if (example.id === 'plugin-runtime') {
+      if (example.id === 'plugin-install' || example.id === 'plugin-capability') {
         // The inspector must start without implicitly mounting optional providers.
         expect(html).toContain('mountCordisRuntimeDemo');
         const inspector = await readFile(
@@ -755,7 +737,7 @@ describe('example catalog metadata', () => {
         expect(parsed.querySelector('form#create-form')).not.toBeNull();
         expect(parsed.querySelector('#create')).not.toBeNull();
         expect(html).toContain('map.createLayer(');
-      } else {
+      } else if (example.id !== 'plugin-install') {
         expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       }
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
@@ -800,7 +782,7 @@ describe('example catalog metadata', () => {
   });
   it('exposes TopoJSON import and the requested six export formats', async () => {
     const topojsonHtml = await readFile(
-      resolve('packages/examples/examples/getting-started/topojson-viewer/index.html'),
+      resolve('packages/examples/examples/getting-started/vector-file/index.html'),
       'utf8',
     );
     const topojson = new DOMParser().parseFromString(topojsonHtml, 'text/html');
@@ -1178,21 +1160,20 @@ describe('example catalog metadata', () => {
       reportError.mockRestore();
     }
   });
-  it('keeps the Shapefile viewer map-first with one banner and one floating workbench', async () => {
+  it('keeps vector file opening on one map with a CRS field for ZIP input', async () => {
     const html = await readFile(
-      resolve('packages/examples/examples/getting-started/shapefile-viewer/index.html'),
+      resolve('packages/examples/examples/getting-started/vector-file/index.html'),
       'utf8',
     );
     const parsed = new DOMParser().parseFromString(html, 'text/html');
-    const workbench = parsed.querySelector('body > details.shp-workbench.panel');
+    const workbench = parsed.querySelector('body > details.emap-example-workbench.panel');
     expect(parsed.body.classList.contains('emap-example-with-floating-header')).toBe(true);
-    expect(parsed.querySelectorAll('header, #header')).toHaveLength(1);
     expect(parsed.querySelector('body > #header')).not.toBeNull();
     expect(parsed.querySelector('body > #map')).not.toBeNull();
     expect(workbench?.hasAttribute('open')).toBe(true);
-    expect(workbench?.querySelector('#shp-load-form')).not.toBeNull();
-    expect(workbench?.querySelector('#shp-metadata')).not.toBeNull();
-    expect(parsed.querySelector('.shp-page, .shp-topbar, .shp-content, .shp-workspace')).toBeNull();
+    expect(parsed.querySelector<HTMLInputElement>('#file-input')?.accept).toContain('.zip');
+    expect(parsed.querySelector('#crs-preset')).not.toBeNull();
+    expect(parsed.querySelector('#load-zip')).not.toBeNull();
   });
   it('exposes live line color, width, and dash controls', async () => {
     const html = await readFile(
@@ -1214,7 +1195,7 @@ describe('example catalog metadata', () => {
   });
   it('removes the draw-snap display layer before replacing uploaded source data', async () => {
     const html = await readFile(
-      resolve('packages/examples/examples/draw-snap-clear/index.html'),
+      resolve('packages/examples/examples/draw-snap/index.html'),
       'utf8',
     );
     expect(html).toMatch(

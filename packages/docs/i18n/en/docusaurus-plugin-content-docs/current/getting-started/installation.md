@@ -3,7 +3,7 @@ id: installation
 slug: /getting-started/installation
 title: Installation
 api: ["Emap", "TopologySource"]
-examples: ["getting-started/geojson-viewer"]
+examples: ["getting-started/vector-file"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -120,4 +120,4 @@ Web Worker uses the core package; publish `emap-worker.js` and `mapshaper-vendor
 
 ## Runnable examples
 
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)

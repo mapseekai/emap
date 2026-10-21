@@ -6,7 +6,7 @@ const catalogCopy = {
   zh: {
     title: 'Emap 文档示例',
     eyebrow: 'Emap 示例',
-    intro: '打开示例，查看实时地图、源码、数据夹具和 API 入口。',
+    intro: '按任务打开示例：加载数据、设置样式、查询编辑、几何分析和 DuckDB。',
     catalogLabel: '示例目录',
     allCategories: '全部',
     languageLabel: '语言',
@@ -21,7 +21,7 @@ const catalogCopy = {
   en: {
     title: 'Emap Documentation Example',
     eyebrow: 'Emap examples',
-    intro: 'Open an example to inspect the live map, source code, fixture, and API touchpoint.',
+    intro: 'Open an example by task: load data, style it, query and edit, analyze geometry, or run DuckDB.',
     catalogLabel: 'Example catalog',
     allCategories: 'All',
     languageLabel: 'Language',
@@ -41,20 +41,58 @@ interface CatalogState {
   query: string;
 }
 
+const categoryOrder = [
+  'getting-started',
+  'data-layers',
+  'style',
+  'interaction',
+  'editing',
+  'analysis',
+  'duckdb',
+  'rendering',
+  'extension',
+] as const;
+
 const categoryLabels: Record<ExampleLocale, Readonly<Record<string, string>>> = {
   zh: {
-    'map-data': '地图与数据',
-    'style-interaction': '样式与交互',
-    'data-editing': '数据编辑',
-    'data-analysis': '数据分析',
+    'getting-started': '入门',
+    'data-layers': '数据与图层',
+    style: '样式',
+    interaction: '交互',
+    editing: '编辑',
+    analysis: '几何分析',
+    duckdb: 'DuckDB',
+    rendering: '渲染与性能',
+    extension: '扩展',
   },
   en: {
-    'map-data': 'Map & Data',
-    'style-interaction': 'Styling & Interaction',
-    'data-editing': 'Data Editing',
-    'data-analysis': 'Data Analysis',
+    'getting-started': 'Getting started',
+    'data-layers': 'Data & layers',
+    style: 'Styling',
+    interaction: 'Interaction',
+    editing: 'Editing',
+    analysis: 'Geometry analysis',
+    duckdb: 'DuckDB',
+    rendering: 'Rendering & performance',
+    extension: 'Extensions',
   },
 };
+
+function orderedCategoryCounts(examples: readonly ExampleDefinition[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const example of examples) {
+    counts.set(example.category, (counts.get(example.category) ?? 0) + 1);
+  }
+  const ordered = new Map<string, number>();
+  for (const category of categoryOrder) {
+    const count = counts.get(category);
+    if (count) ordered.set(category, count);
+  }
+  for (const [category, count] of counts) {
+    if (!ordered.has(category)) ordered.set(category, count);
+  }
+  return ordered;
+}
 
 export const examplePublicHref = (id: string): string =>
   `/mapseekai/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
@@ -154,10 +192,7 @@ function renderCatalogLocale(
   searchField.append(searchLabel, searchControl);
   header.append(eyebrow, title, intro, searchField);
 
-  const categories = new Map<string, number>();
-  for (const example of examples) {
-    categories.set(example.category, (categories.get(example.category) ?? 0) + 1);
-  }
+  const categories = orderedCategoryCounts(examples);
 
   const shell = document.createElement('div');
   shell.className = 'catalog-shell';

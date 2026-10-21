@@ -3,7 +3,7 @@ id: selection
 slug: /guides/selection
 title: Selection
 api: ["BoxSelectHandler", "BoxSelectHandlerOptions", "BoxSelectStyle", "ClickSelectHandler", "DragPanHandler", "DragPanOptions", "DrawFeatureHandler", "DrawFeatureOptions", "DrawGeometryType", "Emap", "featureMatchesLasso", "LassoSelectHandler", "LassoSelectHandlerOptions", "LassoSelectStyle", "MergeSelectedOptions", "ModifierCombo", "pointInPolygon", "resolveMode", "ScrollZoomHandler", "ScrollZoomOptions", "SelectHandlerOptions", "Selection", "SelectionDiff", "SelectionSnapshot", "SelectMode", "TransformFeatureHandler", "TransformFeatureOptions", "VertexEditHandler", "VertexEditOptions", "FeatureQuery"]
-examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
+examples: ["lasso-select","feature-rotate","feature-scale","feature-selection","feature-translate","merge-selected"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -159,5 +159,5 @@ Run bulk data operations through `map.ops` to update selection, spatial indexes,
 ## Runnable examples
 
 - [Feature selection](/mapseekai/emap/examples/feature-selection/)
-- [Box selection](/mapseekai/emap/examples/box-select/)
+- [Box selection](/mapseekai/emap/examples/lasso-select/)
 - [Lasso selection](/mapseekai/emap/examples/lasso-select/)

@@ -1,0 +1,34 @@
+{
+  "sidebar.tutorialSidebar.category.开始": {
+    "message": "Start",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.地图": {
+    "message": "Map",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.显示": {
+    "message": "Display",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.交互": {
+    "message": "Interaction",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.编辑": {
+    "message": "Editing",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.数据": {
+    "message": "Data",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.进阶": {
+    "message": "Advanced",
+    "description": "Sidebar category"
+  },
+  "sidebar.tutorialSidebar.category.参考": {
+    "message": "Reference",
+    "description": "Sidebar category"
+  }
+}

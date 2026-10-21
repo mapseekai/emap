@@ -3,7 +3,7 @@ id: overview
 slug: /concepts/overview
 title: Concepts overview
 api: ["Emap", "TopologySource", "LayerSpecification"]
-examples: ["getting-started/geojson-viewer"]
+examples: ["getting-started/vector-file"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -157,4 +157,4 @@ Continue with [Emap map instance](./emap.md), [Sources and layers](./source-laye
 
 ## Runnable examples
 
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)

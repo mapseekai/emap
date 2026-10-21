@@ -1,1 +1,10 @@
-{}
+{
+  "navbar.item.label.文档": {
+    "message": "Docs",
+    "description": "Navbar docs label"
+  },
+  "navbar.item.label.示例": {
+    "message": "Examples",
+    "description": "Navbar examples label"
+  }
+}

@@ -30,9 +30,9 @@ test('example catalog is generated from the shared manifest', async ({ page }) =
   expect(errors).toEqual([]);
 });
 
-test('GeoJSON viewer paints a real Canvas and survives pointer navigation', async ({ page }) => {
+test('vector file viewer paints a real Canvas and survives pointer navigation', async ({ page }) => {
   const errors = collectRuntimeErrors(page);
-  await page.goto('/mapseekai/emap/examples/getting-started/geojson-viewer/');
+  await page.goto('/mapseekai/emap/examples/getting-started/vector-file/');
 
   const status = page.locator('#status');
   await expect(status).toContainText('当前:');

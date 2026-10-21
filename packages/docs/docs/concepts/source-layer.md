@@ -3,7 +3,7 @@ id: source-layer
 slug: /concepts/source-layer
 title: 数据源与图层
 api: ["CirclePaint", "DatasetFormatPlugin", "Emap", "ExportedFormatFile", "ExportFormat", "ExportOptions", "FillPaint", "ITopologySource", "LayerLayout", "LayerPaint", "LayerSpecification", "LayerType", "LinePaint", "ReadySourceLoadPlan", "registerFormat", "ReplaceableTopologySource", "resolvePointStyle", "resolveStrokeStyle", "SourceLoadAnswers", "SourceLoadDiagnostic", "SourceLoadDiagnosticCode", "SourceLoadDraft", "SourceLoadError", "SourceLoadRequest", "SourceLoadRequirement", "SourceLoadSummary", "SourcePreflightResult", "TopologySource", "TopologySource.fromBytes", "TopologySource.fromUrl", "TopologySourceData", "TopologySourceFromBytesOptions", "TopologySourceInput", "TopologySourceOptions", "ImportResourceLimits", "ZipExtractionLimits"]
-examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers"]
+examples: ["getting-started/vector-file","getting-started/lines","getting-started/points","merge-layers"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -149,7 +149,7 @@ if (result.status === 'ready') await map.confirmSource(result.plan); // 确认�
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)
 - [线图层](/mapseekai/emap/examples/getting-started/lines/)
 - [点图层](/mapseekai/emap/examples/getting-started/points/)
 - [合并图层](/mapseekai/emap/examples/merge-layers/)

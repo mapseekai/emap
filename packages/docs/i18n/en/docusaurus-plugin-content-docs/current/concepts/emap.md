@@ -3,7 +3,7 @@ id: emap
 slug: /concepts/emap
 title: Emap map instance
 api: ["Emap", "Feature", "FeatureAccessor", "FeatureQuery", "findInvalidFieldName", "HighlightManager", "isValidFieldName", "VisibleLayerLookup", "MapOptions", "TopologySource"]
-examples: ["getting-started/geojson-viewer","interaction-handlers","undo-redo"]
+examples: ["getting-started/vector-file","interaction-handlers","undo-redo"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -195,6 +195,6 @@ if (!result.ok) console.error(result.error);
 
 ## Runnable examples
 
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)
 - [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
 - [Undo and redo](/mapseekai/emap/examples/undo-redo/)

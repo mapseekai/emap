@@ -3,7 +3,7 @@ id: operations
 slug: /data/operations
 title: 数据操作
 api: ["AffineLayerOptions", "ApplyExpressionOptions", "BufferOptions", "CheckGeometryOptions", "CleanOptions", "ClipEraseOptions", "DataFillOptions", "DissolveOptions", "DivideOptions", "DragSessionOptions", "DropLayerOptions", "Emap", "ExplodeOptions", "ExportSnapshotOptions", "ExpressionEvaluationPolicy", "FeatureAffineSession", "FeatureRef", "FeatureTranslateSession", "FilterFieldsOptions", "FilterGeomOptions", "FilterIslandsOptions", "FilterOptions", "FilterSliversOptions", "GeometryCheckReport", "HighlightStyle", "InnerlinesOptions", "IntersectionPointsLayerOptions", "JoinTableData", "JoinTableOptions", "LinesOptions", "LoadSnapshotOptions", "MapOptions", "MergeLayersOptions", "MosaicOptions", "PointsMode", "PointsOptions", "PolygonsOptions", "ProjectLayerExport", "ProjectLayerOutputOptions", "ProjectOptions", "QueriedFeature", "QueryFeaturesOptions", "RebuildTopologyOptions", "RenameFieldsOptions", "RenameLayerOptions", "SimplifyMethod", "SimplifyOptions", "SnapOptions", "SortFeaturesOptions", "SplitCutter", "SplitFeatureHandler", "SplitFeatureOptions", "SplitLayerOptions", "SplitSelectedOptions", "SplitSelectedResult", "UnionOptions", "UniqueFeaturesOptions", "OpResult", "OpError", "ClassifyFeaturesOptions"]
-examples: ["buffer","clip-erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
+examples: ["buffer","clip","erase","dissolve","filter-features","merge-selected","simplify","split-features","union"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -229,7 +229,8 @@ if (simplified.ok) {
 ## 可运行示例
 
 - [Buffer](/mapseekai/emap/examples/buffer/)
-- [Clip / erase](/mapseekai/emap/examples/clip-erase/)
+- [裁剪](/mapseekai/emap/examples/clip/)
+- [擦除](/mapseekai/emap/examples/erase/)
 - [Dissolve](/mapseekai/emap/examples/dissolve/)
 - [筛选要素](/mapseekai/emap/examples/filter-features/)
 - [合并选中要素](/mapseekai/emap/examples/merge-selected/)

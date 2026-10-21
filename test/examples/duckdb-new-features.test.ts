@@ -120,10 +120,7 @@ it('registers only the two split distance routes in the Vite build inputs', () =
   }
 
   expect(Object.keys(input)).toEqual(
-    expect.arrayContaining([
-      'examples/duckdb/relation/distance/index',
-      'examples/duckdb/relation/distance-within/index',
-    ]),
+    expect.arrayContaining(['examples/duckdb/relation/spatial-relations/index']),
   );
   expect(Object.keys(input)).not.toContain('examples/duckdb-spatial-ops/index');
 });

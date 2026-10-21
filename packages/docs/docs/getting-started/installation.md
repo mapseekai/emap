@@ -3,7 +3,7 @@ id: installation
 slug: /getting-started/installation
 title: 安装
 api: ["Emap", "TopologySource"]
-examples: ["getting-started/geojson-viewer"]
+examples: ["getting-started/vector-file"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -119,4 +119,4 @@ Web Worker 使用核心包；应用须发布 `emap-worker.js` 和 `mapshaper-ven
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)

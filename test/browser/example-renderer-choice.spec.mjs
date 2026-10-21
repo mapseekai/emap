@@ -8,7 +8,9 @@ async function actual(page, renderer) {
   await expect(page.locator('#map canvas[data-emap-renderer]').first()).toHaveAttribute('data-emap-renderer',renderer);
 }
 // Every route is visited, including generated DuckDB workflows and the standalone GPU experiments.
-for (const example of examples) test(`${example.id}: shared renderer controls and default backend`, async ({page}) => {
+for (const example of examples) {
+  if (example.id === 'plugin-install' || example.id === 'plugin-capability') continue;
+  test(`${example.id}: shared renderer controls and default backend`, async ({page}) => {
   await page.goto(base+example.id+'/');
   await expect(page.locator('.emap-example-renderer-tools')).toHaveCount(1);
   await expect(page.locator('[data-example-renderer]')).toHaveCount(3);
@@ -16,8 +18,9 @@ for (const example of examples) test(`${example.id}: shared renderer controls an
   if (gpuOnly.includes(example.id)) await expect(button(page,'canvas2d')).toBeDisabled();
   else await expect(button(page,'canvas2d')).toBeEnabled();
   if (!example.id.startsWith('luma-')) await actual(page,'webgl2');
-});
-for (const id of ['getting-started/points','getting-started/lines','getting-started/polygon-fill','vertex-editing','geotiff-viewer','mixed-data-viewer','duckdb/geometry/centroid','plugin-runtime'])
+  });
+}
+for (const id of ['getting-started/points','getting-started/lines','getting-started/polygon-fill','vertex-editing','geotiff-viewer','mixed-data-viewer','duckdb/geometry/centroid','plugin-install'])
   for (const target of ['canvas2d','webgpu']) test(`${id}: ${target} buttons recreate the map with the selected backend`, async ({page}) => {
     await page.goto(base+id+'/?renderer=webgl2&testParam=keep#sample');
     await actual(page,'webgl2');

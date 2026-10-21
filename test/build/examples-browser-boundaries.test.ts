@@ -26,9 +26,8 @@ describe('examples browser build boundaries', () => {
   });
   it('has no unresolved root stylesheet references in authored examples', () => {
     for (const relative of [
+      'packages/examples/examples/getting-started/vector-file/index.html',
       'packages/examples/examples/export-formats/index.html',
-      'packages/examples/examples/getting-started/topojson-viewer/index.html',
-      'packages/examples/examples/getting-started/kml-viewer/index.html',
     ]) {
       expect(readFileSync(resolve(root, relative), 'utf8')).not.toContain('href="/style.css"');
     }

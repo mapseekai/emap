@@ -8,11 +8,13 @@ import { editorPreset } from '@mapseekai/emap/presets';
 import { loadExampleRuntime, fixtureUrl } from './example-runtime';
 
 /** Visual diagnostics read the actual Cordis registry; this module owns only UI state. */
-export async function mountCordisRuntimeDemo(): Promise<void> {
+export async function mountCordisRuntimeDemo(focus: 'install' | 'capability' = 'install'): Promise<void> {
+  const optional = <T extends HTMLElement>(id: string): T | null =>
+    document.getElementById(id) as T | null;
   const element = <T extends HTMLElement>(id: string): T => {
-    const node = document.getElementById(id);
+    const node = optional<T>(id);
     if (!node) throw new Error(`Missing demo element: ${id}`);
-    return node as T;
+    return node;
   };
   const emap = await loadExampleRuntime();
   const map = await emap.Emap.create({
@@ -27,8 +29,8 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
   );
   const fibers = () => [...map.ctx.registry.values()].flatMap((runtime) => [...runtime.fibers]);
   const action = element('action-state');
-  const pluginSearch = element<HTMLInputElement>('plugin-search');
-  const capabilitySearch = element<HTMLInputElement>('capability-search');
+  const pluginSearch = optional<HTMLInputElement>('plugin-search');
+  const capabilitySearch = optional<HTMLInputElement>('capability-search');
   let selectedName = 'feature.interaction.drag-pan';
   let busy = false;
   let closed = false;
@@ -43,8 +45,10 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
   }
 
   function capabilities(): void {
-    const target = element('capability-list');
-    const results = map.capabilities.search(capabilitySearch.value);
+    const target = optional('capability-list');
+    const search = optional<HTMLInputElement>('capability-search');
+    if (!target || !search) return;
+    const results = map.capabilities.search(search.value);
     target.replaceChildren();
     for (const item of results.slice(0, 50)) {
       const row = document.createElement('div');
@@ -63,74 +67,95 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     if (closed) return;
     const records = inspectContext(map.ctx);
     const services = inspectServices(map.ctx);
-    element('metric-plugins').textContent = String(records.length);
-    element('metric-active').textContent = String(
-      records.filter((item) => item.state === 'ACTIVE').length,
-    );
-    element('metric-capabilities').textContent = String(map.capabilities.list().length);
-    element('metric-formats').textContent = String(map.formats.list().length);
-    const database = map.ctx.get('duckDb');
-    element('service-state').textContent = [
-      `MapLibre：${map.ctx.get('mapLibre') ? '已安装' : '未安装'}`,
-      `DuckDB：${database ? (database.peek() ? '已初始化' : '已安装，尚未初始化') : '未安装'}`,
-      `服务：${services.filter((item) => item.state === 'ACTIVE').length}`,
-    ].join(' · ');
-    const list = element('plugin-list');
-    list.replaceChildren();
-    const query = pluginSearch.value.toLowerCase();
-    for (const item of records.filter((item) => item.name.toLowerCase().includes(query))) {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'runtime-row';
-      row.dataset.selected = String(item.name === selectedName);
-      row.dataset.pluginName = item.name;
-      const name = document.createElement('code');
-      name.textContent = item.name;
-      const state = document.createElement('span');
-      state.textContent = item.state;
-      row.append(name, state);
-      row.addEventListener('click', () => {
-        selectedName = item.name;
-        refresh();
-      });
-      list.append(row);
+    const pluginsMetric = optional('metric-plugins');
+    if (pluginsMetric) pluginsMetric.textContent = String(records.length);
+    const activeMetric = optional('metric-active');
+    if (activeMetric) {
+      activeMetric.textContent = String(records.filter((item) => item.state === 'ACTIVE').length);
     }
-    const selected = records.find((item) => item.name === selectedName);
-    element('selected-id').textContent = selectedName;
-    element('selected-status').textContent = selected
-      ? `#${selected.uid} · ${selected.state}`
-      : '未安装（Fiber 已 Dispose）';
-    element('selected-requires').textContent =
-      selected?.inject
-        .map((name) => {
-          const provider = services.find((service) => service.name === name);
-          return `${name} → ${provider?.owner ?? '等待 Provider'}`;
-        })
-        .join('\n') || '—';
-    element('selected-provides').textContent = selected?.provides.join('\n') || '—';
-    element('selected-effects').textContent = selected
-      ? JSON.stringify(selected.effects, null, 2)
-      : '—';
-    element<HTMLButtonElement>('dispose-plugin').disabled =
-      busy || !selected || !safe(selectedName);
-    element<HTMLButtonElement>('restart-plugin').disabled =
-      busy || !selected || !safe(selectedName);
-    element<HTMLButtonElement>('reinstall-plugin').disabled =
-      busy || !!selected || !definitions.has(selectedName) || !safe(selectedName);
+    const capabilityMetric = optional('metric-capabilities');
+    if (capabilityMetric) capabilityMetric.textContent = String(map.capabilities.list().length);
+    const formatMetric = optional('metric-formats');
+    if (formatMetric) formatMetric.textContent = String(map.formats.list().length);
+    const serviceState = optional('service-state');
+    if (serviceState) {
+      const database = map.ctx.get('duckDb');
+      serviceState.textContent = [
+        `MapLibre：${map.ctx.get('mapLibre') ? '已安装' : '未安装'}`,
+        `DuckDB：${database ? (database.peek() ? '已初始化' : '已安装，尚未初始化') : '未安装'}`,
+        `服务：${services.filter((item) => item.state === 'ACTIVE').length}`,
+      ].join(' · ');
+    }
+    const list = optional('plugin-list');
+    if (list && pluginSearch) {
+      list.replaceChildren();
+      const query = pluginSearch.value.toLowerCase();
+      for (const item of records.filter((item) => item.name.toLowerCase().includes(query))) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'runtime-row';
+        row.dataset.selected = String(item.name === selectedName);
+        row.dataset.pluginName = item.name;
+        const name = document.createElement('code');
+        name.textContent = item.name;
+        const state = document.createElement('span');
+        state.textContent = item.state;
+        row.append(name, state);
+        row.addEventListener('click', () => {
+          selectedName = item.name;
+          refresh();
+        });
+        list.append(row);
+      }
+      const selected = records.find((item) => item.name === selectedName);
+      const selectedId = optional('selected-id');
+      if (selectedId) selectedId.textContent = selectedName;
+      const selectedStatus = optional('selected-status');
+      if (selectedStatus) {
+        selectedStatus.textContent = selected
+          ? `#${selected.uid} · ${selected.state}`
+          : '未安装（Fiber 已 Dispose）';
+      }
+      const requires = optional('selected-requires');
+      if (requires) {
+        requires.textContent =
+          selected?.inject
+            .map((name) => {
+              const provider = services.find((service) => service.name === name);
+              return `${name} → ${provider?.owner ?? '等待 Provider'}`;
+            })
+            .join('\n') || '—';
+      }
+      const provides = optional('selected-provides');
+      if (provides) provides.textContent = selected?.provides.join('\n') || '—';
+      const effects = optional('selected-effects');
+      if (effects) effects.textContent = selected ? JSON.stringify(selected.effects, null, 2) : '—';
+      const dispose = optional<HTMLButtonElement>('dispose-plugin');
+      if (dispose) dispose.disabled = busy || !selected || !safe(selectedName);
+      const restart = optional<HTMLButtonElement>('restart-plugin');
+      if (restart) restart.disabled = busy || !selected || !safe(selectedName);
+      const reinstall = optional<HTMLButtonElement>('reinstall-plugin');
+      if (reinstall) {
+        reinstall.disabled = busy || !!selected || !definitions.has(selectedName) || !safe(selectedName);
+      }
+    }
     for (const [button, name] of [
       ['install-maplibre', 'provider.maplibre'],
       ['install-arrow', 'feature.format.arrow'],
       ['install-duckdb', 'provider.duckdb'],
     ]) {
-      element<HTMLButtonElement>(button).disabled =
-        busy || records.some((item) => item.name === name);
+      const node = optional<HTMLButtonElement>(button);
+      if (node) node.disabled = busy || records.some((item) => item.name === name);
     }
-    element<HTMLButtonElement>('invoke-read').disabled = busy;
+    const invoke = optional<HTMLButtonElement>('invoke-read');
+    if (invoke) invoke.disabled = busy;
     capabilities();
   }
 
   function run(id: string, task: () => Promise<void>): void {
-    element<HTMLButtonElement>(id).addEventListener('click', () => {
+    const button = optional<HTMLButtonElement>(id);
+    if (!button) return;
+    button.addEventListener('click', () => {
       void (async () => {
         if (busy || closed) return;
         busy = true;
@@ -200,9 +225,9 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     element('capability-result').textContent = JSON.stringify(result.content, null, 2);
     report('Agent 通过真实 CapabilityRegistry 读取了当前 CRS；没有发送网络请求。');
   });
-  element('refresh').addEventListener('click', refresh);
-  pluginSearch.addEventListener('input', refresh);
-  capabilitySearch.addEventListener('input', capabilities);
+  optional('refresh')?.addEventListener('click', refresh);
+  pluginSearch?.addEventListener('input', refresh);
+  capabilitySearch?.addEventListener('input', capabilities);
 
   async function load(file: File): Promise<void> {
     const version = ++loadVersion;
@@ -218,7 +243,8 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     map.setExtent(source.getExtent());
     element('fixture-state').textContent = `${file.name} · ${source.getLayers().length} 个数据图层`;
   }
-  element<HTMLInputElement>('file-input').addEventListener('change', (event) => {
+  const fileInput = optional<HTMLInputElement>('file-input');
+  fileInput?.addEventListener('change', (event) => {
     void (async () => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (!file) return;
@@ -230,38 +256,42 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     })().catch((error: unknown) => console.error(error));
   });
 
-  const response = await fetch(fixtureUrl('fixtures/task-6-polygons.geojson'));
-  if (!response.ok) throw new Error(`Fixture HTTP ${response.status}`);
-  await load(
-    new File([await response.arrayBuffer()], 'task-6-polygons.geojson', {
-      type: 'application/geo+json',
-    }),
-  );
-  const summary = element('preset-summary');
-  const counts = (preset: string, instance: typeof map) => {
-    const item = document.createElement('div');
-    item.textContent = `${preset}: ${inspectContext(instance.ctx).length} Fibers · Canvas ${instance.ctx.get('render') ? '有' : '无'}`;
-    summary.append(item);
-  };
-  counts('editor', map);
-  const hidden = document.createElement('div');
-  hidden.style.cssText = 'position:absolute;left:-9999px;top:0;width:320px;height:240px;';
-  document.body.append(hidden);
-  try {
-    for (const preset of ['viewer', 'headless', 'empty'] as const) {
-      const instance = await emap.Emap.create({
-        renderer: getExampleRenderer(),
-        preset,
-        ...(preset === 'viewer' ? { container: hidden } : {}),
-      });
-      try {
-        counts(preset, instance);
-      } finally {
-        await instance.dispose();
+  if (fileInput) {
+    const response = await fetch(fixtureUrl('fixtures/task-6-polygons.geojson'));
+    if (!response.ok) throw new Error(`Fixture HTTP ${response.status}`);
+    await load(
+      new File([await response.arrayBuffer()], 'task-6-polygons.geojson', {
+        type: 'application/geo+json',
+      }),
+    );
+  }
+  const summary = optional('preset-summary');
+  if (summary) {
+    const counts = (preset: string, instance: typeof map) => {
+      const item = document.createElement('div');
+      item.textContent = `${preset}: ${inspectContext(instance.ctx).length} Fibers · Canvas ${instance.ctx.get('render') ? '有' : '无'}`;
+      summary.append(item);
+    };
+    counts('editor', map);
+    const hidden = document.createElement('div');
+    hidden.style.cssText = 'position:absolute;left:-9999px;top:0;width:320px;height:240px;';
+    document.body.append(hidden);
+    try {
+      for (const preset of ['viewer', 'headless', 'empty'] as const) {
+        const instance = await emap.Emap.create({
+          renderer: getExampleRenderer(),
+          preset,
+          ...(preset === 'viewer' ? { container: hidden } : {}),
+        });
+        try {
+          counts(preset, instance);
+        } finally {
+          await instance.dispose();
+        }
       }
+    } finally {
+      hidden.remove();
     }
-  } finally {
-    hidden.remove();
   }
 
   const proof = element('runtime-proof');
@@ -279,6 +309,10 @@ export async function mountCordisRuntimeDemo(): Promise<void> {
     },
     { once: true },
   );
-  report('Cordis 已就绪。先选中 drag-pan，依次测试 Dispose、重新安装、Restart。');
+  report(
+    focus === 'capability'
+      ? 'Capability 已就绪。搜索能力，或让 Agent 读取当前 CRS。'
+      : 'Cordis 已就绪。先选中 drag-pan，依次测试 Dispose、重新安装、Restart。',
+  );
   refresh();
 }

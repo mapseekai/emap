@@ -1,16 +1,16 @@
 ---
 id: architecture
 slug: /concepts/architecture
-title: Current architecture and source layout
+title: Source layout
 api: ["Emap", "Context", "TopologySource"]
-examples: ["plugin-runtime", "getting-started/geojson-viewer"]
+examples: ["plugin-install", "getting-started/vector-file"]
 stability: experimental
 verifiedVersion: 0.14.0
 ---
 
-# Current architecture and source layout
+# Source layout
 
-Emap composes a GIS domain core, selectable Canvas2D / luma GPU rendering, and optional integrations through its native Cordis plugin runtime; the public API is the `Emap` facade.
+This page is for people changing the repository. The map-to-source map lives in [Runtime composition](./runtime.md).
 
 ```ts
 const map = await Emap.create({ container: 'map', preset: 'viewer' }); // create a browser map with browsing capability
@@ -178,5 +178,5 @@ The release gate covers formatting, types, architecture, schemas, builds, tests,
 
 ## Runnable examples
 
-- [Plugin runtime](/mapseekai/emap/examples/plugin-runtime/)
-- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Install a plugin](/mapseekai/emap/examples/plugin-install/)
+- [Open a vector file](/mapseekai/emap/examples/getting-started/vector-file/)

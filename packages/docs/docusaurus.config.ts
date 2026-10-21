@@ -57,11 +57,11 @@ const config: Config = {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Docs',
+          label: '文档',
         },
         {
           href: 'pathname:///examples/',
-          label: 'Examples',
+          label: '示例',
           position: 'left',
         },
         {

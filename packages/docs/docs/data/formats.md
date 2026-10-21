@@ -3,7 +3,7 @@ id: formats
 slug: /data/formats
 title: 数据格式
 api: ["buildGeoMetadata", "crsStringToProjjson", "DatasetFormatPlugin", "decodeWkb", "detectGeometryColumn", "Emap", "ExportedFormatFile", "exportGeoArrow", "ExportGeoArrowOptions", "exportGeoParquet", "ExportGeoParquetOptions", "fromArrowTable", "FromArrowTableOptions", "GeoColumnMetadata", "GeoEncoding", "GeoMetadata", "GeometryColumnInfo", "importGeoArrow", "ImportGeoArrowOptions", "importGeoParquet", "ImportGeoParquetOptions", "initParquetWasm", "InitParquetWasmOptions", "ParquetWasmModule", "ParquetWasmTable", "parseGeoMetadata", "projjsonToCrsString", "registerArrowFormats", "registerFormat", "setArrowTable", "setParquetWasm", "toArrowTable", "toArrowTableFromSource", "ToArrowTableOptions", "TopologySource.export", "TopologySource.fromBytes", "TopologySource.fromUrl", "WkbGeometry", "WkbWriter", "TopologySource", "ExportOptions", "TopologySource.setData"]
-examples: ["export-formats","getting-started/kml-viewer","flatgeobuf-viewer","geoparquet-viewer"]
+examples: ["export-formats","getting-started/vector-file","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
 verifiedVersion: 0.14.0
 ---
@@ -333,4 +333,4 @@ unregister();
 - [导出格式](/mapseekai/emap/examples/export-formats/)
 - [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet 查看器](/mapseekai/emap/examples/geoparquet-viewer/)
-- [KML 查看器](/mapseekai/emap/examples/getting-started/kml-viewer/)
+- [打开矢量文件](/mapseekai/emap/examples/getting-started/vector-file/)
