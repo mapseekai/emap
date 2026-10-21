@@ -29,7 +29,12 @@ function collectExampleHtmls(dir: string, prefix = ''): Map<string, string> {
 const exampleHtmls = collectExampleHtmls(examplesRoot);
 const mountedOperations = new Set<string>();
 for (const html of exampleHtmls.values()) {
+  if (!html.includes('mountDuckDbSpatialExample(')) continue;
   for (const match of html.matchAll(/operation:\s*'(\w+)'/g)) mountedOperations.add(match[1]!);
+  const operationOptions =
+    html.match(/<select\b[^>]*\bid=["']spatial-operation["'][^>]*>([\s\S]*?)<\/select>/)?.[1] ?? '';
+  for (const match of operationOptions.matchAll(/<option\b[^>]*\bvalue=["'](\w+)["']/g))
+    mountedOperations.add(match[1]!);
 }
 
 // Runner operations dispatched through the spatialRelation() branch instead of a `case`.

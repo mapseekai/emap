@@ -50,6 +50,7 @@ export interface DuckDbGeoParquetQueryLayerOptions extends DuckDbGeoParquetQuery
 }
 
 export interface DuckDbOverlayLayerOptions {
+  signal?: AbortSignal;
   src: string;
   mask: string;
   operation: 'intersect' | 'difference' | string;
@@ -140,7 +141,9 @@ async function runSourceOp(
   sourceId: string,
   operation: string,
   run: () => Promise<MapshaperDataset>,
+  signal?: AbortSignal,
 ): Promise<OpResult<LayerSuccess>> {
+  if (signal?.aborted) return errorToOpResult(signal.reason, operation);
   let outputs = pendingOutputs.get(ctx);
   if (!outputs) {
     outputs = new Map();
@@ -151,6 +154,7 @@ async function runSourceOp(
   try {
     const snapshots = [...new Set([...inputs, sourceId])].map((id) => captureSource(ctx, id));
     const dataset = await run();
+    signal?.throwIfAborted();
     if (outputs.get(sourceId) !== token) return Err.staleOperation(sourceId, operation);
     for (const snapshot of snapshots) {
       if (!snapshot.isCurrent()) return Err.staleOperation(snapshot.id, operation);
@@ -168,7 +172,7 @@ async function runSourceOp(
 
 async function runLayerOp(
   ctx: DuckDbMapOpContext,
-  opts: { src: string; output: { sourceId: string } },
+  opts: { src: string; output: { sourceId: string }; signal?: AbortSignal },
   errorOperation: string,
   run: (dataset: MapshaperDataset) => Promise<MapshaperDataset>,
 ): Promise<OpResult<LayerSuccess>> {
@@ -178,12 +182,25 @@ async function runLayerOp(
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
-  return runSourceOp(ctx, [opts.src], sourceId, errorOperation, () => run(input.dataset));
+  return runSourceOp(
+    ctx,
+    [opts.src],
+    sourceId,
+    errorOperation,
+    () => run(input.dataset),
+    opts.signal,
+  );
 }
 
 async function runBinaryLayerOp(
   ctx: DuckDbMapOpContext,
-  opts: { src: string; output: { sourceId: string }; mask?: string; join?: string },
+  opts: {
+    src: string;
+    output: { sourceId: string };
+    mask?: string;
+    join?: string;
+    signal?: AbortSignal;
+  },
   maskField: 'mask' | 'join',
   errorOperation: string,
   run: (inputDataset: MapshaperDataset, maskDataset: MapshaperDataset) => Promise<MapshaperDataset>,
@@ -197,8 +214,13 @@ async function runBinaryLayerOp(
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
-  return runSourceOp(ctx, [opts.src, opts[maskField]!], sourceId, errorOperation, () =>
-    run(input.dataset, mask.dataset),
+  return runSourceOp(
+    ctx,
+    [opts.src, opts[maskField]!],
+    sourceId,
+    errorOperation,
+    () => run(input.dataset, mask.dataset),
+    opts.signal,
   );
 }
 
@@ -264,6 +286,7 @@ export async function duckDbGeoParquetQueryLayer(
 
 function overlayOptions(opts: DuckDbOverlayLayerOptions): OverlayOptions {
   return {
+    signal: opts.signal,
     inputLayer: opts.inputLayer,
     maskLayer: opts.maskLayer,
     outputLayer: opts.outputLayer,

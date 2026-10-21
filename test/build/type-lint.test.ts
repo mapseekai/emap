@@ -4,7 +4,14 @@ import ts from 'typescript';
 import { resolve } from 'node:path';
 
 describe('type-aware lint gate', () => {
-  const eslint = new ESLint();
+  // Immutable CI Programs retain disk types when lintText replaces a file.
+  const eslint = new ESLint({
+    overrideConfig: {
+      languageOptions: {
+        parserOptions: { disallowAutomaticSingleRunInference: true },
+      },
+    },
+  });
 
   it.each([
     ['Promise.reject(new Error("ignored"));', '@typescript-eslint/no-floating-promises'],

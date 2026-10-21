@@ -1,5 +1,5 @@
 import { tableToIPC, type Table } from 'apache-arrow';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
 import { toArrowTable } from '../arrow/dataset-to-table';
@@ -220,6 +220,63 @@ describe('DuckDB toolbox execution', () => {
 
     expect(primarySql(runtime)).toContain('LEFT JOIN');
     expect(primarySql(runtime)).toContain('ST_Intersects');
+  });
+
+  it('rejects an abort between helper completion and toolbox result delivery', async () => {
+    const dataset = await polygonDataset();
+    const controller = new AbortController();
+    const execute = vi.spyOn(duckDbToolbox.require('buffer'), 'execute').mockImplementation(() => {
+      queueMicrotask(() => controller.abort());
+      return Promise.resolve(dataset);
+    });
+    try {
+      await expect(
+        duckDbToolbox.execute('buffer', {
+          inputs: { input: dataset },
+          params: { distance: 1 },
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      execute.mockRestore();
+    }
+  });
+
+  it.each([
+    ['buffer', { distance: 1 }],
+    ['isValid', {}],
+    ['centroid', {}],
+    ['spatialJoin', {}],
+    ['intersect', {}],
+    ['collect', {}],
+    ['attributeFilter', { sql: 'SELECT * FROM input' }],
+    [
+      'spatialSummaryJoin',
+      { predicate: 'intersects', aggregations: [{ operation: 'count', outputColumn: 'count' }] },
+    ],
+  ] as const)('forwards the caller signal through %s and cleans up after cancellation', async (id, params) => {
+    const dataset = await polygonDataset();
+    const runtime = runtimeFor(dataset);
+    const controller = new AbortController();
+    const query = vi
+      .spyOn(runtime.connection, 'query')
+      .mockImplementation(async (_sql: string, signal?: AbortSignal) => {
+        if (signal) {
+          expect(signal).toBe(controller.signal);
+          controller.abort();
+        }
+        return toArrowTable(dataset, { encoding: 'wkb' });
+      });
+    await expect(
+      duckDbToolbox.execute(id, {
+        inputs: { input: dataset, mask: dataset, join: dataset, target: dataset },
+        params,
+        runtime,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(query).toHaveBeenCalledWith(expect.any(String), controller.signal);
+    expect(query).toHaveBeenLastCalledWith(expect.stringContaining('DROP TABLE'));
   });
 
   it('exposes a normalized category/tool registry without duplicate ids', () => {

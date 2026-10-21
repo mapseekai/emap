@@ -146,6 +146,28 @@ const result = await duckDbToolbox.execute('buffer', {
 
 工具定义包含输入、参数、CRS/单位、输出、cost 和 agent 元数据。
 
+### 取消一次工具运行
+
+在 `DuckDbToolExecutionContext.signal` 传入调用方 signal；直接调用处理函数时传 `options.signal`：
+
+```ts
+const controller = new AbortController();
+const work = duckDbToolbox.execute('buffer', {
+  inputs: { input: roads }, params: { distance: 50 }, runtime,
+  signal: controller.signal,
+});
+controller.abort();
+try { await work; } catch (error) {
+  if (error !== controller.signal.reason) throw error;
+}
+```
+
+`signal.aborted` 表示逻辑取消；返回的 Promise 在 pending query 的取消确认、在途轮询/结果读取、临时表删除和连接关闭后结束，通常以 signal 的 reason 拒绝。应等待它结束再用新 controller 重试；清理失败会返回包含清理错误的异常，不能把该异常视为安全重试确认。
+
+运行时连接的 `query(sql, signal?)` 在传 signal 时使用 DuckDB 的 pending query 接口。它在取消后停止后续轮询和消费，等待当前请求及取消确认并释放 Arrow reader。同一连接的查询/插入/关闭按调用顺序执行，旧 signal 不会取消下一条查询。普通取消只影响该次专用连接，其他连接和共享 runtime 继续可用。自定义 `DuckDbRuntime` 必须自行实现 `query` 的 signal 契约；忽略 signal 的实现只能由外层阻止结果返回。
+
+共享 runtime 初始化和 spatial 扩展加载归 runtime 所有，单次取消会等待已开始的共享初始化，再跳过该次连接/查询；不会关闭整个数据库。Arrow 输入准备和结果转 Dataset 中的同步代码也不能由 signal 抢占。`runtime.close()` 用于运行时所有者释放数据库，不能用作普通查询取消。
+
 
 ## 更多 GeoParquet 查询
 

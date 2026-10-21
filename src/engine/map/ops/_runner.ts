@@ -21,6 +21,7 @@ import { DatasetReplaceSelectionCommand } from '../../../domain/edit/commands/da
 import type { EditCommand } from '../../../domain/edit/edit-command';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
+import { operationSignal } from '../operation-scope';
 import type { MutableTopologySource } from '../../../domain/source/source';
 import type { TransactionInternal } from '../../../domain/edit/transaction';
 import { Err, OK, okValue, type OpResult } from '../op-result';
@@ -741,6 +742,7 @@ async function _runViaWorker(
   host.fire('workerjobstart', { id, cmd: request.cmd, label, datasetVertexCount });
 
   try {
+    operationSignal(host)?.throwIfAborted();
     const adapter = getDefaultMapshaperAdapter();
     const inputByteLimit = workerDataByteBound({
       commands: request.commands,
@@ -765,12 +767,16 @@ async function _runViaWorker(
       request.commands,
       async () => {
         const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
+        operationSignal(host)?.throwIfAborted();
         crsLabel = await sanitizePackedSessionCrs(packed);
+        operationSignal(host)?.throwIfAborted();
         return packed;
       },
       inputFiles,
       inputByteLimit,
+      operationSignal(host),
     );
+    operationSignal(host)?.throwIfAborted();
     const restored = await adapter.restoreSessionData(resultPacked);
     if (!restored.datasets || restored.datasets.length === 0) {
       throw new Error('worker: no dataset in response');

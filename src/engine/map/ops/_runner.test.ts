@@ -19,6 +19,8 @@ import {
   inferEffectForHeads,
 } from './_runner';
 import * as runnerModule from './_runner';
+import { MapshaperWorkerPool } from '../../core/mapshaper-worker-pool';
+import { TasklaneTestWorker, flushTasks } from '../../../../test/utils/tasklane-worker';
 
 describe('dataset command selection history', () => {
   function setup() {
@@ -55,6 +57,56 @@ describe('dataset command selection history', () => {
   }
 
   const ref = { source: 's', layer: 'points', id: 0 };
+
+  it('bridges scoped cancellation to its worker without changing data, selection or history', async () => {
+    const { host, source, selection, history, ops } = setup();
+    const pool = new MapshaperWorkerPool({
+      workerUrl: 'worker.js',
+      WorkerCtor: TasklaneTestWorker as unknown as typeof Worker,
+    });
+    TasklaneTestWorker.instances = [];
+    Object.assign(host, { _workerPool: pool, _workerMode: true });
+    selection.apply([ref], 'replace');
+    const original = source.getDataset();
+    const controller = new AbortController();
+    const adapter = getDefaultMapshaperAdapter();
+    const restored = vi.spyOn(adapter, 'restoreSessionData');
+    try {
+      const work = ops
+        .withSignal(controller.signal)
+        .sortFeatures({ source: 's', target: 'points', expression: 'rank' });
+      await vi.waitFor(() => expect(TasklaneTestWorker.instances.at(-1)?.requests).toHaveLength(1));
+      const worker = TasklaneTestWorker.instances.at(-1)!;
+      controller.abort();
+      expect(await work).toMatchObject({ ok: false, error: { kind: 'host-removed' } });
+      expect(worker.terminate).toHaveBeenCalledOnce();
+      expect(restored).not.toHaveBeenCalled();
+      expect(source.getDataset()).toBe(original);
+      expect(selection.getAll()).toEqual([ref]);
+      expect(history.size()).toBe(0);
+      Object.assign(host, { _workerMode: false });
+      expect(
+        (
+          await ops
+            .withSignal(new AbortController().signal)
+            .sortFeatures({ source: 's', target: 'points', expression: 'rank' })
+        ).ok,
+      ).toBe(true);
+      await flushTasks();
+      expect(
+        (
+          await ops
+            .withSignal(controller.signal)
+            .sortFeatures({ source: 's', target: 'points', expression: 'rank' })
+        ).ok,
+      ).toBe(false);
+      expect(history.size()).toBe(1);
+    } finally {
+      restored.mockRestore();
+      pool.destroy();
+      await pool.closed;
+    }
+  });
 
   it('restores the pre-sort selection on undo and clears a new selection on redo', async () => {
     const { source, selection, history, host, ops } = setup();

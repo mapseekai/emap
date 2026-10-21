@@ -1,4 +1,4 @@
-import type { WorkerRuntime, RuntimeScope } from '@mapseekai/tasklane';
+import type { WorkerRuntime, RuntimeScope, TaskHandle } from '@mapseekai/tasklane';
 import type { PackedSession } from '../../integrations/mapshaper/adapter';
 import {
   encodeWorkerPacket,
@@ -59,6 +59,7 @@ export class MapshaperWorkerPool {
   readonly poolSize: number;
   private closing: Promise<void> = Promise.resolve();
   private readonly retiredScopes = new Set<RuntimeScope>();
+  private readonly tasks = new Map<number, TaskHandle<unknown>>();
   constructor(private readonly options: MapshaperWorkerPoolOptions) {
     this.poolSize = Math.max(1, Math.floor(options.poolSize ?? 1));
     this.timeout = options.jobTimeoutMs ?? 120_000;
@@ -82,16 +83,18 @@ export class MapshaperWorkerPool {
     cmd: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
+    signal?: AbortSignal,
   ): Promise<any> {
-    return this.runWithId(cmd, packed, inputFiles).promise;
+    return this.runWithId(cmd, packed, inputFiles, signal).promise;
   }
   runWithId(
     cmd: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
+    signal?: AbortSignal,
   ): { id: number; promise: Promise<any> } {
     const id = this.reserveId();
-    return { id, promise: this.dispatchWithId(id, cmd, packed, inputFiles) };
+    return { id, promise: this.dispatchWithId(id, cmd, packed, inputFiles, undefined, signal) };
   }
   async dispatchWithId(
     id: number,
@@ -99,7 +102,9 @@ export class MapshaperWorkerPool {
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
     transferList?: Transferable[],
+    signal?: AbortSignal,
   ): Promise<any> {
+    signal?.throwIfAborted();
     return this.dispatchPreparedWithId(
       id,
       cmd,
@@ -109,25 +114,31 @@ export class MapshaperWorkerPool {
       },
       inputFiles,
       workerDataByteBound({ packed, cmd, inputFiles }),
+      signal,
     );
   }
   async dispatchPreparedWithId(
     id: number,
     cmd: string | ParsedCommandWire[],
-    prepare: () => Promise<any>,
+    prepare: (signal: AbortSignal) => Promise<any>,
     inputFiles?: Record<string, Uint8Array | string>,
     inputByteLimit = IMPORT_BYTES,
+    signal?: AbortSignal,
   ): Promise<PackedSession> {
+    signal?.throwIfAborted();
     if (this.destroyed) throw new Error('MapshaperWorkerPool: destroyed');
+    if (this.tasks.has(id)) throw new Error('MapshaperWorkerPool: duplicate active task id');
     const handle = this.scope.enqueuePrepared('mapshaper', {
       pool: 'mapshaper',
       group: String(id),
       cancellation: 'terminate',
+      signal,
       budget: { inputBytes: inputByteLimit, outputBytes: IMPORT_BYTES, scratchBytes: IMPORT_BYTES },
       preparationScratchBytes: IMPORT_BYTES,
       executionTimeoutMs: this.timeout,
       prepareAsync: async ({ signal }) => {
-        const packed = await prepare();
+        signal.throwIfAborted();
+        const packed = await prepare(signal);
         signal.throwIfAborted();
         // A binary envelope avoids tasklane's object-graph limit for millions of shapes.
         const bytes = encodeWorkerPacket(packed);
@@ -142,7 +153,23 @@ export class MapshaperWorkerPool {
         };
       },
     });
-    return taskValue<PackedSession>(handle, (bytes: Uint8Array) => decodeWorkerData(bytes));
+    this.tasks.set(id, handle);
+    try {
+      const result = await taskValue<PackedSession>(handle, (bytes: Uint8Array) =>
+        decodeWorkerData(bytes),
+      );
+      signal?.throwIfAborted();
+      return result;
+    } finally {
+      await handle.settled;
+      this.tasks.delete(id);
+    }
+  }
+  /** Request cancellation of one job and wait for its physical execution/preparation to end. */
+  async cancel(id: number, reason?: unknown): Promise<void> {
+    const handle = this.tasks.get(id);
+    handle?.cancel(reason);
+    await handle?.settled;
   }
   cancelAll(): void {
     if (this.destroyed) return;

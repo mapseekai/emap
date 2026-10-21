@@ -105,6 +105,7 @@ export const duckDbCapabilityPlugins: readonly Plugin.Object[] = duckDbToolbox
                   snapshots.map((snapshot) => [snapshot.name, snapshot.dataset]),
                 ),
                 params: input.params as Record<string, unknown> | undefined,
+                signal: call.signal,
               });
               call.assertActive();
               for (const snapshot of snapshots) {

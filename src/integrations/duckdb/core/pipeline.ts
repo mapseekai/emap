@@ -126,18 +126,22 @@ export interface PipelineInput {
 export async function runPipeline<T>(operation: {
   label: string;
   runtime: DuckDbRuntime;
+  signal?: AbortSignal;
   requiresSpatial?: boolean;
   inputs: readonly PipelineInput[];
   buildSql: (tableNames: readonly string[]) => string;
   convertResult?: (result: Table) => T;
   messages?: Partial<PipelineMessages>;
 }): Promise<T> {
+  const { signal } = operation;
+  signal?.throwIfAborted();
   const messages = { ...pipelineMessages(operation.label), ...operation.messages };
 
   if (operation.requiresSpatial !== false) {
     try {
       await operation.runtime.ensureSpatial();
     } catch (err) {
+      signal?.throwIfAborted();
       throw new DuckDbOperationError('spatial-extension-unavailable', messages.spatialUnavailable, {
         cause: err,
       });
@@ -147,16 +151,33 @@ export async function runPipeline<T>(operation: {
   let conn: DuckDbConnection | undefined;
   const tableNames: string[] = [];
   let primaryError: unknown;
+  let failed = false;
   try {
+    signal?.throwIfAborted();
     conn = await operation.runtime.connect();
+    signal?.throwIfAborted();
     for (const input of operation.inputs) {
+      signal?.throwIfAborted();
       const name = nextTableName(input.prefix);
       tableNames.push(name);
       await conn.insertArrowTable(input.table, { name });
     }
-    const resultTable = await conn.query(operation.buildSql(tableNames));
-    return operation.convertResult ? operation.convertResult(resultTable) : (resultTable as T);
+    signal?.throwIfAborted();
+    const sql = operation.buildSql(tableNames);
+    signal?.throwIfAborted();
+    const resultTable = await conn.query(sql, signal);
+    signal?.throwIfAborted();
+    const result = operation.convertResult
+      ? operation.convertResult(resultTable)
+      : (resultTable as T);
+    signal?.throwIfAborted();
+    return result;
   } catch (err) {
+    failed = true;
+    if (signal?.aborted) {
+      primaryError = err instanceof AggregateError ? err : signal.reason;
+      throw primaryError;
+    }
     if (err instanceof DuckDbOperationError) {
       primaryError = err;
       throw err;
@@ -165,25 +186,29 @@ export async function runPipeline<T>(operation: {
     primaryError = wrapped;
     throw wrapped;
   } finally {
-    let cleanupError: unknown;
+    const cleanupErrors: unknown[] = [];
     if (conn) {
       for (const name of tableNames) {
         try {
           await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(name)}`);
         } catch (err) {
-          cleanupError ??= err;
+          cleanupErrors.push(err);
         }
       }
     }
     try {
       await conn?.close?.();
     } catch (err) {
-      cleanupError ??= err;
+      cleanupErrors.push(err);
     }
-    if (cleanupError && !primaryError) {
+    if (cleanupErrors.length && signal?.aborted && failed) {
+      throw new AggregateError([primaryError, ...cleanupErrors], messages.cleanupFailed);
+    }
+    if (cleanupErrors.length && !failed) {
       throw new DuckDbOperationError('query-failed', messages.cleanupFailed, {
-        cause: cleanupError,
+        cause: cleanupErrors[0],
       });
     }
+    if (!failed) signal?.throwIfAborted();
   }
 }
