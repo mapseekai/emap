@@ -11,6 +11,20 @@ function fakeRuntime(): DuckDbRuntime {
   return { connect: vi.fn(), ensureSpatial: vi.fn(), close: vi.fn(async () => {}) };
 }
 describe('DuckDB provider lifecycle', () => {
+  it('does not initialize a runtime for an already cancelled caller', async () => {
+    const create = vi.fn(async () => fakeRuntime());
+    const map = await Emap.create({ preset: 'headless', plugins: [duckDbPlugin({ create })] });
+    const controller = new AbortController();
+    controller.abort();
+    try {
+      await expect(
+        map.ctx.duckDbProcessing.execute('buffer', { inputs: {}, signal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      await map.dispose();
+    }
+  });
   it('lazily provides the entire canonical tool catalog without creating a database', async () => {
     const create = vi.fn(async () => fakeRuntime());
     const map = await Emap.create({

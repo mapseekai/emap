@@ -300,8 +300,11 @@ function normalizeToolContext(
 }
 
 async function executeTool(idOrAlias: string, context: DuckDbToolExecutionContext) {
+  context.signal?.throwIfAborted();
   const tool = requireTool(idOrAlias);
-  return tool.execute(normalizeToolContext(tool, context));
+  const result = await tool.execute(normalizeToolContext(tool, context));
+  context.signal?.throwIfAborted();
+  return result;
 }
 
 /**

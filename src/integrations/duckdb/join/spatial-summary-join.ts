@@ -43,6 +43,7 @@ export async function spatialSummaryJoin(
   opts: SpatialSummaryJoinOptions,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const { options, predicate, joinType, targetGeometryColumn, joinGeometryColumn } =
     validateSpatialSummaryOptions(opts);
   normalizeSpatialAggregations(options, new Set(), targetGeometryColumn);
@@ -146,6 +147,7 @@ export async function spatialSummaryJoin(
   return runPipeline({
     label: 'spatial summary join',
     runtime,
+    signal: opts.signal,
     messages: {
       spatialUnavailable: 'DuckDB spatial summary join spatial extension is unavailable',
     },

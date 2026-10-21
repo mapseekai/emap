@@ -32,6 +32,110 @@ const respond = (worker: TasklaneTestWorker, value: unknown) => {
 };
 
 describe('tasklane Mapshaper ownership', () => {
+  it('rejects a pre-aborted signal without preparing or transferring input', async () => {
+    const client = pool();
+    const controller = new AbortController();
+    controller.abort();
+    const prepare = vi.fn(async () => ({ datasets: [] }));
+    await expect(
+      client.dispatchPreparedWithId(
+        client.reserveId(),
+        '-clean',
+        prepare,
+        undefined,
+        undefined,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    const bytes = new Uint8Array([1]);
+    await expect(
+      client.dispatchWithId(
+        client.reserveId(),
+        '-clean',
+        { bytes },
+        undefined,
+        [bytes.buffer],
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(prepare).not.toHaveBeenCalled();
+    expect(bytes.byteLength).toBe(1);
+    expect(TasklaneTestWorker.instances).toHaveLength(0);
+  });
+  it('cancels only the target running job and rejects late results before retry', async () => {
+    const client = pool(2);
+    const controller = new AbortController();
+    const first = client.runWithId('-clean', { datasets: [] }, undefined, controller.signal);
+    const failed = expect(first.promise).rejects.toMatchObject({ name: 'AbortError' });
+    const second = client.run('-clean', { datasets: [] });
+    await flushTasks();
+    const [old, other] = TasklaneTestWorker.instances;
+    controller.abort();
+    await client.cancel(first.id);
+    await client.cancel(first.id);
+    await failed;
+    expect(old.terminate).toHaveBeenCalledOnce();
+    expect(other.terminate).not.toHaveBeenCalled();
+    respond(other, { datasets: ['other'] });
+    await expect(second).resolves.toEqual({ datasets: ['other'] });
+    const retry = client.run('-clean', { datasets: [] }, undefined, new AbortController().signal);
+    await flushTasks();
+    respond(old, { datasets: ['stale'] });
+    const active = TasklaneTestWorker.instances.findLast(
+      (worker) => worker !== old && worker.pending.length > 0,
+    )!;
+    respond(active, { datasets: ['retry'] });
+    await expect(retry).resolves.toEqual({ datasets: ['retry'] });
+  });
+  it('cancels queued work without preparing it or stopping the running job', async () => {
+    const client = pool();
+    const first = client.run('-clean', { datasets: [] });
+    const prepare = vi.fn(async () => ({ datasets: [] }));
+    const id = client.reserveId();
+    const second = client.dispatchPreparedWithId(id, '-clean', prepare);
+    const failed = expect(second).rejects.toMatchObject({ name: 'AbortError' });
+    await flushTasks();
+    await client.cancel(id);
+    await failed;
+    expect(prepare).not.toHaveBeenCalled();
+    expect(TasklaneTestWorker.instances[0].terminate).not.toHaveBeenCalled();
+    respond(TasklaneTestWorker.instances[0], { datasets: [] });
+    await first;
+  });
+  it('waits for cancelled preparation to finish before reporting physical completion', async () => {
+    const client = pool();
+    let finish!: (value: unknown) => void;
+    const controller = new AbortController();
+    const prepare = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const id = client.reserveId();
+    const job = client.dispatchPreparedWithId(
+      id,
+      '-clean',
+      prepare,
+      undefined,
+      undefined,
+      controller.signal,
+    );
+    const failed = expect(job).rejects.toMatchObject({ name: 'AbortError' });
+    await flushTasks();
+    expect(prepare).toHaveBeenCalledOnce();
+    controller.abort();
+    let settled = false;
+    const cancelled = client.cancel(id).then(() => {
+      settled = true;
+    });
+    await flushTasks();
+    expect(settled).toBe(false);
+    finish({ datasets: [] });
+    await cancelled;
+    await failed;
+    expect(TasklaneTestWorker.instances).toHaveLength(0);
+  });
   it('spawns lazily and serializes work without a hidden worker-side queue', async () => {
     const client = pool();
     expect(TasklaneTestWorker.instances).toHaveLength(0);

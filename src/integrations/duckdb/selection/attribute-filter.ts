@@ -23,6 +23,7 @@ import {
  * const options: AttributeFilterOptions = { sql: 'SELECT name FROM input WHERE population > 1000' };
  */
 export interface AttributeFilterOptions {
+  signal?: AbortSignal;
   geometryColumn?: string;
   inputLayer?: string | number;
   outputLayer?: string;
@@ -124,6 +125,8 @@ export async function attributeFilter(
   opts: AttributeFilterOptions,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  const { signal } = opts;
+  signal?.throwIfAborted();
   if (!runtime)
     throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
   const geometryColumn = opts.geometryColumn ?? 'geometry';
@@ -158,10 +161,14 @@ export async function attributeFilter(
   });
   let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
   let primaryError: unknown;
+  let failed = false;
   try {
     conn = await runtime.connect();
+    signal?.throwIfAborted();
     await conn.insertArrowTable(input, { name: inputTableName });
-    const resultTable = await conn.query(validated.sql);
+    signal?.throwIfAborted();
+    const resultTable = await conn.query(validated.sql, signal);
+    signal?.throwIfAborted();
     try {
       const rowIds = resultRowIds(
         resultTable,
@@ -188,6 +195,11 @@ export async function attributeFilter(
       );
     }
   } catch (err) {
+    failed = true;
+    if (signal?.aborted) {
+      primaryError = err instanceof AggregateError ? err : signal.reason;
+      throw primaryError;
+    }
     if (err instanceof DuckDbOperationError) {
       primaryError = err;
       throw err;
@@ -196,20 +208,28 @@ export async function attributeFilter(
     primaryError = wrapped;
     throw wrapped;
   } finally {
-    let cleanupError: unknown;
+    const cleanupErrors: unknown[] = [];
     if (conn) {
       try {
         await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(inputTableName)}`);
       } catch (err) {
-        cleanupError = err;
+        cleanupErrors.push(err);
       }
     }
-    const closeError = await conn?.close?.().catch((err: unknown) => err);
-    if ((cleanupError || closeError) && !primaryError) {
+    try {
+      await conn?.close?.();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length && signal?.aborted && failed) {
+      throw new AggregateError([primaryError, ...cleanupErrors], 'DuckDB query cleanup failed');
+    }
+    if (cleanupErrors.length && !failed) {
       throw new DuckDbOperationError('query-failed', 'DuckDB query cleanup failed', {
-        cause: cleanupError ?? closeError,
+        cause: cleanupErrors[0],
       });
     }
+    if (!failed) signal?.throwIfAborted();
   }
 }
 
