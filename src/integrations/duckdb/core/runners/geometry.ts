@@ -9,6 +9,7 @@ import { type DuckDbRuntime } from '../../runtime';
 import { buildUnaryGeometrySql } from '../sql/geometry';
 
 export interface UnaryGeometryRunnerOptions {
+  signal?: AbortSignal;
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
@@ -27,6 +28,7 @@ export async function runUnaryGeometryTool(
   operation: GeometryOperation,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const input = datasetToArrowInput(dataset, { layer: opts.layer, geometryColumn }, operation.id);
@@ -34,6 +36,7 @@ export async function runUnaryGeometryTool(
   return runPipeline({
     label: operation.id,
     runtime: rt,
+    signal: opts.signal,
     inputs: [{ table: input, prefix: 'emap_duckdb_geometry_input' }],
     buildSql: ([tableName]) =>
       buildUnaryGeometrySql({

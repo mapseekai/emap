@@ -13,6 +13,7 @@ import { type DuckDbRuntime } from '../../runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from '../sql/overlay';
 
 export interface OverlayRunnerOptions {
+  signal?: AbortSignal;
   inputLayer?: string | number;
   maskLayer?: string | number;
   outputLayer?: string;
@@ -65,6 +66,7 @@ export async function runOverlayTool(
   operation: OverlayOperation,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const messages = pipelineMessages(operation.id);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
@@ -74,6 +76,7 @@ export async function runOverlayTool(
   let mask: Table;
   try {
     const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
+    opts.signal?.throwIfAborted();
     input = datasetToArrowInput(
       inputDataset,
       { layer: opts.inputLayer, geometryColumn: inputGeometryColumn },
@@ -95,12 +98,14 @@ export async function runOverlayTool(
       );
     }
   } catch (err) {
+    opts.signal?.throwIfAborted();
     throw new DuckDbOperationError('conversion-failed', messages.inputConversion, { cause: err });
   }
 
   return runPipeline({
     label: operation.id,
     runtime: rt,
+    signal: opts.signal,
     inputs: [
       { table: input, prefix: 'emap_duckdb_overlay_input' },
       { table: mask, prefix: 'emap_duckdb_overlay_mask' },

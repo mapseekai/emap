@@ -1194,10 +1194,7 @@ describe('example catalog metadata', () => {
     expect(parsed.querySelector('#arrow-size')).not.toBeNull();
   });
   it('removes the draw-snap display layer before replacing uploaded source data', async () => {
-    const html = await readFile(
-      resolve('packages/examples/examples/draw-snap/index.html'),
-      'utf8',
-    );
+    const html = await readFile(resolve('packages/examples/examples/draw-snap/index.html'), 'utf8');
     expect(html).toMatch(
       /getLayer\('reference-line'\)[\s\S]*removeLayer\('reference-line'\)[\s\S]*removeSource\(SOURCE_ID\)/,
     );

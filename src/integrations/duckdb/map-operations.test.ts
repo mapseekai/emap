@@ -1,5 +1,5 @@
 import { tableFromArrays, type Table } from 'apache-arrow';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
@@ -954,6 +954,32 @@ function setup() {
 }
 
 describe('DuckDB map adapter stale-result protection', () => {
+  it('rejects cancellation at the helper-to-commit boundary and allows a fresh retry', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('input', dataset);
+    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+    const controller = new AbortController();
+    const setter = vi.spyOn(ctx, 'setSourceDataset');
+    const opts = {
+      src: 'input',
+      output: { sourceId: 'output' },
+      operation: 'intersect',
+      mask: 'input',
+      runtime,
+      signal: controller.signal,
+    };
+    const query = vi.spyOn(runtime.connection, 'query').mockImplementation(async (sql) => {
+      if (sql.startsWith('DROP')) queueMicrotask(() => controller.abort());
+      return toArrowTable(dataset, { encoding: 'wkb' });
+    });
+    expect((await duckDbOverlayLayer(ctx, opts)).ok).toBe(false);
+    expect(setter).not.toHaveBeenCalled();
+    query.mockRestore();
+    expect(
+      (await duckDbOverlayLayer(ctx, { ...opts, signal: new AbortController().signal })).ok,
+    ).toBe(true);
+    expect(setter).toHaveBeenCalledOnce();
+  });
   it.each([
     'source replacement',
     'source removal',

@@ -46,6 +46,7 @@ export type SpatialAggregation =
  * const options: SpatialSummaryJoinOptions = { predicate: 'contains', aggregations: [{ operation: 'count', outputColumn: 'point_count' }] };
  */
 export interface SpatialSummaryJoinOptions {
+  signal?: AbortSignal;
   predicate: SpatialSummaryJoinPredicate;
   aggregations: readonly SpatialAggregation[];
   joinType?: SpatialSummaryJoinType;

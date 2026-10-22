@@ -166,14 +166,17 @@ d('shipped bundles are self-contained', () => {
     expect(code).not.toContain('China - onshore and offshore.');
   });
 
-  it('survives esbuild browser pre-bundling with a require shim present', () => {
+  it.each([
+    ['emap.mjs', 'TopologySource'],
+    ['emap-duckdb.mjs', 'createDuckDbRuntimeFromJsDelivr'],
+  ])('%s survives esbuild browser pre-bundling with a require shim present', (file, exportName) => {
     const dir = mkdtempSync(resolve(tmpdir(), 'emap-esbuild-'));
     const entry = resolve(dir, 'entry.mjs');
     const bundle = resolve(dir, 'bundle.mjs');
     writeFileSync(
       entry,
-      `import { TopologySource } from ${JSON.stringify(resolve(DIST, 'emap.mjs'))};\n` +
-        'globalThis.__emapTopologySource = TopologySource;\n',
+      `import { ${exportName} as api } from ${JSON.stringify(resolve(DIST, file))};\n` +
+        'globalThis.__emapPublishedApi = api;\n',
     );
 
     runBin('esbuild', [

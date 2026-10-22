@@ -65,6 +65,7 @@ export type RelationOperation =
   | RelationAttributeDistanceWithinOperation;
 
 export interface RelationRunnerOptions {
+  signal?: AbortSignal;
   inputLayer?: string | number;
   maskLayer?: string | number;
   outputLayer?: string;
@@ -101,6 +102,7 @@ export async function runRelationTool(
   operation: RelationOperation,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
   const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
@@ -118,7 +120,9 @@ export async function runRelationTool(
   let alignedMaskDataset: MapshaperDataset;
   try {
     alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
+    opts.signal?.throwIfAborted();
   } catch (err) {
+    opts.signal?.throwIfAborted();
     throw new DuckDbOperationError(
       'conversion-failed',
       pipelineMessages(operation.id).inputConversion,
@@ -134,6 +138,7 @@ export async function runRelationTool(
   return runPipeline({
     label: operation.id,
     runtime: rt,
+    signal: opts.signal,
     inputs: [
       { table: input, prefix: 'emap_duckdb_relation_input' },
       { table: mask, prefix: 'emap_duckdb_relation_mask' },

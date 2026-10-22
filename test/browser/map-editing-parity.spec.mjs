@@ -156,3 +156,55 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
     await dispose(page, errors);
   });
 }
+
+for (const renderer of ['canvas2d', 'webgl2']) {
+  for (const reverse of [false, true]) {
+    test(`${renderer}: polygon winding #35 (${reverse ? 'CW dblclick' : 'CCW close click'}) supports history and hole tools`, async ({page}) => {
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await setup(page, renderer);
+      const before = await page.evaluate(() => editingState());
+      await page.evaluate(() => {
+        editingMap.drawFeature.setOptions({source: 'area', type: 'polygon', snapToVertex: false, snapToEdge: false});
+        editingMap.drawFeature.enable();
+      });
+      const points = [[0,-2],[3,-2],[3,1],[0,1]];
+      if (reverse) points.reverse();
+      for (const point of points) await click(page, point);
+      if (reverse) await click(page, points.at(-1), [0,0], {clickCount: 2});
+      else await click(page, points[0]);
+      await expect.poll(() => page.evaluate(() => editingState().sources[0][0].paths.length)).toBe(2);
+      await page.evaluate(() => editingMap.drawFeature.disable());
+      const after = await page.evaluate(() => editingState());
+      const area = await page.evaluate(() => {
+        const dataset = editingMap.getSource('area').getDataset();
+        return emap.getDefaultMapshaperAdapter().exportPathData(dataset.layers[0].shapes[1], dataset.arcs, 'polygon').pathData[0].area;
+      });
+      expect(area).toBeCloseTo(9, 8);
+      for (let cycle = 0; cycle < 2; cycle++) {
+        expect(await page.evaluate(() => editingMap.undo())).toBe(true);
+        expect(await page.evaluate(() => editingState())).toEqual(before);
+        expect(await page.evaluate(() => editingMap.redo())).toBe(true);
+        expect(await page.evaluate(() => editingState())).toEqual(after);
+      }
+      await page.evaluate(() => {
+        editingMap.select(editingMap.queryFeatures(editingMap.getTransform().project(2,0)));
+        editingMap.ringEdit.setOptions({mode: 'add'});
+        editingMap.ringEdit.enable();
+      });
+      for (const point of [[0.5,-1.5],[1.5,-1.5],[1.5,-0.5],[0.5,-0.5]]) await click(page, point);
+      await finish(page);
+      await expect.poll(() => page.evaluate(() => editingState().sources[0][0].paths[1].length)).toBe(2);
+      await page.evaluate(() => editingMap.ringEdit.setOptions({mode: 'fill'}));
+      await click(page, [1,-1]);
+      await expect.poll(() => page.evaluate(() => editingState().sources[0][0].paths.length)).toBe(3);
+      await page.evaluate(() => editingMap.undo());
+      await page.evaluate(() => editingMap.ringEdit.setOptions({mode: 'delete'}));
+      await click(page, [1,-1]);
+      await expect.poll(() => page.evaluate(() => editingState().sources[0][0].paths[1].length)).toBe(1);
+      await page.evaluate(() => editingMap.ringEdit.disable());
+      expect((await page.evaluate(() => editingState())).sources).toEqual(after.sources);
+      await dispose(page, errors);
+    });
+  }
+}

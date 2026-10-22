@@ -20,7 +20,7 @@ import {
   type MapshaperAdapter,
 } from '../mapshaper/adapter';
 import { resolveDatasetCRSMetadata } from '../../domain/geo/crs-resolver';
-import { normalizePointShape } from '../../domain/source/layer-utils';
+import { getLayerId, normalizePointShape } from '../../domain/source/layer-utils';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -79,7 +79,13 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
   const useWkb = opts.encoding === 'wkb';
   const geometryColumn = opts.geometryColumn || 'geometry';
 
-  const geometry = collectGeometry(shapes, arcs, geometryType, adapter);
+  const geometry = collectGeometry(
+    shapes,
+    arcs,
+    geometryType,
+    adapter,
+    getLayerId(layer, dataset.layers.indexOf(layer)),
+  );
   const sourceCrsString = resolveDatasetCRSMetadata(dataset);
   const reprojectToWgs84 = opts.reprojectToWgs84 === true && isWebMercatorCrs(sourceCrsString);
   const outputGeometry = reprojectToWgs84 ? webMercatorGeometryToWgs84(geometry) : geometry;
@@ -203,6 +209,7 @@ function collectGeometry(
   arcs: ArcCollection | undefined,
   geometryType: 'point' | 'polyline' | 'polygon',
   adapter: MapshaperAdapter,
+  layerId: string,
 ): CollectedGeometry {
   const grow = new GrowableCoords();
   const features: CollectedGeometry['features'] = new Array<
@@ -250,6 +257,12 @@ function collectGeometry(
       geometryTypes.add(runs.length > 1 ? 'MultiLineString' : 'LineString');
     } else {
       const groups = groupPolygonRings(exported.pathData, arcs, adapter);
+      const groupedRings = groups.reduce((count, rings) => count + rings.length, 0);
+      if (groupedRings !== exported.pathData.filter((path) => (path.area ?? 0) !== 0).length) {
+        throw new Error(
+          `Cannot convert polygon in layer "${layerId}", feature ${i}: invalid ring winding or containment; repair ring directions before exporting`,
+        );
+      }
       if (groups.length === 0) {
         features[i] = null;
         continue;

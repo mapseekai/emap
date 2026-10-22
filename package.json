@@ -1,6 +1,6 @@
 {
   "name": "@mapseekai/emap",
-  "version": "0.14.3",
+  "version": "0.15.0",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
@@ -220,6 +220,7 @@
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@types/jsdom": "^30.0.0",
+    "@types/node": "24.13.1",
     "@webgpu/types": "0.1.72",
     "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^17.0.0",
@@ -235,7 +236,7 @@
     "typedoc": "^0.28.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.71.2",
-    "vite": "^7.3.6",
+    "vite": "^7.3.7",
     "vitest": "^4.1.9"
   },
   "dependencies": {

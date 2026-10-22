@@ -40,8 +40,9 @@ test('uses native Cordis fibers for real pointer interaction disposal and reinst
   await expect.poll(() => page.evaluate(() => window.emapHarness.map.getCenter())).not.toEqual(stopped);
   await page.locator('#restart-plugin').click();
   await expect(page.locator('#action-state')).toContainText('Fiber.restart()');
-  await expect(page.locator('#preset-summary')).toContainText('headless');
-  await expect(page.locator('#preset-summary')).toContainText('empty');
+  const restarted = await page.evaluate(() => window.emapHarness.map.getCenter());
+  await pan(page);
+  await expect.poll(() => page.evaluate(() => window.emapHarness.map.getCenter())).not.toEqual(restarted);
   expect(errors).toEqual([]);
 });
 
@@ -67,6 +68,15 @@ test('dynamically registers formats and suspends DuckDB capabilities through nat
   expect(pending).toBeGreaterThan(0);
   await page.locator('#reinstall-plugin').click();
   await expect.poll(async () => Number(await page.locator('#metric-capabilities').textContent())).toBeGreaterThan(baseline);
+  expect(errors).toEqual([]);
+});
+
+test('invokes a capability from the dedicated capability example', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/mapseekai/emap/examples/plugin-capability/');
+  await expect(page.locator('#runtime-proof')).toContainText('Context.is(map.ctx) = true');
+  await expect.poll(() => page.evaluate(() => Boolean(window.emapHarness?.map))).toBe(true);
   const actualCrs = await page.evaluate(() => window.emapHarness.map.getCRS());
   await page.locator('#invoke-read').click();
   await expect.poll(async () => {

@@ -1,4 +1,5 @@
 import { pluginSignal } from '../../runtime/context/cancellation';
+import { createAbortScope } from '../../shared/abort-scope';
 import type { Plugin } from 'cordis';
 import type { DuckDbToolExecutionContext } from './core/tool-definition';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
@@ -23,12 +24,21 @@ export function duckDbPlugin(options: DuckDbRuntimeOptions = {}): Plugin.Object 
         yield ctx.provide('duckDb', runtime);
         yield ctx.provide('duckDbProcessing', {
           async execute(id, input) {
-            signal.throwIfAborted();
-            const active = await runtime.get();
-            signal.throwIfAborted();
-            const result = await duckDbToolbox.execute(id, { ...input, runtime: active });
-            signal.throwIfAborted();
-            return result;
+            const operation = createAbortScope([signal, input.signal]);
+            try {
+              operation.signal.throwIfAborted();
+              const active = await runtime.get();
+              operation.signal.throwIfAborted();
+              const result = await duckDbToolbox.execute(id, {
+                ...input,
+                runtime: active,
+                signal: operation.signal,
+              });
+              operation.signal.throwIfAborted();
+              return result;
+            } finally {
+              operation.dispose();
+            }
           },
         });
       });

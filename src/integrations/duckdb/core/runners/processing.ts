@@ -12,6 +12,7 @@ import {
 import type { DuckDbRuntime } from '../../runtime';
 
 export interface ProcessingGeometryOptions {
+  signal?: AbortSignal;
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
@@ -47,12 +48,14 @@ export async function runSingleInputTool(
   buildSql: (tableName: string, geometryColumn: string) => string,
   runtime: DuckDbRuntime | null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const input = datasetToArrowInput(dataset, opts, label);
   return runPipeline({
     label,
     runtime: rt,
+    signal: opts.signal,
     inputs: [{ table: input, prefix: `emap_duckdb_${label}_input` }],
     buildSql: ([tableName]) => buildSql(tableName!, geometryColumn),
     convertResult: (result) =>
@@ -74,14 +77,25 @@ export async function runTwoInputTool(
   runtime: DuckDbRuntime | null,
   alignCrs = false,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const rt = requireRuntime(runtime);
   const geometryColumn = opts.geometryColumn ?? 'geometry';
-  const secondaryInput = alignCrs ? await alignSecondaryDatasetCrs(primary, secondary) : secondary;
+  let secondaryInput = secondary;
+  if (alignCrs) {
+    try {
+      secondaryInput = await alignSecondaryDatasetCrs(primary, secondary);
+    } catch (error) {
+      opts.signal?.throwIfAborted();
+      throw error;
+    }
+    opts.signal?.throwIfAborted();
+  }
   const left = datasetToArrowInput(primary, opts, label);
   const right = datasetToArrowInput(secondaryInput, { geometryColumn }, label);
   return runPipeline({
     label,
     runtime: rt,
+    signal: opts.signal,
     inputs: [
       { table: left, prefix: `emap_duckdb_${label}_left` },
       { table: right, prefix: `emap_duckdb_${label}_right` },

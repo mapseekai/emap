@@ -8,7 +8,9 @@ import { editorPreset } from '@mapseekai/emap/presets';
 import { loadExampleRuntime, fixtureUrl } from './example-runtime';
 
 /** Visual diagnostics read the actual Cordis registry; this module owns only UI state. */
-export async function mountCordisRuntimeDemo(focus: 'install' | 'capability' = 'install'): Promise<void> {
+export async function mountCordisRuntimeDemo(
+  focus: 'install' | 'capability' = 'install',
+): Promise<void> {
   const optional = <T extends HTMLElement>(id: string): T | null =>
     document.getElementById(id) as T | null;
   const element = <T extends HTMLElement>(id: string): T => {
@@ -136,7 +138,8 @@ export async function mountCordisRuntimeDemo(focus: 'install' | 'capability' = '
       if (restart) restart.disabled = busy || !selected || !safe(selectedName);
       const reinstall = optional<HTMLButtonElement>('reinstall-plugin');
       if (reinstall) {
-        reinstall.disabled = busy || !!selected || !definitions.has(selectedName) || !safe(selectedName);
+        reinstall.disabled =
+          busy || !!selected || !definitions.has(selectedName) || !safe(selectedName);
       }
     }
     for (const [button, name] of [

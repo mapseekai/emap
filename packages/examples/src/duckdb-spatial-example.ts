@@ -450,7 +450,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   }
   operationSelect?.addEventListener('change', () => {
     if (!operationSelect.value) return;
-    operation = getDuckDbSpatialOperationDefinition(operationSelect.value as DuckDbSpatialOperation);
+    operation = getDuckDbSpatialOperationDefinition(
+      operationSelect.value as DuckDbSpatialOperation,
+    );
     updateControls();
     syncControls();
   });

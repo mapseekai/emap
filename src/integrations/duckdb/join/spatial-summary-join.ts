@@ -43,6 +43,7 @@ export async function spatialSummaryJoin(
   opts: SpatialSummaryJoinOptions,
   runtime: DuckDbRuntime | null = null,
 ): Promise<MapshaperDataset> {
+  opts.signal?.throwIfAborted();
   const { options, predicate, joinType, targetGeometryColumn, joinGeometryColumn } =
     validateSpatialSummaryOptions(opts);
   normalizeSpatialAggregations(options, new Set(), targetGeometryColumn);
@@ -86,6 +87,7 @@ export async function spatialSummaryJoin(
   let joinTable: Table;
   try {
     const alignedJoinDataset = await alignSecondaryDatasetCrs(targetDataset, joinDataset);
+    opts.signal?.throwIfAborted();
     if (featureCount(join.layer) === 0) {
       for (const [index, aggregation] of aggregations.entries()) {
         if (aggregation.operation !== 'count') {
@@ -123,6 +125,7 @@ export async function spatialSummaryJoin(
     });
     validateAggregationFieldTypes(joinTable, joinGeometryColumn, aggregations);
   } catch (err) {
+    opts.signal?.throwIfAborted();
     if (err instanceof DuckDbOperationError) throw err;
     throw new DuckDbOperationError(
       'conversion-failed',
@@ -131,6 +134,7 @@ export async function spatialSummaryJoin(
     );
   }
 
+  opts.signal?.throwIfAborted();
   if (rowCount === 0 || joinTable.numRows === 0) {
     const rowIds = joinType === 'left' ? Array.from({ length: rowCount }, (_, index) => index) : [];
     return rebuildSpatialSummaryDataset(
@@ -146,6 +150,7 @@ export async function spatialSummaryJoin(
   return runPipeline({
     label: 'spatial summary join',
     runtime,
+    signal: opts.signal,
     messages: {
       spatialUnavailable: 'DuckDB spatial summary join spatial extension is unavailable',
     },

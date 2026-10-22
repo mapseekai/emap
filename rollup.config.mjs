@@ -359,15 +359,17 @@ export default [
   },
   // ESM bundle (`@mapseekai/emap/duckdb`) — optional DuckDB-Wasm spatial
   // processing support. Keep DuckDB runtime dependencies external/lazy so
-  // the main and Arrow bundles stay light.
+  // the main and Arrow bundles stay light. Reuse the browser-patched Mapshaper
+  // vendor so consumer pre-bundlers cannot activate its Node require fallback.
   {
     input: 'src/integrations/duckdb/index.ts',
-    external: ['cordis', '@duckdb/duckdb-wasm', 'apache-arrow'],
+    external: ['cordis', '@duckdb/duckdb-wasm', 'apache-arrow', 'mapshaper'],
     onwarn: quietKnownCircularWarnings,
     output: {
       file: 'dist/emap-duckdb.mjs',
       format: 'es',
       sourcemap: shouldWriteSourcemap,
+      paths: { mapshaper: './mapshaper-vendor.mjs' },
     },
     plugins: commonPlugins(),
   },
