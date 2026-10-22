@@ -47,6 +47,15 @@ interface StableSelection {
   used: number;
   controller: AbortController;
 }
+interface PackedSource {
+  owner: GeometryOwner;
+  arcs: GeometryInput['arcs'];
+  interval: number;
+  coordinates: Float64Array;
+  offsets: Uint32Array;
+  features: Uint32Array;
+  bytes: number;
+}
 interface Plan {
   key: string;
   sourceId: string;
@@ -119,7 +128,7 @@ interface Options {
   workerRuntime?: WorkerRuntime;
   workerUrl: URL;
   cacheBytes?: number;
-  /** Includes active plans; only inactive completed plans may be evicted. */
+  /** Shared by plans, stable selections and reusable source packets. */
   partitionCacheBytes?: number;
   externalBytes?: () => number;
   /** Internal test/host transport seam, not a second source dataset. */
@@ -162,6 +171,8 @@ export class GeometryChunkCache {
   private plans = new Map<string, Plan>();
   private entries = new Map<string, GeometryEntry>();
   private selections = new Map<string, StableSelection>();
+  private packed = new Map<GeometryJob, PackedSource>();
+  private packedBytes = 0;
   private jobHashes = new WeakMap<GeometryJob, number>();
   private identities = new WeakMap<object, number>();
   private serial = 0;
@@ -240,6 +251,8 @@ export class GeometryChunkCache {
     selectionBuilds: 0,
     selectionHits: 0,
     packMs: 0,
+    packedHits: 0,
+    packedMisses: 0,
     batchAdmissionMs: 0,
     uploadCulledBytes: 0,
     directFeatures: 0,
@@ -286,6 +299,8 @@ export class GeometryChunkCache {
       planningRequests,
       failedRequests: requests.filter((r) => this.failed(r)).length,
       selectionCacheBytes: [...this.selections.values()].reduce((n, s) => n + s.bytes, 0),
+      packedCacheBytes: this.packedBytes,
+      packedCacheEntries: this.packed.size,
       paused: false,
       interacting: this.interacting,
       triangulation: this.worker.triangulation ? { ...this.worker.triangulation } : null,
@@ -759,6 +774,107 @@ export class GeometryChunkCache {
       bytes -= s.bytes;
       this.selections.delete(key);
     }
+    this.trimPacked();
+  }
+  private get packedLimit(): number {
+    return Math.max(
+      0,
+      (this.options.partitionCacheBytes ?? 128 * 1024 ** 2) -
+        [...this.plans.values()].reduce((n, p) => n + p.count * 4 + p.boundsBytes, 0) -
+        [...this.selections.values()].reduce((n, s) => n + s.bytes, 0),
+    );
+  }
+  private dropPacked(job: GeometryJob): void {
+    const packet = this.packed.get(job);
+    if (packet) this.packedBytes -= packet.bytes;
+    this.packed.delete(job);
+  }
+  private trimPacked(): void {
+    const requests = this.current();
+    const jobs = requests.every((r) => r.entries !== null || r.error)
+      ? new Set(requests.flatMap((r) => (r.entries ?? []).map((e) => e.job)))
+      : null;
+    for (const [job, packet] of this.packed)
+      if (
+        (jobs && !jobs.has(job)) ||
+        !requests.some(
+          (r) =>
+            r.input.arcs === packet.arcs &&
+            r.input.interval === packet.interval &&
+            r.owner.sourceId === packet.owner.sourceId &&
+            r.owner.id === packet.owner.id &&
+            r.owner.revision === packet.owner.revision &&
+            r.owner.content === packet.owner.content,
+        )
+      )
+        this.dropPacked(job);
+    const limit = this.packedLimit;
+    for (const job of this.packed.keys()) {
+      if (this.packedBytes <= limit) break;
+      this.dropPacked(job);
+    }
+  }
+  private async pack(
+    request: GeometryRequest,
+    entry: GeometryEntry,
+    signal: AbortSignal,
+  ): Promise<GeometryPacket> {
+    signal.throwIfAborted();
+    const input =
+      request.input.kind === 'fill'
+        ? { ...request.input, storageBounds: entry.coverage?.bounds }
+        : request.input;
+    const reusable = input.sourceSelection && input.kind === 'path' && !!input.screen;
+    const old = this.packed.get(entry.job);
+    if (
+      reusable &&
+      old &&
+      old.arcs === input.arcs &&
+      old.interval === input.interval &&
+      old.owner.sourceId === request.owner.sourceId &&
+      old.owner.id === request.owner.id &&
+      old.owner.revision === request.owner.revision &&
+      old.owner.content === request.owner.content
+    ) {
+      this.packed.delete(entry.job);
+      this.packed.set(entry.job, old);
+      this.counters.packedHits++;
+      return {
+        kind: 'path',
+        screen: input.screen,
+        compactStroke: input.compactStroke,
+        storageBounds: input.storageBounds,
+        coordinates: old.coordinates.slice(),
+        offsets: old.offsets.slice(),
+        features: old.features.slice(),
+      };
+    }
+    if (old) this.dropPacked(entry.job);
+    const packet = await packGeometryJob(input, entry.job, signal);
+    signal.throwIfAborted();
+    if (reusable) {
+      this.counters.packedMisses++;
+      const bytes =
+        packet.coordinates.byteLength +
+        packet.offsets.byteLength +
+        packet.features.byteLength +
+        entry.job.members.byteLength +
+        (entry.job.components?.byteLength ?? 0);
+      // Keep warm inputs when the working set exceeds capacity; cyclic eviction would miss every time.
+      if (bytes <= GEOMETRY_BATCH_BYTES && this.packedBytes + bytes <= this.packedLimit) {
+        this.packed.set(entry.job, {
+          owner: request.owner,
+          arcs: input.arcs,
+          interval: input.interval,
+          bytes,
+          coordinates: packet.coordinates.slice(),
+          offsets: packet.offsets.slice(),
+          features: packet.features.slice(),
+        });
+        this.packedBytes += bytes;
+      }
+    }
+    return packet;
   }
   private entry(job: GeometryJob, request: GeometryRequest): GeometryEntry {
     const storage = request.input.storageBounds;
@@ -1257,14 +1373,8 @@ export class GeometryChunkCache {
             pending(r) &&
             [...this.pinned].some((e) => sameOwner(e.owner, r.owner) && !this.wanted().has(e)),
         );
-      if (unchanged && group.length && group.every((r) => this.complete(r))) {
-        // The replacement is uploaded, but the last presented frame can still
-        // own its predecessor. Let presentation unpin it before the next owner
-        // spends this capacity. finish() resumes scheduling after that frame.
-        const wanted = this.wanted();
-        if ([...this.pinned].some((e) => sameOwner(e.owner, owner) && !wanted.has(e)))
-          return undefined;
-      }
+      // acceptResult() waits for presentation only when the hard budget needs
+      // old pins released; the soft budget must not serialize every owner on rAF.
       if (
         !unchanged ||
         progressiveWaiting ||
@@ -1545,6 +1655,7 @@ export class GeometryChunkCache {
     let progressed = false;
     try {
       while (!this.disposed) {
+        if (this.packedBytes && this.packedBytes > this.packedLimit) this.trimPacked();
         const first = this.nextQueued();
         if (!first) break;
         const controller = new AbortController();
@@ -1604,13 +1715,7 @@ export class GeometryChunkCache {
             const packing = performance.now();
             let packet: GeometryPacket;
             try {
-              packet = await packGeometryJob(
-                request.input.kind === 'fill'
-                  ? { ...request.input, storageBounds: entry.coverage?.bounds }
-                  : request.input,
-                entry.job,
-                controller.signal,
-              );
+              packet = await this.pack(request, entry, controller.signal);
               if (packet.kind === 'fill') {
                 packet.sourceId = request.owner.sourceId;
                 packet.cacheKey = JSON.stringify([
@@ -1866,6 +1971,8 @@ export class GeometryChunkCache {
         this.plans.clear();
         for (const selection of this.selections.values()) selection.controller.abort();
         this.selections.clear();
+        this.packed.clear();
+        this.packedBytes = 0;
         this.entries.clear();
         this.bytes = 0;
         this.pinned.clear();

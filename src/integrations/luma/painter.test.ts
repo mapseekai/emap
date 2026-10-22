@@ -367,7 +367,7 @@ describe('navigation timing samples', () => {
     expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
     expect(dispose).toHaveBeenCalledOnce();
     time = 1500;
-    // Unknown/expired cost requires a bounded recovery draw, not an assertion of zero GPU time.
+    // Unknown/expired cost requires a fresh settled frame, not an assertion of zero GPU time.
     expect(f.painter.navigationFrameMs).toBe(Infinity);
     f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
     expect(f.painter.navigationFrameMs).toBeLessThan(33.3);

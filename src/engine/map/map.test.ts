@@ -409,20 +409,15 @@ describe('Emap rendering', () => {
     const renderNavigation = vi.fn(() => true);
     const overlay = vi.fn();
     const style = { transform: '', transformOrigin: '' };
-    const render = map.ctx.render;
     setPrivate(map, '_canvas', { style });
     setPrivate(map, '_viewport', { transform: new AffineTransform(1, -1, 12, 3) });
     setPrivate(map, '_scheduler', { lastFrameMs: cpu });
     setPrivate(map, '_painter', { renderNavigation, navigationFrameMs: gpu });
     setPrivate(map, '_renderEditOverlay', overlay);
-    const refresh = vi.spyOn(render as any, '_refreshNavigationSoon').mockImplementation(() => {});
     callPrivate(map, '_applyFastTransform', { tx: 12, ty: 3, sx: 1, sy: 1 });
     expect(renderNavigation).toHaveBeenCalledTimes(replay ? 1 : 0);
-    expect(refresh).toHaveBeenCalledOnce();
-    if (!replay) expect(refresh).toHaveBeenCalledWith(250);
     expect(style.transform).toBe(replay ? '' : 'translate(12px,3px) scale(1,1)');
     expect(overlay).toHaveBeenCalledOnce();
-    refresh.mockRestore();
   });
   it('records full-frame timing without forcing a Canvas readback', async () => {
     const map = (await createTestMap()) as Emap;

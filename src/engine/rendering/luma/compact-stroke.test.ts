@@ -1,11 +1,25 @@
 import { AffineTransform } from '../../../domain/geo/transform';
 import { compactStrokeCompatible } from './compact-stroke';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { compactStrokeGeometry, COMPACT_STROKE_STRIDE } from './compact-stroke';
 import { pathGeometry } from './path-geometry';
 import type { Point } from './geometry';
 
 describe('affine opaque compact stroke geometry', () => {
+  it('calculates shared joins once while packing adjacent segments', () => {
+    const path = Array.from({ length: 128 }, (_, i) => [i, Math.sin(i)] as Point);
+    const source = pathGeometry([path]);
+    const hypot = vi.spyOn(Math, 'hypot');
+    try {
+      const packed = compactStrokeGeometry(source, 4);
+      expect(packed.compactStroke).toBe(true);
+      expect(packed.count).toBe(path.length - 1);
+      expect(packed.vertices.every(Number.isFinite)).toBe(true);
+      expect(hypot.mock.calls.length).toBeLessThanOrEqual(path.length * 4);
+    } finally {
+      hypot.mockRestore();
+    }
+  });
   it('preserves every valid endpoint and cap without emitting padding instances', () => {
     const paths: Point[][] = Array.from({ length: 300 }, (_, i) => [
       [i, 0],

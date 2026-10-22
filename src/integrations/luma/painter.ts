@@ -206,7 +206,7 @@ export class LumaPainter implements EditPainter {
         this.completionSample = null;
       }
     }
-    // Expired/unavailable samples require a recovery draw, never a zero-cost GPU claim.
+    // Expired/unavailable samples require a fresh settled frame, never a zero-cost GPU claim.
     if (!this.completionSample && now - this.completionSampleAt > 1000) return Infinity;
     return Math.max(this.navigationCpuMs, this.queueBusyMs ?? Infinity);
   }

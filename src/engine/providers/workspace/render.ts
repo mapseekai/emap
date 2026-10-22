@@ -127,7 +127,6 @@ export class CanvasRenderService {
     }, delay);
   }
   cancelNavigation(): void {
-    this._cancelNavigationRefresh();
     const wasNavigating = this._navSnapshotTransform !== null;
     if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
     this._wheelSettleTimer = null;
@@ -164,9 +163,6 @@ export class CanvasRenderService {
 
   _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
 
-  private _navigationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-  private _navigationRefreshDelay = 0;
-
   private _paintedTransform: { mx: number; my: number; bx: number; by: number } | null = null;
 
   _wheelSettleTimer: number | NodeJS.Timeout | null = null;
@@ -198,7 +194,6 @@ export class CanvasRenderService {
   }
 
   _endNavGesture(): void {
-    this._cancelNavigationRefresh();
     const hasPendingNav = this._pendingAction === 'nav' && this._pendingRender > 0;
     const refreshLabels =
       this._navSnapshotTransform !== null &&
@@ -296,7 +291,6 @@ export class CanvasRenderService {
   }
 
   _renderFull(): void {
-    this._cancelNavigationRefresh();
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
@@ -431,25 +425,10 @@ export class CanvasRenderService {
     };
   }
 
-  private _cancelNavigationRefresh(): void {
-    if (this._navigationRefreshTimer !== null) clearTimeout(this._navigationRefreshTimer);
-    this._navigationRefreshTimer = null;
-  }
-  private _refreshNavigationSoon(delay = 80): void {
-    if (!this._navSnapshotTransform || this._disposed) return;
-    if (this._navigationRefreshTimer !== null && this._navigationRefreshDelay === delay) return;
-    this._cancelNavigationRefresh();
-    this._navigationRefreshDelay = delay;
-    this._navigationRefreshTimer = setTimeout(() => {
-      this._navigationRefreshTimer = null;
-      if (this._disposed || !this._navSnapshotTransform) return;
-      if (this._painter.navigationPending) this._refreshNavigationSoon(delay);
-      else this._scheduleRender('redraw');
-    }, delay);
-  }
   _applyFastTransform(delta: AffineDelta): void {
     const view = this.deps.view._viewport;
     if (
+      !this._canvas.style.transform &&
       Math.max(this._scheduler.lastFrameMs, this._painter.navigationFrameMs ?? 0) <=
         SLOW_FRAME_MS &&
       this._painter.renderNavigation?.(
@@ -466,14 +445,9 @@ export class CanvasRenderService {
       const { mx, my, bx, by } = view.transform;
       this._paintedTransform = { mx, my, bx, by };
       if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
-      // Healthy camera replay refines geometry only after input pauses.
-      this._cancelNavigationRefresh();
-      this._refreshNavigationSoon();
     } else {
-      // A slow/unknown sample must not lock out the very frames that can replace
-      // it. Bound recovery draws to 4 Hz; continuous input must not reset this timer.
-      if (this._painter.renderNavigation) this._refreshNavigationSoon(250);
-      else this._cancelNavigationRefresh();
+      // Keep the full-size last frame for the rest of this gesture, just as Canvas does.
+      // Settling or an explicit content/size invalidation supplies the next full frame.
       this._canvas.style.transformOrigin = 'top left';
       this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
     }
@@ -718,7 +692,6 @@ export class CanvasRenderService {
       return;
     }
     this._disposed = true;
-    this._cancelNavigationRefresh();
     this._liveVertexState = null;
     this._liveEditArcs = null;
     this._paintedTransform = null;

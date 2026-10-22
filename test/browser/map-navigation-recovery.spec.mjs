@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
-  test(`${renderer}: 199 labeled points recover during navigation with 20 hidden layers`, async ({ page }, info) => {
+  test(`${renderer}: 199 labeled points retain slow navigation snapshots with 20 hidden layers`, async ({ page }, info) => {
     test.setTimeout(120000);
     await page.goto('/mapseekai/emap/examples/luma-benchmark/');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
@@ -46,8 +46,7 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
       // Seed a single old CPU sample without adding persistent load. No engine methods are mocked.
       r._scheduler.recordFrame(p.renderNavigation ? 100 : 5, r._captureRenderSnapshot());
       const before = { ...p.stats?.presentation };
-      let frames = 0, css = 0, recoveryMs = null;
-      const start = performance.now();
+      let frames = 0, css = 0;
       r.beginNavigation();
       r.render({ action: 'nav', navDelta: r._computeNavDelta() });
       const initialSnapshot = !!r._canvas.style.transform;
@@ -57,11 +56,8 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
         await new Promise(requestAnimationFrame);
         frames++;
         if (r._canvas.style.transform) css++;
-        if (recoveryMs === null && !r._canvas.style.transform &&
-            ((p.stats?.presentation?.replays ?? 0) > (before.replays ?? 0) ||
-             (p.stats?.presentation?.presented ?? 0) > (before.presented ?? 0))) recoveryMs = performance.now() - start;
       }
-      const during = { frames, css, recoveryMs, initialSnapshot,
+      const during = { frames, css, initialSnapshot,
         replays: (p.stats?.presentation?.replays ?? 0) - (before.replays ?? 0),
         full: (p.stats?.presentation?.presented ?? 0) - (before.presented ?? 0),
         active: r._navSnapshotTransform !== null };
@@ -69,11 +65,11 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
       r.endNavigation();
       await new Promise(requestAnimationFrame);
       await new Promise(requestAnimationFrame);
-      const final = { transform: r._canvas.style.transform, painted: { ...r._paintedTransform }, view: { ...v.transform }, timer: r._navigationRefreshTimer, timing: p.stats?.navigationTiming };
+      const final = { transform: r._canvas.style.transform, painted: { ...r._paintedTransform }, view: { ...v.transform }, timing: p.stats?.navigationTiming };
       Object.assign(v.transform, startView);
       r.render();
       await map.dispose();
-      return { during, final, glyphSizes, previewSizes, errors: recoveryErrors, pendingAfterDispose: p.navigationPending ?? false, timerAfterDispose: r._navigationRefreshTimer };
+      return { during, final, glyphSizes, previewSizes, errors: recoveryErrors, pendingAfterDispose: p.navigationPending ?? false };
     });
     await info.attach('navigation-recovery', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
     console.log(renderer, JSON.stringify({ during: result.during, final: result.final }));
@@ -81,16 +77,13 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
     if (renderer === 'canvas2d') expect(result.during.css).toBe(0);
     else {
       expect(result.during.initialSnapshot).toBe(true);
-      // Ready label layouts can replace a replay with a full live frame.
-      expect(result.during.replays + result.during.full).toBeGreaterThan(0);
-      expect(result.during.recoveryMs).toBeLessThan(2000);
-      expect(result.during.css).toBeLessThan(result.during.frames);
+      expect(result.during.replays).toBe(0);
+      expect(result.during.full).toBe(0);
+      expect(result.during.css).toBe(result.during.frames);
     }
     expect(result.previewSizes).toEqual(result.glyphSizes);
     expect(result.final.transform).toBe('');
     for (const key of ['mx', 'my', 'bx', 'by']) expect(result.final.painted[key]).toBeCloseTo(result.final.view[key], 8);
-    expect(result.final.timer).toBeNull();
-    expect(result.timerAfterDispose).toBeNull();
     expect(result.pendingAfterDispose).toBe(false);
     expect(result.errors).toEqual([]);
   });

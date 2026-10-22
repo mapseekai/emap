@@ -1494,6 +1494,189 @@ function screenPathInput(): GeometryInput & { screen: NonNullable<GeometryInput[
   };
 }
 
+it('reuses owned source packets after transfer while rebuilding paths for the current view', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  const read = vi.spyOn(input.arcs!, 'getArcIter');
+  const packets: Parameters<typeof buildGeometryPacket>[0][] = [];
+  f.transport.build.mockImplementation(async (packet) => {
+    const received = structuredClone(packet, {
+      transfer: [packet.coordinates.buffer, packet.offsets.buffer, packet.features.buffer],
+    });
+    packets.push(received);
+    return buildGeometryPacket(received);
+  });
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const count = packets.length,
+      builds = f.cache.stats.builds;
+    read.mockClear();
+    const screen: NonNullable<GeometryInput['screen']> = {
+      ...input.screen,
+      view: [40, -40, -320, 320],
+    };
+    const next = f.frame({ ...input, screen, compactStroke: true });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.stats.builds).toBe(builds + count);
+    expect(read).not.toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(count);
+    expect(f.cache.stats.packedCacheBytes).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      expect(packets[count + i].coordinates).toEqual(packets[i].coordinates);
+      expect(packets[count + i].offsets).toEqual(packets[i].offsets);
+      expect(packets[count + i].features).toEqual(packets[i].features);
+      expect(packets[count + i].screen).toEqual(screen);
+      expect(packets[count + i].compactStroke).toBe(true);
+    }
+    f.cache.clear({ layerId: 'p' });
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.cache.stats.packedCacheBytes).toBe(0);
+});
+
+it.each([
+  'interval',
+  'revision',
+  'arcs',
+  'membership',
+] as const)('rebuilds cached source packets after changing %s', async (change) => {
+  const f = fixture(),
+    input = screenPathInput();
+  const read = vi.spyOn(input.arcs!, 'getArcIter');
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    read.mockClear();
+    const nextInput: GeometryInput = {
+      ...input,
+      screen: { ...input.screen, view: [40, -40, -320, 320] },
+      ...(change === 'interval' ? { interval: 1 } : {}),
+      ...(change === 'membership' ? { ids: Uint32Array.of(0, 1) } : {}),
+      ...(change === 'arcs' ? { arcs: { ...input.arcs! } } : {}),
+    };
+    const next = f.frame(nextInput, change === 'revision' ? 1 : 0);
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(read).toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(0);
+    f.cache.clear({ sourceId: 's' });
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('keeps source packet copies inside the existing partition and selection budget', async () => {
+  const f = fixture(1024 ** 2, 160),
+    input = screenPathInput();
+  const read = vi.spyOn(input.arcs!, 'getArcIter');
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    read.mockClear();
+    const next = f.frame({ ...input, screen: { ...input.screen, view: [40, -40, -320, 320] } });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(read).toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(0);
+    expect(
+      f.cache.stats.packedCacheBytes +
+        f.cache.stats.partitionBytes +
+        f.cache.stats.selectionCacheBytes,
+    ).toBeLessThanOrEqual(160);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('trims warm source packets before preparing a new source with more index metadata', async () => {
+  const f = fixture(1024 ** 2, 1000),
+    input = screenPathInput();
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const previous = f.cache.stats.packedCacheBytes;
+    expect(previous).toBeGreaterThan(0);
+    f.cache.begin();
+    const path = f.cache.request(input, { id: 'p', sourceId: 's', revision: 0 });
+    const points = f.cache.request(
+      {
+        ...f.input,
+        wholeLayer: true,
+        bounds: [0, 0, 200, 200],
+        shapes: Array.from({ length: 200 }, (_, i) => [[i, i]]),
+      },
+      { id: 'q', sourceId: 'other', revision: 0 },
+    );
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(path) && f.cache.complete(points)).toBe(true));
+    const stats = f.cache.stats;
+    expect(
+      stats.packedCacheBytes + stats.partitionBytes + stats.selectionCacheBytes,
+    ).toBeLessThanOrEqual(1000);
+    expect(stats.packedCacheBytes).toBeLessThan(previous);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('does not retain a source packet larger than the existing 2 MiB batch bound', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  input.arcs = {
+    size: () => 1,
+    getArcIter() {
+      let at = 0;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (at > 131072) return false;
+          this.x = at++ / 131072;
+          return true;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  try {
+    const request = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+    expect(f.transport.build.mock.calls[0][0].coordinates.byteLength).toBeGreaterThan(
+      2 * 1024 ** 2,
+    );
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('does not retain a packet when its source is cleared during packing', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const iter = input.arcs!.getArcIter.bind(input.arcs);
+    let cleared = false;
+    vi.spyOn(input.arcs!, 'getArcIter').mockImplementationOnce((id) => {
+      cleared = true;
+      f.cache.clear({ sourceId: 's' });
+      return iter(id);
+    });
+    f.frame({ ...input, interval: 1 });
+    await vi.waitFor(() => expect(cleared).toBe(true));
+    expect(f.cache.stats.visibleChunks).toBe(0);
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
 it('reuses whole-layer source membership without rescanning arcs on camera changes', async () => {
   const f = fixture(),
     input = screenPathInput(),
@@ -2486,6 +2669,38 @@ it.each([
     expect(f.cache.stats.failedRequests).toBe(0);
     expect(f.transport.build).toHaveBeenCalledTimes(4);
     expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('prepares retiring owners before presentation while all replacements fit the hard budget', async () => {
+  const f = fixture();
+  const input = { ...f.input, ordered: true };
+  const frame = (interval: number) => {
+    f.cache.begin();
+    const requests = ['a', 'b', 'c'].map((id) =>
+      f.cache.request({ ...input, interval }, { id, sourceId: 's', revision: 0 }),
+    );
+    f.cache.finish();
+    return requests;
+  };
+  try {
+    const first = frame(0);
+    await vi.waitFor(() => expect(first.every((r) => f.cache.complete(r))).toBe(true));
+    const displayed = first.flatMap((r) => f.cache.drawable(r));
+    f.cache.pin(displayed);
+    const initial = f.cache.stats.bytes;
+    Reflect.set(f.cache, 'limit', initial * 1.1);
+    const next = frame(1);
+    // No presentation callback runs: preparation can use the existing hard-limit headroom.
+    await vi.waitFor(() => expect(next.every((r) => f.cache.complete(r))).toBe(true));
+    expect(displayed.every((entry) => f.cache.isResident(entry))).toBe(true);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(initial * 2.2);
+    expect(f.report).not.toHaveBeenCalled();
+    f.cache.pin(next.flatMap((r) => f.cache.drawable(r)));
+    f.cache.finish();
+    expect(displayed.some((entry) => f.cache.isResident(entry))).toBe(false);
   } finally {
     f.cache.dispose();
   }

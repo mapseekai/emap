@@ -17,7 +17,7 @@ describe('map canvas teardown', () => {
   });
 });
 
-describe('navigation recovery during a continuous gesture', () => {
+describe('navigation snapshots during a continuous gesture', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -39,6 +39,7 @@ describe('navigation recovery during a continuous gesture', () => {
     } as never);
     const style = { transform: '', transformOrigin: '' };
     render._canvas = { width: 800, height: 600, style, remove() {} } as never;
+    Reflect.set(render, '_paintedTransform', { mx: 1, my: -1, bx: 0, by: 0 });
     let cost = 100;
     let redraws = 0;
     let replays = 0;
@@ -76,6 +77,9 @@ describe('navigation recovery during a continuous gesture', () => {
       render,
       style,
       step,
+      setCost(value: number) {
+        cost = value;
+      },
       get redraws() {
         return redraws;
       },
@@ -85,36 +89,82 @@ describe('navigation recovery during a continuous gesture', () => {
     };
   }
 
-  it('re-evaluates a slow sample and resumes replay before continuous navigation ends', () => {
+  it('keeps the last full-size frame frozen until the slow gesture ends, even after timing improves', () => {
     const f = fixture();
     f.step();
     expect(f.style.transform).not.toBe('');
+    f.setCost(5);
     for (let i = 0; i < 50; i++) f.step();
     expect(f.render._navSnapshotTransform).not.toBeNull();
-    expect(f.redraws).toBeGreaterThan(0);
-    expect(f.replays).toBeGreaterThan(10);
-    expect(f.style.transform).toBe('');
+    expect(f.redraws).toBe(0);
+    expect(f.replays).toBe(0);
+    expect(f.style.transform).not.toBe('');
+    expect([f.render._canvas.width, f.render._canvas.height]).toEqual([800, 600]);
     f.render.endNavigation();
     const before = f.redraws;
     vi.advanceTimersByTime(32);
     expect(f.redraws).toBe(before + 1);
+    expect(f.style.transform).toBe('');
+    f.render.beginNavigation();
+    f.step();
+    expect(f.replays).toBe(1);
     f.render.dispose();
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('limits recovery drawing when the scene stays slow', () => {
+  it('does not redraw or replay a slow scene during two seconds of continuous navigation', () => {
     const f = fixture();
     let redraws = 0;
     f.render._renderImpl = () => {
       redraws++;
     };
     for (let i = 0; i < 125; i++) f.step();
-    expect(redraws).toBeGreaterThan(0);
-    expect(redraws).toBeLessThanOrEqual(8);
+    expect(redraws).toBe(0);
     expect(f.replays).toBe(0);
     expect(f.style.transform).not.toBe('');
+    f.render.endNavigation();
+    vi.advanceTimersByTime(32);
+    expect(redraws).toBe(1);
     f.render.dispose();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps a frozen frame when another gesture overtakes its queued settle redraw', () => {
+    const f = fixture();
+    f.step();
+    f.render.endNavigation();
+    f.render.beginNavigation();
+    f.setCost(5);
+    f.step();
+    expect(f.redraws).toBe(0);
+    expect(f.replays).toBe(0);
+    expect(f.render._computeNavDelta().tx).toBe(2);
+    expect(f.style.transform).toBe('translate(2px,0px) scale(1,1)');
+    f.render.endNavigation();
+    vi.advanceTimersByTime(32);
+    expect(f.redraws).toBe(1);
+    expect(f.style.transform).toBe('');
+    f.render.dispose();
+  });
+
+  it('uses the same frozen-frame policy for a slow Canvas2D gesture', () => {
+    const f = fixture();
+    Reflect.set(f.render._painter, 'renderNavigation', undefined);
+    f.render._scheduler = new RenderScheduler({
+      fullRedraw: () => f.render._renderFull(),
+      requestRedraw: () => f.render._scheduleRender('redraw', undefined, true),
+      fastNav: (delta) => f.render._applyFastTransform(delta),
+      getSnapshot: () => f.render._captureRenderSnapshot(),
+    });
+    f.render._scheduler.recordFrame(100, f.render._captureRenderSnapshot());
+    for (let i = 0; i < 50; i++) f.step();
+    expect(f.redraws).toBe(0);
+    expect(f.style.transform).toBe('translate(50px,0px) scale(1,1)');
+    f.render.endNavigation();
+    vi.advanceTimersByTime(32);
+    expect(f.redraws).toBe(1);
+    expect(f.style.transform).toBe('');
+    f.render.dispose();
   });
 
   it('keeps healthy camera replay free of geometry preparation during continuous navigation', () => {
@@ -131,9 +181,12 @@ describe('navigation recovery during a continuous gesture', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('defers prepared-geometry notifications during camera replay without blocking explicit redraws', () => {
+  it.each([
+    5, 100,
+  ])('defers prepared geometry without blocking explicit redraws at %sms', (cost) => {
     const f = fixture();
     f.render._renderImpl();
+    f.setCost(cost);
     f.step();
     const before = f.redraws;
     Reflect.get(f.render, '_schedulePreparedRender').call(f.render);
@@ -168,7 +221,7 @@ describe('navigation recovery during a continuous gesture', () => {
     f.render.dispose();
   });
 
-  it('does not pile recovery frames onto a GPU queue that has not completed', () => {
+  it('keeps using the snapshot after an unfinished GPU queue completes during the gesture', () => {
     const f = fixture();
     Object.defineProperty(f.render._painter, 'navigationPending', {
       value: true,
@@ -177,8 +230,24 @@ describe('navigation recovery during a continuous gesture', () => {
     for (let i = 0; i < 125; i++) f.step();
     expect(f.redraws).toBe(0);
     Object.defineProperty(f.render._painter, 'navigationPending', { value: false });
+    f.setCost(5);
     for (let i = 0; i < 40; i++) f.step();
-    expect(f.replays).toBeGreaterThan(0);
+    expect(f.replays).toBe(0);
+    expect(f.redraws).toBe(0);
+    f.render.dispose();
+  });
+
+  it.each([
+    [33, 1],
+    [34, 0],
+    [Infinity, 0],
+  ])('uses the shared frame budget when the GPU timing estimate is %sms', (cost, replays) => {
+    const f = fixture();
+    f.setCost(cost);
+    f.step();
+    expect(f.replays).toBe(replays);
+    expect(f.redraws).toBe(0);
+    expect(f.style.transform === '').toBe(replays === 1);
     f.render.dispose();
   });
 

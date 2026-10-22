@@ -59,6 +59,17 @@ function packCompactStrokes(
   let data = parts[0].vertices;
   const xy = (i: number, axis: number) =>
     src[i * PATH_STRIDE + axis] + src[i * PATH_STRIDE + axis + 2];
+  // A segment's end and the next segment's start share the same source vertex.
+  let joined = -1,
+    ax = 0,
+    ay = 0,
+    bx = 0,
+    by = 0,
+    la = 0,
+    lb = 0,
+    mx = 0,
+    my = 0,
+    cosine = 0;
   const join = (
     prev: number,
     curr: number,
@@ -67,40 +78,47 @@ function packCompactStrokes(
     cap: boolean,
     at: number,
   ) => {
-    let ax = xy(curr, 0) - xy(prev, 0),
-      ay = xy(curr, 1) - xy(prev, 1);
-    let bx = xy(next, 0) - xy(curr, 0),
-      by = xy(next, 1) - xy(curr, 1);
-    const la = Math.hypot(ax, ay),
-      lb = Math.hypot(bx, by);
-    if (cap || (end ? lb === 0 : la === 0)) {
+    if (cap) {
       data[at + 3] = 0;
       return;
     }
-    if (la > 0) {
-      ax /= la;
-      ay /= la;
-    }
-    if (lb > 0) {
-      bx /= lb;
-      by /= lb;
-    }
-    let tx = ax + bx,
-      ty = ay + by;
-    const len = Math.hypot(tx, ty);
-    if (len > 0) {
-      tx /= len;
-      ty /= len;
-    } else {
-      tx = -ay;
-      ty = ax;
-    }
-    const mx = -ty,
-      my = tx,
-      nx = end ? -ay : -by,
-      ny = end ? ax : bx;
-    const sine = Math.abs(mx * nx + my * ny),
+    if (joined !== curr) {
+      joined = curr;
+      ax = xy(curr, 0) - xy(prev, 0);
+      ay = xy(curr, 1) - xy(prev, 1);
+      bx = xy(next, 0) - xy(curr, 0);
+      by = xy(next, 1) - xy(curr, 1);
+      la = Math.hypot(ax, ay);
+      lb = Math.hypot(bx, by);
+      if (la > 0) {
+        ax /= la;
+        ay /= la;
+      }
+      if (lb > 0) {
+        bx /= lb;
+        by /= lb;
+      }
+      let tx = ax + bx,
+        ty = ay + by;
+      const len = Math.hypot(tx, ty);
+      if (len > 0) {
+        tx /= len;
+        ty /= len;
+      } else {
+        tx = -ay;
+        ty = ax;
+      }
+      mx = -ty;
+      my = tx;
       cosine = Math.abs(ax * mx + ay * my);
+    }
+    if (end ? lb === 0 : la === 0) {
+      data[at + 3] = 0;
+      return;
+    }
+    const nx = end ? -ay : -by,
+      ny = end ? ax : bx;
+    const sine = Math.abs(mx * nx + my * ny);
     const size = 1 / Math.max(sine, 0.001);
     data[at] = mx * size;
     data[at + 1] = my * size;
