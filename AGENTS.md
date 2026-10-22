@@ -5,6 +5,9 @@ engine built on `mapshaper` data structures and HTML5 Canvas.
 
 ## Read only what the task needs
 
+`AGENTS.md` is the single source of repository-wide agent rules. Load its linked
+guidance only when the task matches the stated condition.
+
 | Task | Guidance |
 | --- | --- |
 | Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture) and the [architecture guide](packages/docs/docs/concepts/architecture.md) |
