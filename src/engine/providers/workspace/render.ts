@@ -102,11 +102,19 @@ export class CanvasRenderService {
     };
     for (const [pass, position] of this._passes) {
       if (position !== stage) continue;
-      try {
-        pass(frame);
-      } catch (error) {
-        this.deps.events.fire('error', { error });
-      }
+      this._renderPass(pass, frame);
+    }
+  }
+
+  private _renderPass(pass: RenderPass, frame: RenderFrame): void {
+    const report = (error: unknown) => this.deps.events.fire('error', { error });
+    this._painter.setRenderPassErrorHandler?.(report);
+    try {
+      pass(frame);
+    } catch (error) {
+      report(error);
+    } finally {
+      this._painter.setRenderPassErrorHandler?.(null);
     }
   }
 
@@ -482,13 +490,7 @@ export class CanvasRenderService {
       };
       for (const block of sourceRenderBlocks(all, this._passes, this._sourceOrder)) {
         if ('layers' in block) this._renderLayers(pixelSize, lineScale, block.layers, retain);
-        else {
-          try {
-            block.pass(frame);
-          } catch (error) {
-            this.deps.events.fire('error', { error });
-          }
-        }
+        else this._renderPass(block.pass, frame);
       }
       return;
     }

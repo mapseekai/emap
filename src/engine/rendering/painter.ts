@@ -102,6 +102,8 @@ export interface CorePainter {
   /** @internal Optional lifecycle for GPU painters; existing synchronous painters remain valid. */
   readonly backend?: import('../map/renderer').RendererBackend;
   finishFrame?(): void;
+  /** @internal Preserve registered-pass error isolation for deferred geometry preparation. */
+  setRenderPassErrorHandler?(report: ((error: unknown) => void) | null): void;
   /** @internal A progressive scene may be presented before every request is ready. */
   readonly framePresented?: boolean;
   renderNavigation?(view: AffineTransform, labels?: LabelFrame): boolean;

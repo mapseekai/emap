@@ -1,3 +1,6 @@
+import assert from 'node:assert/strict';
+import { flatPathGeometry } from './flat-path';
+import { flatCompactStrokeParts, compactStrokeParts } from './compact-stroke';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { compactStrokeCompatible } from './compact-stroke';
 import { describe, expect, it, vi } from 'vitest';
@@ -144,4 +147,307 @@ it('separates mixed endpoint precision without losing any endpoint or join coeff
     original.vertices.byteLength,
   );
   expect(compactStrokeParts(source, 0.01)).toEqual([source]);
+});
+
+describe('exact stored reversal joins', () => {
+  const markers = (g: ReturnType<typeof pathGeometry>) => {
+    const stride = g.compactStrokeXY ? 12 : 16;
+    return Array.from({ length: g.count }, (_, i) => [
+      g.vertices[i * stride + stride - 5],
+      g.vertices[i * stride + stride - 1],
+    ]);
+  };
+  it('bounds every endpoint of closed backtracks without changing source or instances', () => {
+    for (const length of [1e-10, 0.01, 1, 100000])
+      for (const [x, y] of [
+        [1, 0],
+        [0, 1],
+        [0.6, 0.8],
+      ]) {
+        const source = pathGeometry([
+          [
+            [0, 0],
+            [x * length, y * length],
+            [0, 0],
+          ],
+        ]);
+        const before = source.vertices.slice(),
+          packed = compactStrokeGeometry(source, 4);
+        expect(packed.count).toBe(2);
+        expect(markers(packed)).toEqual([
+          [2, 2],
+          [2, 2],
+        ]);
+        const stride = packed.compactStrokeXY ? 12 : 16;
+        for (let i = 0; i < packed.count; i++) {
+          expect([...packed.vertices.slice(i * stride + stride - 8, (i + 1) * stride)]).toEqual([
+            0, 0, 0, 2, 0, 0, 0, 2,
+          ]);
+        }
+        expect(source.vertices).toEqual(before);
+      }
+  });
+  it('specializes only matching neighbors and preserves explicit and zero-neighbor caps', () => {
+    const open = compactStrokeGeometry(
+      pathGeometry([
+        [
+          [0, 2],
+          [0, 0],
+          [10, 0],
+          [0, 0],
+          [-2, 1],
+        ],
+      ]),
+      4,
+    );
+    expect(markers(open).map((row) => row.map((v) => v === 2))).toEqual([
+      [false, false],
+      [false, true],
+      [true, false],
+      [false, false],
+    ]);
+    for (const path of [
+      [
+        [0, 0],
+        [0, 0],
+        [10, 0],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [10, 0],
+        [10, 0],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [10, 0],
+        [0, 0],
+        [0, 0],
+      ],
+    ] as Point[][]) {
+      const source = pathGeometry([path]),
+        packed = compactStrokeGeometry(source, 4);
+      expect(packed.count).toBe(2);
+      expect(packed.vertices.every(Number.isFinite)).toBe(true);
+      expect(markers(packed).flat()).toContain(0);
+    }
+    const empty = pathGeometry([
+      [
+        [0, 0],
+        [0, 0],
+        [0, 0],
+      ],
+    ]);
+    expect(compactStrokeGeometry(empty, 4)).toBe(empty);
+  });
+  it('keeps unequal and nearly reversed legs generic, including differences only in low words', () => {
+    for (const path of [
+      [
+        [-10, 0],
+        [0, 0],
+        [-1, 0],
+      ],
+      [
+        [-1000, 0],
+        [0, 0],
+        [-1000, 0.001],
+      ],
+      [
+        [-1000, -1000],
+        [0, 0],
+        [-1000, -999.999],
+      ],
+      [
+        [13000000.001, 4000000.002],
+        [13000000.004, 4000000.008],
+        [13000000.001, 4000000.002001],
+      ],
+    ] as Point[][]) {
+      const packed = compactStrokeGeometry(pathGeometry([path]), 4);
+      expect(markers(packed).flat()).not.toContain(2);
+      expect(markers(packed)[0][1]).not.toBe(0);
+    }
+    const precise = compactStrokeGeometry(
+      pathGeometry([
+        [
+          [13000000.001, 4000000.002],
+          [13000000.004, 4000000.008],
+          [13000000.001, 4000000.002],
+        ],
+      ]),
+      4,
+    );
+    expect(precise.compactStrokeXY).toBe(false);
+    expect(markers(precise)).toEqual([
+      [2, 2],
+      [2, 2],
+    ]);
+  });
+});
+
+describe('direct filtered compact records', () => {
+  const compare = (paths: Point[][], maxExpansion = 1.125, trackMembers = true) => {
+    let n = 0;
+    const offsets = Uint32Array.from([
+      ...paths.map((p) => {
+        const a = n;
+        n += p.length;
+        return a;
+      }),
+      n,
+    ]);
+    const coordinates = Float64Array.from(paths.flatMap((p) => p.flat()));
+    const raw = flatPathGeometry(coordinates, offsets, trackMembers);
+    const expected = compactStrokeParts(raw, maxExpansion);
+    const actual = flatCompactStrokeParts(coordinates, offsets, trackMembers, maxExpansion);
+    if (expected[0] === raw) expect(actual).toBeUndefined();
+    else {
+      assert.deepEqual(actual!.parts, expected);
+      expect(actual!.inputCount).toBe(raw.count);
+    }
+    return actual;
+  };
+  it('uses whole-input padded capacity at the admission boundary for XY, precise and mixed parts', () => {
+    for (const [path, floats] of [
+      [
+        [
+          [0, 0],
+          [1, 0],
+          [2, 1],
+          [3, 2],
+        ],
+        36,
+      ],
+      [
+        [
+          [0.1, 0],
+          [1.1, 0],
+          [2.1, 1],
+          [3.1, 2],
+        ],
+        48,
+      ],
+      [
+        [
+          [0, 0],
+          [1, 0],
+          [2.1, 1],
+          [3, 2],
+        ],
+        44,
+      ],
+    ] as [Point[], number][]) {
+      const equality = floats / 42;
+      expect(compare([path], equality - 1e-12)).toBeUndefined();
+      expect(compare([path], equality)).toBeDefined();
+      expect(compare([path], equality + 1e-12)).toBeDefined();
+      compare([[], [[8, 8]], path], equality);
+    }
+    expect(
+      compare([
+        Array.from({ length: 2000 }, (_, i) => [i, Math.sin(i)] as Point),
+        [
+          [0, 0],
+          [1, 1],
+        ],
+      ]),
+    ).toBeUndefined();
+    expect(
+      compare([
+        [
+          [0, 0],
+          [0, 0],
+        ],
+      ]),
+    ).toBeUndefined();
+  });
+  it('keeps Float64 closure and validity distinct from stored high/low arithmetic', () => {
+    const tiny = compare([
+      [
+        [0, 0],
+        [1e-50, 0],
+      ],
+    ])!.parts[0];
+    expect(tiny.compactStrokeXY).toBe(true);
+    expect(tiny.count).toBe(1); // Nonzero source segment survives low-word underflow.
+    expect([...tiny.vertices]).toEqual(Array(12).fill(0));
+    const open = compare([
+      [
+        [0, 0],
+        [1, 0],
+        [1e-50, 0],
+      ],
+    ])!.parts[0];
+    expect(open.vertices[7]).toBe(0);
+    expect(open.vertices[11]).toBe(2);
+    expect(open.vertices[19]).toBe(2);
+    expect(open.vertices[23]).toBe(0); // Quantized endpoints coincide; the Float64 path is open.
+    const signed = compare(
+      [
+        [
+          [-0, -0],
+          [1, 0],
+        ],
+      ],
+      4,
+      false,
+    )!.parts[0];
+    expect(Object.is(signed.vertices[0], -0)).toBe(true);
+    expect(signed.memberRanges).toBeUndefined();
+    compare(
+      [
+        [
+          [13000000.001, 4000000.002],
+          [13000000.004, 4000000.008],
+          [13000000.001, 4000000.002001],
+        ],
+      ],
+      4,
+    );
+  });
+  it('falls back on nonfinite endpoint or join output without requiring unused dash distances', () => {
+    expect(
+      compare(
+        [
+          [
+            [1e39, 0],
+            [2e39, 0],
+          ],
+        ],
+        4,
+      ),
+    ).toBeUndefined();
+    expect(
+      compare(
+        [
+          [
+            [-3e38, 0],
+            [0, 0],
+            [3e38, 0],
+          ],
+        ],
+        4,
+      ),
+    ).toBeUndefined();
+  });
+  it('matches quantized generic joins on reproducible mixed paths and independent path boundaries', () => {
+    let seed = 12345;
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    for (let k = 0; k < 80; k++) {
+      const paths: Point[][] = Array.from({ length: 4 }, () => {
+        const path: Point[] = Array.from({ length: 2 + Math.floor(random() * 8) }, () => {
+          const scale = random() < 0.5 ? 1e7 : 1;
+          return [random() * scale, random() * scale];
+        });
+        if (random() < 0.5) path.push(path[0]);
+        if (random() < 0.5) path.splice(1, 0, path[0]);
+        return path;
+      });
+      compare(paths, 4);
+    }
+  });
 });

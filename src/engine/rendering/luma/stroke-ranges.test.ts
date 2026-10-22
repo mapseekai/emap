@@ -113,3 +113,31 @@ it('indexes long shared-neighbor strokes without rewriting coordinates and retai
   expect(guarded.pathRanges!.uncullable?.[0]).toBe(1);
   expect(guarded.vertices).toBe(corner.vertices);
 });
+
+it('bounds exact reversal ranges across physical splits without dropping source members or offscreen caps', () => {
+  const raw = pathGeometry(
+    Array.from(
+      { length: 17000 },
+      () =>
+        [
+          [-1, 5],
+          [-2, 5],
+          [-1, 5],
+        ] as [number, number][],
+    ),
+  );
+  raw.memberRanges = Uint32Array.from([7, 0, raw.count]);
+  const packed = compactStrokeGeometry(raw),
+    indexed = spatialStrokeGeometry(packed);
+  expect(indexed.pathRanges!.uncullable!.some(Boolean)).toBe(false);
+  const parts = splitGeometry(indexed);
+  expect(parts.length).toBeGreaterThan(1);
+  expect(parts.reduce((n, p) => n + p.count, 0)).toBe(34000);
+  expect(parts.reduce((n, p) => n + p.memberRanges![2], 0)).toBe(34000);
+  for (const part of parts) {
+    expect(
+      new PathRangeIndex(part.pathRanges!, part.count).select(new AffineTransform(), 10, 10, 4)
+        .rejected,
+    ).toBe(0);
+  }
+});

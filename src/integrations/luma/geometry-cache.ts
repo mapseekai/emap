@@ -131,6 +131,8 @@ interface Options {
   /** Shared by plans, stable selections and reusable source packets. */
   partitionCacheBytes?: number;
   externalBytes?: () => number;
+  /** Keep the composited image visible while its geometry is retired. */
+  retainPresentation?: () => boolean;
   /** Internal test/host transport seam, not a second source dataset. */
   transport?: GeometryTransport;
 }
@@ -178,6 +180,7 @@ export class GeometryChunkCache {
   private serial = 0;
   private frame = 0;
   private collecting = false;
+  private admitting = new Set<GeometryEntry>();
   private wantedCache: Set<GeometryEntry> | null = null;
   private protectedCache: Set<GeometryEntry> | null = null;
   private trimCandidates: GeometryEntry[] | null = null;
@@ -202,6 +205,10 @@ export class GeometryChunkCache {
   private notification: ReturnType<typeof setTimeout> | null = null;
   private resumeAdmission: (() => void) | null = null;
   private presentationPlanning = false;
+  private presentationRetained = false;
+  private presentationVersion = 0;
+  private waitedPresentationVersion = -1;
+  private waitedExternal = -1;
   private pinned = new Set<GeometryEntry>();
   private latest = new Map<string, GeometryEntry>();
   private turn = 0;
@@ -317,6 +324,7 @@ export class GeometryChunkCache {
   }
   admitExternal(incoming: number): void {
     this.trim(incoming);
+    if (this.bytes + this.externalBytes + incoming > this.limit * 2) this.retirePresentation();
     if (this.bytes + this.externalBytes + incoming > this.limit * 2)
       throw new RangeError('Shared geometry working set exceeds its bounded allocation limit.');
   }
@@ -512,21 +520,32 @@ export class GeometryChunkCache {
         request.fallback = retained;
       }
       controller.signal.throwIfAborted();
-      // Admit the selection together before its prefix exists outside request.entries.
-      // Per-entry trimming could otherwise evict that not-yet-published prefix.
-      const metadataBytes = jobs.reduce(
-        (n, job) => n + job.members.byteLength + (job.components?.byteLength ?? 0),
-        0,
-      );
-      if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
-        this.trim(metadataBytes, request);
-      const allocatedBefore = this.bytes;
+      // Resolve reuse before charging metadata, and protect the whole shared
+      // selection while admitting missing members without intermediate trimming.
+      const reused = jobs.map((job) => this.entry(job, request, true));
+      this.admitting = new Set(reused.filter((entry): entry is GeometryEntry => !!entry));
+      this.selectionChanged();
       try {
-        request.entries = jobs.map((job) => this.entry(job, request));
-      } catch (error) {
-        if (error instanceof GeometryMetadataAdmissionError)
-          request.requiredMetadataBytes = this.bytes - allocatedBefore + error.requiredBytes;
-        throw error;
+        const metadataBytes = jobs.reduce(
+          (n, job, i) =>
+            n + (reused[i] ? 0 : job.members.byteLength + (job.components?.byteLength ?? 0)),
+          0,
+        );
+        if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
+          this.trim(metadataBytes, request);
+        if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
+          this.retirePresentation();
+        const allocatedBefore = this.bytes;
+        try {
+          request.entries = jobs.map((job, i) => reused[i] ?? this.entry(job, request));
+        } catch (error) {
+          if (error instanceof GeometryMetadataAdmissionError)
+            request.requiredMetadataBytes = this.bytes - allocatedBefore + error.requiredBytes;
+          throw error;
+        }
+      } finally {
+        this.admitting.clear();
+        this.selectionChanged();
       }
       if (
         request.fallback &&
@@ -876,7 +895,17 @@ export class GeometryChunkCache {
     }
     return packet;
   }
-  private entry(job: GeometryJob, request: GeometryRequest): GeometryEntry {
+  private entry(job: GeometryJob, request: GeometryRequest): GeometryEntry;
+  private entry(
+    job: GeometryJob,
+    request: GeometryRequest,
+    lookupOnly: true,
+  ): GeometryEntry | undefined;
+  private entry(
+    job: GeometryJob,
+    request: GeometryRequest,
+    lookupOnly = false,
+  ): GeometryEntry | undefined {
     const storage = request.input.storageBounds;
     const fullChunk = job.bounds && storage && containsBounds(storage, job.bounds);
     const storageBounds = fullChunk ? undefined : storage;
@@ -1006,6 +1035,7 @@ export class GeometryChunkCache {
       this.counters.cacheHits++;
       return old;
     }
+    if (lookupOnly) return undefined;
     const metadataBytes = job.members.byteLength + (job.components?.byteLength ?? 0);
     if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
       throw new GeometryMetadataAdmissionError(metadataBytes);
@@ -1033,6 +1063,17 @@ export class GeometryChunkCache {
     this.entries.set(id, entry);
     this.bytes += entry.bytes;
     return entry;
+  }
+  /** Withdraw exactly one failed render-pass request without retiring sibling owners. */
+  cancel(request: GeometryRequest): void {
+    for (const [id, current] of this.requests) {
+      if (current !== request) continue;
+      this.requests.delete(id);
+      request.controller.abort();
+      this.selectionChanged();
+      this.cancelObsolete();
+      return;
+    }
   }
   /** A membership change is not a presentation commit. Keep each stable spatial
    * chunk's previous image until its replacement can draw, never both versions.
@@ -1090,8 +1131,12 @@ export class GeometryChunkCache {
   pin(entries: Iterable<GeometryEntry>, planning = false): void {
     this.trimCandidates = null;
     this.trimCursor = 0;
-    this.pinned = new Set(entries);
+    const next = new Set(entries);
+    if (next.size !== this.pinned.size || [...next].some((entry) => !this.pinned.has(entry)))
+      this.presentationVersion++;
+    this.pinned = next;
     this.presentationPlanning = planning;
+    this.presentationRetained = false;
   }
   complete(request: GeometryRequest): boolean {
     return (
@@ -1528,9 +1573,13 @@ export class GeometryChunkCache {
     this.trim(cost, request);
     if (
       this.bytes + this.externalBytes + cost > this.limit * 2 &&
+      (this.waitedPresentationVersion !== this.presentationVersion ||
+        this.waitedExternal !== this.externalBytes) &&
       [...this.pinned].some((e) => !this.wanted().has(e)) &&
       [...this.wanted()].some((e) => this.isResident(e) && !this.pinned.has(e))
     ) {
+      this.waitedPresentationVersion = this.presentationVersion;
+      this.waitedExternal = this.externalBytes;
       // Keep this bounded Worker result until presentation retires the ready
       // replacements' predecessors, rather than discarding and rebuilding it.
       await new Promise<void>((resolve) => {
@@ -1546,6 +1595,8 @@ export class GeometryChunkCache {
       signal.throwIfAborted();
       this.trim(cost, request);
     }
+    if (this.bytes + this.externalBytes + cost > this.limit * 2) this.retirePresentation();
+    signal.throwIfAborted();
     if (this.bytes + this.externalBytes + cost > this.limit * 2) {
       entry.requiredBytes = cost;
       throw new GeometryAdmissionError(
@@ -1636,6 +1687,7 @@ export class GeometryChunkCache {
     this.latest.set(entry.family, entry);
     entry.screenStats = result.screenStats;
     entry.state = 'ready';
+    this.presentationVersion++;
     entry.preparationMs =
       Number.isFinite(result.preparationMs) && result.preparationMs! >= 0
         ? result.preparationMs
@@ -1793,6 +1845,24 @@ export class GeometryChunkCache {
       }
     }
   }
+  private retirePresentation(): void {
+    if (this.disposed) return;
+    const wanted = this.wanted();
+    const retired = [...this.entries.values()].filter(
+      (entry) =>
+        !wanted.has(entry) && !this.admitting.has(entry) && !this.active?.entries.has(entry),
+    );
+    if (!retired.length || !this.options.retainPresentation?.()) return;
+    // The host now retains the composited image, so no old mesh is required.
+    this.presentationRetained = true;
+    this.pinned.clear();
+    this.presentationPlanning = false;
+    this.handoffOwner = undefined;
+    this.handoffRequests = [];
+    for (const entry of retired) this.evict(entry);
+    this.selectionChanged();
+    for (const request of this.current()) request.cursor = 0;
+  }
   private provisionalAtomicEntries(owner: GeometryOwner): GeometryEntry[] {
     const key = (owner: GeometryOwner) =>
       JSON.stringify([owner.sourceId, owner.id, owner.revision]);
@@ -1813,7 +1883,13 @@ export class GeometryChunkCache {
           )
           .flatMap((r) => r.entries ?? []),
       ),
-    ].filter((e) => this.isResident(e) && !this.pinned.has(e) && !this.active?.entries.has(e));
+    ].filter(
+      (e) =>
+        this.isResident(e) &&
+        !this.admitting.has(e) &&
+        !this.pinned.has(e) &&
+        !this.active?.entries.has(e),
+    );
   }
   private trim(incoming: number, request?: GeometryRequest): void {
     if (this.bytes + this.externalBytes + incoming <= this.limit) return;
@@ -1829,7 +1905,12 @@ export class GeometryChunkCache {
       // A ready fallback can be needed before it has reached the next GPU frame.
       // Protect it even when a pending upload triggers eviction between frames.
       const presenting = new Set(
-        (this.collecting ? [...this.requests.values()] : this.current()).flatMap((r) =>
+        (this.presentationRetained
+          ? []
+          : this.collecting
+            ? [...this.requests.values()]
+            : this.current()
+        ).flatMap((r) =>
           // Atomic layers pin their committed frame; provisional buckets may be superseded unseen.
           r.input.wholeLayer ? [] : this.drawable(r),
         ),
@@ -1838,6 +1919,7 @@ export class GeometryChunkCache {
         .filter(
           (e) =>
             !wanted.has(e) &&
+            !this.admitting.has(e) &&
             !presenting.has(e) &&
             !this.pinned.has(e) &&
             !this.active?.entries.has(e),
@@ -1852,11 +1934,7 @@ export class GeometryChunkCache {
       const entry = this.trimCandidates[this.trimCursor++];
       if (this.entries.get(entry.id) !== entry) continue;
       this.retentionAge = Math.max(this.retentionAge, entry.retentionPriority ?? 0);
-      this.counters.evictedPreparationMs += entry.preparationMs ?? 0;
-      if (entry.meshes.some((mesh) => mesh.kind === 'fill')) this.counters.evictedFillEntries++;
-      if (entry.screenSpace) this.counters.evictedScreenEntries++;
-      this.drop(entry);
-      this.counters.evictions++;
+      this.evict(entry);
     }
     if (request && this.bytes + this.externalBytes + incoming > this.limit * 2) {
       for (const entry of this.provisionalAtomicEntries(request.owner)) {
@@ -1866,9 +1944,7 @@ export class GeometryChunkCache {
         // An incomplete atomic owner still draws its committed pins. Release
         // only its unpublished payload; keep metadata and identity for retry.
         const metadata = entry.job.members.byteLength + (entry.job.components?.byteLength ?? 0);
-        this.counters.evictedPreparationMs += entry.preparationMs ?? 0;
-        if (entry.screenSpace) this.counters.evictedScreenEntries++;
-        this.drop(entry);
+        this.evict(entry);
         entry.bytes = metadata;
         entry.state = 'queued';
         entry.screenSpace = false;
@@ -1879,12 +1955,19 @@ export class GeometryChunkCache {
         this.bytes += metadata;
         this.entries.set(entry.id, entry);
         for (const r of this.current()) r.cursor = 0;
-        this.counters.evictions++;
       }
     }
   }
+  private evict(entry: GeometryEntry): void {
+    this.counters.evictedPreparationMs += entry.preparationMs ?? 0;
+    if (entry.meshes.some((mesh) => mesh.kind === 'fill')) this.counters.evictedFillEntries++;
+    if (entry.screenSpace) this.counters.evictedScreenEntries++;
+    this.drop(entry);
+    this.counters.evictions++;
+  }
   private drop(entry: GeometryEntry): void {
     this.residencyVersion++;
+    this.presentationVersion++;
     if (this.active?.entries.has(entry)) this.active.controller.abort();
     const meshes = entry.meshes;
     entry.meshes = [];

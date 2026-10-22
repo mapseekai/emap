@@ -1,5 +1,6 @@
 import type { GeometryBuffer } from '../../../integrations/luma/types';
 import { PATH_STRIDE } from './path-geometry';
+import { flatCompactStrokeParts } from './compact-stroke';
 import { AffineTransform } from '../../../domain/geo/transform';
 import {
   validateScreenPathRequest,
@@ -123,12 +124,18 @@ export function flatPointGeometry(xy: Float64Array): GeometryBuffer {
 }
 /** Formal affine screen-filter path. No additional x/y copies or retained XY
  * tuples. Unsupported projection/culling policies stay on the reference path. */
-export function flatScreenPathGeometry(
+function filterScreenPaths(
   xy: Float64Array,
   offsets: Uint32Array,
   r: ScreenPathRequest,
   trackMembers = false,
-): { geometry: GeometryBuffer; screenSpace: boolean; screenStats: ScreenPathStats } {
+): {
+  positions: Float64Array;
+  offsets: Uint32Array;
+  members?: number[];
+  screenSpace: boolean;
+  screenStats: ScreenPathStats;
+} {
   validateScreenPathRequest(r);
   if (r.perspective || r.smallArcs || r.cull)
     throw new Error('Flat screen preparation requires preselected affine paths');
@@ -164,7 +171,8 @@ export function flatScreenPathGeometry(
           (x * 2 < -2147483648 || x * 2 > 2147483647 || y * 2 < -2147483648 || y * 2 > 2147483647))
       )
         return {
-          geometry: flatPathGeometry(xy, offsets, trackMembers),
+          positions: xy,
+          offsets,
           screenSpace: false,
           screenStats: { ...emptyScreenPathStats(), rawFallbackChunks: 1 },
         };
@@ -197,15 +205,55 @@ export function flatScreenPathGeometry(
     }
   }
   starts[path] = n / 2;
-  const geometry = flatPathGeometry(
-    positions.subarray(0, n),
-    starts.subarray(0, path + 1),
-    trackMembers,
-  );
-  if (geometry.memberRanges)
+  stats.outputVertices = n / 2;
+  return {
+    positions: positions.subarray(0, n),
+    offsets: starts.subarray(0, path + 1),
+    ...(trackMembers ? { members } : {}),
+    screenSpace: true,
+    screenStats: stats,
+  };
+}
+function restoreScreenMembers(geometry: GeometryBuffer, members?: number[]) {
+  if (members && geometry.memberRanges)
     for (let i = 0; i < geometry.memberRanges.length; i += 3)
       geometry.memberRanges[i] = members[geometry.memberRanges[i]];
-  stats.outputVertices = n / 2;
-  stats.outputSegments = geometry.segmentCount ?? 0;
-  return { geometry, screenSpace: true, screenStats: stats };
+}
+export function flatScreenPathGeometry(
+  xy: Float64Array,
+  offsets: Uint32Array,
+  r: ScreenPathRequest,
+  trackMembers = false,
+): { geometry: GeometryBuffer; screenSpace: boolean; screenStats: ScreenPathStats } {
+  const filtered = filterScreenPaths(xy, offsets, r, trackMembers);
+  const geometry = flatPathGeometry(filtered.positions, filtered.offsets, trackMembers);
+  restoreScreenMembers(geometry, filtered.members);
+  if (filtered.screenSpace) filtered.screenStats.outputSegments = geometry.segmentCount ?? 0;
+  return { geometry, screenSpace: filtered.screenSpace, screenStats: filtered.screenStats };
+}
+/** Worker-only compact attempt; either fallback still builds its original generic geometry. */
+export function flatScreenPathParts(
+  xy: Float64Array,
+  offsets: Uint32Array,
+  r: ScreenPathRequest,
+): {
+  parts: GeometryBuffer[];
+  inputCount: number;
+  screenSpace: boolean;
+  screenStats: ScreenPathStats;
+} {
+  const filtered = filterScreenPaths(xy, offsets, r, true);
+  const compact = filtered.screenSpace
+    ? flatCompactStrokeParts(filtered.positions, filtered.offsets, true)
+    : undefined;
+  const parts = compact?.parts ?? [flatPathGeometry(filtered.positions, filtered.offsets, true)];
+  for (const geometry of parts) restoreScreenMembers(geometry, filtered.members);
+  if (filtered.screenSpace)
+    filtered.screenStats.outputSegments = parts.reduce((n, g) => n + (g.segmentCount ?? 0), 0);
+  return {
+    parts,
+    inputCount: compact?.inputCount ?? parts[0].count,
+    screenSpace: filtered.screenSpace,
+    screenStats: filtered.screenStats,
+  };
 }

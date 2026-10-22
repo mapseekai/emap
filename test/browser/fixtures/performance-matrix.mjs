@@ -100,6 +100,13 @@ window.installMatrixProbe = async () => {
     await painter.gpu?.waitForIdle();
     return performance.now() - start;
   };
+  const drawResident = () => {
+    if (!painter.gpu) { map.render(); return; }
+    const frames = painter.stats.frames;
+    if (!painter.renderNavigation(map.ctx.view._viewport.transform) ||
+        painter.stats.frames !== frames + 1)
+      throw new Error('Diagnostic capture requires one resident GPU submission');
+  };
   probe.snapshot = () => ({
     backend: map.getRenderer(),
     dimensions: { width: map.ctx.view._viewport.width, height: map.ctx.view._viewport.height, dpr: devicePixelRatio },
@@ -224,6 +231,9 @@ window.installMatrixProbe = async () => {
       cpuMs: summary(times), frameMs: summary(intervals), times, intervals,
       fps: frames * 1000 / intervals.reduce((a, b) => a + b, 0),
       completionMs,
+      requestedRedraws: frames,
+      gpuSubmissions: painter.gpu ? painter.stats.frames - before.frames : null,
+      gpuSubmissionsPerSecond: painter.gpu ? (painter.stats.frames - before.frames) * 1000 / completionMs : null,
       completionFps: frames * 1000 / completionMs,
       drawCallsPerFrame: painter.stats ? (painter.stats.drawCalls - before.drawCalls) / frames : null,
       uploadedBytes: painter.stats ? painter.stats.uploadedBytes - before.uploadedBytes : null,
@@ -240,7 +250,7 @@ window.installMatrixProbe = async () => {
         for (let i = 0; i < 8; i++) {
           await tick();
           const n = gpu.gpuTimings.length;
-          map.render();
+          drawResident();
           await gpu.waitForIdle();
           const deadline = performance.now() + 500;
           while (gpu.gpuTimings.length === n && performance.now() < deadline) await pause(2);
@@ -254,7 +264,7 @@ window.installMatrixProbe = async () => {
   };
   // Pixel validation is outside timed samples: readback can synchronize/stall the GPU.
   probe.pixels = async () => {
-    map.render();
+    drawResident();
     const bitmap = await createImageBitmap(render._canvas);
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const ctx = canvas.getContext('2d');

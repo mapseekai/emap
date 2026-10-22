@@ -16,11 +16,12 @@ in float pathFlags;
 out vec2 cornerOffset;
 out vec2 pathPosition;
 out float pathLength;
+flat out float capsuleMode;
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
  float width = max(emap.parameters.x * 0.5, 1e-12);
- if (pathFlags >= 4.0) { gl_Position=vec4(2.0,2.0,0.0,1.0); cornerOffset=vec2(0.0); pathPosition=vec2(0.0); pathLength=0.0; return; }
+ if (pathFlags >= 4.0) { gl_Position=vec4(2.0,2.0,0.0,1.0); cornerOffset=vec2(0.0); pathPosition=vec2(0.0); pathLength=0.0; capsuleMode=0.0; return; }
  vec4 prev = end ? startPosition : previousPosition;
  vec4 curr = end ? endPosition : startPosition;
  vec4 next = end ? nextPosition : endPosition;
@@ -45,6 +46,11 @@ void main() {
  bool startCap = la == 0.0 || (!end && ((flags & 1) != 0));
  bool endCap = lb == 0.0 || (end && ((flags & 2) != 0));
  if (startCap || endCap) offset = joint > 0.5 ? dir * 4.0 * (startCap ? -1.0 : 1.0) : normal * side;
+ bool capsule = (end ? la : lb) > 0.0 &&
+   (((flags & 1) == 0 && all(equal(previousPosition, endPosition))) ||
+    ((flags & 2) == 0 && all(equal(startPosition, nextPosition))));
+ if (capsule) offset = normal * side + dir * (end ? 4.0 : -4.0);
+ capsuleMode = float(capsule);
  cornerOffset = offset;
  vec2 fromStart = offset + (end ? da : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
@@ -56,9 +62,14 @@ precision highp float;
 in vec2 cornerOffset;
 in vec2 pathPosition;
 in float pathLength;
+flat in float capsuleMode;
 out vec4 fragColor;
 void main() {
- if ((pathPosition.y < 0.0 || pathPosition.y > pathLength) && dot(cornerOffset, cornerOffset) > 1.0) discard;
+ vec2 q = vec2(pathPosition.x, pathPosition.y - clamp(pathPosition.y, 0.0, pathLength));
+ // The envelope alone supplies body-edge MSAA coverage; reject only beyond endpoints.
+ bool outside = (pathPosition.y < 0.0 || pathPosition.y > pathLength) &&
+   (capsuleMode > 0.5 ? dot(q, q) > 1.0 : dot(cornerOffset, cornerOffset) > 1.0);
+ if (outside) discard;
  fragColor = vec4(emap.color.rgb * emap.color.a, emap.color.a);
 }`;
 
@@ -66,6 +77,7 @@ export const pathMsaaWGSL = `
 struct PathOut {
  @builtin(position) position: vec4<f32>,
  @location(0) corner: vec2<f32>, @location(1) local: vec2<f32>, @location(2) len: f32,
+ @location(3) @interpolate(flat) capsule: f32,
 };
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,
  @location(1) previousPosition:vec4<f32>, @location(2) startPosition:vec4<f32>,
@@ -73,7 +85,7 @@ struct PathOut {
  @location(5) pathDistance:vec2<f32>, @location(6) pathFlags:f32)->PathOut {
  let end = corners.x > 0.0; let side = corners.y; let joint = select(0.0,1.0,side==0.0);
  let width = max(emap.parameters.x * 0.5, 1e-12);
- if(pathFlags>=4.0){return PathOut(vec4<f32>(2.0,2.0,0.0,1.0),vec2<f32>(0.0),vec2<f32>(0.0),0.0);}
+ if(pathFlags>=4.0){return PathOut(vec4<f32>(2.0,2.0,0.0,1.0),vec2<f32>(0.0),vec2<f32>(0.0),0.0,0.0);}
  let prev=select(previousPosition,startPosition,end);
  let curr=select(startPosition,endPosition,end);
  let next=select(endPosition,nextPosition,end);
@@ -95,10 +107,14 @@ struct PathOut {
  let startCap=la==0.0 || (!end && ((flags&1u)!=0u));
  let endCap=lb==0.0 || (end && ((flags&2u)!=0u));
  if(startCap||endCap){offset=select(normal*side,dir*4.0*select(1.0,-1.0,startCap),joint>0.5);}
+ let capsule=select(lb,la,end)>0.0 &&
+   (((flags&1u)==0u && all(previousPosition==endPosition)) ||
+    ((flags&2u)==0u && all(startPosition==nextPosition)));
+ if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
  let fromStart=offset+select(vec2<f32>(0.0),da,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
  let position=clipPosition(projectSegmentPosition(curr,select(next,prev,end))+offset*width);
- return PathOut(position,offset,local,select(lb,la,end));
+ return PathOut(position,offset,local,select(lb,la,end),select(0.0,1.0,capsule));
 }
 // Reject the same fragments through coverage, without WGSL discard's helper
 // invocation cost on dense overlapping strokes. The rasterizer's MSAA coverage
@@ -107,7 +123,8 @@ struct PathCoverage {
  @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
 };
 @fragment fn fragmentMain(p:PathOut)->PathCoverage {
- let outside=(p.local.y<0.0||p.local.y>p.len)&&dot(p.corner,p.corner)>1.0;
+ let q=vec2<f32>(p.local.x,p.local.y-clamp(p.local.y,0.0,p.len));
+ let outside=(p.local.y<0.0||p.local.y>p.len)&&select(dot(p.corner,p.corner)>1.0,dot(q,q)>1.0,p.capsule>0.5);
  return PathCoverage(premultiply(1.0),select(0xffffffffu,0u,outside));
 }
 `;

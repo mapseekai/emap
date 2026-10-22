@@ -186,16 +186,19 @@ test('webgpu: stroke sample masks preserve discard coverage and depth across pai
         const line = strokeMap.getSource('s').getLayers()[0].name;
         strokeMap.addLayer({ id: 'translucent', type: 'line', source: 's', 'source-layer': line, paint: { 'line-color': '#18a848', 'line-opacity': .4, 'line-width': 8 } });
         strokeMap.addLayer({ id: 'opaque-after-barriers', type: 'line', source: 's', 'source-layer': line, paint: { 'line-color': '#981f6d', 'line-width': 3 } });
-        const gpu = strokeMap.ctx.render._painter.gpu;
+        const p = strokeMap.ctx.render._painter;
+        const gpu = p.gpu;
         window.coveragePipelines = [];
         for (const [kind, entry] of gpu.pipelines) {
           if (!kind.startsWith('path-msaa')) continue;
-          // Independent pre-optimization oracle: same vertices, round cap/join
-          // predicate and pipeline state, with the original fragment discard.
+          // Compare sample-mask rejection with discard for the same envelope,
+          // including the bounded whole-segment capsule mode.
           const input = kind.includes('compact') ? 'CompactOut' : 'PathOut';
           const source = entry.shaders[0].source.split('@fragment')[0] + `
             @fragment fn fragmentMain(p:${input})->@location(0) vec4<f32> {
-              if ((p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0) { discard; }
+              let q=vec2<f32>(p.local.x,p.local.y-clamp(p.local.y,0.0,p.len));
+              let outside=(p.local.y<0.0 || p.local.y>p.len) && select(dot(p.corner,p.corner)>1.0,dot(q,q)>1.0,p.capsule>0.5);
+              if (outside) { discard; }
               return premultiply(1.0);
             }`;
           const module = gpu.device.handle.createShaderModule({ code: source });
@@ -209,8 +212,12 @@ test('webgpu: stroke sample masks preserve discard coverage and depth across pai
         window.captureCoverage = async reference => {
           gpu.commandCache?.clear();
           for (const entry of coveragePipelines) entry.pipeline.handle = reference ? entry.reference : entry.optimized;
-          // Include native command-plan replay as well as immediate submission.
-          for (let i = 0; i < 3; i++) strokeMap.render();
+          // The debug-only pipeline swap must submit even when the semantic scene is unchanged.
+          for (let i = 0; i < 3; i++) {
+            const frames = gpu.stats.frames;
+            if (!p.renderNavigation(strokeMap.ctx.view._viewport.transform) || gpu.stats.frames !== frames + 1)
+              throw new Error('Coverage oracle requires one resident GPU submission');
+          }
           return captureStroke();
         };
       });

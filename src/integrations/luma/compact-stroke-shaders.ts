@@ -14,6 +14,7 @@ in vec4 endJoin;
 out vec2 cornerOffset;
 out vec2 pathPosition;
 out float pathLength;
+flat out float capsuleMode;
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
@@ -24,7 +25,11 @@ void main() {
  vec2 normal = vec2(-dir.y, dir.x);
  vec4 join = end ? endJoin : startJoin;
  vec2 offset;
- if(join.w == 0.0) {
+ bool capsule = len > 0.0 && (startJoin.w == 2.0 || endJoin.w == 2.0);
+ capsuleMode = float(capsule);
+ if(capsule) {
+   offset = normal * side + dir * (end ? 4.0 : -4.0);
+ } else if(join.w == 0.0) {
    offset = joint > 0.5 ? dir * 4.0 * (end ? 1.0 : -1.0) : normal * side;
  } else {
    float corner = side * join.w;
@@ -43,6 +48,7 @@ export const compactStrokeWGSL = `
 struct CompactOut {
  @builtin(position) position:vec4<f32>,
  @location(0) corner:vec2<f32>, @location(1) local:vec2<f32>, @location(2) len:f32,
+ @location(3) @interpolate(flat) capsule:f32,
 };
 @vertex fn vertexMain(@location(0) corners:vec2<f32>, @location(1) startPosition:vec4<f32>,
  @location(2) endPosition:vec4<f32>, @location(3) startJoin:vec4<f32>, @location(4) endJoin:vec4<f32>)->CompactOut {
@@ -52,7 +58,9 @@ struct CompactOut {
  var dir=vec2<f32>(0.0);if(len>0.0){dir=delta/len;}
  let normal=vec2<f32>(-dir.y,dir.x);let join=select(startJoin,endJoin,end);
  var offset:vec2<f32>;
- if(join.w==0.0){offset=select(normal*side,dir*4.0*select(-1.0,1.0,end),joint>0.5);}
+ let capsule=len>0.0 && (startJoin.w==2.0 || endJoin.w==2.0);
+ if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
+ else if(join.w==0.0){offset=select(normal*side,dir*4.0*select(-1.0,1.0,end),joint>0.5);}
  else {
    let corner=side*join.w;var limit=1.0;
    if(corner<0.0){limit=min(1.0,join.z*abs(emap.scale.x)/width);}
@@ -61,7 +69,7 @@ struct CompactOut {
  let fromStart=offset+select(vec2<f32>(0.0),delta,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
  let curr=select(startPosition,endPosition,end);
- return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len);
+ return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len,select(0.0,1.0,capsule));
 }
 // Match the raw path's binary rejection while retaining hardware MSAA coverage.
 // No discard/helper invocation is needed for this side-effect-free fragment.
@@ -69,7 +77,8 @@ struct PathCoverage {
  @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
 };
 @fragment fn fragmentMain(p:CompactOut)->PathCoverage {
- let outside=(p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0;
+ let q=vec2<f32>(p.local.x,p.local.y-clamp(p.local.y,0.0,p.len));
+ let outside=(p.local.y<0.0 || p.local.y>p.len) && select(dot(p.corner,p.corner)>1.0,dot(q,q)>1.0,p.capsule>0.5);
  return PathCoverage(vec4<f32>(emap.color.rgb*emap.color.a,emap.color.a),select(0xffffffffu,0u,outside));
 }
 `;

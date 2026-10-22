@@ -10,7 +10,12 @@ import { buildFillRanges, spatialFillGeometry } from './fill-ranges';
 import type { FeatureGeometryCache } from './feature-geometry-cache';
 import { lineGeometry, type Point } from './geometry';
 import { flatPolygonGeometry, flatSingleRingIndices } from './flat-polygon';
-import { flatPathGeometry, flatPointGeometry, flatScreenPathGeometry } from './flat-path';
+import {
+  flatPathGeometry,
+  flatPointGeometry,
+  flatScreenPathGeometry,
+  flatScreenPathParts,
+} from './flat-path';
 import { PATH_STRIDE } from './path-geometry';
 import { buildScreenPaths, type ScreenPathStats } from './screen-paths';
 import { MAX_GEOMETRY_JOB_VERTICES, type GeometryPacket } from './geometry-jobs';
@@ -198,6 +203,7 @@ export function buildGeometryPacket(
   };
   let directFeatures = 0;
   let geometry: GeometryBuffer;
+  let directParts: GeometryBuffer[] | undefined, directInputCount: number | undefined;
   let screenSpace = false,
     screenStats: ScreenPathStats | undefined;
   if (packet.kind === 'path') {
@@ -207,8 +213,14 @@ export function buildGeometryPacket(
       !packet.screen.smallArcs &&
       !packet.screen.cull
     ) {
-      const prepared = flatScreenPathGeometry(coordinates, offsets, packet.screen, true);
-      geometry = prepared.geometry;
+      const prepared = packet.compactStroke
+        ? flatScreenPathParts(coordinates, offsets, packet.screen)
+        : flatScreenPathGeometry(coordinates, offsets, packet.screen, true);
+      if ('parts' in prepared) {
+        directParts = prepared.parts;
+        directInputCount = prepared.inputCount;
+        geometry = prepared.parts[0];
+      } else geometry = prepared.geometry;
       screenSpace = prepared.screenSpace;
       screenStats = prepared.screenStats;
     } else if (packet.screen) {
@@ -319,8 +331,10 @@ export function buildGeometryPacket(
     }
     geometry = { kind: 'fill', vertices, indices, count: indices.length };
   } else throw new Error('Unsupported geometry packet kind');
-  const pathInputInstances = packet.kind === 'path' ? geometry.count : 0;
-  const prepared = packet.compactStroke && screenSpace ? compactStrokeParts(geometry) : [geometry];
+  const pathInputInstances = packet.kind === 'path' ? (directInputCount ?? geometry.count) : 0;
+  const prepared =
+    directParts ??
+    (packet.compactStroke && screenSpace ? compactStrokeParts(geometry) : [geometry]);
   const pathOutputInstances =
     packet.kind === 'path' ? prepared.reduce((n, g) => n + g.count, 0) : 0;
   const geometries: GeometryBuffer[] = [];

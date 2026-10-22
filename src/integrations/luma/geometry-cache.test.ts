@@ -1094,7 +1094,10 @@ it('does not report evicted request entries as complete and repairs their draw s
   f.cache.dispose();
 });
 
-it('reuses a resident full fill mesh when a smaller upload coverage is requested', async () => {
+it.each([
+  false,
+  true,
+])('reuses a resident full fill mesh when a smaller upload coverage is requested (tight budget: %s)', async (tightBudget) => {
   const f = fixture();
   const path = [
     [-10, -10],
@@ -1126,6 +1129,11 @@ it('reuses a resident full fill mesh when a smaller upload coverage is requested
   };
   const first = f.frame(input);
   await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  if (tightBudget) {
+    f.cache.pin(first.entries!);
+    Reflect.set(f.cache, 'limit', (f.cache.stats.bytes + 2) / 2);
+    Reflect.get(f.cache, 'options').retainPresentation = () => true;
+  }
   const near = f.frame({ ...input, viewBounds: [-1, -1, 1, 1], storageBounds: [-2, -2, 2, 2] });
   await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
   expect(f.gpu.createMesh).toHaveBeenCalledTimes(1);
@@ -2938,4 +2946,320 @@ it('ages expensive unused geometry out under sustained pressure and preserves re
   await vi.waitFor(() => expect(f.cache.complete(edited)).toBe(true));
   expect(f.transport.build).toHaveBeenCalledTimes(calls + 2);
   f.cache.dispose();
+});
+
+// The old 100-byte frame plus an 80-byte ready target leaves eight payload bytes.
+// Each remaining target costs 20 bytes including metadata, so only the overlap fails.
+function admissionFixture(jobs = 5, retain = false, payloadBytes = 16) {
+  const owner = { id: 'layer', sourceId: 'source', revision: 0 };
+  const entry = (
+    id: string,
+    member: number,
+    bytes: number,
+    state: GeometryEntry['state'],
+  ): GeometryEntry => ({
+    id,
+    family: id,
+    partition: 'partition',
+    owner,
+    job: { chunk: member, members: Int32Array.of(member) },
+    bytes,
+    state,
+    meshes: state === 'ready' ? [{ kind: 'point', count: 1, bytes: bytes - 4 } as never] : [],
+    ranges: [],
+    fillRanges: [],
+    screenSpace: false,
+    used: 0,
+  });
+  const old = entry('old', 0, 100, 'ready');
+  const targets = [
+    entry('ready-target', 0, 80, 'ready'),
+    ...Array.from({ length: jobs }, (_, i) => entry('target-' + i, i + 1, 4, 'queued')),
+  ];
+  const gpu = { createMesh: vi.fn(() => ({ bytes: payloadBytes })), destroyMesh: vi.fn() };
+  const report = vi.fn(),
+    retainPresentation = vi.fn(() => retain);
+  let admissionWakes = 0;
+  const cache = new GeometryChunkCache(gpu as never, {
+    cacheBytes: (188 + jobs * 4) / 2,
+    workerUrl: new URL('http://example.test/worker.js'),
+    retainPresentation,
+    transport: {
+      stats: {},
+      dispose() {},
+      build: async () => ({
+        geometries: [{ kind: 'point', vertices: new Float32Array(payloadBytes / 4), count: 1 }],
+        screenSpace: false,
+      }),
+    } as never,
+    report,
+    invalidate: () => {
+      if (Reflect.get(cache, 'resumeAdmission')) admissionWakes++;
+      cache.pin(cache.isResident(old) ? [old] : []);
+      cache.finish();
+    },
+  });
+  const request = {
+    input: {
+      kind: 'point',
+      shapes: targets.map((_, i) => [[i + 1, i + 1]]),
+      wholeLayer: true,
+      interval: 1,
+      bounds: [0, 0, 16, 16],
+    },
+    owner,
+    controller: new AbortController(),
+    key: 'new',
+    entries: targets,
+    fallback: [old],
+    frame: 0,
+    cursor: 0,
+    plan: {
+      key: 'partition',
+      count: jobs + 1,
+      boundsBytes: 0,
+      sourceId: 'source',
+      revision: 0,
+      used: 0,
+      ready: true,
+      controller: new AbortController(),
+      promise: Promise.resolve({ chunks: jobs + 1, membership: new Uint32Array(jobs + 1) }),
+    },
+  } as GeometryRequest;
+  Reflect.set(cache, 'entries', new Map([old, ...targets].map((e) => [e.id, e])));
+  Reflect.set(cache, 'requests', new Map([['request', request]]));
+  Reflect.set(cache, 'bytes', 180 + jobs * 4);
+  cache.pin([old]);
+  cache.didPresent(1);
+  return {
+    cache,
+    old,
+    targets,
+    request,
+    gpu,
+    report,
+    retainPresentation,
+    wakes: () => admissionWakes,
+  };
+}
+
+it('waits only once for unchanged presentation capacity across rejected unknown-cost jobs', async () => {
+  const f = admissionFixture();
+  try {
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.report).toHaveBeenCalledTimes(5));
+    expect(f.wakes()).toBe(1);
+    expect(f.cache.isResident(f.old)).toBe(true);
+    expect(f.cache.stats.pending).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('retires old geometry behind a retained complete image and admits a fitting atomic target', async () => {
+  const f = admissionFixture(5, true);
+  try {
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(f.request)).toBe(true));
+    expect(f.retainPresentation).toHaveBeenCalledOnce();
+    expect(f.cache.isResident(f.old)).toBe(false);
+    expect(f.gpu.destroyMesh).toHaveBeenCalledOnce();
+    expect(f.cache.drawable(f.request)).toEqual(f.targets);
+    expect(f.cache.stats.bytes).toBe(180);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(208);
+    expect(f.cache.stats.blockedEntries).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(7);
+});
+
+it('reports a target that still exceeds the hard budget after retiring its old geometry', async () => {
+  const f = admissionFixture(5, true, 64);
+  try {
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.stats.pending).toBe(0));
+    await vi.waitFor(() => expect(f.report).toHaveBeenCalled());
+    expect(f.cache.complete(f.request)).toBe(false);
+    expect(f.cache.isResident(f.old)).toBe(false);
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(208);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('admits target metadata by retiring an old complete image before any target upload', async () => {
+  const f = fixture();
+  try {
+    const old = f.frame({ ...f.input, wholeLayer: true });
+    await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+    f.cache.pin(old.entries!);
+    const bytes = f.cache.stats.bytes;
+    Reflect.set(f.cache, 'limit', (bytes + 4) / 2);
+    Reflect.get(f.cache, 'options').retainPresentation = () => true;
+    const next = f.frame({ ...f.input, wholeLayer: true, interval: 1 });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(bytes + 4);
+    expect(old.entries!.every((entry) => !f.cache.isResident(entry))).toBe(true);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('admits immediate geometry while collecting and repairs later reused chunks after retirement', async () => {
+  const f = fixture();
+  try {
+    const old = f.frame();
+    await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+    f.cache.pin(old.entries!);
+    const bytes = f.cache.stats.bytes;
+    Reflect.set(f.cache, 'limit', (bytes + 4) / 2);
+    Reflect.get(f.cache, 'options').retainPresentation = () => true;
+    f.cache.begin();
+    expect(() => f.cache.admitExternal(16)).not.toThrow();
+    const next = f.cache.request(f.input, { id: 'p', sourceId: 's', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.cache.drawable(next)).toHaveLength(3);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'clear',
+  'dispose',
+  'replace',
+  'cancel',
+] as const)('settles paused admission on %s without stale uploads', async (action) => {
+  const f = admissionFixture(5, true);
+  Reflect.get(f.cache, 'options').invalidate = () => {};
+  try {
+    f.cache.finish();
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'resumeAdmission')).not.toBeNull());
+    if (action === 'dispose') f.cache.dispose();
+    else if (action === 'clear') f.cache.clear({ sourceId: 'source' });
+    else if (action === 'cancel') {
+      f.cache.cancel(f.request);
+      f.cache.finish();
+    } else {
+      f.cache.begin();
+      const next = f.cache.request(
+        { ...f.request.input, shapes: [[[2, 2]]], interval: 2 },
+        f.request.owner,
+      );
+      f.cache.finish();
+      await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+      expect(f.cache.drawable(next)).toHaveLength(1);
+      expect(f.cache.drawable(next)).not.toContain(f.old);
+    }
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'resumeAdmission')).toBeNull());
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
+    expect(f.report).not.toHaveBeenCalled();
+    if (action !== 'replace') {
+      expect(f.gpu.createMesh).not.toHaveBeenCalled();
+      expect(f.cache.stats.bytes).toBe(0);
+    }
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('resolves a wholly reused selection before charging hypothetical metadata', async () => {
+  const f = fixture();
+  Reflect.get(f.cache, 'options').retainPresentation = () => true;
+  try {
+    const old = f.frame({ ...f.input, wholeLayer: true });
+    await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+    f.cache.pin(old.entries!);
+    Reflect.set(f.cache, 'limit', (f.cache.stats.bytes + 4) / 2);
+    const next = f.frame({ ...f.input, wholeLayer: true, viewBounds: [-1, -1, 17, 17] });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(next.entries![0]).toBe(old.entries![0]);
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.gpu.destroyMesh).not.toHaveBeenCalled();
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  0, 2,
+])('protects shared target %s while admitting missing metadata and retiring an obsolete peer', async (shared) => {
+  const f = fixture();
+  Reflect.get(f.cache, 'options').retainPresentation = () => true;
+  try {
+    const old = f.frame({ ...f.input, ids: Uint32Array.of(shared, 1) });
+    await vi.waitFor(() => expect(f.cache.complete(old)).toBe(true));
+    f.cache.pin(old.entries!);
+    const reused = old.entries!.find((entry) => entry.job.members.includes(shared))!;
+    Reflect.set(f.cache, 'limit', 25);
+    const next = f.frame({ ...f.input, ids: Uint32Array.of(0, 2) });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(next.entries).toContain(reused);
+    expect(f.cache.isResident(reused)).toBe(true);
+    expect(f.cache.stats.bytes).toBe(48);
+    expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(50);
+    expect(f.transport.build).toHaveBeenCalledTimes(3);
+    expect(next.entries!.flatMap((entry) => [...entry.job.members])).toEqual([0, 2]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'fill',
+  'path',
+] as const)('accounts for retired %s resources in existing eviction counters', async (kind) => {
+  const f = admissionFixture(5, true);
+  f.old.meshes[0].kind = kind;
+  f.old.screenSpace = kind === 'path';
+  f.old.preparationMs = 12;
+  try {
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(f.request)).toBe(true));
+    expect(f.cache.stats.evictions).toBe(1);
+    expect(f.cache.stats.evictedPreparationMs).toBe(12);
+    expect(f.cache.stats.evictedFillEntries).toBe(kind === 'fill' ? 1 : 0);
+    expect(f.cache.stats.evictedScreenEntries).toBe(kind === 'path' ? 1 : 0);
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.cache.stats.evictions).toBe(1);
+});
+
+it('cancels only an exact pending request while preserving sibling and replacement ownership', async () => {
+  const f = fixture();
+  const aOwner = { id: 'a', sourceId: 's', revision: 0 };
+  const bOwner = { id: 'b', sourceId: 's', revision: 0 };
+  try {
+    f.cache.begin();
+    const a = f.cache.request(f.input, aOwner);
+    const b = f.cache.request(f.input, bOwner);
+    f.cache.cancel(a);
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+    expect(a.controller.signal.aborted).toBe(true);
+    expect(b.controller.signal.aborted).toBe(false);
+    expect(f.cache.stats.pending).toBe(0);
+    expect(f.cache.stats.visibleChunks).toBe(b.entries!.length);
+    const bEntries = b.entries;
+    f.cache.begin();
+    const replacement = f.cache.request(f.input, aOwner);
+    const retainedB = f.cache.request(f.input, bOwner);
+    f.cache.cancel(a);
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(replacement)).toBe(true));
+    expect(replacement.controller.signal.aborted).toBe(false);
+    expect(retainedB.entries).toBe(bEntries);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.cache.stats.bytes).toBe(0);
 });

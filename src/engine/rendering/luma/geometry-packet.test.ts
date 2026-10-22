@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, expect, it, vi } from 'vitest';
+import { flatPathGeometry, flatScreenPathGeometry } from './flat-path';
+import { buildScreenPaths } from './screen-paths';
+import type { ArcVertexData } from '../../../shared/types/mapshaper-types';
+import { compactStrokeParts } from './compact-stroke';
+import { spatialStrokeGeometry } from './stroke-ranges';
+import { selectPathMembers } from './path-members';
 import { buildGeometryPacket, splitGeometry } from './geometry-packet';
 import { pathGeometry, PATH_STRIDE } from './path-geometry';
 import type { GeometryPacket } from './geometry-jobs';
@@ -187,4 +194,408 @@ it('reports a finite per-packet preparation cost without retaining timing object
   });
   expect(Number.isFinite(result.preparationMs)).toBe(true);
   expect(result.preparationMs).toBeGreaterThanOrEqual(0);
+});
+
+function screenPacket(paths: Point[][]): GeometryPacket {
+  let n = 0;
+  const offsets = Uint32Array.from([
+    ...paths.map((p) => {
+      const a = n;
+      n += p.length;
+      return a;
+    }),
+    n,
+  ]);
+  return {
+    kind: 'path',
+    compactStroke: true,
+    coordinates: Float64Array.from(paths.flatMap((p) => p.flat())),
+    offsets,
+    features: Uint32Array.from([0, paths.length]),
+    screen: {
+      view: [1, 1, 0, 0],
+      width: 800,
+      height: 600,
+      pixelRatio: 2,
+      initialScale: 0,
+      smallArcs: false,
+      halfPixel: false,
+      cull: false,
+      padding: 8,
+      revision: 0,
+    },
+  };
+}
+function expectReference(packet: GeometryPacket) {
+  const coordinates = packet.coordinates.slice(),
+    offsets = packet.offsets.slice();
+  const reference = flatScreenPathGeometry(
+    packet.coordinates,
+    packet.offsets,
+    packet.screen!,
+    true,
+  );
+  const parts =
+    packet.compactStroke && reference.screenSpace
+      ? compactStrokeParts(reference.geometry)
+      : [reference.geometry];
+  const expected = parts.flatMap((p) =>
+    splitGeometry(spatialStrokeGeometry(p, !!packet.compactStroke && reference.screenSpace)),
+  );
+  const actual = buildGeometryPacket(packet);
+  assert.deepEqual(actual.geometries, expected);
+  // Typed-array value equality alone may overlook signed zero.
+  for (let i = 0; i < expected.length; i++)
+    assert.deepEqual(
+      new Uint8Array(
+        actual.geometries[i].vertices.buffer,
+        actual.geometries[i].vertices.byteOffset,
+        actual.geometries[i].vertices.byteLength,
+      ),
+      new Uint8Array(
+        expected[i].vertices.buffer,
+        expected[i].vertices.byteOffset,
+        expected[i].vertices.byteLength,
+      ),
+    );
+  expect(actual.screenSpace).toBe(reference.screenSpace);
+  expect(actual.screenStats).toEqual(reference.screenStats);
+  expect(actual.pathInputInstances).toBe(reference.geometry.count);
+  expect(actual.pathOutputInstances).toBe(parts.reduce((n, p) => n + p.count, 0));
+  assert.deepEqual(packet.coordinates, coordinates);
+  assert.deepEqual(packet.offsets, offsets);
+  return actual;
+}
+describe('direct screen compact preparation', () => {
+  it('does not allocate discarded padded records on successful compaction, but retains raw fallback', () => {
+    const packet = screenPacket([
+      [
+        [0, 0],
+        [1, 0],
+        [0, 0],
+      ],
+      [
+        [2, 2],
+        [3, 3],
+        [2, 2],
+      ],
+    ]);
+    const lengths: number[] = [],
+      Native = Float32Array;
+    vi.stubGlobal(
+      'Float32Array',
+      new Proxy(Native, {
+        construct(target, args) {
+          if (typeof args[0] === 'number') lengths.push(args[0]);
+          return Reflect.construct(target, args);
+        },
+      }),
+    );
+    try {
+      const result = buildGeometryPacket(packet);
+      expect(result.geometries[0].compactStroke).toBe(true);
+      expect(result.pathInputInstances).toBe(7);
+      expect(lengths).not.toContain(70); // Two paths: (3 + 2) * 2 neighbor records, seven floats each.
+      expect(lengths.reduce((a, b) => a + b, 0)).toBe(48);
+      lengths.length = 0;
+      buildGeometryPacket({ ...packet, compactStroke: false });
+      expect(lengths).toContain(70);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('matches the retained generic route across precision, degeneracy, closure and projection cases', () => {
+    const paths: Point[][] = [
+      [],
+      [[7, 9]],
+      [
+        [0, 0],
+        [0, 0],
+      ],
+      [],
+      [
+        [0, 0],
+        [1, 0],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [0, 0],
+        [1, 0],
+        [0, 0],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 0],
+        [2, 1],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+      ],
+      [
+        [0, 0],
+        [0, 1],
+        [-1, 1],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1.00000001, 0.00000002],
+        [2, 1],
+      ],
+      [
+        [13000000.001, 4000000.002],
+        [13000000.004, 4000000.008],
+        [13000000.001, 4000000.002],
+      ],
+      [
+        [-1000, 0],
+        [0, 0],
+        [-1000, 0.001],
+      ],
+      [
+        [-0, -0],
+        [1e-50, 0],
+        [1, 0],
+      ],
+      [
+        [1.13, 2.17],
+        [1.14, 2.18],
+        [4.27, 7.19],
+        [4.28, 7.2],
+      ],
+    ];
+    for (const halfPixel of [false, true])
+      for (const pixelRatio of [1, 1.5, 2])
+        for (const view of [
+          [1, 1, 0, 0],
+          [7, -7, -0.123, 0.1],
+          [-7, 7, 200, -0.1],
+        ]) {
+          const packet = screenPacket(paths);
+          Object.assign(packet.screen!, { halfPixel, pixelRatio, view });
+          expectReference(packet);
+        }
+    for (const paths of [
+      [],
+      [[]],
+      [[[1, 1]]],
+      [
+        [
+          [0, 0],
+          [0, 0],
+        ],
+      ],
+    ] as Point[][][])
+      for (const halfPixel of [false, true]) {
+        const packet = screenPacket(paths);
+        packet.screen!.halfPixel = halfPixel;
+        expectReference(packet);
+      }
+  });
+  it('keeps original-source overflow fallback distinct from filtered-screen admission fallback', () => {
+    for (const last of [2 ** 32, Number.MAX_VALUE]) {
+      const packet = screenPacket([
+        [
+          [0, 0],
+          [0.001, 0.001],
+          [1, 1],
+        ],
+        [
+          [0, 0],
+          [last, last],
+        ],
+      ]);
+      packet.screen!.halfPixel = true;
+      const actual = expectReference(packet);
+      expect(actual.screenSpace).toBe(false);
+      expect(actual.screenStats!.rawFallbackChunks).toBe(1);
+      expect(actual.screenStats!.originalVertices).toBe(0);
+    }
+    const long = screenPacket([
+      Array.from({ length: 70000 }, (_, i) => [i / 10, Math.sin(i)] as Point),
+    ]);
+    const result = expectReference(long);
+    expect(result.screenSpace).toBe(true);
+    expect(result.geometries).toHaveLength(2);
+    expect(result.geometries[0].compactStroke).not.toBe(true);
+    expect(result.geometries[0].pathRanges!.envelopeHalfWidths).toBe(8);
+    const nonfinite = screenPacket([
+      [
+        [1e39, 0],
+        [2e39, 1],
+      ],
+    ]);
+    expect(expectReference(nonfinite).geometries[0].compactStroke).not.toBe(true);
+  });
+  it('preserves split ownership, precision part ordering, and conservative range boundaries', () => {
+    for (const count of [127, 128, 129, 511, 512, 513, 28671, 28672, 28673]) {
+      const paths: Point[][] = [];
+      for (let i = 0; i < count; i++) {
+        paths.push([
+          [i, 0],
+          [i + 1, 0],
+        ]);
+        paths.push([
+          [i + 0.00000001, 2],
+          [i + 1.00000001, 3],
+        ]);
+      }
+      const packet = screenPacket(paths),
+        result = expectReference(packet);
+      const members = Int32Array.from({ length: paths.length }, (_, i) => i);
+      const selected = new Set([0, 1, 256, 257, paths.length - 1]);
+      for (const g of result.geometries) {
+        const ranges = selectPathMembers(g.memberRanges!, members, selected, [
+          { firstInstance: 1, count: Math.max(0, g.count - 2) },
+        ]);
+        for (const range of ranges)
+          for (let i = range.firstInstance; i < range.firstInstance + range.count; i++) {
+            const owner = Array.from({ length: g.memberRanges!.length / 3 }, (_, j) => j * 3).find(
+              (j) =>
+                g.memberRanges![j + 1] <= i && i < g.memberRanges![j + 1] + g.memberRanges![j + 2],
+            )!;
+            expect(selected.has(g.memberRanges![owner])).toBe(true);
+          }
+      }
+      expect(result.geometries[0].compactStrokeXY).toBe(true);
+      expect(result.geometries.at(-1)!.compactStrokeXY).toBe(false);
+    }
+  });
+  it('keeps literal reversal markers, caps and bounded versus extreme-join metadata', () => {
+    const packet = screenPacket(
+      Array.from({ length: 256 }, () => [
+        [0, 0],
+        [10, 0],
+        [0, 0],
+      ]),
+    );
+    const g = expectReference(packet).geometries[0];
+    expect([...g.vertices.slice(4, 12)]).toEqual([0, 0, 0, 2, 0, 0, 0, 2]);
+    expect([...g.pathRanges!.uncullable!]).toEqual([0, 0, 0, 0]);
+    const near = screenPacket(
+      Array.from({ length: 512 }, () => [
+        [-1000, 0],
+        [0, 0],
+        [-1000, 0.001],
+      ]),
+    );
+    expect([...expectReference(near).geometries[0].pathRanges!.uncullable!]).toEqual([1, 1, 1, 1]);
+    const cap = expectReference(
+      screenPacket([
+        [
+          [0, 0],
+          [10, 0],
+        ],
+      ]),
+    ).geometries[0];
+    expect([...cap.vertices.slice(4)]).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+  });
+  it('retains generic preparation for compact-disabled, unscreened and non-affine policies', () => {
+    const packet = screenPacket([
+      [
+        [0, 0],
+        [1, 0],
+        [0, 0],
+      ],
+      [
+        [9000, 9000],
+        [9001, 9001],
+      ],
+    ]);
+    expectReference({ ...packet, compactStroke: false });
+    const raw = buildGeometryPacket({ ...packet, screen: undefined });
+    assert.deepEqual(
+      raw.geometries,
+      splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true)),
+    );
+    for (const policy of [
+      { smallArcs: true },
+      { cull: true },
+      { perspective: { pitch: 50, bearing: 35 } },
+    ]) {
+      const screen = { ...packet.screen!, ...policy };
+      const data = {
+        xx: Float64Array.from([0, 1, 0, 9000, 9001]),
+        yy: Float64Array.from([0, 0, 0, 9000, 9001]),
+        ii: packet.offsets.subarray(0, 2),
+        nn: Uint32Array.from([3, 2]),
+      } as ArcVertexData;
+      const reference = buildScreenPaths(data, Uint32Array.from([0, 1]), screen);
+      const expected = reference.fallback
+        ? splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true))
+        : compactStrokeParts(reference.geometry).flatMap((g) =>
+            splitGeometry(spatialStrokeGeometry(g, true)),
+          );
+      const actual = buildGeometryPacket({ ...packet, screen });
+      assert.deepEqual(actual.geometries, expected);
+      expect(actual.screenStats).toEqual(reference.stats);
+    }
+  });
+  it('transfers only compact derived backings and preserves source packet arrays', async () => {
+    const { collectTransferables } = await import('../../worker/transferables');
+    const packet = screenPacket([
+      [
+        [0, 0],
+        [1, 0],
+        [0, 0],
+      ],
+      [
+        [0.1, 0],
+        [1.1, 0],
+      ],
+    ]);
+    const before = packet.coordinates.slice(),
+      result = buildGeometryPacket(packet);
+    const clone = structuredClone(result, {
+      transfer: collectTransferables(result) as ArrayBuffer[],
+    });
+    expect(clone.geometries).toHaveLength(2);
+    for (const g of clone.geometries)
+      expect(g.vertices.buffer.byteLength).toBe(g.vertices.byteLength);
+    assert.deepEqual(packet.coordinates, before);
+    expectReference(packet);
+  });
+  it('rejects malformed packets before the direct route', () => {
+    const packet = screenPacket([
+      [
+        [0, 0],
+        [1, 1],
+      ],
+    ]);
+    for (const bad of [
+      { coordinates: new Float32Array([0, 0, 1, 1]) },
+      { coordinates: new Float64Array(4_000_002) },
+      { offsets: new Uint32Array(2_000_002) },
+      { features: new Uint32Array(2_000_002) },
+      { offsets: new Int32Array([0, 2]) },
+      { features: new Int32Array([0, 1]) },
+      { coordinates: new Float64Array([0, 0, 1]) },
+      { coordinates: new Float64Array([0, NaN, 1, 1]) },
+      { coordinates: new Float64Array([0, 0, Infinity, 1]) },
+      { offsets: new Uint32Array([0, 2, 1, 2]), features: new Uint32Array([0, 3]) },
+      { offsets: new Uint32Array([0, 3, 2]), features: new Uint32Array([0, 2]) },
+      { features: new Uint32Array([0, 1, 0, 1]) },
+      { featureIds: new Int32Array([-1]) },
+      { featureIds: new Int32Array([]) },
+      { featureIds: new Uint32Array([0]) },
+      { screen: { ...packet.screen, pixelRatio: 0 } },
+      { screen: { ...packet.screen, view: [1, 1, NaN, 0] } },
+    ])
+      expect(() => buildGeometryPacket({ ...packet, ...bad } as GeometryPacket)).toThrow();
+  });
 });
