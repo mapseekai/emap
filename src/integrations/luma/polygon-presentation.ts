@@ -30,7 +30,7 @@ interface Plan {
   cold?: PolygonColdGroup[];
 }
 interface Options {
-  /** Whole stroke layers commit all paint buckets together. */
+  /** Whole layers commit all fill and stroke paint buckets together. */
   atomic?: boolean;
   ready(entry: GeometryEntry): boolean;
   complete(request: GeometryRequest): boolean;
@@ -195,7 +195,7 @@ export class PolygonPresentation {
           if (plan.cold)
             for (const group of plan.cold) {
               const fill = plan.current[group.fill];
-              const strokes = group.strokes.map((i) => plan.current[i]);
+              const strokes = group.strokes.map(({ part }) => plan.current[part]);
               if (
                 !this.options.ready(fill.entry) ||
                 !strokes.every(
@@ -205,8 +205,13 @@ export class PolygonPresentation {
                 )
               )
                 continue;
-              const members = new Set(group.arcs);
-              selected.push([fill, ...strokes.map((part) => ({ ...part, members }))]);
+              selected.push([
+                fill,
+                ...strokes.map((part, i) => ({
+                  ...part,
+                  members: new Set(group.strokes[i].arcs),
+                })),
+              ]);
             }
           for (const group of plan.groups) {
             const targets = group.targets.map((i) => plan.current[i]);

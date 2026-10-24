@@ -488,8 +488,8 @@ export class Emap extends EventDispatcher {
     this.ctx.view.setGeometryLod(options);
   }
 
-  /** Toggle display-only screen path deduplication independently of geometry LOD. Defaults to true. */
-  public setScreenPathFiltering(enabled = true): void {
+  /** Toggle display-only screen path deduplication independently of geometry LOD. Defaults to false. */
+  public setScreenPathFiltering(enabled = false): void {
     this.ctx.view.setScreenPathFiltering(enabled);
   }
   public setCRS(crs: string): void {

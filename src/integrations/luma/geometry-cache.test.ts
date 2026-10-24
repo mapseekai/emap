@@ -2,14 +2,21 @@ import { arcVisibilityFilter } from '../../domain/geo/arc-visibility';
 import { describe, expect, it, vi } from 'vitest';
 import { GeometryChunkCache, type GeometryEntry, type GeometryRequest } from './geometry-cache';
 import { buildGeometryPacket } from '../../engine/rendering/luma/geometry-packet';
+import { FeatureGeometryCache } from '../../engine/rendering/luma/feature-geometry-cache';
 import type { GeometryInput } from '../../engine/rendering/luma/geometry-jobs';
 import type { GpuRenderer } from './gpu-renderer';
-function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
+function fixture(
+  cacheBytes = 1024 ** 2,
+  partitionCacheBytes?: number,
+  retainPresentation?: () => boolean,
+) {
   const gpu = {
     createMesh: vi.fn((g) => ({
       kind: g.kind,
       count: g.count,
       bytes: g.vertices.byteLength + (g.indices?.byteLength ?? 0),
+      ...(g.compactStroke ? { compactStroke: true, compactStrokeXY: g.compactStrokeXY } : {}),
+      ...(g.solidPath ? { solidPath: g.solidPath } : {}),
     })),
     destroyMesh: vi.fn(),
   };
@@ -25,6 +32,7 @@ function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
       workerMs: 0,
       inputBytes: 0,
       peakInputBytes: 0,
+      recycledInputBytes: 0,
     },
   };
   const report = vi.fn(),
@@ -36,6 +44,7 @@ function fixture(cacheBytes = 1024 ** 2, partitionCacheBytes?: number) {
     invalidate,
     cacheBytes,
     partitionCacheBytes,
+    retainPresentation,
   });
   const input: GeometryInput = {
     kind: 'point',
@@ -1141,6 +1150,264 @@ it.each([
   f.cache.dispose();
 });
 
+describe('default admitted residency', () => {
+  it('retains an admitted far scene across a subset view and small external uploads', async () => {
+    const f = fixture(48);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      expect(f.cache.stats.bytes).toBe(72);
+      const nearInput = { ...f.input, ids: Uint32Array.of(0) };
+      const near = f.frame(nearInput);
+      await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+      f.frame(nearInput);
+      expect(far.entries!.every((entry) => f.cache.isResident(entry))).toBe(true);
+      expect(f.cache.stats.evictions).toBe(0);
+      f.cache.admitExternal(4);
+      expect(far.entries!.every((entry) => f.cache.isResident(entry))).toBe(true);
+      const builds = f.cache.stats.builds;
+      const restored = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(restored)).toBe(true));
+      expect(f.cache.stats.builds).toBe(builds);
+      expect(f.cache.stats.evictions).toBe(0);
+      expect(f.cache.stats.budgetBytes).toBe(48);
+      expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(96);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.cache.dispose();
+    }
+  });
+
+  it('evicts inactive admitted chunks when external allocations need hard-limit headroom', async () => {
+    const f = fixture(48);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      const input = { ...f.input, ids: Uint32Array.of(0) };
+      const near = f.frame(input);
+      await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+      f.frame(input);
+      expect(f.cache.stats.bytes).toBe(72);
+      f.cache.admitExternal(32);
+      expect(f.cache.stats.bytes).toBe(48);
+      expect(f.cache.stats.bytes + 32).toBeLessThanOrEqual(96);
+      expect(f.cache.isResident(near.entries![0])).toBe(true);
+      expect(far.entries!.filter((entry) => f.cache.isResident(entry))).toHaveLength(2);
+      expect(() => f.cache.admitExternal(80)).toThrow(RangeError);
+      expect(f.cache.isResident(near.entries![0])).toBe(true);
+    } finally {
+      f.cache.dispose();
+    }
+  });
+
+  it.each([
+    true,
+    false,
+  ])('keeps the soft target for %s explicit-budget scenes and small default scenes', async (explicit) => {
+    const f = fixture(48);
+    if (!explicit) delete Reflect.get(f.cache, 'options').cacheBytes;
+    try {
+      const input = { ...f.input, ids: explicit ? undefined : Uint32Array.of(0) };
+      const first = f.frame(input);
+      await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+      f.frame(input);
+      for (const id of [1, 2]) {
+        const nextInput = { ...f.input, ids: Uint32Array.of(id) };
+        const next = f.frame(nextInput);
+        await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+        f.frame(nextInput);
+        expect(f.cache.stats.bytes).toBeLessThanOrEqual(48);
+        expect(f.cache.isResident(next.entries![0])).toBe(true);
+      }
+    } finally {
+      f.cache.dispose();
+    }
+  });
+
+  it.each([
+    'source',
+    'layer',
+    'revision',
+    'content',
+    'arcs',
+    'shapes',
+    'interval',
+    'layout',
+    'clear',
+  ] as const)('retires the default allowance after a %s change', async (change) => {
+    const f = fixture(48);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      if (change === 'clear') f.cache.clear({ sourceId: 's' });
+      const input: GeometryInput = {
+        ...f.input,
+        ...(change === 'arcs' ? { arcs: { size: () => 0 } as GeometryInput['arcs'] } : {}),
+        ...(change === 'shapes' ? { shapes: structuredClone(f.input.shapes) } : {}),
+        ...(change === 'interval' ? { interval: 1 } : {}),
+        ...(change === 'layout' ? { ordered: true } : {}),
+      };
+      const owner = {
+        id: change === 'layer' ? 'other' : 'p',
+        sourceId: change === 'source' ? 'other' : 's',
+        revision: change === 'revision' ? 1 : 0,
+        content: change === 'content' ? 'other' : undefined,
+      };
+      const frame = (id: number) => {
+        f.cache.begin();
+        const request = f.cache.request({ ...input, ids: Uint32Array.of(id) }, owner);
+        f.cache.finish();
+        return request;
+      };
+      for (const id of [0, 1, 2]) {
+        const next = frame(id);
+        await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+        frame(id);
+        expect(f.cache.stats.bytes).toBeLessThanOrEqual(48);
+        expect(f.cache.isResident(next.entries![0])).toBe(true);
+      }
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.cache.dispose();
+    }
+    expect(f.cache.stats.bytes).toBe(0);
+  });
+});
+
+describe('selective presentation retirement', () => {
+  it.each([
+    false,
+    true,
+  ])('reserves external bytes while preserving explicit-budget eager release (%s)', async (explicit) => {
+    const f = fixture(48, undefined, () => true);
+    if (!explicit) delete Reflect.get(f.cache, 'options').cacheBytes;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      f.cache.pin(far.entries!);
+      const input = { ...f.input, ids: Uint32Array.of(0) };
+      const near = f.frame(input);
+      await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+      f.frame(input);
+      expect(f.cache.stats.bytes).toBe(72);
+      expect(() => f.cache.admitExternal(32)).not.toThrow();
+      expect(f.cache.stats.bytes).toBe(explicit ? 24 : 48);
+      expect(f.cache.stats.bytes + 32).toBeLessThanOrEqual(96);
+      expect(f.cache.isResident(near.entries![0])).toBe(true);
+      expect(far.entries!.filter((entry) => f.cache.isResident(entry))).toHaveLength(
+        explicit ? 1 : 2,
+      );
+      expect(() => f.cache.admitExternal(80)).toThrow(RangeError);
+      expect(f.cache.isResident(near.entries![0])).toBe(true);
+    } finally {
+      f.cache.dispose();
+    }
+  });
+
+  it('protects wanted, active and admitting entries while freeing a retained presentation', async () => {
+    const f = fixture(64, undefined, () => true);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    const controller = new AbortController();
+    try {
+      const input = {
+        ...f.input,
+        shapes: [[[1, 1]], [[6, 6]], [[12, 12]], [[18, 18]]],
+        bounds: [0, 0, 20, 20] as const,
+      };
+      const far = f.frame(input);
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame(input);
+      f.cache.pin(far.entries!);
+      const nearInput = { ...input, ids: Uint32Array.of(0) };
+      const near = f.frame(nearInput);
+      await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+      f.frame(nearInput);
+      Reflect.set(f.cache, 'active', { entries: new Set([far.entries![1]]), controller });
+      Reflect.get(f.cache, 'admitting').add(far.entries![2]);
+      expect(() => f.cache.admitExternal(40)).not.toThrow();
+      expect(f.cache.stats.bytes).toBe(72);
+      expect(far.entries!.slice(0, 3).every((entry) => f.cache.isResident(entry))).toBe(true);
+      expect(f.cache.isResident(far.entries![3])).toBe(false);
+      expect(controller.signal.aborted).toBe(false);
+      expect(() => f.cache.admitExternal(80)).toThrow(RangeError);
+      expect(far.entries!.slice(0, 3).every((entry) => f.cache.isResident(entry))).toBe(true);
+      expect(controller.signal.aborted).toBe(false);
+    } finally {
+      Reflect.get(f.cache, 'admitting').clear();
+      f.cache.dispose();
+    }
+  });
+
+  it('releases only the old chunks needed for pending selection metadata', async () => {
+    const f = fixture(40, undefined, () => true);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    let release: (() => void) | undefined;
+    let waiting = false;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      f.cache.pin(far.entries!);
+      f.transport.build.mockImplementationOnce(async (packet) => {
+        waiting = true;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return buildGeometryPacket(packet);
+      });
+      f.frame({ ...f.input, wholeLayer: true, interval: 1, ids: Uint32Array.of(0, 1) });
+      await vi.waitFor(() => expect(waiting).toBe(true));
+      expect(far.entries!.filter((entry) => f.cache.isResident(entry))).toHaveLength(2);
+      expect(f.cache.stats.bytes).toBe(64);
+      expect(f.cache.stats.bytes).toBeLessThanOrEqual(80);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+      f.cache.dispose();
+    }
+  });
+
+  it('releases only the old chunks needed for a pending result upload', async () => {
+    const f = fixture(48, undefined, () => true);
+    delete Reflect.get(f.cache, 'options').cacheBytes;
+    let release: (() => void) | undefined;
+    let waiting = false;
+    try {
+      const far = f.frame();
+      await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+      f.frame();
+      f.cache.pin(far.entries!);
+      let calls = 0;
+      f.transport.build.mockImplementation(async (packet) => {
+        if (++calls === 2) {
+          waiting = true;
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        return buildGeometryPacket(packet);
+      });
+      const next = f.frame({ ...f.input, interval: 1, ids: Uint32Array.of(0, 1) });
+      await vi.waitFor(() => expect(waiting).toBe(true));
+      expect(far.entries!.filter((entry) => f.cache.isResident(entry))).toHaveLength(2);
+      expect(next.entries![0].state).toBe('ready');
+      expect(f.cache.stats.bytes).toBe(80);
+      expect(f.cache.stats.bytes).toBeLessThanOrEqual(96);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+      f.cache.dispose();
+    }
+  });
+});
+
 it('does not scan eviction candidates below budget or notify forever for ready requests', async () => {
   const f = fixture(),
     request = f.frame();
@@ -1423,6 +1690,285 @@ it('reuses containing fill coverage only at identical membership and detail', as
   f.cache.dispose();
 });
 
+function fillCoverageInput(centres = [0]): GeometryInput {
+  const rings = centres.map((x) => [
+    [x - 1, -10],
+    [x + 1, -10],
+    [x + 1, 10],
+    [x - 1, 10],
+    [x - 1, -10],
+  ]);
+  return {
+    kind: 'fill',
+    sourceSelection: true,
+    interval: 0,
+    bounds: [-1, -10, centres.at(-1)! + 1, 10],
+    shapes: rings.map((_, id) => [[id]]),
+    arcs: {
+      size: () => rings.length,
+      getArcIter(id: number) {
+        let i = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            if (i === rings[id].length) return false;
+            [this.x, this.y] = rings[id][i++];
+            return true;
+          },
+        };
+      },
+    } as unknown as GeometryInput['arcs'],
+  };
+}
+
+function delayedFillFixture(delayAt = 1) {
+  const f = fixture(),
+    features = new FeatureGeometryCache();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  f.transport.build.mockImplementation(async (packet) => {
+    if (f.transport.build.mock.calls.length === delayAt) await gate;
+    return buildGeometryPacket(packet, features);
+  });
+  f.transport.dispose.mockImplementation(() => features.clear());
+  return { ...f, release };
+}
+
+describe('queued fill coverage reuse', () => {
+  it('does not report cache hits for a cold fill that requires its first build', async () => {
+    const f = delayedFillFixture();
+    try {
+      f.release();
+      const request = f.frame(fillCoverageInput());
+      await vi.waitFor(() => expect(f.cache.complete(request)).toBe(true));
+      expect(
+        f.cache.drawable(request).flatMap((entry) => entry.meshes.map((mesh) => mesh.count)),
+      ).toEqual([6]);
+      expect(f.transport.build).toHaveBeenCalledOnce();
+      expect(f.cache.stats.cacheHits).toBe(0);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ])('reuses a newly resident fill before dispatch (full: %s, recollect: %s)', async (full, recollect) => {
+    const f = delayedFillFixture(),
+      input = fillCoverageInput(),
+      near = { ...input, storageBounds: [-1, -3, 1, 3] as const };
+    let a!: GeometryRequest,
+      b!: GeometryRequest,
+      recollected: GeometryRequest | undefined,
+      observedPartial = false;
+    const create = f.gpu.createMesh.getMockImplementation()!;
+    f.gpu.createMesh.mockImplementation((geometry) => {
+      if (f.gpu.createMesh.mock.calls.length === 1) {
+        const before = b.entries;
+        observedPartial =
+          !f.cache.isResident(a.entries![0]) &&
+          Reflect.get(f.cache, 'queued').call(f.cache, b) === before![0] &&
+          b.entries === before;
+        if (recollect) queueMicrotask(() => (recollected = f.frame({ ...near })));
+      }
+      return create(geometry);
+    });
+    try {
+      a = f.frame({ ...input, storageBounds: full ? undefined : [-1, -8, 1, 8] });
+      await vi.waitFor(() => expect(a.entries?.[0].state).toBe('building'));
+      b = f.frame(near);
+      await vi.waitFor(() => expect(b.entries?.[0].state).toBe('queued'));
+      const queued = b.entries!,
+        orphan = queued[0];
+      expect(a.plan).toBe(b.plan);
+      expect(a.entries![0].job.members).toEqual(Int32Array.of(0));
+      expect(orphan.job.members).toEqual(Int32Array.of(0));
+      f.release();
+      await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+      expect(observedPartial).toBe(true);
+      if (recollect) expect(recollected).toBe(b);
+      expect(f.transport.build).toHaveBeenCalledTimes(1);
+      expect(b.entries).not.toBe(queued);
+      expect(b.entries![0]).toBe(a.entries![0]);
+      expect(
+        f.cache.drawable(b).flatMap((entry) => entry.meshes.map((mesh) => mesh.count)),
+      ).toEqual([6]);
+      expect(orphan.bytes).toBe(0);
+      expect(f.cache.stats.entries).toBe(1);
+      expect(f.cache.stats.visibleChunks).toBe(1);
+      expect(f.cache.stats.pending).toBe(0);
+      expect(f.cache.stats.bytes).toBe(a.entries![0].bytes);
+      expect(f.cache.stats.cancellations).toBe(0);
+      expect(f.cache.stats.evictions).toBe(0);
+      expect(f.cache.stats.cacheHits).toBeGreaterThan(0);
+      if (!full) expect(f.cache.stats.coverageHits).toBeGreaterThan(0);
+      expect(f.gpu.createMesh).toHaveBeenCalledOnce();
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it('rechecks later jobs inside a batch after its first job requires a build', async () => {
+    const f = delayedFillFixture(3),
+      input = fillCoverageInput([0, 4, 8]),
+      buildBatch = vi.fn(async (packets) =>
+        packets.map((packet: Parameters<typeof buildGeometryPacket>[0]) => ({
+          result: buildGeometryPacket(packet),
+        })),
+      );
+    Reflect.get(f.cache, 'worker').buildBatch = buildBatch;
+    try {
+      const a = f.frame({ ...input, storageBounds: [6, -8, 10, 8] });
+      await vi.waitFor(() => expect(a.entries?.[2].state).toBe('building'));
+      const b = f.frame({ ...input, storageBounds: [-2, -3, 10, 3] });
+      await vi.waitFor(() =>
+        expect(b.entries?.every((entry) => entry.state === 'queued')).toBe(true),
+      );
+      const before = b.entries!,
+        orphan = before[2];
+      f.release();
+      await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+      expect(b.entries).not.toBe(before);
+      expect(b.entries![2]).toBe(a.entries![2]);
+      expect(orphan.bytes).toBe(0);
+      expect(
+        f.cache.drawable(b).flatMap((entry) => entry.meshes.map((mesh) => mesh.count)),
+      ).toEqual([6, 6, 6]);
+      expect(f.transport.build).toHaveBeenCalledTimes(5);
+      expect(buildBatch).not.toHaveBeenCalled();
+      expect(f.cache.stats.pending).toBe(0);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it('replaces shared queued metadata in every current draw slot before releasing it', async () => {
+    const f = delayedFillFixture(),
+      input = fillCoverageInput(),
+      near = { ...input, storageBounds: [-1, -3, 1, 3] as const },
+      owner = { id: 'p', sourceId: 's', revision: 0 };
+    try {
+      const a = f.frame({ ...input, storageBounds: [-1, -8, 1, 8] });
+      await vi.waitFor(() => expect(a.entries?.[0].state).toBe('building'));
+      f.cache.begin();
+      const b = f.cache.request(near, owner),
+        c = f.cache.request(near, owner);
+      f.cache.finish();
+      await vi.waitFor(() => expect(b.entries?.[0].state === 'queued' && !!c.entries).toBe(true));
+      const orphan = b.entries![0];
+      expect(c.entries![0]).toBe(orphan);
+      // Prime ownership before replacement to catch a stale wanted/protected selection.
+      expect(f.cache.stats.visibleChunks).toBe(1);
+      f.release();
+      await vi.waitFor(() => expect(f.cache.complete(b) && f.cache.complete(c)).toBe(true));
+      expect(b.entries![0]).toBe(a.entries![0]);
+      expect(c.entries![0]).toBe(a.entries![0]);
+      expect(orphan.bytes).toBe(0);
+      expect(f.cache.stats.entries).toBe(1);
+      expect(f.cache.stats.bytes).toBe(a.entries![0].bytes);
+      expect(f.transport.build).toHaveBeenCalledTimes(1);
+      expect(f.gpu.destroyMesh).not.toHaveBeenCalled();
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it.each([
+    'coverage',
+    'membership',
+    'detail',
+  ] as const)('builds queued fills with incompatible %s', async (difference) => {
+    const f = delayedFillFixture(),
+      source = fillCoverageInput(),
+      input = { ...source, shapes: [[[0]], [[0]]], ids: Uint32Array.of(0) };
+    try {
+      const a = f.frame({ ...input, storageBounds: [-1, -8, 1, 8] });
+      await vi.waitFor(() => expect(a.entries?.[0].state).toBe('building'));
+      const b = f.frame({
+        ...input,
+        interval: difference === 'detail' ? 0.5 : 0,
+        ids: Uint32Array.of(difference === 'membership' ? 1 : 0),
+        storageBounds: difference === 'coverage' ? [-1, -9, 1, 9] : [-1, -3, 1, 3],
+      });
+      await vi.waitFor(() => expect(b.entries?.[0].state).toBe('queued'));
+      f.release();
+      await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+      expect(b.entries![0]).not.toBe(a.entries![0]);
+      expect(f.transport.build).toHaveBeenCalledTimes(2);
+      expect(f.cache.stats.cancellations).toBe(0);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it('builds the queued fill if the containing result loses residency before dispatch', async () => {
+    const f = delayedFillFixture(),
+      input = fillCoverageInput(),
+      create = f.gpu.createMesh.getMockImplementation()!;
+    let a!: GeometryRequest;
+    f.gpu.createMesh.mockImplementation((geometry) => {
+      if (f.gpu.createMesh.mock.calls.length === 1)
+        queueMicrotask(() => Reflect.get(f.cache, 'drop').call(f.cache, a.entries![0]));
+      return create(geometry);
+    });
+    try {
+      a = f.frame({ ...input, storageBounds: [-1, -8, 1, 8] });
+      await vi.waitFor(() => expect(a.entries?.[0].state).toBe('building'));
+      const b = f.frame({ ...input, storageBounds: [-1, -3, 1, 3] });
+      await vi.waitFor(() => expect(b.entries?.[0].state).toBe('queued'));
+      f.release();
+      await vi.waitFor(() => expect(f.cache.complete(b)).toBe(true));
+      expect(f.cache.isResident(a.entries![0])).toBe(false);
+      expect(b.entries![0]).not.toBe(a.entries![0]);
+      expect(f.transport.build).toHaveBeenCalledTimes(2);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+
+  it('does not restore queued fill requests after their source is cleared', async () => {
+    const f = delayedFillFixture(),
+      input = fillCoverageInput();
+    try {
+      const a = f.frame({ ...input, storageBounds: [-1, -8, 1, 8] });
+      await vi.waitFor(() => expect(a.entries?.[0].state).toBe('building'));
+      const b = f.frame({ ...input, storageBounds: [-1, -3, 1, 3] });
+      await vi.waitFor(() => expect(b.entries?.[0].state).toBe('queued'));
+      f.cache.clear({ sourceId: 's' });
+      f.release();
+      await vi.waitFor(() => expect(Reflect.get(f.cache, 'active')).toBeNull());
+      expect(b.controller.signal.aborted).toBe(true);
+      expect(f.cache.stats.entries).toBe(0);
+      expect(f.cache.stats.pending).toBe(0);
+      expect(f.cache.stats.bytes).toBe(0);
+      expect(f.gpu.createMesh).not.toHaveBeenCalled();
+      expect(f.transport.build).toHaveBeenCalledTimes(1);
+      expect(f.report).not.toHaveBeenCalled();
+    } finally {
+      f.release();
+      f.cache.dispose();
+    }
+  });
+});
+
 /** Three overlapping selections in one stable spatial chunk, plus a new chunk. */
 function handoffInput(kind: 'point' | 'path' | 'fill'): GeometryInput {
   const points = [
@@ -1502,17 +2048,550 @@ function screenPathInput(): GeometryInput & { screen: NonNullable<GeometryInput[
   };
 }
 
+it('reuploads full fill results after GPU eviction and viewport invisibility without rebuilding', async () => {
+  const f = fixture(1024),
+    input = { ...handoffInput('fill'), sourceSelection: true },
+    read = vi.spyOn(input.arcs!, 'getArcIter');
+  f.transport.build.mockImplementation(async (packet) => ({
+    ...buildGeometryPacket(packet),
+    preparationMs: 12,
+    directFeatures: 7,
+    uploadCulledBytes: 9,
+  }));
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const original = f.gpu.createMesh.mock.calls.map(([g]) => g),
+      values = original.map((g) => ({ vertices: g.vertices.slice(), indices: g.indices?.slice() })),
+      builds = f.transport.build.mock.calls.length,
+      preparationMs = f.cache.stats.preparationMs,
+      directFeatures = f.cache.stats.directFeatures,
+      uploadCulledBytes = f.cache.stats.uploadCulledBytes;
+    const near = f.frame({ ...input, viewBounds: [8, 8, 9, 9] });
+    await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+    expect(near.entries).toEqual([]);
+    f.cache.admitExternal(f.cache.stats.budgetBytes);
+    expect(first.entries!.every((entry) => !f.cache.isResident(entry))).toBe(true);
+    expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(original.length);
+    read.mockClear();
+    const far = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+    expect(f.transport.build).toHaveBeenCalledTimes(builds);
+    expect(read).not.toHaveBeenCalled();
+    expect(f.cache.stats.fillResultHits).toBe(builds);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(original.length * 2);
+    const replayed = f.gpu.createMesh.mock.calls.slice(original.length).map(([g]) => g);
+    for (let i = 0; i < original.length; i++) {
+      expect(replayed[i].vertices).toBe(original[i].vertices);
+      expect(replayed[i].indices).toBe(original[i].indices);
+      expect(replayed[i].vertices).toEqual(values[i].vertices);
+      expect(replayed[i].indices).toEqual(values[i].indices);
+    }
+    expect(f.cache.stats.preparationMs).toBe(preparationMs);
+    expect(f.cache.stats.directFeatures).toBe(directFeatures);
+    expect(f.cache.stats.uploadCulledBytes).toBe(uploadCulledBytes);
+    expect(f.cache.stats.fillResultCacheBytes).toBeGreaterThan(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+  expect(f.cache.stats.fillResultCacheEntries).toBe(0);
+});
+
+async function evictFillEntries(f: ReturnType<typeof fixture>, input: GeometryInput) {
+  const first = f.frame(input);
+  await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+  const near = f.frame({ ...input, viewBounds: [8, 8, 9, 9] });
+  await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+  expect(near.entries).toEqual([]);
+  f.cache.admitExternal(f.cache.stats.budgetBytes);
+  expect(first.entries!.every((entry) => !f.cache.isResident(entry))).toBe(true);
+  return first;
+}
+
+it('replays a cached fill while an earlier uncached packet is held in the same batch', async () => {
+  const f = fixture(4096),
+    input = fillCoverageInput([0, 4, 8]),
+    read = vi.spyOn(input.arcs!, 'getArcIter'),
+    builtMembers: number[] = [];
+  let waiting = false,
+    release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+    build = async (packet: Parameters<typeof buildGeometryPacket>[0]) => {
+      builtMembers.push(packet.featureIds![0]);
+      if (packet.featureIds![0] === 1) {
+        waiting = true;
+        await gate;
+      }
+      return buildGeometryPacket(packet);
+    },
+    buildBatch = vi.fn(async (packets: Parameters<typeof buildGeometryPacket>[0][]) =>
+      Promise.all(packets.map(async (packet) => ({ result: await build(packet) }))),
+    );
+  f.transport.build.mockImplementation(build);
+  Object.assign(f.transport, { buildBatch });
+  try {
+    const warm = f.frame({ ...input, ids: Uint32Array.of(2) });
+    await vi.waitFor(() => expect(f.cache.complete(warm)).toBe(true));
+    const builds = f.transport.build.mock.calls.length;
+    const near = f.frame({ ...input, viewBounds: [100, 100, 101, 101] });
+    await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+    f.cache.admitExternal(f.cache.stats.budgetBytes);
+    expect(warm.entries!.every((entry) => !f.cache.isResident(entry))).toBe(true);
+    expect(f.cache.stats.fillResultCacheEntries).toBe(1);
+    read.mockClear();
+    const next = f.frame(input);
+    await vi.waitFor(() => expect(waiting).toBe(true));
+    expect(next.entries!.map((entry) => entry.state)).toEqual(['ready', 'building', 'ready']);
+    expect(f.cache.complete(next)).toBe(false);
+    expect(f.cache.isResident(next.entries![2])).toBe(true);
+    expect(f.cache.stats.fillResultHits).toBe(1);
+    expect(builtMembers).toEqual([2, 0, 1]);
+    expect(read.mock.calls.some(([id]) => id === 0)).toBe(true);
+    expect(read.mock.calls.some(([id]) => id === 1)).toBe(true);
+    expect(read.mock.calls.some(([id]) => id === 2)).toBe(false);
+    release();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(next.entries).toHaveLength(3);
+    expect(f.transport.build).toHaveBeenCalledTimes(builds + 2);
+    expect(buildBatch).not.toHaveBeenCalled();
+    expect(builtMembers).toEqual([2, 0, 1]);
+    expect(read.mock.calls.some(([id]) => id === 2)).toBe(false);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    release();
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'source',
+  'layer',
+  'revision',
+  'plan',
+] as const)('invalidates retained full fill arrays on %s changes after GPU eviction', async (change) => {
+  const f = fixture(1024),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  try {
+    const first = await evictFillEntries(f, input);
+    expect(f.cache.stats.fillResultCacheBytes).toBeGreaterThan(0);
+    const builds = f.transport.build.mock.calls.length;
+    if (change === 'source') f.cache.clear({ sourceId: 's' });
+    if (change === 'layer') f.cache.clear({ layerId: 'p' });
+    if (change === 'source' || change === 'layer') {
+      expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+      expect(f.cache.stats.fillResultCacheEntries).toBe(0);
+    }
+    if (change === 'plan') {
+      Reflect.get(f.cache, 'options').partitionCacheBytes = f.cache.stats.partitionBytes;
+      const replacementInput = { ...input, arcs: { ...input.arcs! } },
+        replacement = f.frame(replacementInput);
+      await vi.waitFor(() => expect(f.cache.complete(replacement)).toBe(true));
+      f.frame(replacementInput);
+      expect(Reflect.get(f.cache, 'plans').has(first.plan.key)).toBe(false);
+      expect(f.cache.stats.fillResultCacheEntries).toBe(0);
+    }
+    const next = f.frame(input, change === 'revision' ? 1 : 0);
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build.mock.calls.length).toBeGreaterThan(builds);
+    expect(f.cache.stats.fillResultHits).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'membership',
+  'interval',
+  'arcs',
+  'content',
+  'layout',
+] as const)('keeps retained full fill identity exact after changing %s', async (change) => {
+  const f = fixture(1024),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  try {
+    await evictFillEntries(f, input);
+    const builds = f.transport.build.mock.calls.length;
+    f.cache.begin();
+    const next = f.cache.request(
+      {
+        ...input,
+        ...(change === 'membership' ? { ids: Uint32Array.of(0, 1) } : {}),
+        ...(change === 'interval' ? { interval: 1 } : {}),
+        ...(change === 'arcs' ? { arcs: { ...input.arcs! } } : {}),
+        ...(change === 'layout' ? { spatialOrder: true } : {}),
+      },
+      { id: 'p', sourceId: 's', revision: 0, content: change === 'content' ? 'other' : undefined },
+    );
+    f.cache.finish();
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build.mock.calls.length).toBeGreaterThan(builds);
+    expect(f.cache.stats.fillResultHits).toBe(0);
+    if (change === 'membership')
+      expect(next.entries!.flatMap((entry) => [...entry.job.members])).toEqual([0, 1]);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('excludes partially covered fills from the final result cache', async () => {
+  const f = fixture(1024),
+    input = {
+      ...handoffInput('fill'),
+      sourceSelection: true,
+      viewBounds: [1.11, 1.11, 1.115, 1.115] as const,
+      storageBounds: [1.11, 1.11, 1.115, 1.115] as const,
+    };
+  try {
+    const first = await evictFillEntries(f, input),
+      builds = f.transport.build.mock.calls.length;
+    expect(first.entries!.every((entry) => !!entry.coverage)).toBe(true);
+    expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+    const next = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build.mock.calls.length).toBeGreaterThan(builds);
+    expect(f.cache.stats.fillResultHits).toBe(0);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('lets final fills displace packed paths inside the existing shared CPU quota', async () => {
+  const f = fixture(1024 ** 2),
+    path = screenPathInput(),
+    fill = { ...handoffInput('fill'), sourceSelection: true };
+  path.arcs = {
+    size: () => 4,
+    getArcIter(id: number) {
+      let at = 0;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          this.x = id + at / 512;
+          this.y = at / 512;
+          return at++ < 256;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  try {
+    const warm = f.frame(path);
+    await vi.waitFor(() => expect(f.cache.complete(warm)).toBe(true));
+    const before = f.cache.stats,
+      quota = before.partitionBytes + before.selectionCacheBytes + before.packedCacheBytes;
+    expect(before.packedCacheBytes).toBeGreaterThan(8000);
+    Reflect.get(f.cache, 'options').partitionCacheBytes = quota;
+    f.cache.begin();
+    const retained = f.cache.request(path, { id: 'p', sourceId: 's', revision: 0 }),
+      added = f.cache.request(fill, { id: 'fill', sourceId: 's', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() =>
+      expect(f.cache.complete(retained) && f.cache.complete(added)).toBe(true),
+    );
+    const after = f.cache.stats;
+    expect(after.fillResultCacheBytes).toBeGreaterThan(0);
+    expect(after.packedCacheBytes).toBeLessThan(before.packedCacheBytes);
+    expect(
+      after.partitionBytes +
+        after.selectionCacheBytes +
+        after.packedCacheBytes +
+        after.fillResultCacheBytes,
+    ).toBeLessThanOrEqual(quota);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('skips an oversized final fill backing allocation without flushing warm paths', async () => {
+  const f = fixture(1024 ** 2, 16384),
+    path = screenPathInput(),
+    input = { ...handoffInput('fill'), sourceSelection: true, ids: Uint32Array.of(0) };
+  f.transport.build.mockImplementation(async (packet) => {
+    const result = buildGeometryPacket(packet);
+    if (packet.kind === 'fill')
+      for (const g of result.geometries) {
+        const vertices = new Float32Array(new ArrayBuffer(32768), 0, g.vertices.length);
+        vertices.set(g.vertices);
+        g.vertices = vertices;
+      }
+    return result;
+  });
+  try {
+    const warm = f.frame(path);
+    await vi.waitFor(() => expect(f.cache.complete(warm)).toBe(true));
+    const packed = f.cache.stats.packedCacheBytes;
+    f.cache.begin();
+    const retained = f.cache.request(path, { id: 'p', sourceId: 's', revision: 0 }),
+      added = f.cache.request(input, { id: 'fill', sourceId: 's', revision: 0 });
+    f.cache.finish();
+    await vi.waitFor(() =>
+      expect(f.cache.complete(retained) && f.cache.complete(added)).toBe(true),
+    );
+    expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+    expect(f.cache.stats.packedCacheBytes).toBe(packed);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'members',
+  'components',
+] as const)('checks exact cached fill %s even when the identity hash matches', async (change) => {
+  const f = fixture(1024),
+    input = { ...handoffInput('fill'), sourceSelection: true, ids: Uint32Array.of(0) };
+  try {
+    await evictFillEntries(f, input);
+    const record = Reflect.get(f.cache, 'fillResults').values().next().value,
+      builds = f.transport.build.mock.calls.length;
+    record.job = {
+      ...record.job,
+      ...(change === 'members' ? { members: Int32Array.of(1) } : { components: Uint32Array.of(1) }),
+    };
+    const next = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build).toHaveBeenCalledTimes(builds + 1);
+    expect(f.cache.stats.fillResultHits).toBe(0);
+    expect(next.entries![0].job.members).toEqual(Int32Array.of(0));
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('charges a retained fill backing buffer once across shared typed-array views', async () => {
+  const f = fixture(1024, 10000),
+    input = { ...handoffInput('fill'), sourceSelection: true, ids: Uint32Array.of(0) };
+  f.transport.build.mockImplementation(async (packet) => {
+    const result = buildGeometryPacket(packet),
+      backing = new ArrayBuffer(8192);
+    for (const g of result.geometries) {
+      const vertices = new Float32Array(backing, 0, g.vertices.length),
+        indices = new Uint16Array(backing, 1024, g.indices!.length),
+        bounds = new Float64Array(backing, 2048, g.fillRanges!.bounds.length);
+      vertices.set(g.vertices);
+      indices.set(g.indices!);
+      bounds.set(g.fillRanges!.bounds);
+      g.vertices = vertices;
+      g.indices = indices;
+      g.fillRanges = { ...g.fillRanges!, bounds };
+    }
+    return result;
+  });
+  try {
+    await evictFillEntries(f, input);
+    const stats = f.cache.stats;
+    expect(stats.fillResultCacheEntries).toBe(1);
+    expect(stats.fillResultCacheBytes).toBeGreaterThan(8192);
+    expect(
+      stats.fillResultCacheBytes + stats.partitionBytes + stats.selectionCacheBytes,
+    ).toBeLessThanOrEqual(10000);
+    const next = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.cache.stats.fillResultHits).toBe(1);
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  'clear',
+  'dispose',
+  'cancel',
+] as const)('rolls back a yielded fill replay on %s without reviving its CPU payload', async (action) => {
+  const f = fixture(8 * 1024 ** 2),
+    input = { ...handoffInput('fill'), sourceSelection: true, ids: Uint32Array.of(0) };
+  f.transport.build.mockImplementation(async (packet) => {
+    const result = buildGeometryPacket(packet),
+      g = result.geometries[0];
+    result.geometries = Array.from({ length: 3 }, () => {
+      const vertices = new Float32Array((2 * 1024 ** 2) / 4);
+      vertices.set(g.vertices);
+      return { ...g, vertices };
+    });
+    return result;
+  });
+  try {
+    await evictFillEntries(f, input);
+    expect(f.cache.stats.fillResultCacheEntries).toBe(1);
+    const create = f.gpu.createMesh.getMockImplementation()!;
+    let next: GeometryRequest;
+    f.gpu.createMesh.mockImplementation((g) => {
+      setTimeout(() => {
+        if (action === 'clear') f.cache.clear({ sourceId: 's' });
+        else if (action === 'dispose') f.cache.dispose();
+        else {
+          f.cache.cancel(next);
+          f.cache.finish();
+        }
+      }, 0);
+      return create(g);
+    });
+    next = f.frame(input);
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
+    // Wait for the scheduled replay, not only the gap before its pump starts.
+    await vi.waitFor(() => expect(f.gpu.createMesh).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
+    expect(f.transport.build).toHaveBeenCalledOnce();
+    expect(f.gpu.destroyMesh).toHaveBeenCalledTimes(4);
+    expect(f.cache.stats.bytes).toBe(0);
+    expect(f.cache.stats.fillResultCacheEntries).toBe(0);
+    expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('yields between small cached fill uploads when the replay slice reaches four milliseconds', async () => {
+  const f = fixture(1024),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  try {
+    await evictFillEntries(f, input);
+    const uploads = f.gpu.createMesh.mock.calls.length,
+      create = f.gpu.createMesh.getMockImplementation()!;
+    f.gpu.createMesh.mockImplementation((g) => {
+      setTimeout(() => f.cache.clear({ sourceId: 's' }), 0);
+      const deadline = performance.now() + 5;
+      while (performance.now() < deadline) {}
+      return create(g);
+    });
+    f.frame(input);
+    await vi.waitFor(() => expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads + 1));
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
+    expect(f.transport.build).toHaveBeenCalledTimes(2);
+    expect(f.cache.stats.bytes).toBe(0);
+    expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('does not retain a full fill Worker result returned after its source was cleared', async () => {
+  const f = fixture(),
+    input = { ...handoffInput('fill'), sourceSelection: true };
+  let release!: () => void;
+  f.transport.build.mockImplementation(async (packet) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return buildGeometryPacket(packet);
+  });
+  try {
+    f.frame(input);
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    f.cache.clear({ sourceId: 's' });
+    release();
+    await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
+    expect(f.gpu.createMesh).not.toHaveBeenCalled();
+    expect(f.cache.stats.fillResultCacheEntries).toBe(0);
+    expect(f.cache.stats.fillResultCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
+});
+
+function transferPathInput(packet: Parameters<typeof buildGeometryPacket>[0]) {
+  const remote = structuredClone(packet, {
+    transfer: [packet.coordinates.buffer, packet.offsets.buffer, packet.features.buffer],
+  });
+  return {
+    remote,
+    restore() {
+      const returned = structuredClone(
+        { coordinates: remote.coordinates, offsets: remote.offsets, features: remote.features },
+        { transfer: [remote.coordinates.buffer, remote.offsets.buffer, remote.features.buffer] },
+      );
+      Object.assign(packet, returned);
+      return returned;
+    },
+  };
+}
+
+it('keeps valid source packets across offscreen GPU eviction and invalidates them on revision', async () => {
+  const f = fixture(1024),
+    input = { ...screenPathInput(), wholeLayer: false };
+  const read = vi.spyOn(input.arcs!, 'getArcIter');
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const bytes = f.cache.stats.packedCacheBytes;
+    expect(bytes).toBeGreaterThan(0);
+    const hidden = f.frame({ ...input, viewBounds: [8, 8, 9, 9] });
+    await vi.waitFor(() => expect(f.cache.complete(hidden)).toBe(true));
+    expect(hidden.entries).toEqual([]);
+    f.frame({ ...input, viewBounds: [8, 8, 9, 9] });
+    f.cache.admitExternal(f.cache.stats.budgetBytes);
+    expect(first.entries!.every((entry) => !f.cache.isResident(entry))).toBe(true);
+    expect(f.cache.stats.packedCacheBytes).toBe(bytes);
+    read.mockClear();
+    const back = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(back)).toBe(true));
+    expect(read).not.toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBeGreaterThan(0);
+    const hits = f.cache.stats.packedHits;
+    const revised = f.frame(input, 1);
+    await vi.waitFor(() => expect(f.cache.complete(revised)).toBe(true));
+    expect(f.cache.stats.packedHits).toBe(hits);
+    expect(read).toHaveBeenCalled();
+    f.cache.clear({ sourceId: 's' });
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+  expect(f.cache.stats.packedCacheBytes).toBe(0);
+});
+
+it('releases packets owned by replaced membership so the bounded quota can warm the new selection', async () => {
+  const f = fixture(1024 ** 2, 128),
+    input = screenPathInput();
+  const read = vi.spyOn(input.arcs!, 'getArcIter');
+  try {
+    const first = f.frame({ ...input, ids: Uint32Array.of(0) });
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    expect(f.cache.stats.packedCacheBytes).toBeGreaterThan(0);
+    const next = f.frame({ ...input, ids: Uint32Array.of(1) });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    const hits = f.cache.stats.packedHits,
+      builds = f.cache.stats.builds;
+    read.mockClear();
+    const zoom = f.frame({
+      ...input,
+      ids: Uint32Array.of(1),
+      screen: { ...input.screen, view: [40, -40, -320, 320] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(zoom)).toBe(true));
+    expect(f.cache.stats.builds).toBe(builds + 1);
+    expect(read).not.toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(hits + 1);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
 it('reuses owned source packets after transfer while rebuilding paths for the current view', async () => {
   const f = fixture(),
     input = screenPathInput();
   const read = vi.spyOn(input.arcs!, 'getArcIter');
   const packets: Parameters<typeof buildGeometryPacket>[0][] = [];
   f.transport.build.mockImplementation(async (packet) => {
-    const received = structuredClone(packet, {
-      transfer: [packet.coordinates.buffer, packet.offsets.buffer, packet.features.buffer],
-    });
-    packets.push(received);
-    return buildGeometryPacket(received);
+    const moved = transferPathInput(packet);
+    packets.push(structuredClone(moved.remote));
+    const result = buildGeometryPacket(moved.remote);
+    moved.restore();
+    return result;
   });
   try {
     const first = f.frame(input);
@@ -1543,6 +2622,117 @@ it('reuses owned source packets after transfer while rebuilding paths for the cu
     f.cache.dispose();
   }
   expect(f.cache.stats.packedCacheBytes).toBe(0);
+});
+
+it('hands the returned input buffers to the next Worker build without copying coordinates', async () => {
+  const f = fixture(),
+    input = screenPathInput(),
+    read = vi.spyOn(input.arcs!, 'getArcIter');
+  let returned: ReturnType<ReturnType<typeof transferPathInput>['restore']> | undefined;
+  const reused: boolean[] = [];
+  f.transport.build.mockImplementation(async (packet) => {
+    if (returned)
+      reused.push(
+        packet.coordinates === returned.coordinates &&
+          packet.offsets === returned.offsets &&
+          packet.features === returned.features,
+      );
+    const moved = transferPathInput(packet);
+    expect(packet.offsets.byteLength).toBe(0);
+    const result = buildGeometryPacket(moved.remote);
+    returned = moved.restore();
+    return result;
+  });
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    read.mockClear();
+    const next = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [40, -40, -320, 320] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(next)).toBe(true));
+    expect(reused).toEqual([true]);
+    expect(read).not.toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(1);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('repacks detached cached input after a Worker failure instead of counting a false cache hit', async () => {
+  const f = fixture(),
+    input = screenPathInput(),
+    read = vi.spyOn(input.arcs!, 'getArcIter');
+  const build = async (packet: Parameters<typeof buildGeometryPacket>[0]) => {
+    const moved = transferPathInput(packet),
+      result = buildGeometryPacket(moved.remote);
+    moved.restore();
+    return result;
+  };
+  f.transport.build.mockImplementation(build);
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const bytes = f.cache.stats.packedCacheBytes;
+    f.transport.build.mockImplementationOnce(async (packet) => {
+      transferPathInput(packet);
+      throw new Error('Worker failed after receiving input');
+    });
+    const failed = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [40, -40, -320, 320] },
+    });
+    await vi.waitFor(() => expect(f.cache.failed(failed)).toBe(true));
+    const hits = f.cache.stats.packedHits;
+    read.mockClear();
+    const retry = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [80, -80, -640, 640] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(retry)).toBe(true));
+    expect(read).toHaveBeenCalled();
+    expect(f.cache.stats.packedHits).toBe(hits);
+    expect(f.cache.stats.packedCacheBytes).toBe(bytes);
+    expect(f.report).toHaveBeenCalledOnce();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('does not revive a cleared source cache when its transferred inputs return late', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  let release!: () => void;
+  let returned: Parameters<typeof buildGeometryPacket>[0] | undefined;
+  f.transport.build.mockImplementation(async (packet) => {
+    const moved = transferPathInput(packet);
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const result = buildGeometryPacket(moved.remote);
+    moved.restore();
+    returned = packet;
+    return result;
+  });
+  try {
+    f.frame(input);
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    expect(f.cache.stats.packedCacheBytes).toBeGreaterThan(0);
+    f.cache.clear({ layerId: 'p' });
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+    release();
+    await f.transport.build.mock.results[0].value;
+    expect(returned!.offsets.byteLength).toBeGreaterThan(0);
+    expect(f.cache.stats.packedCacheBytes).toBe(0);
+    expect(f.cache.stats.packedCacheEntries).toBe(0);
+    expect(f.gpu.createMesh).not.toHaveBeenCalled();
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    release?.();
+    f.cache.dispose();
+  }
 });
 
 it.each([
@@ -1789,7 +2979,7 @@ it('keeps spatial raw ordering distinct from source-order requests and their fal
   }
 });
 
-it('reuses finer whole-layer screen paths across coarser resolutions without rebuilding or uploading', async () => {
+it('reuses sparse whole-layer screen paths across sixteenfold zoom-out without rebuilding or uploading', async () => {
   const f = fixture(4 * 1024 ** 2),
     input = screenPathInput(),
     arcs = input.arcs!;
@@ -1807,7 +2997,7 @@ it('reuses finer whole-layer screen paths across coarser resolutions without reb
     expect(resident).toHaveLength(2);
     expect(resident.reduce((n, entry) => n + entry.job.members.length, 0)).toBe(9000);
     expect(resident.every((entry) => entry.screenSpace)).toBe(true);
-    for (const scale of [15, 14, 12, 10, 8, 12, 16]) {
+    for (const scale of [15, 14, 12, 10, 8, 4, 2, 1, 8, 16]) {
       const next = f.frame({
         ...input,
         screen: { ...input.screen, view: [scale, -scale, -8 * scale, 8 * scale] },
@@ -1819,6 +3009,109 @@ it('reuses finer whole-layer screen paths across coarser resolutions without reb
       expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads);
       expect(f.cache.stats.bytes).toBe(bytes);
     }
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('rebuilds reducible wide-detail paths so another fitting layer is not blocked', async () => {
+  const f = fixture(140, undefined, () => true),
+    input = screenPathInput();
+  input.bounds = [0, 0, 1, 1];
+  input.screen = { ...input.screen, view: [16, -16, 0, 0] };
+  input.arcs = {
+    size: () => 1,
+    getArcIter() {
+      const xy = [
+        [0, 0],
+        [0.05, 0.05],
+        [0.1, 0],
+      ];
+      let at = -1;
+      return {
+        get x() {
+          return xy[at][0];
+        },
+        get y() {
+          return xy[at][1];
+        },
+        hasNext: () => ++at < xy.length,
+      };
+    },
+  } as GeometryInput['arcs'];
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    expect(first.entries![0].screenStats).toMatchObject({ outputVertices: 3, outputSegments: 2 });
+    f.cache.pin(first.entries!);
+    f.cache.begin();
+    const coarse = f.cache.request(
+      { ...input, screen: { ...input.screen, view: [1, -1, 0, 0] } },
+      { id: 'p', sourceId: 's', revision: 0 },
+    );
+    const point = f.cache.request(
+      {
+        kind: 'point',
+        interval: 0,
+        bounds: [0, 0, 1, 1],
+        shapes: [[[0.5, 0.5]]],
+        wholeLayer: true,
+      },
+      { id: 'point', sourceId: 'q', revision: 0 },
+    );
+    f.cache.finish();
+    await vi.waitFor(() =>
+      expect(
+        f.cache.complete(coarse) &&
+          (f.cache.complete(point) || f.cache.failed(point)) &&
+          f.cache.stats.pending === 0,
+      ).toBe(true),
+    );
+    expect(f.cache.complete(point)).toBe(true);
+    expect(coarse.entries![0].screenStats).toMatchObject({ outputVertices: 2, outputSegments: 1 });
+    expect(f.cache.stats.bytes).toBeLessThanOrEqual(280);
+    expect(f.cache.stats.blockedEntries).toBe(0);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it.each([
+  false,
+  true,
+])('keeps wide compact reuse in its minimum storage format (exact XY: %s)', async (xy) => {
+  const f = fixture(),
+    input = { ...screenPathInput(), compactStroke: true };
+  if (xy)
+    input.arcs = {
+      size: () => 1,
+      getArcIter() {
+        let at = 0;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            this.x = at++ / 8;
+            return at <= 2;
+          },
+        };
+      },
+    } as GeometryInput['arcs'];
+  try {
+    const fine = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(fine)).toBe(true));
+    const original = f.cache.drawable(fine);
+    expect(original[0].meshes[0].compactStrokeXY).toBe(xy);
+    const coarse = f.frame({
+      ...input,
+      screen: { ...input.screen, view: [1, -1, -8, 8] },
+    });
+    await vi.waitFor(() => expect(f.cache.complete(coarse)).toBe(true));
+    expect(f.cache.stats.builds).toBe(xy ? 1 : 2);
+    if (xy) expect(f.cache.drawable(coarse)).toEqual(original);
+    else expect(f.cache.drawable(coarse)).not.toEqual(original);
     expect(f.report).not.toHaveBeenCalled();
   } finally {
     f.cache.dispose();
@@ -1853,6 +3146,45 @@ it('reuses finer screen paths after the coarser mesh is evicted under the unchan
     expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads);
     expect(f.cache.stats.budgetBytes).toBe(1024);
     expect(f.cache.stats.peakBytes).toBeLessThanOrEqual(2048);
+    expect(f.report).not.toHaveBeenCalled();
+  } finally {
+    f.cache.dispose();
+  }
+});
+
+it('rebuilds collapsed screen arcs beyond one octave while preserving their existing near-scale reuse', async () => {
+  const f = fixture(),
+    input = screenPathInput();
+  input.arcs = {
+    size: () => 1,
+    getArcIter() {
+      let read = false;
+      return {
+        x: 1,
+        y: 1,
+        hasNext() {
+          if (read) return false;
+          read = true;
+          return true;
+        },
+      };
+    },
+  } as GeometryInput['arcs'];
+  try {
+    const first = f.frame(input);
+    await vi.waitFor(() => expect(f.cache.complete(first)).toBe(true));
+    const resident = f.cache.drawable(first);
+    expect(resident[0].screenStats?.collapsedArcs).toBe(1);
+    const near = f.frame({ ...input, screen: { ...input.screen, view: [8, -8, -64, 64] } });
+    await vi.waitFor(() => expect(f.cache.complete(near)).toBe(true));
+    expect(f.cache.drawable(near)).toEqual(resident);
+    expect(f.cache.stats.builds).toBe(1);
+    const far = f.frame({ ...input, screen: { ...input.screen, view: [4, -4, -32, 32] } });
+    await vi.waitFor(() => expect(f.cache.complete(far)).toBe(true));
+    expect(f.cache.drawable(far)).not.toEqual(resident);
+    expect(f.cache.drawable(far)[0].screenStats?.collapsedArcs).toBe(1);
+    expect(f.cache.stats.builds).toBe(2);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);
     expect(f.report).not.toHaveBeenCalled();
   } finally {
     f.cache.dispose();
@@ -1901,20 +3233,20 @@ it('keeps the final coarse screen frame when an obsolete zoom-in finishes later'
   }
 });
 
-it('halves descending-octave screen rebuilds while preferring exact resident resolutions', async () => {
+it('reuses sparse descending-octave screen paths while preferring exact resident resolutions', async () => {
   const f = fixture(),
     input = screenPathInput();
   try {
     for (const [scale, builds, frameScale] of [
       [16, 1, 16],
       [8, 1, 16],
-      [4, 2, 4],
-      [2, 2, 4],
-      [1, 3, 1],
-      [16, 3, 16],
-      [4, 3, 4],
-      [32, 4, 32],
-      [16, 4, 16],
+      [4, 1, 16],
+      [2, 1, 16],
+      [1, 1, 16],
+      [16, 1, 16],
+      [4, 1, 16],
+      [32, 2, 32],
+      [16, 2, 16],
     ]) {
       const next = f.frame({
         ...input,
@@ -1934,7 +3266,7 @@ it('halves descending-octave screen rebuilds while preferring exact resident res
 it.each<[string, Partial<NonNullable<GeometryInput['screen']>>]>([
   ['higher scale', { view: [32, -32, -256, 256] }],
   ['higher physical resolution', { pixelRatio: 4 }],
-  ['more than one octave of extra detail', { view: [4, -4, -32, 32] }],
+  ['more than sixteenfold extra detail', { view: [0.999, -0.999, -7.992, 7.992] }],
   ['different screen revision', { revision: 1 }],
   ['culling', { cull: true }],
   ['small-arc filtering', { smallArcs: true }],

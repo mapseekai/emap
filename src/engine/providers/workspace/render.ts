@@ -379,7 +379,7 @@ export class CanvasRenderService {
     this._syncLiveEditGeometry();
     this._prepareIcons();
     const transform = this.deps.view._viewport.transform;
-    this._painter.setScreenPathFiltering?.(this.deps.view._viewport.screenPathFiltering ?? true);
+    this._painter.setScreenPathFiltering?.(this.deps.view._viewport.screenPathFiltering ?? false);
     this._painter.setTransform(transform);
 
     this._painter.clear();

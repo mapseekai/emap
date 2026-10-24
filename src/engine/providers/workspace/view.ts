@@ -54,7 +54,7 @@ export class ViewServiceImpl {
     this.deps.signals.requestRender();
   }
 
-  public setScreenPathFiltering(enabled = true): void {
+  public setScreenPathFiltering(enabled = false): void {
     if (typeof enabled !== 'boolean') throw new Error('screenPathFiltering must be a boolean.');
     if (enabled === this._viewport.screenPathFiltering) return;
     this._viewport.screenPathFiltering = enabled;

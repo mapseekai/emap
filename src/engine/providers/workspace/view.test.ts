@@ -51,19 +51,21 @@ describe('geometry LOD configuration', () => {
 describe('independent screen path filtering', () => {
   it('toggles screen filtering without changing geometry LOD and redraws only on changes', () => {
     const { view, requestRender } = setup();
-    expect(view._viewport.screenPathFiltering).toBe(true);
+    expect(view._viewport.screenPathFiltering).toBe(false);
     view.setGeometryLod(false);
     requestRender.mockClear();
     view.setScreenPathFiltering(false);
-    expect(view._viewport.screenPathFiltering).toBe(false);
+    expect(requestRender).not.toHaveBeenCalled();
+    view.setScreenPathFiltering(true);
+    expect(view._viewport.screenPathFiltering).toBe(true);
     expect(view._viewport.geometryLodTolerance).toBe(0);
     expect(requestRender).toHaveBeenCalledOnce();
-    view.setScreenPathFiltering(false);
+    view.setScreenPathFiltering(true);
     expect(requestRender).toHaveBeenCalledOnce();
     view.setGeometryLod({ pixelTolerance: 2 });
-    expect(view._viewport.screenPathFiltering).toBe(false);
-    view.setScreenPathFiltering();
     expect(view._viewport.screenPathFiltering).toBe(true);
+    view.setScreenPathFiltering();
+    expect(view._viewport.screenPathFiltering).toBe(false);
     expect(view._viewport.geometryLodTolerance).toBe(2);
     view.dispose();
   });
@@ -74,7 +76,7 @@ describe('independent screen path filtering', () => {
     const { view, requestRender } = setup();
     expect(() => view.setScreenPathFiltering(value as any)).toThrow(/screenPathFiltering/);
     expect(requestRender).not.toHaveBeenCalled();
-    expect(view._viewport.screenPathFiltering).toBe(true);
+    expect(view._viewport.screenPathFiltering).toBe(false);
     view.dispose();
   });
 });

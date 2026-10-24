@@ -60,8 +60,8 @@ root/examples 类型、公共类型契约、架构、测试布局、生产构建
 
 在已有 4187 服务打开 `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl&pointLod=off`，WebGPU 改为 `gpu=webgpu`。默认启用两个新过滤开关。
 
-点击“过滤后暖重绘压测”测当前固定视图已准备的过滤几何，不使用快照，准备耗时另列。点击“A/B 原始几何导航”仍测原始 GPU Buffer 逐帧导航，并排除新屏幕缓存；Canvas 自身绘制吸附仍存在。两种结果模式不可混算。
+点击“过滤后暖重绘压测”测当前固定视图已准备的过滤几何，不使用快照，准备耗时另列。点击“A/B 原始几何导航”仍测原始 GPU Buffer 逐帧导航，并排除新屏幕缓存；该历史测试使用了当时默认开启的 Canvas 屏幕过滤；当前默认已关闭。两种结果模式不可混算。
 
-`screenFilter=off` 同时关闭两项；`smallArcs=off`、`halfPixel=off` 单独控制。
+当前半设备像素去重默认关闭，可用 `halfPixel=on` 单独开启，或 `screenFilter=on` 同时开启两项。`screenFilter=off` 同时关闭两项；`smallArcs=off`、`halfPixel=off` 单独控制。
 
 原始 JSON、截图和编辑结果保存在 `test-results/luma-screen-filter-evidence/`；实现说明 `docs/luma-canvas-screen-filter.md`。用户 4187 服务未关闭或重启；未提交、未推送、未发布。

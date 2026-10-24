@@ -388,6 +388,8 @@ async function spatialPathJobs(
   return jobs;
 }
 export interface GeometryPacket {
+  /** Internal ownership round-trip for reusable source packets; no coordinate copy. */
+  recycleInput?: boolean;
   /** Optional conservative source-space coverage for derived GPU fill storage. */
   storageBounds?: Rect;
   /** Exact original feature identity, only for Worker-local tessellation reuse. */

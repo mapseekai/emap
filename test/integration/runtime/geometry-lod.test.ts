@@ -7,6 +7,23 @@ import type { CorePainter } from '../../../src/engine/rendering/painter';
 import { Bounds } from '../../../src/domain/geo/bounds';
 
 describe('geometry LOD public configuration', () => {
+  it.each([
+    undefined,
+    false,
+    true,
+  ])('honors screen filtering opt-in at creation (%s)', async (enabled) => {
+    const map = await Emap.create({
+      preset: 'headless',
+      geometryLod: false,
+      screenPathFiltering: enabled,
+    });
+    try {
+      expect(map.ctx.view._viewport.screenPathFiltering).toBe(enabled === true);
+      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(0);
+    } finally {
+      await map.dispose();
+    }
+  });
   it('keeps screen filtering independent at creation and through runtime changes', async () => {
     const map = await Emap.create({
       preset: 'headless',
@@ -23,8 +40,9 @@ describe('geometry LOD public configuration', () => {
       map.setScreenPathFiltering(false);
       expect(viewport.geometryLodTolerance).toBe(2);
       expect(viewport.screenPathFiltering).toBe(false);
+      map.setScreenPathFiltering(true);
       map.setScreenPathFiltering();
-      expect(viewport.screenPathFiltering).toBe(true);
+      expect(viewport.screenPathFiltering).toBe(false);
     } finally {
       await map.dispose();
     }

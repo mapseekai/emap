@@ -51,7 +51,11 @@ function* geometryMeshes(geometry: GeometryBuffer): Generator<GeometryBuffer> {
         ? COMPACT_STROKE_XY_STRIDE
         : COMPACT_STROKE_STRIDE
       : geometry.kind === 'path'
-        ? PATH_STRIDE
+        ? geometry.solidPath === 'xy'
+          ? 3
+          : geometry.solidPath
+            ? 5
+            : PATH_STRIDE
         : geometry.kind === 'point'
           ? 4
           : 10;
@@ -72,6 +76,7 @@ function* geometryMeshes(geometry: GeometryBuffer): Generator<GeometryBuffer> {
         ...(geometry.compactStroke
           ? { compactStroke: true, compactStrokeXY: geometry.compactStrokeXY }
           : {}),
+        ...(geometry.solidPath ? { solidPath: geometry.solidPath } : {}),
         count,
         ...(geometry.memberRanges
           ? { memberRanges: slicePathMembers(geometry.memberRanges, first, count) }
@@ -241,8 +246,10 @@ export function buildGeometryPacket(
       );
       screenStats = filtered.stats;
       screenSpace = !filtered.fallback;
-      geometry = screenSpace ? filtered.geometry : flatPathGeometry(coordinates, offsets, true);
-    } else geometry = flatPathGeometry(coordinates, offsets, true);
+      geometry = screenSpace
+        ? filtered.geometry
+        : flatPathGeometry(coordinates, offsets, true, !!packet.compactStroke);
+    } else geometry = flatPathGeometry(coordinates, offsets, true, !!packet.compactStroke);
   } else if (packet.kind === 'arrow') geometry = lineGeometry(readPaths());
   else if (packet.kind === 'point') geometry = flatPointGeometry(coordinates);
   else if (packet.kind === 'fill') {

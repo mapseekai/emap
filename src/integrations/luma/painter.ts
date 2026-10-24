@@ -117,6 +117,7 @@ function commandState(command: DrawCommand): unknown[] | null {
     value.logicalCount,
     value.compactStroke,
     value.compactStrokeXY,
+    value.solidPath,
     value.pageSlice?.page,
     value.pageSlice?.released,
   ];
@@ -187,7 +188,7 @@ export class LumaPainter implements EditPainter {
   private width = 1;
   private height = 1;
   private pixelRatio = 1;
-  private screenPathFiltering = true;
+  private screenPathFiltering = false;
   private active = false;
   private frameStarted = 0;
   private completionSample: {
@@ -249,7 +250,7 @@ export class LumaPainter implements EditPainter {
     readonly gpu: GpuRenderer,
     private readonly options: Options,
   ) {
-    this.screenPathFiltering = options.screenPathFiltering !== false;
+    this.screenPathFiltering = options.screenPathFiltering ?? false;
     this.colors = new GpuColors(canvas);
     this.cache = new PainterGeometryCache(gpu, undefined, true, (incoming) =>
       this.chunks.admitExternal(incoming),
@@ -769,11 +770,10 @@ export class LumaPainter implements EditPainter {
           this.gpu.strokeBatchingEnabled &&
           useMsaaPath(paint, this.gpu.pathMode, this.gpu.pathRendering.samples),
         compactStroke:
-          !!screen &&
+          input.kind === 'path' &&
           this.gpu.compactStrokesEnabled !== false &&
-          this.gpu.pathRendering.samples > 1 &&
-          this.gpu.pathMode !== 'legacy' &&
-          compactStrokeCompatible(view, screen.view),
+          useMsaaPath(paint, this.gpu.pathMode, this.gpu.pathRendering.samples) &&
+          (!screen || compactStrokeCompatible(view, screen.view)),
         screen,
         bounds,
         viewBounds: wholeLayer ? undefined : viewBounds,
@@ -1350,6 +1350,8 @@ export class LumaPainter implements EditPainter {
         sourceId: owner.sourceId,
         layerId: owner.id,
         presentation: new PolygonPresentation(shapes, {
+          // Publish every face and boundary together, like whole stroke layers.
+          atomic: true,
           ready: (entry) =>
             this.chunks.isResident(entry) &&
             (!entry.meshes.some((mesh) => mesh.compactStroke) ||

@@ -43,7 +43,7 @@ GPU Buffer 存 CSS 屏幕坐标；Canvas 对照重放相同设备像素命令，
 ## 测试入口与口径
 
 `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl&pointLod=off`，WebGPU 改为 `gpu=webgpu`。
-`screenFilter=off` 同时关闭两项；`smallArcs=off` / `halfPixel=off` 可单独关闭。
+当前半设备像素去重默认关闭，可用 `halfPixel=on` 单独开启，或 `screenFilter=on` 同时开启两项。`screenFilter=off` 同时关闭两项；`smallArcs=off` / `halfPixel=off` 可单独关闭。
 顶点编辑入口接受相同参数。
 
 页面 `A/B 原始几何导航` 保持原始 Buffer 的逐帧导航口径，显式排除屏幕过滤与快照，

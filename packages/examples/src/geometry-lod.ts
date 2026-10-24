@@ -232,8 +232,8 @@ export async function mountGeometryLodExample(
   document.getElementById('reset-detail')!.addEventListener(
     'click',
     () => {
-      enabled.checked = true;
-      screenFiltering.checked = true;
+      enabled.checked = false;
+      screenFiltering.checked = false;
       tolerance.value = '0.5';
       void apply();
       applyScreenFiltering();
@@ -267,5 +267,7 @@ export async function mountGeometryLodExample(
     },
     { once: true },
   );
+  await apply();
+  applyScreenFiltering();
   await autoLoadExampleFixtures('geometry-lod');
 }

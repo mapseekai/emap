@@ -19,6 +19,9 @@ import {
 import { collectTransferables } from '../../engine/worker/transferables';
 import type { GeometryPacket } from '../../engine/rendering/luma/geometry-jobs';
 import type { GeometryResult } from '../../engine/rendering/luma/geometry-packet';
+type RecycledInput = Pick<GeometryPacket, 'coordinates' | 'offsets' | 'features'> & {
+  index: number;
+};
 
 /** One lazy Worker per map, at most one bounded transferable batch in flight.
  * Cancellation terminates computation, rather than leaving a stale triangulation queued.
@@ -36,6 +39,7 @@ export class GeometryWorker {
     workerMs: 0,
     inputBytes: 0,
     peakInputBytes: 0,
+    recycledInputBytes: 0,
   };
   private sources = new Set<string>();
   private retentionVersion = 0;
@@ -110,6 +114,22 @@ export class GeometryWorker {
     if (this.pending) throw new Error('Geometry Worker already has an active job');
     const packets = payload.packets ?? [payload.packet!];
     const bytes = geometryBatchBytes(packets);
+    const recycling = packets.flatMap((packet, index) =>
+      packet.recycleInput
+        ? [
+            {
+              index,
+              packet,
+              sizes: [packet.coordinates, packet.offsets, packet.features].map((a) => [
+                a.length,
+                a.byteOffset,
+                a.buffer.byteLength,
+              ]),
+            },
+          ]
+        : [],
+    );
+    const recycledBytes = geometryBatchBytes(recycling.map((item) => item.packet));
     let session: WorkerSession | undefined;
     try {
       session = this.owner.session;
@@ -118,7 +138,7 @@ export class GeometryWorker {
         budget: {
           inputBytes: packetByteLength(message),
           scratchBytes: 256 * MIB,
-          outputBytes: 256 * MIB,
+          outputBytes: 256 * MIB + recycledBytes,
         },
         signal,
         cancellation: 'terminate',
@@ -151,7 +171,36 @@ export class GeometryWorker {
                 !!item && !!item.result !== (typeof item.error === 'string'),
             )
           : !!response.result;
-        if (!valid) throw new Error('Invalid geometry Worker response');
+        const recycled: RecycledInput[] = response.recycled === undefined ? [] : response.recycled;
+        const seen = new Set<number>();
+        if (!valid || !Array.isArray(recycled) || recycled.length !== recycling.length)
+          throw new Error('Invalid geometry Worker response');
+        for (const input of recycled) {
+          const expected = recycling.find((item) => item.index === input?.index);
+          if (
+            !expected ||
+            seen.has(input.index) ||
+            !(input.coordinates instanceof Float64Array) ||
+            !(input.offsets instanceof Uint32Array) ||
+            !(input.features instanceof Uint32Array) ||
+            [input.coordinates, input.offsets, input.features].some(
+              (a, i) =>
+                a.length !== expected.sizes[i][0] ||
+                a.byteOffset !== expected.sizes[i][1] ||
+                a.buffer.byteLength !== expected.sizes[i][2],
+            )
+          )
+            throw new Error('Invalid geometry Worker response');
+          seen.add(input.index);
+        }
+        // Validate the complete reply before restoring any borrowed input ownership.
+        for (const input of recycled) {
+          const packet = packets[input.index];
+          packet.coordinates = input.coordinates;
+          packet.offsets = input.offsets;
+          packet.features = input.features;
+        }
+        this.stats.recycledInputBytes += recycledBytes;
         Object.assign(this.triangulation, response.cache);
         this.stats.jobs +=
           response.results?.filter((item: GeometryBatchItem) => !!item.result).length ?? 1;

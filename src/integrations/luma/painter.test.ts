@@ -21,7 +21,7 @@ vi.mock('./colors', () => ({
   },
 }));
 afterEach(() => vi.clearAllMocks());
-async function fixture() {
+async function fixture(renderer: 'webgl2' | 'webgpu' = 'webgl2', screenPathFiltering?: boolean) {
   const gpu = {
     pathMode: 'auto',
     pathRendering: { samples: 4 },
@@ -52,7 +52,8 @@ async function fixture() {
     })),
   };
   vi.mocked(GpuRenderer.create).mockResolvedValue(gpu as unknown as GpuRenderer);
-  const painter = await LumaPainter.create(document.createElement('canvas'), 'webgl2', {
+  const painter = await LumaPainter.create(document.createElement('canvas'), renderer, {
+    screenPathFiltering,
     invalidate: vi.fn(),
     report: vi.fn(),
   });
@@ -89,6 +90,25 @@ async function fixture() {
   };
   return { painter, gpu, view, arcs, frame };
 }
+it.each([
+  ['webgl2', undefined],
+  ['webgl2', false],
+  ['webgl2', true],
+  ['webgpu', undefined],
+  ['webgpu', false],
+  ['webgpu', true],
+] as const)('honors screen filtering opt-in on %s (%s)', async (renderer, enabled) => {
+  const f = await fixture(renderer, enabled);
+  try {
+    f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+    expect(
+      (f.gpu.drawMesh.mock.calls.at(-1)![1] as { screenSpace?: boolean }).screenSpace === true,
+    ).toBe(enabled === true);
+  } finally {
+    f.painter.dispose();
+  }
+});
+
 describe('deferred retained intervals', () => {
   type Draw = 'arcs' | 'predicate' | 'paths' | 'outline' | 'arrows' | 'fill';
   async function intervalFixture(kind: Draw) {
@@ -252,6 +272,10 @@ describe('formal GPU prepared path selection', () => {
     });
     expect(request.mock.calls).toHaveLength(1);
     expect(request.mock.calls[0][0]).toMatchObject({ spatialOrder: c.expected });
+    expect(request.mock.calls[0][0]).toMatchObject({
+      compactStroke:
+        (c.alpha ?? 1) === 1 && !c.dash && !c.arrow && c.mode !== 'legacy' && (c.samples ?? 4) > 1,
+    });
     f.painter.dispose();
   });
   it('retains one whole-layer request when panning large source-owned strokes', async () => {
@@ -273,9 +297,12 @@ describe('formal GPU prepared path selection', () => {
     f.painter.dispose();
   });
   it.each([
-    1, 2,
-  ])('filters small paths independently of geometry LOD, invalidates toggles and reuses a panned screen mesh at DPR %s', async (pixelRatio) => {
-    const f = await fixture();
+    ['webgl2', 1],
+    ['webgl2', 2],
+    ['webgpu', 1],
+    ['webgpu', 2],
+  ] as const)('defaults to raw small paths and supports toggles and panned reuse on %s at DPR %s', async (renderer, pixelRatio) => {
+    const f = await fixture(renderer);
     const points = [
       [0.1, 0.1],
       [0.11, 0.11],
@@ -309,6 +336,10 @@ describe('formal GPU prepared path selection', () => {
       f.painter.finishFrame();
     };
     draw();
+    expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(2);
+    expect(f.gpu.drawMesh.mock.calls.at(-1)![1]).not.toHaveProperty('screenSpace', true);
+    f.painter.setScreenPathFiltering(true);
+    draw();
     expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(1);
     expect(f.gpu.drawMesh.mock.calls.at(-1)![1]).toMatchObject({
       screenSpace: true,
@@ -316,7 +347,7 @@ describe('formal GPU prepared path selection', () => {
     });
     view.translate(0.17, -0.23);
     draw();
-    expect(f.gpu.createMesh).toHaveBeenCalledOnce();
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);
     f.painter.setScreenPathFiltering(false);
     draw();
     expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(2);
@@ -324,7 +355,7 @@ describe('formal GPU prepared path selection', () => {
     f.painter.setScreenPathFiltering(true);
     draw();
     expect(f.gpu.createMesh.mock.calls.at(-1)![0].segmentCount).toBe(1);
-    expect(f.gpu.createMesh).toHaveBeenCalledTimes(3);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(4);
     f.painter.dispose();
   });
 
@@ -1077,8 +1108,11 @@ it('registers later unchanged chunk owners before immediate pressure retires onl
   }
 });
 
-it('compares actual polygon publication after async planning, including shared outline members and rehydrated meshes', async () => {
-  const f = await fixture();
+it.each([
+  'webgl2',
+  'webgpu',
+] as const)('publishes the complete polygon layer together on %s and reuses rehydrated meshes', async (renderer) => {
+  const f = await fixture(renderer);
   Reflect.set(f.arcs, 'getPointCount', () => 100_000);
   f.painter.setScreenPathFiltering(false);
   const shapes = [[[0]], [[1]]];
@@ -1156,13 +1190,13 @@ it('compares actual polygon publication after async planning, including shared o
   expect(f.gpu.drawMesh).not.toHaveBeenCalled();
   a.state = 'ready';
   f.frame(draw);
-  expect(f.gpu.drawMesh.mock.calls.map((c) => c[0])).toEqual([a.meshes[0], stroke.meshes[0]]);
-  expect(f.gpu.drawMesh.mock.calls[1][2]).toEqual([{ firstInstance: 0, count: 1 }]);
+  expect(f.gpu.drawMesh).not.toHaveBeenCalled();
+  expect(f.painter.frameComplete).toBe(false);
   f.frame(draw);
-  expect(f.gpu.begin).toHaveBeenCalledTimes(2);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
   stroke.meshes = [{ kind: 'path', count: 2, bytes: 32 } as never];
   f.frame(draw);
-  expect(f.gpu.begin).toHaveBeenCalledTimes(3);
+  expect(f.gpu.drawMesh).not.toHaveBeenCalled();
   b.state = 'ready';
   f.gpu.drawMesh.mockClear();
   f.frame(draw);
@@ -1174,7 +1208,10 @@ it('compares actual polygon publication after async planning, including shared o
   expect(f.gpu.drawMesh.mock.calls[2][2]).toBeUndefined();
   expect(f.painter.frameComplete).toBe(true);
   f.frame(draw);
-  expect(f.gpu.begin).toHaveBeenCalledTimes(4);
+  expect(f.gpu.begin).toHaveBeenCalledTimes(2);
+  stroke.meshes = [{ kind: 'path', count: 2, bytes: 32 } as never];
+  f.frame(draw);
+  expect(f.gpu.begin).toHaveBeenCalledTimes(3);
   f.painter.dispose();
 });
 

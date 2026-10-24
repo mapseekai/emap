@@ -150,7 +150,7 @@ describe('independent Canvas screen path filtering', () => {
 
   it.each([
     1, 2,
-  ])('retains source positions with filtering enabled or disabled at DPR %s', (pixelRatio) => {
+  ])('defaults to raw source positions and supports explicit filtering at DPR %s', (pixelRatio) => {
     const { painter, segments } = makeArrowPainter(100, 100, pixelRatio);
     const arcs = makeArrowArcs([
       [
@@ -162,7 +162,6 @@ describe('independent Canvas screen path filtering', () => {
     const transform = new AffineTransform(1, -1, 3.35, 4.25);
     painter.setTransform(transform);
     painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, bounds: [-5, -5, 5, 5] });
-    painter.setScreenPathFiltering(false);
     painter.drawArcs(arcs as any, { color: '#123456', width: 2 });
     expect(segments).toHaveLength(2);
     expect(segments[0][0]).toBeCloseTo(3.45 * pixelRatio);
@@ -199,6 +198,7 @@ describe('independent Canvas screen path filtering', () => {
         [1.1, 0.1],
       ],
     ]);
+    painter.setScreenPathFiltering(true);
     painter.drawArcs(arcs as any, { width: 2, color: '#123456', ...style });
     expect(segments).toHaveLength(2);
     expect(segments[0][0]).toBeCloseTo(0.1);
@@ -217,6 +217,7 @@ describe('independent Canvas screen path filtering', () => {
         [1.1, 0.1],
       ],
     ]);
+    painter.setScreenPathFiltering(true);
     painter.drawArcs(arcs as any, { width: 2, color });
     expect(segments).toHaveLength(1);
   });

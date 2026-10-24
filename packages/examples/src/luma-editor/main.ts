@@ -140,7 +140,8 @@ const smallArcToggle = el<HTMLInputElement>('small-arc-filter'),
 const filterParams = new URLSearchParams(location.search);
 renderers.setScreenFilters(
   filterParams.get('screenFilter') !== 'off' && filterParams.get('smallArcs') !== 'off',
-  filterParams.get('screenFilter') !== 'off' && filterParams.get('halfPixel') !== 'off',
+  filterParams.get('screenFilter') !== 'off' &&
+    (filterParams.get('halfPixel') ?? filterParams.get('screenFilter')) === 'on',
 );
 smallArcToggle.checked = renderers.smallArcFilterEnabled;
 halfPixelToggle.checked = renderers.halfPixelFilterEnabled;

@@ -37,6 +37,7 @@ function meshState(m: GpuMesh): unknown[] {
     m.pageSlice?.page,
     m.pageSlice?.released,
     m.compactStrokeXY,
+    m.solidPath,
   ];
 }
 function sameState(s: readonly unknown[], m: GpuMesh): boolean {
@@ -52,7 +53,8 @@ function sameState(s: readonly unknown[], m: GpuMesh): boolean {
     s[8] === m.compactStroke &&
     s[9] === m.pageSlice?.page &&
     s[10] === m.pageSlice?.released &&
-    s[11] === m.compactStrokeXY
+    s[11] === m.compactStrokeXY &&
+    s[12] === m.solidPath
   );
 }
 function sameDraw(a: MeshDraw, b: MeshDraw): boolean {
@@ -175,7 +177,8 @@ function compile(
         next.pageSlice?.page !== first.pageSlice.page ||
         next.kind !== first.kind ||
         next.compactStroke !== first.compactStroke ||
-        next.compactStrokeXY !== first.compactStrokeXY
+        next.compactStrokeXY !== first.compactStrokeXY ||
+        next.solidPath !== first.solidPath
       )
         break;
       const adjacent =

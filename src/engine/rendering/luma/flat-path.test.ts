@@ -19,6 +19,29 @@ function packet(paths: Point[][]) {
   return { xy: Float64Array.from(paths.flatMap((p) => p.flat())), offsets };
 }
 describe('binary path layout', () => {
+  it('stores solid shared neighbors without distances and preserves precise coordinate words', () => {
+    for (const [x, format, stride] of [
+      [8, 'xy', 3],
+      [1e7 + 0.01, 'high-low', 5],
+    ] as const) {
+      const xy = Float64Array.from([x, 2, x + 1, 3, x + 2, 2]);
+      const original = flatPathGeometry(xy, Uint32Array.from([0, 3]), true);
+      const solid = flatPathGeometry(xy, Uint32Array.from([0, 3]), true, true);
+      expect(solid.solidPath).toBe(format);
+      expect(solid.count).toBe(2);
+      expect(solid.segmentCount).toBe(2);
+      expect(solid.vertices.byteLength).toBe(5 * stride * 4);
+      expect(solid.memberRanges).toEqual(Uint32Array.from([0, 0, 2]));
+      expect(solid.pathRanges).toEqual(original.pathRanges);
+      for (let i = 0; i < 5; i++) {
+        expect(solid.vertices.slice(i * stride, i * stride + stride - 1)).toEqual(
+          original.vertices.slice(i * 7, i * 7 + stride - 1),
+        );
+        expect(solid.vertices[(i + 1) * stride - 1]).toBe(original.vertices[i * 7 + 6]);
+      }
+      expect(xy[0]).toBe(x);
+    }
+  });
   it('keeps original road endpoints fixed when a cached screen frame is magnified', () => {
     const points: Point[] = [
       [1.13, 2.17],

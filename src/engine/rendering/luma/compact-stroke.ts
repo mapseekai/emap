@@ -268,7 +268,10 @@ export function flatCompactStrokeParts(
       );
     }
   }
-  if (parts.some((p) => p.vertices.some((value) => !Number.isFinite(value)))) return undefined;
+  for (const part of parts) {
+    const vertices = part.vertices;
+    for (let i = 0; i < vertices.length; i++) if (!Number.isFinite(vertices[i])) return undefined;
+  }
   if (trackMembers)
     for (let i = 0; i < parts.length; i++) parts[i].memberRanges = Uint32Array.from(members[i]);
   return { parts, inputCount: Math.max(0, capacity - 3) };

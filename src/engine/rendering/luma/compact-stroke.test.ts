@@ -431,6 +431,18 @@ describe('direct filtered compact records', () => {
       ),
     ).toBeUndefined();
   });
+  it('rejects overflow in a later precise part after valid XY records', () => {
+    const paths: Point[][] = Array.from({ length: 32 }, (_, i) => [
+      [i, 0],
+      [i + 1, 1],
+    ]);
+    expect(compare(paths, 4)!.parts[0].count).toBe(32);
+    paths.push([
+      [1e39, 0],
+      [2e39, 0],
+    ]);
+    expect(compare(paths, 4)).toBeUndefined();
+  });
   it('matches quantized generic joins on reproducible mixed paths and independent path boundaries', () => {
     let seed = 12345;
     const random = () => {

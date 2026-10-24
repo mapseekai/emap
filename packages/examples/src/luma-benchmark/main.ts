@@ -132,7 +132,8 @@ const smallArcToggle = el<HTMLInputElement>('small-arc-filter'),
 const filterParams = new URLSearchParams(location.search);
 renderers.setScreenFilters(
   filterParams.get('screenFilter') !== 'off' && filterParams.get('smallArcs') !== 'off',
-  filterParams.get('screenFilter') !== 'off' && filterParams.get('halfPixel') !== 'off',
+  filterParams.get('screenFilter') !== 'off' &&
+    (filterParams.get('halfPixel') ?? filterParams.get('screenFilter')) === 'on',
 );
 smallArcToggle.checked = renderers.smallArcFilterEnabled;
 halfPixelToggle.checked = renderers.halfPixelFilterEnabled;
@@ -657,7 +658,7 @@ async function compare(framesPerTrial = 60, screenMode = false) {
     showResults(results);
     el('results-caption').textContent = screenMode
       ? `当前结果：过滤后固定视图暖重绘，不使用快照；屏幕准备 ${renderers.screenFilterStats.buildWallMs.toFixed(1)} ms 另计。`
-      : '当前结果：原始 GPU 几何平移缩放 A/B；不使用屏幕过滤缓存和快照。Canvas 保留自身的绘制吸附。';
+      : '当前结果：原始 GPU 几何平移缩放 A/B；不使用屏幕过滤缓存和快照。Canvas2D 同样绘制原始路径。';
     setStatus(
       'A/B 完成。FPS 看显示节奏，CPU ms 看主线程开销；切勿把两者混为 GPU 执行时间。',
       'ready',

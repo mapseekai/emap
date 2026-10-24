@@ -293,7 +293,7 @@ export class BenchmarkRenderers {
   readonly navigation: FastNavPreview;
   pathCullingEnabled = true;
   smallArcFilterEnabled = true;
-  halfPixelFilterEnabled = true;
+  halfPixelFilterEnabled = false;
   private screenPaths: ScreenPathCache | null = null;
   private initialScale = 1;
   private preparing = false;

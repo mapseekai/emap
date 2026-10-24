@@ -94,7 +94,7 @@ map.setGeometryLod(); // 恢复默认 0.5
 
 ### 屏幕同像素去重
 
-`screenPathFiltering` 默认开启，与几何简化独立。Canvas2D、WebGL2 和 WebGPU 对不透明实线及面描边使用相同的源锚定参考网格：半设备像素网格仅用于合并连续重复的内部顶点，保留折返、原坐标和弧的首尾端点，不把线位置吸附到网格。平移复用参考网格，放大时更新去重精度。小图层和大数据使用同一规则。
+`screenPathFiltering` 默认关闭，与几何简化独立，可通过 `screenPathFiltering: true` 或 `setScreenPathFiltering(true)` 按需开启。Canvas2D、WebGL2 和 WebGPU 对不透明实线及面描边使用相同的源锚定参考网格：半设备像素网格仅用于合并连续重复的内部顶点，保留折返、原坐标和弧的首尾端点，不把线位置吸附到网格。平移复用参考网格，放大时更新去重精度。小图层和大数据使用同一规则。
 
 GPU 整层线缓存在缩小时可复用物理分辨率不超过请求两倍、且平均每条非空弧不超过两个线段的较细结果，减少逐级重新准备和上传；已有精确级别优先使用。线段数限制避免缩小时保留过多绘制工作。超出条件或放大到缓存精度不足时仍会更新，源坐标和端点保持不变。
 
@@ -102,10 +102,10 @@ GPU 整层线缓存在缩小时可复用物理分辨率不超过请求两倍、�
 const map = await Emap.create({
   container: 'map',
   geometryLod: false,
-  screenPathFiltering: true,
+  screenPathFiltering: false,
 });
-map.setScreenPathFiltering(false); // 关闭屏幕去重，几何简化设置不变
-map.setScreenPathFiltering(); // 恢复默认开启
+map.setScreenPathFiltering(true); // 按需开启屏幕去重，几何简化设置不变
+map.setScreenPathFiltering(); // 恢复默认关闭
 map.setGeometryLod(false);
 map.setScreenPathFiltering(false); // 两项均关闭：保留源数据允许的完整精度
 ```
@@ -228,10 +228,10 @@ GPU Buffer 不变，复用 WebGL 偏移 VAO 或 WebGPU firstInstance；全范围
 
 ### Canvas 屏幕过滤（luma 实验页）
 
-默认开启的“Canvas 微小 arc 过滤”和“半设备像素重复点过滤”只作用于背景线/面描边。
+“Canvas 微小 arc 过滤”默认开启，“半设备像素重复点过滤”默认关闭；两者只作用于背景线/面描边，可独立调整。
 它们复用 Canvas 的 0.35 CSS px 阈值及初始视图修正、DPR 后半像素截断、连续重复命令跳过和
 塌缩路径 0.1 设备像素短线。原始 dataset、面填充/洞、选中轮廓和编辑顶点不受影响。
-这是有上述像素阈值的显示近似。两项可独立关闭；`screenFilter=off` 同时关闭。
+这是有上述像素阈值的显示近似。两项可独立调整；`halfPixel=on` 开启半像素去重，`screenFilter=on` 同时开启，`screenFilter=off` 同时关闭。
 屏幕几何由 Worker 按精确视图/DPR/版本生成，快照导航期间不重建；旧结果不会覆盖新视图。
 页面提供“原始几何导航”和“过滤后暖重绘压测”两个按钮。后者测固定当前视图、同一过滤命令集，筛选准备耗时另列，不使用快照。两种帧率不可直接混算。
 
@@ -355,12 +355,12 @@ const map = await Emap.create({
   container: 'map',
   renderer: 'webgl2',
   geometryWorkerUrl: '/assets/emap-geometry-worker.js', // 默认主包同目录
-  screenPathFiltering: true,
+  screenPathFiltering: false,
 });
 ```
 
-`screenPathFiltering` 在所有渲染器默认对不透明实线及面描边开启半设备像素显示过滤，保留源坐标，
-网格只用于去重判断，保留点及端点不发生网格位移。它与 `geometryLod` 独立，运行时可用 `setScreenPathFiltering(false)` 关闭。
+`screenPathFiltering` 在所有渲染器默认关闭，运行时可用 `setScreenPathFiltering(true)` 对不透明实线及面描边开启半设备像素显示过滤。
+网格只用于去重判断，保留点及端点不发生网格位移。它与 `geometryLod` 独立，`setScreenPathFiltering()` 恢复默认关闭。
 虚线、箭头、半透明描边和面填充保留几何精度；小图层、临时编辑高亮继续同步绘制。
 几何 Worker 不受数据操作的 `useWorker` 控制。
 

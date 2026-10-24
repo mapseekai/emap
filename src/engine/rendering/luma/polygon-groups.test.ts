@@ -156,8 +156,13 @@ it('cold shared edges are directed dependencies, not a layer-wide readiness cycl
     p = partition([0, 0, 0]);
   const current = [part('fill', f, 0, [0]), part('fill', f, 1, [1]), part('path', p, 0, [0, 1, 2])];
   const groups = await polygonColdGroups(current, [[[0, 1]], [[~1, 2]]], signal());
-  expect(groups?.map((g) => ({ fill: g.fill, strokes: g.strokes, arcs: [...g.arcs] }))).toEqual([
-    { fill: 0, strokes: [2], arcs: [0, 1] },
-    { fill: 1, strokes: [2], arcs: [1, 2] },
+  expect(
+    groups?.map((g) => ({
+      fill: g.fill,
+      strokes: g.strokes.map(({ part, arcs }) => ({ part, arcs: [...arcs] })),
+    })),
+  ).toEqual([
+    { fill: 0, strokes: [{ part: 2, arcs: [0, 1] }] },
+    { fill: 1, strokes: [{ part: 2, arcs: [1, 2] }] },
   ]);
 });

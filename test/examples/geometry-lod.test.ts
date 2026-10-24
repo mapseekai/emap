@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { mountGeometryLodExample } from '../../packages/examples/src/geometry-lod';
 import { importGeoPackageInWorker } from '@mapseekai/emap/geopackage';
 
@@ -21,14 +22,11 @@ describe('geometry LOD local GeoPackage import', () => {
       prepare?: () => Promise<{ ok: boolean }>;
     } = {},
   ) {
-    document.body.innerHTML = `
-      <input id="geometry-lod" type="checkbox" checked />
-      <input id="screen-path-filtering" type="checkbox" checked />
-      <input id="pixel-tolerance" type="number" value="0.5" />
-      <input id="gpkg-layers" value=" roads, landuse , " />
-      <input id="file-input" type="file" />
-      <p id="status"></p><p id="geometry-stats"></p>
-      <button id="reset-detail"></button><button id="fit"></button>`;
+    document.body.innerHTML = readFileSync(
+      'packages/examples/examples/geometry-lod/index.html',
+      'utf8',
+    );
+    document.querySelector<HTMLInputElement>('#gpkg-layers')!.value = ' roads, landuse , ';
     const map = {
       addSource: vi.fn(),
       addLayer: vi.fn(),
@@ -70,7 +68,7 @@ describe('geometry LOD local GeoPackage import', () => {
       off = vi.fn();
     }
     const enabled = document.querySelector<HTMLInputElement>('#geometry-lod')!;
-    enabled.checked = options.enabled ?? true;
+    enabled.checked = options.enabled ?? enabled.checked;
     await mountGeometryLodExample(map as never, { TopologySource: Source } as never);
     const input = document.querySelector<HTMLInputElement>('#file-input')!;
     const select = () => {
@@ -82,6 +80,31 @@ describe('geometry LOD local GeoPackage import', () => {
     };
     return { map, select, enabled, sources };
   }
+
+  it('starts with geometry simplification and screen filtering disabled in the actual example', async () => {
+    const { map, enabled } = await setup();
+    expect(enabled.checked).toBe(false);
+    expect(document.querySelector<HTMLInputElement>('#screen-path-filtering')!.checked).toBe(false);
+    expect(document.querySelector<HTMLInputElement>('#pixel-tolerance')!.disabled).toBe(true);
+    expect(map.setGeometryLod).toHaveBeenLastCalledWith(false);
+    expect(map.setScreenPathFiltering).toHaveBeenLastCalledWith(false);
+    expect(map.ops.simplifyLayer).not.toHaveBeenCalled();
+  });
+
+  it('restores disabled defaults after both controls are enabled', async () => {
+    const { map, enabled } = await setup({ enabled: true });
+    const screen = document.querySelector<HTMLInputElement>('#screen-path-filtering')!;
+    screen.checked = true;
+    screen.dispatchEvent(new Event('change'));
+    expect(map.setScreenPathFiltering).toHaveBeenLastCalledWith(true);
+    document.getElementById('reset-detail')!.click();
+    await vi.waitFor(() => expect(map.setGeometryLod).toHaveBeenLastCalledWith(false));
+    expect(enabled.checked).toBe(false);
+    expect(screen.checked).toBe(false);
+    expect(map.setScreenPathFiltering).toHaveBeenLastCalledWith(false);
+    expect(document.querySelector<HTMLInputElement>('#pixel-tolerance')!.value).toBe('0.5');
+    expect(document.querySelector<HTMLInputElement>('#pixel-tolerance')!.disabled).toBe(true);
+  });
 
   it('passes selected tables to the native worker and displays the returned source', async () => {
     vi.mocked(importGeoPackageInWorker).mockResolvedValue({} as never);
@@ -239,6 +262,7 @@ describe('geometry LOD local GeoPackage import', () => {
     vi.mocked(importGeoPackageInWorker).mockResolvedValue({} as never);
     let complete!: (value: { ok: boolean }) => void;
     const { map, select } = await setup({
+      enabled: true,
       thresholds: false,
       prepare: () =>
         new Promise((resolve) => {

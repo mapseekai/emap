@@ -45,6 +45,7 @@ export interface GpuMesh {
   indexBytes?: 2 | 4;
   compactStroke?: boolean;
   compactStrokeXY?: boolean;
+  solidPath?: GeometryBuffer['solidPath'];
   pageSlice?: GeometrySlice;
   firstInstance?: number;
   firstIndex?: number;
@@ -568,6 +569,8 @@ export class GpuRenderer {
       'line',
       'path',
       'path-msaa',
+      'path-msaa-solid',
+      'path-msaa-solid-xy',
       'path-msaa-compact',
       'path-msaa-compact-xy',
       'image',
@@ -620,9 +623,7 @@ export class GpuRenderer {
           ...parameters,
           depthCompare: 'always',
           depthWriteEnabled: false,
-          ...(kind === 'path-msaa' ||
-          kind === 'path-msaa-compact' ||
-          kind === 'path-msaa-compact-xy'
+          ...(kind.startsWith('path-msaa') && !kind.endsWith('-reference')
             ? { blend: false, depthCompare: 'less', depthWriteEnabled: true }
             : {}),
           ...(kind === 'circle-core'
@@ -717,6 +718,7 @@ export class GpuRenderer {
         kind: geometry.kind,
         compactStroke: geometry.compactStroke,
         compactStrokeXY: geometry.compactStrokeXY,
+        solidPath: geometry.solidPath,
         buffer: slice.page.buffer,
         indices: slice.page.indices,
         indexBytes: 2,
@@ -767,6 +769,7 @@ export class GpuRenderer {
       kind: geometry.kind,
       compactStroke: geometry.compactStroke,
       compactStrokeXY: geometry.compactStrokeXY,
+      solidPath: geometry.solidPath,
       buffer,
       indices,
       indexBytes,
@@ -1176,13 +1179,17 @@ export class GpuRenderer {
     }
     if ((mesh.kind === 'path' || mesh.kind === 'line') && (paint.width ?? 1) <= 0) return;
     const fastPath = mesh.kind === 'path' && useMsaaPath(paint, this.pathMode, this.pathSamples);
-    if (mesh.compactStroke && !fastPath) return;
+    if ((mesh.compactStroke || mesh.solidPath) && !fastPath) return;
     const baseInstance = mesh.firstInstance ?? 0;
     const msaaKind = mesh.compactStroke
       ? mesh.compactStrokeXY
         ? 'path-msaa-compact-xy'
         : 'path-msaa-compact'
-      : 'path-msaa';
+      : mesh.solidPath
+        ? mesh.solidPath === 'xy'
+          ? 'path-msaa-solid-xy'
+          : 'path-msaa-solid'
+        : 'path-msaa';
     const kind: PipelineKind = fastPath
       ? this.pathMode === 'reference'
         ? `${msaaKind}-reference`
@@ -1258,7 +1265,7 @@ export class GpuRenderer {
       this.circleQueue.push({ mesh, vao, bindings: style.bindings });
     } else {
       this.flushCircles();
-      if (kind === 'path-msaa' || kind === 'path-msaa-compact' || kind === 'path-msaa-compact-xy') {
+      if (kind.startsWith('path-msaa') && !kind.endsWith('-reference')) {
         const group = opaquePathGroup(paint);
         if (this.pointDepthDirty && this.pointGroup !== group) this.resetPointDepth();
         this.pointGroup = group;

@@ -5,6 +5,8 @@ export interface GeometryBuffer {
   compactStroke?: boolean;
   /** All endpoint low parts were exactly zero; no coordinate rounding occurred. */
   compactStrokeXY?: boolean;
+  /** Solid MSAA shared neighbors omit dash distances; XY omits only exactly zero low words. */
+  solidPath?: 'xy' | 'high-low';
   /** Number of original non-zero path segments, excluding padding instances. */
   segmentCount?: number;
   /** Conservative source-space bounds of immutable contiguous path instance ranges. */

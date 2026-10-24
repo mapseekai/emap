@@ -6,7 +6,15 @@ import {
 } from './compact-stroke-shaders';
 import { iconVS, iconFS, iconWGSL } from './icon-shaders';
 import { cameraWGSL } from './camera-shaders';
-import { pathMsaaVS, pathMsaaFS, pathMsaaWGSL } from './path-shaders';
+import {
+  pathMsaaVS,
+  pathMsaaFS,
+  pathMsaaWGSL,
+  solidPathVS,
+  solidPathWGSL,
+  solidPathXYVS,
+  solidPathXYWGSL,
+} from './path-shaders';
 import type { BufferLayout, ShaderLayout } from '@luma.gl/core';
 import {
   emapModule,
@@ -41,6 +49,10 @@ export type PipelineKind =
   | 'point-depth-reset'
   | 'path-msaa'
   | 'path-msaa-reference'
+  | 'path-msaa-solid'
+  | 'path-msaa-solid-reference'
+  | 'path-msaa-solid-xy'
+  | 'path-msaa-solid-xy-reference'
   | 'path-msaa-compact'
   | 'path-msaa-compact-reference'
   | 'path-msaa-compact-xy'
@@ -238,6 +250,10 @@ struct ImageOut{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>}
 @fragment fn fragmentMain(p:ImageOut)->@location(0) vec4<f32>{let c=textureSample(imageTexture,imageSampler,p.uv);let a=c.a*emap.parameters.x;return vec4<f32>(c.rgb*a,a);}
 `;
 const glsl = {
+  'path-msaa-solid': [solidPathVS, pathMsaaFS],
+  'path-msaa-solid-reference': [solidPathVS, pathMsaaFS],
+  'path-msaa-solid-xy': [solidPathXYVS, pathMsaaFS],
+  'path-msaa-solid-xy-reference': [solidPathXYVS, pathMsaaFS],
   'path-msaa-compact-xy': [compactStrokeXYVS, pathMsaaFS],
   'path-msaa-compact-xy-reference': [compactStrokeXYVS, pathMsaaFS],
   'path-msaa-compact': [compactStrokeVS, pathMsaaFS],
@@ -256,6 +272,10 @@ const glsl = {
   icon: [iconVS, iconFS],
 };
 const wgsl = {
+  'path-msaa-solid': solidPathWGSL,
+  'path-msaa-solid-reference': solidPathWGSL,
+  'path-msaa-solid-xy': solidPathXYWGSL,
+  'path-msaa-solid-xy-reference': solidPathXYWGSL,
   'path-msaa-compact-xy': compactStrokeXYWGSL,
   'path-msaa-compact-xy-reference': compactStrokeXYWGSL,
   'path-msaa-compact': compactStrokeWGSL,
@@ -331,6 +351,27 @@ export function shaderLayouts(
           format: xy && i < 2 ? ('float32x2' as const) : ('float32x4' as const),
           byteOffset: xy ? [0, 8, 16, 32][i] : i * 16,
         })),
+      });
+    } else if (kind.startsWith('path-msaa-solid')) {
+      const xy = kind.startsWith('path-msaa-solid-xy'),
+        stride = xy ? 12 : 20;
+      const names = ['previousPosition', 'startPosition', 'endPosition', 'nextPosition'];
+      names.forEach((name, i) =>
+        attribute(xy ? name + 'XY' : name, i + 1, xy ? 'vec2<f32>' : 'vec4<f32>', 'instance'),
+      );
+      attribute('pathFlags', 6, 'f32', 'instance');
+      bufferLayout.push({
+        name: 'path',
+        stepMode: 'instance',
+        byteStride: stride,
+        attributes: [
+          ...names.map((name, i) => ({
+            attribute: xy ? name + 'XY' : name,
+            format: xy ? ('float32x2' as const) : ('float32x4' as const),
+            byteOffset: i * stride,
+          })),
+          { attribute: 'pathFlags', format: 'float32', byteOffset: stride * 2 - 4 },
+        ],
       });
     } else if (kind === 'line') {
       attribute('instanceStart', 1, 'vec4<f32>', 'instance');

@@ -45,8 +45,10 @@ function rawStrokeRanges(g: GeometryBuffer): GeometryBuffer {
   const ranges = g.pathRanges;
   if (!ranges || !g.count) return g;
   const uncullable = new Uint8Array(ranges.segments.length),
-    v = g.vertices;
-  const coord = (i: number, a: number) => v[i * 7 + a] + v[i * 7 + a + 2];
+    v = g.vertices,
+    stride = g.solidPath === 'xy' ? 3 : g.solidPath ? 5 : 7;
+  const coord = (i: number, a: number) =>
+    v[i * stride + a] + (g.solidPath === 'xy' ? 0 : v[i * stride + a + 2]);
   const safeJoin = (a: number, b: number, c: number, end: boolean) => {
     let ax = coord(b, 0) - coord(a, 0),
       ay = coord(b, 1) - coord(a, 1);
@@ -68,7 +70,7 @@ function rawStrokeRanges(g: GeometryBuffer): GeometryBuffer {
     return sine > 0.126; // margin beyond the exact 1/8 envelope threshold
   };
   for (let i = 0; i < g.count; i++) {
-    const flags = v[(i + 1) * 7 + 6],
+    const flags = v[(i + 2) * stride - 1],
       block = Math.floor(i / ranges.blockSize);
     if (flags >= 4 || uncullable[block]) continue;
     if (

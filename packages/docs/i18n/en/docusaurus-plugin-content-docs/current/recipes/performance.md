@@ -94,7 +94,7 @@ The tiny-arc filter also scales by `pixelTolerance / 0.5`. `geometryLod: false` 
 
 ### Screen-pixel deduplication
 
-`screenPathFiltering` defaults to true independently of geometry LOD. Canvas2D, WebGL2, and WebGPU use the same source-anchored half-device-pixel grid to merge consecutive interior duplicates in opaque solid lines and polygon outlines. Retained vertices and both endpoints keep their original positions; the grid never snaps road junctions. Reversals are preserved. Panning reuses the frame; zooming in updates its resolution band. Small layers and large Worker batches share this rule.
+`screenPathFiltering` defaults to false independently of geometry LOD. Enable it explicitly with `screenPathFiltering: true` or `setScreenPathFiltering(true)`. Canvas2D, WebGL2, and WebGPU use the same source-anchored half-device-pixel grid to merge consecutive interior duplicates in opaque solid lines and polygon outlines. Retained vertices and both endpoints keep their original positions; the grid never snaps road junctions. Reversals are preserved. Panning reuses the frame; zooming in updates its resolution band. Small layers and large Worker batches share this rule.
 
 Whole-layer GPU stroke caches can reuse a finer result while zooming out when its physical resolution is at most twice the requested resolution and it averages at most two segments per nonempty arc. This avoids repeated preparation and uploads without retaining excessive draw work. An already resident exact level takes priority. Changes outside these conditions or zooming beyond cached precision still update the geometry; source coordinates and endpoints stay unchanged.
 
@@ -102,10 +102,10 @@ Whole-layer GPU stroke caches can reuse a finer result while zooming out when it
 const map = await Emap.create({
   container: 'map',
   geometryLod: false,
-  screenPathFiltering: true,
+  screenPathFiltering: false,
 });
-map.setScreenPathFiltering(false); // Disable screen deduplication without changing geometry LOD
-map.setScreenPathFiltering(); // Restore the default: enabled
+map.setScreenPathFiltering(true); // Enable screen deduplication without changing geometry LOD
+map.setScreenPathFiltering(); // Restore the default: disabled
 map.setGeometryLod(false);
 map.setScreenPathFiltering(false); // Disable both to retain the detail allowed by the source
 ```
@@ -241,8 +241,8 @@ submitted segments.
 
 ### Canvas screen filtering in the luma examples
 
-The independent examples enable separate micro-arc and half-device-pixel consecutive-command
-filters for background lines and polygon strokes. They mirror Canvas's 0.35 CSS-pixel threshold
+The independent examples keep micro-arc filtering enabled and half-device-pixel consecutive-command
+filtering disabled by default for background lines and polygon strokes. Enable the latter with `halfPixel=on` or enable both with `screenFilter=on`. They mirror Canvas's 0.35 CSS-pixel threshold
 with initial-view scaling, DPR-aware truncation, consecutive-only deduplication and the
 0.1-device-pixel stroke for a collapsed path. Native datasets, polygon fills/holes and original
 selection/editing geometry remain unchanged. This display approximation uses the stated pixel thresholds. `screenFilter=off` disables both switches.
@@ -395,13 +395,14 @@ const map = await Emap.create({
   container: 'map',
   renderer: 'webgl2',
   geometryWorkerUrl: '/assets/emap-geometry-worker.js', // Defaults beside the package bundle
-  screenPathFiltering: true,
+  screenPathFiltering: false,
 });
 ```
 
-`screenPathFiltering` defaults to half-device-pixel display filtering for opaque solid strokes in every renderer,
-using cells only to select interior vertices while preserving retained positions and endpoints. It is independent of `geometryLod`;
-call `setScreenPathFiltering(false)` to disable it at runtime. Dashes, arrows, translucent strokes, and polygon fills
+`screenPathFiltering` defaults to disabled in every renderer. Call `setScreenPathFiltering(true)` to enable
+half-device-pixel display filtering for opaque solid strokes, using cells only to select interior vertices
+while preserving retained positions and endpoints. It is independent of `geometryLod`;
+call `setScreenPathFiltering()` to restore the default disabled state. Dashes, arrows, translucent strokes, and polygon fills
 retain geometry precision. Small layers and edit highlights remain synchronous.
 The geometry Worker is independent of the operation `useWorker` flag.
 

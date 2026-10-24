@@ -106,7 +106,7 @@ const renderers = await BenchmarkRenderers.create(
   backend,
 );
 if (!renderers.gpu) throw new Error(renderers.unavailableReason ?? 'GPU initialization failed');
-renderers.setScreenFilters(true, true);
+renderers.setScreenFilters(false, false);
 renderers.setPointLod(true);
 renderers.navigation.setEnabled(true);
 renderers.setPointStyle(3, 1);

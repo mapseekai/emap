@@ -18,8 +18,20 @@ serve(browserHost(self as unknown as Parameters<typeof browserHost>[0]), {
     }
     cache.retain(new Set(data.retainSources));
     if (!data.packet && !data.packets) return output({ cache: cache.stats });
+    if (data.packets) validateGeometryBatch(data.packets);
+    const recycled = (data.packets ?? [data.packet!]).flatMap((packet, index) =>
+      packet.recycleInput
+        ? [
+            {
+              index,
+              coordinates: packet.coordinates,
+              offsets: packet.offsets,
+              features: packet.features,
+            },
+          ]
+        : [],
+    );
     if (data.packets) {
-      validateGeometryBatch(data.packets);
       const results: GeometryBatchItem[] = data.packets.map((packet) => {
         try {
           return { result: buildGeometryPacket(packet, cache) };
@@ -27,9 +39,11 @@ serve(browserHost(self as unknown as Parameters<typeof browserHost>[0]), {
           return { error: error instanceof Error ? error.message : String(error) };
         }
       });
-      return output({ results, cache: cache.stats }, collectTransferables(results));
+      const response = { results, cache: cache.stats, recycled };
+      return output(response, collectTransferables(response));
     }
     const result = buildGeometryPacket(data.packet!, cache);
-    return output({ result, cache: cache.stats }, collectTransferables(result));
+    const response = { result, cache: cache.stats, recycled };
+    return output(response, collectTransferables(response));
   },
 });

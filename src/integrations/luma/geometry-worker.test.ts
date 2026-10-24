@@ -3,6 +3,7 @@ import { output } from '@mapseekai/tasklane/host';
 import { GeometryWorker } from './geometry-worker';
 import { TasklaneTestWorker, flushTasks } from '../../../test/utils/tasklane-worker';
 import type { GeometryPacket } from '../../engine/rendering/luma/geometry-jobs';
+import { collectTransferables } from '../../engine/worker/transferables';
 const clients: GeometryWorker[] = [];
 function client() {
   const value = new GeometryWorker(new URL('http://example.test/worker.js'));
@@ -45,6 +46,157 @@ it('creates lazily, transfers packet ownership and reuses its Session', async ()
   expect(TasklaneTestWorker.instances).toHaveLength(1);
   expect(value.stats.jobs).toBe(2);
   expect(value.stats.inputBytes).toBe(0);
+});
+it('returns recyclable input ownership before resolving and reuses it on the next build', async () => {
+  const value = client(),
+    input = Object.assign(packet(), { recycleInput: true }),
+    bytes = input.coordinates.byteLength + input.offsets.byteLength + input.features.byteLength;
+  for (let i = 0; i < 2; i++) {
+    const work = value.build(input, new AbortController().signal);
+    await flushTasks();
+    expect(input.offsets.byteLength).toBe(0);
+    const worker = TasklaneTestWorker.instances[0],
+      received = worker.requests[i].payload.packet;
+    expect(worker.requests[i].context.outputLimit).toBe(256 * 1024 ** 2 + bytes);
+    const response = {
+      result: geometry,
+      recycled: [
+        {
+          index: 0,
+          coordinates: received.coordinates,
+          offsets: received.offsets,
+          features: received.features,
+        },
+      ],
+    };
+    worker.pending[i].resolve(output(response, collectTransferables(response)));
+    await work;
+    expect(input.coordinates.byteLength).toBe(16);
+    expect(input.coordinates).toEqual(Float64Array.from([1, 2]));
+    expect(input.offsets).toEqual(Uint32Array.from([0, 1]));
+    expect(input.features).toEqual(Uint32Array.from([0, 1]));
+    expect(received.offsets.byteLength).toBe(0);
+  }
+  expect(value.stats).toMatchObject({ recycledInputBytes: bytes * 2, jobs: 2 });
+});
+it.each([
+  'missing',
+  'not-array',
+  'null',
+  'duplicate',
+  'out-of-range',
+  'wrong-type',
+  'wrong-length',
+  'oversized-backing',
+  'invalid-result',
+])('rejects %s input recycling without partially restoring a batch', async (change) => {
+  const value = client(),
+    inputs = [
+      Object.assign(packet(), { recycleInput: true }),
+      Object.assign(packet(), { recycleInput: true }),
+    ],
+    work = value.buildBatch(inputs, new AbortController().signal),
+    rejected = expect(work).rejects.toThrow('Invalid geometry Worker response');
+  await flushTasks();
+  const worker = TasklaneTestWorker.instances[0],
+    received = worker.requests[0].payload.packets as GeometryPacket[];
+  const recycled = received.map((p, index) => ({
+    index,
+    coordinates: p.coordinates,
+    offsets: p.offsets,
+    features: p.features,
+  }));
+  if (change === 'missing') recycled.pop();
+  if (change === 'duplicate') recycled[1].index = 0;
+  if (change === 'out-of-range') recycled[1].index = 2;
+  if (change === 'wrong-type')
+    recycled[1].coordinates = new Float32Array(2) as unknown as Float64Array;
+  if (change === 'wrong-length') recycled[1].coordinates = new Float64Array(3);
+  if (change === 'oversized-backing')
+    recycled[1].coordinates = new Float64Array(new ArrayBuffer(32), 0, 2);
+  const response = {
+    results:
+      change === 'invalid-result'
+        ? [{ result: geometry }]
+        : inputs.map(() => ({ result: geometry })),
+    recycled: change === 'not-array' ? {} : change === 'null' ? null : recycled,
+  };
+  worker.pending[0].resolve(output(response, collectTransferables(response)));
+  await rejected;
+  for (const input of inputs) expect(input.offsets.byteLength).toBe(0);
+  expect(value.stats).toMatchObject({ recycledInputBytes: 0, jobs: 0 });
+});
+it.each([
+  'single',
+  'batch',
+])('does not restore late %s recyclable inputs after cancellation', async (kind) => {
+  const value = client(),
+    controller = new AbortController(),
+    inputs = [Object.assign(packet(), { recycleInput: true })],
+    work =
+      kind === 'single'
+        ? value.build(inputs[0], controller.signal)
+        : value.buildBatch(inputs, controller.signal),
+    rejected = expect(work).rejects.toMatchObject({ name: 'AbortError' });
+  await flushTasks();
+  const worker = TasklaneTestWorker.instances[0],
+    received =
+      kind === 'single' ? worker.requests[0].payload.packet : worker.requests[0].payload.packets[0];
+  const response = {
+    ...(kind === 'single' ? { result: geometry } : { results: [{ result: geometry }] }),
+    recycled: [
+      {
+        index: 0,
+        coordinates: received.coordinates,
+        offsets: received.offsets,
+        features: received.features,
+      },
+    ],
+  };
+  worker.pending[0].resolve(output(response, collectTransferables(response)));
+  controller.abort();
+  await rejected;
+  expect(inputs[0].offsets.byteLength).toBe(0);
+  expect(value.stats).toMatchObject({ recycledInputBytes: 0 });
+});
+it.each([
+  'abort',
+  'crash',
+])('restarts after %s without restoring lost input ownership', async (failure) => {
+  const value = client(),
+    controller = new AbortController(),
+    input = Object.assign(packet(), { recycleInput: true }),
+    work = value.build(input, controller.signal),
+    rejected = expect(work).rejects.toMatchObject(
+      failure === 'abort' ? { name: 'AbortError' } : { message: 'lost input' },
+    );
+  await flushTasks();
+  const old = TasklaneTestWorker.instances[0];
+  if (failure === 'abort') controller.abort();
+  else old.crash('lost input');
+  await rejected;
+  expect(input.offsets.byteLength).toBe(0);
+  const fresh = Object.assign(packet(), { recycleInput: true }),
+    next = value.build(fresh, new AbortController().signal);
+  await flushTasks();
+  const worker = TasklaneTestWorker.instances.at(-1)!,
+    received = worker.requests[0].payload.packet;
+  const response = {
+    result: geometry,
+    recycled: [
+      {
+        index: 0,
+        coordinates: received.coordinates,
+        offsets: received.offsets,
+        features: received.features,
+      },
+    ],
+  };
+  worker.pending[0].resolve(output(response, collectTransferables(response)));
+  await next;
+  expect(fresh.offsets.byteLength).toBe(8);
+  expect(input.offsets.byteLength).toBe(0);
+  expect(value.stats).toMatchObject({ jobs: 1, recycledInputBytes: 32 });
 });
 it('retains source identities and per-item batch errors', async () => {
   const value = client();

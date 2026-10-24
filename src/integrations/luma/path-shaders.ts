@@ -128,3 +128,24 @@ struct PathCoverage {
  return PathCoverage(premultiply(1.0),select(0xffffffffu,0u,outside));
 }
 `;
+
+// Solid paths share the reference join/projection math, but never read dash distances.
+export const solidPathVS = pathMsaaVS.replace('in vec2 pathDistance;\n', '');
+export const solidPathWGSL = pathMsaaWGSL.replace('@location(5) pathDistance:vec2<f32>, ', '');
+function exactXYPath(source: string, wgsl: boolean): string {
+  const names = ['previousPosition', 'startPosition', 'endPosition', 'nextPosition'];
+  let declarations = '';
+  for (const [i, name] of names.entries()) {
+    source = source.replace(
+      wgsl ? `@location(${i + 1}) ${name}:vec4<f32>` : `in vec4 ${name};`,
+      wgsl ? `@location(${i + 1}) ${name}XY:vec2<f32>` : `in vec2 ${name}XY;`,
+    );
+    declarations += wgsl
+      ? `let ${name}=vec4<f32>(${name}XY,vec2<f32>(0.0));\n`
+      : `vec4 ${name}=vec4(${name}XY,0.0,0.0);\n`;
+  }
+  const entry = wgsl ? '->PathOut {' : 'void main() {';
+  return source.replace(entry, entry + '\n' + declarations);
+}
+export const solidPathXYVS = exactXYPath(solidPathVS, false);
+export const solidPathXYWGSL = exactXYPath(solidPathWGSL, true);

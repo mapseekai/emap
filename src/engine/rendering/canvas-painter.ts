@@ -305,7 +305,7 @@ export class CanvasPainter implements EditPainter {
   private _pixelView = new AffineTransform();
   private _screenView = new AffineTransform();
   private _screenProjection = new AffineTransform();
-  private _screenPathFiltering = true;
+  private _screenPathFiltering = false;
   private _pixelRatio: number = window.devicePixelRatio || 1;
   private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
   private _arrowDotCacheBytes = 0;

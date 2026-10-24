@@ -117,8 +117,7 @@ export async function polygonPresentationGroups(
 
 export interface PolygonColdGroup {
   fill: number;
-  strokes: number[];
-  arcs: Int32Array;
+  strokes: { part: number; arcs: Int32Array }[];
 }
 
 /** Cold presentation has directed dependencies: a ready face needs its boundary,
@@ -150,20 +149,24 @@ export async function polygonColdGroups(
     const part = current[i];
     if (part.kind !== 'fill') continue;
     const arcs = new Set<number>(),
-      strokes = new Set<number>();
+      strokes = new Map<number, number[]>();
     for (const feature of part.job.members) {
       for (const ring of (shapes[feature] ?? []) as PathShape)
         for (const signed of ring) {
           const arc = absArcId(signed);
           if (!arcs.has(arc)) {
             arcs.add(arc);
-            bytes += 4;
-            if (bytes > 32 * 1024 ** 2) return undefined;
             for (const [partition, chunks] of paths) {
               const chunk = partition.membership[arc];
               if (chunk === undefined || chunk === EMPTY_COMPONENT) continue;
               const stroke = chunks.get(partition.batchIds ? partition.batchIds[chunk] : chunk);
-              if (stroke !== undefined) strokes.add(stroke);
+              if (stroke !== undefined) {
+                let members = strokes.get(stroke);
+                if (!members) strokes.set(stroke, (members = []));
+                members.push(arc);
+                bytes += 4;
+                if (bytes > 32 * 1024 ** 2) return undefined;
+              }
             }
           }
           if ((++visits & 2047) === 0 && performance.now() - slice >= 4) {
@@ -172,7 +175,11 @@ export async function polygonColdGroups(
           }
         }
     }
-    groups.push({ fill: i, strokes: [...strokes], arcs: Int32Array.from(arcs) });
+    groups.push({
+      fill: i,
+      // A face can span many stroke chunks; never copy all its edges into each mask.
+      strokes: [...strokes].map(([part, members]) => ({ part, arcs: Int32Array.from(members) })),
+    });
   }
   signal.throwIfAborted();
   return groups;

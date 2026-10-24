@@ -14,6 +14,7 @@ export function flatPathGeometry(
   xy: Float64Array,
   offsets: Uint32Array,
   trackMembers = false,
+  solid = false,
 ): GeometryBuffer {
   const members: number[] = [];
   let capacity = 0;
@@ -21,8 +22,10 @@ export function flatPathGeometry(
     const n = offsets[r + 1] - offsets[r];
     if (n >= 2) capacity += n + 2;
   }
+  const exact = solid && xy.every((v) => Math.fround(v) === v),
+    stride = solid ? (exact ? 3 : 5) : PATH_STRIDE;
   const count = Math.max(0, capacity - 3),
-    data = new Float32Array(capacity * PATH_STRIDE),
+    data = new Float32Array(capacity * stride),
     blockSize = 1024;
   const bounds = new Float64Array(Math.ceil(count / blockSize) * 4),
     segments = new Uint32Array(bounds.length / 4);
@@ -35,14 +38,18 @@ export function flatPathGeometry(
     const x = xy[id * 2],
       y = xy[id * 2 + 1],
       hx = Math.fround(x),
-      hy = Math.fround(y),
-      hd = Math.fround(d);
+      hy = Math.fround(y);
     data[cursor++] = hx;
     data[cursor++] = hy;
-    data[cursor++] = x - hx;
-    data[cursor++] = y - hy;
-    data[cursor++] = hd;
-    data[cursor++] = d - hd;
+    if (!exact) {
+      data[cursor++] = x - hx;
+      data[cursor++] = y - hy;
+    }
+    if (!solid) {
+      const hd = Math.fround(d);
+      data[cursor++] = hd;
+      data[cursor++] = d - hd;
+    }
     data[cursor++] = flags;
   };
   for (let r = 0; r + 1 < offsets.length; r++) {
@@ -93,13 +100,14 @@ export function flatPathGeometry(
         );
       }
       put(j, distance, flags);
-      distance += length;
+      if (!solid) distance += length;
     }
     put(closed ? a + 1 : b - 1, distance, 4);
     first += n + 2;
   }
   return {
     kind: 'path',
+    ...(solid ? { solidPath: exact ? ('xy' as const) : ('high-low' as const) } : {}),
     vertices: data,
     count,
     segmentCount: total,
@@ -246,7 +254,9 @@ export function flatScreenPathParts(
   const compact = filtered.screenSpace
     ? flatCompactStrokeParts(filtered.positions, filtered.offsets, true)
     : undefined;
-  const parts = compact?.parts ?? [flatPathGeometry(filtered.positions, filtered.offsets, true)];
+  const parts = compact?.parts ?? [
+    flatPathGeometry(filtered.positions, filtered.offsets, true, true),
+  ];
   for (const geometry of parts) restoreScreenMembers(geometry, filtered.members);
   if (filtered.screenSpace)
     filtered.screenStats.outputSegments = parts.reduce((n, g) => n + (g.segmentCount ?? 0), 0);

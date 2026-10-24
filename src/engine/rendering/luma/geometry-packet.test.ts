@@ -10,6 +10,7 @@ import { buildGeometryPacket, splitGeometry } from './geometry-packet';
 import { pathGeometry, PATH_STRIDE } from './path-geometry';
 import type { GeometryPacket } from './geometry-jobs';
 import type { Point } from './geometry';
+import type { GeometryBuffer } from '../../../integrations/luma/types';
 describe('geometry Worker packet boundary', () => {
   it('triangulates holes and keeps disjoint features independent', () => {
     const packet: GeometryPacket = {
@@ -57,6 +58,37 @@ describe('geometry Worker packet boundary', () => {
       expect(piece.vertices.byteLength).toBeLessThan(2 * 1024 ** 2);
     }
     expect(first).toBe(original.count);
+  });
+  it('splits solid source paths without dropping high/low neighbors or member ownership', () => {
+    const xy = Float64Array.from({ length: 80000 * 2 }, (_, i) => (i % 2 ? 0 : 1e7 + i / 100));
+    const original = flatPathGeometry(xy, Uint32Array.of(0, 80000), true, true);
+    const result = buildGeometryPacket({
+      kind: 'path',
+      compactStroke: true,
+      coordinates: xy,
+      offsets: Uint32Array.of(0, 80000),
+      features: Uint32Array.of(0, 1),
+    });
+    expect(result.screenSpace).toBe(false);
+    expect(result.geometries).toHaveLength(2);
+    let first = 0;
+    for (const mesh of result.geometries) {
+      expect(mesh.solidPath).toBe('high-low');
+      assert.deepEqual(
+        mesh.vertices,
+        original.vertices.subarray(first * 5, (first + mesh.count + 3) * 5),
+      );
+      expect([...mesh.memberRanges!]).toEqual([0, 0, mesh.count]);
+      first += mesh.count;
+    }
+    expect(first).toBe(79999);
+    const legacy = buildGeometryPacket({
+      kind: 'path',
+      coordinates: xy,
+      offsets: Uint32Array.of(0, 80000),
+      features: Uint32Array.of(0, 1),
+    });
+    expect(legacy.geometries.every((g) => !g.solidPath)).toBe(true);
   });
   it('screens only a derived copy and falls back safely outside int32 snapping range', () => {
     const packet: GeometryPacket = {
@@ -226,6 +258,18 @@ function screenPacket(paths: Point[][]): GeometryPacket {
     },
   };
 }
+function solidReference(g: GeometryBuffer): GeometryBuffer {
+  const src = g.vertices;
+  let exact = true;
+  for (let i = 0; i < src.length; i += 7) if (src[i + 2] !== 0 || src[i + 3] !== 0) exact = false;
+  const stride = exact ? 3 : 5,
+    vertices = new Float32Array((src.length / 7) * stride);
+  for (let i = 0; i < src.length / 7; i++) {
+    for (let j = 0; j < stride - 1; j++) vertices[i * stride + j] = src[i * 7 + j];
+    vertices[(i + 1) * stride - 1] = src[i * 7 + 6];
+  }
+  return { ...g, vertices, solidPath: exact ? 'xy' : 'high-low' };
+}
 function expectReference(packet: GeometryPacket) {
   const coordinates = packet.coordinates.slice(),
     offsets = packet.offsets.slice();
@@ -235,10 +279,12 @@ function expectReference(packet: GeometryPacket) {
     packet.screen!,
     true,
   );
-  const parts =
-    packet.compactStroke && reference.screenSpace
-      ? compactStrokeParts(reference.geometry)
-      : [reference.geometry];
+  let parts = [reference.geometry];
+  if (packet.compactStroke) {
+    const solid = solidReference(reference.geometry);
+    parts = reference.screenSpace ? compactStrokeParts(reference.geometry) : [reference.geometry];
+    if (parts[0] === reference.geometry) parts = [solid];
+  }
   const expected = parts.flatMap((p) =>
     splitGeometry(spatialStrokeGeometry(p, !!packet.compactStroke && reference.screenSpace)),
   );
@@ -484,9 +530,12 @@ describe('direct screen compact preparation', () => {
         [0, 0],
       ]),
     );
-    const g = expectReference(packet).geometries[0];
+    const g = compactStrokeParts(
+      flatScreenPathGeometry(packet.coordinates, packet.offsets, packet.screen!, true).geometry,
+    )[0];
+    expectReference(packet);
     expect([...g.vertices.slice(4, 12)]).toEqual([0, 0, 0, 2, 0, 0, 0, 2]);
-    expect([...g.pathRanges!.uncullable!]).toEqual([0, 0, 0, 0]);
+    expect([...spatialStrokeGeometry(g).pathRanges!.uncullable!]).toEqual([0, 0, 0, 0]);
     const near = screenPacket(
       Array.from({ length: 512 }, () => [
         [-1000, 0],
@@ -521,7 +570,7 @@ describe('direct screen compact preparation', () => {
     const raw = buildGeometryPacket({ ...packet, screen: undefined });
     assert.deepEqual(
       raw.geometries,
-      splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true)),
+      splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true, true)),
     );
     for (const policy of [
       { smallArcs: true },
@@ -537,7 +586,7 @@ describe('direct screen compact preparation', () => {
       } as ArcVertexData;
       const reference = buildScreenPaths(data, Uint32Array.from([0, 1]), screen);
       const expected = reference.fallback
-        ? splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true))
+        ? splitGeometry(flatPathGeometry(packet.coordinates, packet.offsets, true, true))
         : compactStrokeParts(reference.geometry).flatMap((g) =>
             splitGeometry(spatialStrokeGeometry(g, true)),
           );

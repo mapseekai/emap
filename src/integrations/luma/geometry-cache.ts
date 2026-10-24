@@ -51,9 +51,15 @@ interface PackedSource {
   owner: GeometryOwner;
   arcs: GeometryInput['arcs'];
   interval: number;
-  coordinates: Float64Array;
-  offsets: Uint32Array;
-  features: Uint32Array;
+  packet: GeometryPacket;
+  lengths: readonly [number, number, number];
+  bytes: number;
+}
+interface FillResult {
+  owner: GeometryOwner;
+  partition: string;
+  job: GeometryJob;
+  result: Pick<GeometryResult, 'geometries' | 'screenSpace'>;
   bytes: number;
 }
 interface Plan {
@@ -128,7 +134,7 @@ interface Options {
   workerRuntime?: WorkerRuntime;
   workerUrl: URL;
   cacheBytes?: number;
-  /** Shared by plans, stable selections and reusable source packets. */
+  /** Shared by plans, stable selections, source packets and final fill results. */
   partitionCacheBytes?: number;
   externalBytes?: () => number;
   /** Keep the composited image visible while its geometry is retired. */
@@ -165,6 +171,22 @@ function hashJob(job: GeometryJob): number {
   }
   return h >>> 0;
 }
+function resultByteLength(result: GeometryResult, job?: GeometryJob): number {
+  const buffers = new Set<ArrayBufferLike>();
+  for (const g of result.geometries)
+    for (const a of [
+      g.vertices,
+      g.indices,
+      g.pathRanges?.bounds,
+      g.pathRanges?.segments,
+      g.pathRanges?.uncullable,
+      g.fillRanges?.bounds,
+      g.memberRanges,
+    ])
+      if (a) buffers.add(a.buffer);
+  for (const a of [job?.members, job?.components]) if (a) buffers.add(a.buffer);
+  return [...buffers].reduce((n, b) => n + b.byteLength, 0);
+}
 /** Stable spatial chunk resources, separate from small immediate-mode draw slots.
  * All builds happen after rendering yields; only selected XY packets cross the Worker.
  */
@@ -175,7 +197,10 @@ export class GeometryChunkCache {
   private selections = new Map<string, StableSelection>();
   private packed = new Map<GeometryJob, PackedSource>();
   private packedBytes = 0;
+  private fillResults = new Map<string, FillResult>();
+  private fillResultBytes = 0;
   private jobHashes = new WeakMap<GeometryJob, number>();
+  private jobSelections = new WeakMap<GeometryJob, AbortController>();
   private identities = new WeakMap<object, number>();
   private serial = 0;
   private frame = 0;
@@ -229,6 +254,8 @@ export class GeometryChunkCache {
   }
   private bytes = 0;
   private externalEstimate = 0;
+  private admittedScene = '';
+  private admittedBytes = 0;
   private residencyVersion = 0;
   private settledVersion = -1;
   private settledExternal = -1;
@@ -260,6 +287,8 @@ export class GeometryChunkCache {
     packMs: 0,
     packedHits: 0,
     packedMisses: 0,
+    fillResultHits: 0,
+    fillResultEvictions: 0,
     batchAdmissionMs: 0,
     uploadCulledBytes: 0,
     directFeatures: 0,
@@ -308,6 +337,8 @@ export class GeometryChunkCache {
       selectionCacheBytes: [...this.selections.values()].reduce((n, s) => n + s.bytes, 0),
       packedCacheBytes: this.packedBytes,
       packedCacheEntries: this.packed.size,
+      fillResultCacheBytes: this.fillResultBytes,
+      fillResultCacheEntries: this.fillResults.size,
       paused: false,
       interacting: this.interacting,
       triangulation: this.worker.triangulation ? { ...this.worker.triangulation } : null,
@@ -324,7 +355,8 @@ export class GeometryChunkCache {
   }
   admitExternal(incoming: number): void {
     this.trim(incoming);
-    if (this.bytes + this.externalBytes + incoming > this.limit * 2) this.retirePresentation();
+    if (this.bytes + this.externalBytes + incoming > this.limit * 2)
+      this.retirePresentation(incoming);
     if (this.bytes + this.externalBytes + incoming > this.limit * 2)
       throw new RangeError('Shared geometry working set exceeds its bounded allocation limit.');
   }
@@ -534,7 +566,7 @@ export class GeometryChunkCache {
         if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
           this.trim(metadataBytes, request);
         if (this.bytes + this.externalBytes + metadataBytes > this.limit * 2)
-          this.retirePresentation();
+          this.retirePresentation(metadataBytes);
         const allocatedBefore = this.bytes;
         try {
           request.entries = jobs.map((job, i) => reused[i] ?? this.entry(job, request));
@@ -721,7 +753,10 @@ export class GeometryChunkCache {
             old[3] = Math.max(old[3], b[at + 3]);
           } else bounds.set(chunk, [b[at], b[at + 1], b[at + 2], b[at + 3]]);
         }
-        for (const job of jobs) job.bounds = bounds.get(job.chunk);
+        for (const job of jobs) {
+          job.bounds = bounds.get(job.chunk);
+          this.jobSelections.set(job, controller);
+        }
         retained.bytes =
           (stable.ids?.byteLength ?? 0) +
           (stable.components?.byteLength ?? 0) +
@@ -793,15 +828,112 @@ export class GeometryChunkCache {
       bytes -= s.bytes;
       this.selections.delete(key);
     }
-    this.trimPacked();
+    this.trimFillResults();
   }
-  private get packedLimit(): number {
+  private get payloadLimit(): number {
     return Math.max(
       0,
       (this.options.partitionCacheBytes ?? 128 * 1024 ** 2) -
         [...this.plans.values()].reduce((n, p) => n + p.count * 4 + p.boundsBytes, 0) -
         [...this.selections.values()].reduce((n, s) => n + s.bytes, 0),
     );
+  }
+  private get packedLimit(): number {
+    return Math.max(0, this.payloadLimit - this.fillResultBytes);
+  }
+  private fillResultKey(request: GeometryRequest, entry: GeometryEntry): string | undefined {
+    const input = request.input;
+    if (!input.sourceSelection || input.kind !== 'fill' || input.screen || entry.coverage)
+      return undefined;
+    return JSON.stringify([
+      request.owner.sourceId,
+      request.owner.id,
+      request.owner.revision,
+      request.owner.content,
+      request.plan.key,
+      entry.job.chunk,
+      this.jobHashes.get(entry.job) ?? hashJob(entry.job),
+      input.interval,
+      input.forward,
+      input.spatialOrder,
+      input.compactStroke,
+    ]);
+  }
+  private fillResult(request: GeometryRequest, entry: GeometryEntry): GeometryResult | undefined {
+    const key = this.fillResultKey(request, entry),
+      retained = key === undefined ? undefined : this.fillResults.get(key);
+    if (
+      !retained ||
+      this.disposed ||
+      this.entries.get(entry.id) !== entry ||
+      !this.plans.has(retained.partition) ||
+      !sameJob(retained.job, entry.job)
+    )
+      return undefined;
+    this.fillResults.delete(key!);
+    this.fillResults.set(key!, retained);
+    return retained.result;
+  }
+  private dropFillResult(key: string): void {
+    const result = this.fillResults.get(key);
+    if (!result) return;
+    this.fillResultBytes -= result.bytes;
+    this.fillResults.delete(key);
+    this.counters.fillResultEvictions++;
+  }
+  private trimFillResults(): void {
+    // Offscreen chunks and temporarily absent paint buckets remain reusable.
+    for (const [key, result] of this.fillResults)
+      if (!this.plans.has(result.partition)) this.dropFillResult(key);
+    this.trimPacked();
+    const limit = this.payloadLimit;
+    for (const key of this.fillResults.keys()) {
+      if (this.fillResultBytes <= limit) break;
+      this.dropFillResult(key);
+    }
+  }
+  private retainFillResult(
+    request: GeometryRequest,
+    entry: GeometryEntry,
+    result: GeometryResult,
+  ): void {
+    const key = this.fillResultKey(request, entry);
+    if (
+      key === undefined ||
+      this.disposed ||
+      this.entries.get(entry.id) !== entry ||
+      !this.plans.has(entry.partition) ||
+      this.fillResults.has(key) ||
+      result.screenSpace ||
+      result.geometries.some((g) => g.kind !== 'fill')
+    )
+      return;
+    if (this.packedBytes + this.fillResultBytes > this.payloadLimit) this.trimFillResults();
+    // Charge backing allocations once, plus conservative key/object/view metadata.
+    const bytes =
+      resultByteLength(result, entry.job) +
+      512 +
+      (key.length +
+        entry.partition.length +
+        entry.owner.sourceId.length +
+        entry.owner.id.length +
+        (entry.owner.content?.length ?? 0)) *
+        2 +
+      result.geometries.length * 512;
+    // Keep a warm subset instead of cycling through a working set that cannot fit.
+    if (this.fillResultBytes + bytes > this.payloadLimit) return;
+    for (const job of this.packed.keys()) {
+      if (this.packedBytes + this.fillResultBytes + bytes <= this.payloadLimit) break;
+      this.dropPacked(job);
+    }
+    this.fillResults.set(key, {
+      owner: { ...entry.owner },
+      partition: entry.partition,
+      job: entry.job,
+      result: { geometries: result.geometries, screenSpace: false },
+      bytes,
+    });
+    this.fillResultBytes += bytes;
   }
   private dropPacked(job: GeometryJob): void {
     const packet = this.packed.get(job);
@@ -810,12 +942,15 @@ export class GeometryChunkCache {
   }
   private trimPacked(): void {
     const requests = this.current();
+    const live = new Set([...this.selections.values()].map((s) => s.controller));
     const jobs = requests.every((r) => r.entries !== null || r.error)
       ? new Set(requests.flatMap((r) => (r.entries ?? []).map((e) => e.job)))
       : null;
     for (const [job, packet] of this.packed)
       if (
-        (jobs && !jobs.has(job)) ||
+        (this.jobSelections.has(job)
+          ? !live.has(this.jobSelections.get(job)!)
+          : jobs && !jobs.has(job)) ||
         !requests.some(
           (r) =>
             r.input.arcs === packet.arcs &&
@@ -853,20 +988,18 @@ export class GeometryChunkCache {
       old.owner.sourceId === request.owner.sourceId &&
       old.owner.id === request.owner.id &&
       old.owner.revision === request.owner.revision &&
-      old.owner.content === request.owner.content
+      old.owner.content === request.owner.content &&
+      old.packet.coordinates.length === old.lengths[0] &&
+      old.packet.offsets.length === old.lengths[1] &&
+      old.packet.features.length === old.lengths[2]
     ) {
       this.packed.delete(entry.job);
       this.packed.set(entry.job, old);
       this.counters.packedHits++;
-      return {
-        kind: 'path',
-        screen: input.screen,
-        compactStroke: input.compactStroke,
-        storageBounds: input.storageBounds,
-        coordinates: old.coordinates.slice(),
-        offsets: old.offsets.slice(),
-        features: old.features.slice(),
-      };
+      old.packet.screen = input.screen;
+      old.packet.compactStroke = input.compactStroke;
+      old.packet.storageBounds = input.storageBounds;
+      return old.packet;
     }
     if (old) this.dropPacked(entry.job);
     const packet = await packGeometryJob(input, entry.job, signal);
@@ -881,14 +1014,14 @@ export class GeometryChunkCache {
         (entry.job.components?.byteLength ?? 0);
       // Keep warm inputs when the working set exceeds capacity; cyclic eviction would miss every time.
       if (bytes <= GEOMETRY_BATCH_BYTES && this.packedBytes + bytes <= this.packedLimit) {
+        packet.recycleInput = true;
         this.packed.set(entry.job, {
           owner: request.owner,
           arcs: input.arcs,
           interval: input.interval,
           bytes,
-          coordinates: packet.coordinates.slice(),
-          offsets: packet.offsets.slice(),
-          features: packet.features.slice(),
+          packet,
+          lengths: [packet.coordinates.length, packet.offsets.length, packet.features.length],
         });
         this.packedBytes += bytes;
       }
@@ -985,7 +1118,7 @@ export class GeometryChunkCache {
     }
     if (existing) {
       this.touch(existing);
-      this.counters.cacheHits++;
+      if (!lookupOnly || this.isResident(existing)) this.counters.cacheHits++;
       return existing;
     }
     const screen = request.input.screen;
@@ -1005,7 +1138,16 @@ export class GeometryChunkCache {
             revision: screen.revision,
           }
         : undefined;
-    const oldDetail = old?.screenDetail;
+    const oldDetail = old?.screenDetail,
+      oldStats = old?.screenStats,
+      // Wider reuse must not pin extra segments or larger coordinate layouts.
+      detailScaleLimit =
+        oldStats?.collapsedArcs === 0 &&
+        oldStats.outputSegments === oldStats.outputVertices - oldStats.outputSegments &&
+        (!request.input.compactStroke ||
+          old?.meshes.every((mesh) => mesh.compactStrokeXY || mesh.solidPath === 'xy'))
+          ? 16
+          : 2;
     if (
       screen &&
       screenDetail &&
@@ -1022,10 +1164,10 @@ export class GeometryChunkCache {
       sameJob(old.job, job) &&
       oldDetail.interval === screenDetail.interval &&
       oldDetail.revision === screenDetail.revision &&
-      // One octave avoids per-level rebuilding without retaining arbitrarily finer detail.
       screenDetail.resolution.every(
         (value, axis) =>
-          value <= oldDetail.resolution[axis] && oldDetail.resolution[axis] <= value * 2,
+          value <= oldDetail.resolution[axis] &&
+          oldDetail.resolution[axis] <= value * detailScaleLimit,
       ) &&
       compactStrokeCompatible(new AffineTransform(...screen.view), old.screenView)
     ) {
@@ -1233,6 +1375,7 @@ export class GeometryChunkCache {
       for (const entry of this.entries.values())
         if (!wanted.has(entry) && (entry.state === 'queued' || entry.state === 'error'))
           this.drop(entry);
+    this.retainAdmittedScene(current);
     this.trim(0);
     for (const entry of wanted)
       if (
@@ -1278,6 +1421,41 @@ export class GeometryChunkCache {
     }
     if (!this.presentationPlanning) this.resumeAdmission?.();
     this.schedule();
+  }
+  private retainAdmittedScene(requests: readonly GeometryRequest[]): void {
+    if (this.options.cacheBytes !== undefined) return;
+    const scene = JSON.stringify(
+      [
+        ...new Set(
+          requests.map((r) =>
+            JSON.stringify([
+              r.plan.key,
+              r.owner.id,
+              r.owner.content,
+              this.identity(r.input.shapes),
+              r.input.kind,
+              r.input.interval,
+              r.input.forward,
+              r.input.spatialOrder,
+              r.input.sourceSelection,
+              r.input.compactStroke,
+              !!r.input.screen,
+              r.input.arcs && arcVisibilityKey(r.input.arcs, r.input.filter)?.[0],
+            ]),
+          ),
+        ),
+      ].sort(),
+    );
+    if (scene !== this.admittedScene) {
+      this.admittedScene = scene;
+      this.admittedBytes = 0;
+    }
+    if (!requests.every((request) => this.complete(request))) return;
+    let bytes = 0;
+    for (const entry of this.wanted()) bytes += entry.bytes;
+    // Remember a completed visible set, never transient overlap or an enlarged budget.
+    if (bytes + this.externalBytes <= this.limit * 2)
+      this.admittedBytes = Math.max(this.admittedBytes, bytes);
   }
   /** Retain compact completed spatial plans across full/low-detail switches.
    * Exact arc identity remains in the key; different LOD bounds are not aliased.
@@ -1358,7 +1536,28 @@ export class GeometryChunkCache {
   private queued(request: GeometryRequest): GeometryEntry | undefined {
     if (request.error || !request.entries) return undefined;
     while (request.cursor < request.entries.length) {
-      const entry = request.entries[request.cursor];
+      const entry: GeometryEntry = request.entries[request.cursor];
+      if (entry.state === 'queued' && request.input.kind === 'fill') {
+        const reused = this.entry(entry.job, request, true);
+        if (reused !== entry && reused && this.isResident(reused)) {
+          // A containing build may have completed after this selection was queued.
+          request.entries = request.entries.map((selected) =>
+            selected === entry ? reused : selected,
+          );
+          this.residencyVersion++;
+          this.presentationVersion++;
+          this.selectionChanged();
+          if (
+            !this.wanted().has(entry) &&
+            !this.pinned.has(entry) &&
+            !this.admitting.has(entry) &&
+            !this.active?.entries.has(entry)
+          )
+            this.drop(entry);
+          this.notify();
+          continue;
+        }
+      }
       // A failed member must not starve independent chunks behind it.
       if (entry.state === 'error') {
         // Select retries against current capacity; waking every individually
@@ -1538,19 +1737,7 @@ export class GeometryChunkCache {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
-    const buffers = new Set<ArrayBufferLike>();
-    for (const g of result.geometries)
-      for (const a of [
-        g.vertices,
-        g.indices,
-        g.pathRanges?.bounds,
-        g.pathRanges?.segments,
-        g.pathRanges?.uncullable,
-        g.fillRanges?.bounds,
-        g.memberRanges,
-      ])
-        if (a) buffers.add(a.buffer);
-    const resultBytes = [...buffers].reduce((n, b) => n + b.byteLength, 0);
+    const resultBytes = resultByteLength(result);
     this.counters.peakResultBytes = Math.max(this.counters.peakResultBytes, resultBytes);
     const fillRanges = result.geometries.map((g) =>
       g.fillRanges ? new FillRangeIndex(g.fillRanges, g.count) : undefined,
@@ -1595,7 +1782,7 @@ export class GeometryChunkCache {
       signal.throwIfAborted();
       this.trim(cost, request);
     }
-    if (this.bytes + this.externalBytes + cost > this.limit * 2) this.retirePresentation();
+    if (this.bytes + this.externalBytes + cost > this.limit * 2) this.retirePresentation(cost);
     signal.throwIfAborted();
     if (this.bytes + this.externalBytes + cost > this.limit * 2) {
       entry.requiredBytes = cost;
@@ -1700,14 +1887,16 @@ export class GeometryChunkCache {
     this.counters.directFeatures += result.directFeatures ?? 0;
     this.counters.pathInputInstances += result.pathInputInstances ?? 0;
     this.counters.pathOutputInstances += result.pathOutputInstances ?? 0;
+    this.retainFillResult(request, entry, result);
   }
   private async pump(): Promise<void> {
     if (this.running || this.disposed) return;
     this.running = true;
     let progressed = false;
+    let replaySlice = performance.now();
     try {
       while (!this.disposed) {
-        if (this.packedBytes && this.packedBytes > this.packedLimit) this.trimPacked();
+        if (this.packedBytes + this.fillResultBytes > this.payloadLimit) this.trimFillResults();
         const first = this.nextQueued();
         if (!first) break;
         const controller = new AbortController();
@@ -1741,12 +1930,13 @@ export class GeometryChunkCache {
                   : undefined;
             if (!next) break;
             const { request, entry } = next;
+            const retained = this.fillResult(request, entry);
             if (
               entry.requiredBytes !== undefined &&
               this.bytes + this.externalBytes + retryBytes + entry.requiredBytes > this.limit * 2
             )
               break;
-            if (tasks.length) {
+            if (tasks.length && !retained) {
               const admission = performance.now();
               const bound = geometryJobByteBound(
                 request.input,
@@ -1764,6 +1954,21 @@ export class GeometryChunkCache {
             this.active.entries.add(entry);
             this.residencyVersion++;
             request.cursor++;
+            if (retained) {
+              try {
+                await this.acceptResult(request, entry, retained, controller.signal);
+                this.counters.fillResultHits++;
+              } catch (error) {
+                if (controller.signal.aborted) throw error;
+                this.preparationError(request, entry, error);
+              }
+              this.notify();
+              if (performance.now() - replaySlice >= 4) {
+                await geometryYield(controller.signal);
+                replaySlice = performance.now();
+              }
+              continue;
+            }
             const packing = performance.now();
             let packet: GeometryPacket;
             try {
@@ -1845,7 +2050,7 @@ export class GeometryChunkCache {
       }
     }
   }
-  private retirePresentation(): void {
+  private retirePresentation(incoming: number): void {
     if (this.disposed) return;
     const wanted = this.wanted();
     const retired = [...this.entries.values()].filter(
@@ -1853,13 +2058,24 @@ export class GeometryChunkCache {
         !wanted.has(entry) && !this.admitting.has(entry) && !this.active?.entries.has(entry),
     );
     if (!retired.length || !this.options.retainPresentation?.()) return;
-    // The host now retains the composited image, so no old mesh is required.
+    // The retained image frees presentation pins; warm meshes can still be reused.
     this.presentationRetained = true;
     this.pinned.clear();
     this.presentationPlanning = false;
     this.handoffOwner = undefined;
     this.handoffRequests = [];
-    for (const entry of retired) this.evict(entry);
+    const selective = this.options.cacheBytes === undefined;
+    if (selective)
+      retired.sort(
+        (a, b) => (a.retentionPriority ?? 0) - (b.retentionPriority ?? 0) || a.used - b.used,
+      );
+    for (const entry of retired) {
+      if (selective) {
+        if (this.bytes + this.externalBytes + incoming <= this.limit * 2) break;
+        this.retentionAge = Math.max(this.retentionAge, entry.retentionPriority ?? 0);
+      }
+      this.evict(entry);
+    }
     this.selectionChanged();
     for (const request of this.current()) request.cursor = 0;
   }
@@ -1892,7 +2108,12 @@ export class GeometryChunkCache {
     );
   }
   private trim(incoming: number, request?: GeometryRequest): void {
-    if (this.bytes + this.externalBytes + incoming <= this.limit) return;
+    const admitted = this.admittedBytes + this.externalBytes;
+    const target =
+      this.options.cacheBytes === undefined && admitted > this.limit
+        ? Math.min(this.limit * 2, admitted + (request ? 0 : incoming))
+        : this.limit;
+    if (this.bytes + this.externalBytes + incoming <= target) return;
     if (!this.trimCandidates) {
       // Protect requests from the preceding frame until all current slots exist.
       const wanted = this.collecting
@@ -1929,7 +2150,7 @@ export class GeometryChunkCache {
     }
     while (
       this.trimCursor < this.trimCandidates.length &&
-      this.bytes + this.externalBytes + incoming > this.limit
+      this.bytes + this.externalBytes + incoming > target
     ) {
       const entry = this.trimCandidates[this.trimCursor++];
       if (this.entries.get(entry.id) !== entry) continue;
@@ -1991,6 +2212,8 @@ export class GeometryChunkCache {
     if (errors.length) throw new AggregateError(errors, 'Geometry entry cleanup failed');
   }
   clear(scope: { sourceId?: string; layerId?: string } = {}): void {
+    this.admittedScene = '';
+    this.admittedBytes = 0;
     this.settledRequests = [];
     this.settledVersion = -1;
     this.selectionChanged();
@@ -2010,6 +2233,8 @@ export class GeometryChunkCache {
         this.requests.delete(id);
       }
     const errors: unknown[] = [];
+    for (const [key, result] of this.fillResults)
+      if (matches(result.owner)) this.dropFillResult(key);
     for (const e of this.entries.values())
       if (matches(e.owner)) {
         try {
@@ -2056,6 +2281,8 @@ export class GeometryChunkCache {
         this.selections.clear();
         this.packed.clear();
         this.packedBytes = 0;
+        this.fillResults.clear();
+        this.fillResultBytes = 0;
         this.entries.clear();
         this.bytes = 0;
         this.pinned.clear();

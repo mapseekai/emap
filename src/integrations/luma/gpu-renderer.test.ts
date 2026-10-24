@@ -1,6 +1,54 @@
 import type { GeometryBuffer } from './types';
 import { describe, expect, it, vi } from 'vitest';
 import { GpuRenderer } from './gpu-renderer';
+import { shaderLayouts } from './portable-shaders';
+import { flatPathGeometry } from '../../engine/rendering/luma/flat-path';
+
+it.each([
+  false,
+  true,
+])('binds all four shared solid neighbors and cap flags (WebGPU: %s)', (webgpu) => {
+  for (const x of [0, 1e7 + 0.01]) {
+    const g = flatPathGeometry(
+      Float64Array.of(x, 0, x + 1, 2, x + 3, 4),
+      Uint32Array.of(0, 3),
+      true,
+      true,
+    );
+    const xy = g.solidPath === 'xy';
+    const { bufferLayout } = shaderLayouts(xy ? 'path-msaa-solid-xy' : 'path-msaa-solid', webgpu);
+    const binding = bufferLayout.find((b) => b.name === 'path')!;
+    const v = g.vertices,
+      stride = binding.byteStride! / 4;
+    for (let instance = 0; instance < 2; instance++) {
+      const attrs = binding.attributes!;
+      const values = attrs.slice(0, 4).map((a) => {
+        const offset = instance * stride + a.byteOffset / 4;
+        return [v[offset] + (xy ? 0 : v[offset + 2]), v[offset + 1] + (xy ? 0 : v[offset + 3])];
+      });
+      const expected =
+        instance === 0
+          ? [
+              [x, 0],
+              [x, 0],
+              [x + 1, 2],
+              [x + 3, 4],
+            ]
+          : [
+              [x, 0],
+              [x + 1, 2],
+              [x + 3, 4],
+              [x + 3, 4],
+            ];
+      for (let i = 0; i < 4; i++) {
+        expect(values[i][0]).toBeCloseTo(expected[i][0], 7);
+        expect(values[i][1]).toBe(expected[i][1]);
+      }
+      const flag = attrs.find((a) => a.attribute === 'pathFlags')!;
+      expect(v[instance * stride + flag.byteOffset / 4]).toBe(instance + 1);
+    }
+  }
+});
 
 describe('nonblocking navigation completion probes', () => {
   it('observes a WebGL fence immediately after JS resumes and owns no polling timer', () => {
@@ -301,7 +349,9 @@ describe('full precision solid path scheduling', () => {
       pointGroup: null,
       pointDepthDirty: false,
       pipelines: new Map(
-        ['path', 'path-msaa', 'path-msaa-reference'].map((k) => [k, { pipeline: k }]),
+        ['path', 'path-msaa', 'path-msaa-reference', 'path-msaa-solid', 'path-msaa-solid-xy'].map(
+          (k) => [k, { pipeline: k }],
+        ),
       ),
       vertexArray: vi.fn(() => ({ destroy: vi.fn() })),
       style: vi.fn(() => ({ bindings: {} })),
@@ -332,6 +382,18 @@ describe('full precision solid path scheduling', () => {
     renderer.drawMesh(a, { ...paint, color: [1, 0, 0, 1] });
     expect(Reflect.get(renderer, 'resetPointDepth')).toHaveBeenCalledOnce();
     expect(pass.draw.mock.calls.map((c) => c[0].instanceCount)).toEqual([12, 40, 12]);
+  });
+  it.each(['xy', 'high-low'])('resets solid %s coverage before a different paint', (format) => {
+    const { renderer, pass, a } = fixture();
+    a.solidPath = format;
+    renderer.drawMesh(a, paint);
+    renderer.drawMesh(a, { ...paint, color: [1, 0, 0, 1] });
+    expect(Reflect.get(renderer, 'resetPointDepth')).toHaveBeenCalledOnce();
+    expect(pass.draw).toHaveBeenCalledTimes(2);
+    expect(pass.setPipeline.mock.calls.map((c) => c[0])).toEqual([
+      format === 'xy' ? 'path-msaa-solid-xy' : 'path-msaa-solid',
+      format === 'xy' ? 'path-msaa-solid-xy' : 'path-msaa-solid',
+    ]);
   });
   it('restores the standard route for dashes, translucent strokes and missing MSAA', () => {
     const { renderer, pass, a } = fixture();
@@ -1130,12 +1192,14 @@ it('warms production pipelines but compiles diagnostic reference variants only w
   };
   const canvas: any = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
   const g: any = new GpuRenderer(canvas, vi.fn(), vi.fn(), device);
-  expect(g.pipelines.size).toBe(13);
+  expect(g.pipelines.has('path-msaa-solid')).toBe(true);
+  expect(g.pipelines.has('path-msaa-solid-xy')).toBe(true);
+  const warmed = g.pipelines.size;
   expect([...g.pipelines.keys()].some((k: any) => k.endsWith('-reference'))).toBe(false);
   const a = g.pipelineEntry('path-msaa-compact-xy-reference');
-  expect(g.pipelines.size).toBe(14);
+  expect(g.pipelines.size).toBe(warmed + 1);
   expect(g.pipelineEntry('path-msaa-compact-xy-reference')).toBe(a);
-  expect(device.createRenderPipeline).toHaveBeenCalledTimes(14);
+  expect(device.createRenderPipeline).toHaveBeenCalledTimes(warmed + 1);
   g.dispose();
 });
 

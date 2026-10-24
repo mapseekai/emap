@@ -3,8 +3,7 @@ import { PolygonPresentation, type PolygonChannel } from './polygon-presentation
 import type { GeometryEntry, GeometryRequest } from './geometry-cache';
 import type { GeometryPartition } from '../../engine/rendering/luma/geometry-jobs';
 
-function fixture(atomic = false, fillMembership = [0, 1]) {
-  const shapes = [[[0]], [[1]]];
+function fixture(atomic = false, fillMembership = [0, 1], shapes = [[[0]], [[1]]]) {
   const fill: GeometryPartition = {
     membership: Uint32Array.from(fillMembership),
     chunks: Math.max(...fillMembership) + 1,
@@ -245,28 +244,42 @@ describe('polygon presentation', () => {
     expect(f.calls).toEqual(['fill', 'latest-a', 'latest-b']);
     f.group.dispose();
   });
-  it('keeps all stroke paint buckets on the last complete layer across repeated updates', async () => {
+  it.each([
+    'path',
+    'fill',
+  ] as const)('keeps all %s paint buckets and outlines on the last complete layer across repeated updates', async (kind) => {
     const f = fixture(true);
     const first = f.entry('old-red', 0, [0]),
-      second = f.entry('old-blue', 1, [1]);
-    f.group.update([f.channel('path', [first], 'red', 0), f.channel('path', [second], 'blue', 1)]);
+      second = f.entry('old-blue', 1, [1]),
+      boundary = f.entry('boundary', 7, [0, 1]);
+    const channels = (red: GeometryEntry, blue: GeometryEntry) => [
+      f.channel(kind, [red], 'red', 0),
+      f.channel(kind, [blue], 'blue', 1),
+      ...(kind === 'fill' ? [f.channel('path', [boundary])] : []),
+    ];
+    const expected = (red: string, blue: string) => [
+      red,
+      blue,
+      ...(kind === 'fill' ? ['boundary'] : []),
+    ];
+    f.group.update(channels(first, second));
     f.group.draw();
     const red = f.entry('new-red', 0, [0]);
     const blue = f.entry('new-blue', 1, [1], 'building');
     for (let i = 0; i < 2; i++) {
       f.calls.length = 0;
-      f.group.update([f.channel('path', [red], 'red', 0), f.channel('path', [blue], 'blue', 1)]);
+      f.group.update(channels(red, blue));
       f.group.draw();
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       f.calls.length = 0;
       f.group.draw();
-      expect(f.calls).toEqual(['old-red', 'old-blue']);
+      expect(f.calls).toEqual(expected('old-red', 'old-blue'));
       expect(f.group.complete).toBe(false);
     }
     f.calls.length = 0;
     blue.state = 'ready';
     f.group.draw();
-    expect(f.calls).toEqual(['new-red', 'new-blue']);
+    expect(f.calls).toEqual(expected('new-red', 'new-blue'));
     expect(f.group.complete).toBe(true);
     f.group.dispose();
   });
@@ -413,6 +426,44 @@ describe('polygon presentation', () => {
     expect(draws.mock.calls[0][0]).toEqual([stroke]);
     expect(draws.mock.calls[0][1].get(stroke)).toBeUndefined();
     expect(f.calls).toEqual(['fill-a', 'fill-b']);
+    f.group.dispose();
+  });
+
+  it('keeps progressive owner masks local to each stroke chunk across shared reversed edges', async () => {
+    const f = fixture(false, [0, 1, 2], [[[0, ~1]], [[1, 2]], [[3]]]),
+      a = f.entry('fill-a', 0, [0]),
+      b = f.entry('fill-b', 1, [1], 'building'),
+      c = f.entry('fill-c', 2, [2], 'building'),
+      first = f.entry('first', 0, [0]),
+      shared = f.entry('shared', 1, [~1, 2]),
+      last = f.entry('last', 2, [3]);
+    const paths = f.channel('path', [first, shared, last]),
+      draws = vi.fn();
+    paths.request.plan.promise = Promise.resolve({
+      membership: Uint32Array.from([0, 1, 1, 2]),
+      chunks: 3,
+    });
+    paths.draw = draws;
+    f.group.update([f.channel('fill', [a, b, c]), paths]);
+    f.group.draw();
+    await planned(f);
+    let [entries, masks] = draws.mock.calls.at(-1)!;
+    expect(entries).toEqual([first, shared]);
+    expect([...masks.get(first)]).toEqual([0]);
+    expect([...masks.get(shared)]).toEqual([1]);
+    b.state = 'ready';
+    f.group.draw();
+    [entries, masks] = draws.mock.calls.at(-1)!;
+    expect(entries).toEqual([first, shared]);
+    expect([...masks.get(first)]).toEqual([0]);
+    expect([...masks.get(shared)]).toEqual([1, 2]);
+    expect(f.group.complete).toBe(false);
+    c.state = 'ready';
+    f.group.draw();
+    [entries, masks] = draws.mock.calls.at(-1)!;
+    expect(entries).toEqual([first, shared, last]);
+    expect([...masks.values()]).toEqual([undefined, undefined, undefined]);
+    expect(f.group.complete).toBe(true);
     f.group.dispose();
   });
 
