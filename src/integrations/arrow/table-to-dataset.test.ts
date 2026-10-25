@@ -145,6 +145,76 @@ describe('fromArrowTable', () => {
   beforeEach(() => resetTableImportWarnings());
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([
+    ['wkb', false],
+    ['wkb', true],
+    ['native', false],
+    ['native', true],
+  ] as const)('validates polygon containment before cached reuse (%s, noTopology=%s)', (encoding, noTopology) => {
+    const shell = [
+      [0, 0],
+      [0, 4],
+      [4, 4],
+      [4, 0],
+      [0, 0],
+    ];
+    const contained = [
+      [1, 1],
+      [2, 1],
+      [2, 2],
+      [1, 2],
+      [1, 1],
+    ];
+    const orphan = contained.map(([x, y]) => [x + 10, y + 10]);
+    const polygonTable = (hole: number[][]) => {
+      const geometry = wkbColumn('geometry', (writer) => {
+        const points = [...shell, ...hole];
+        writer.writePolygons(
+          Float64Array.from(points.map(([x]) => x)),
+          Float64Array.from(points.map(([, y]) => y)),
+          [
+            [
+              [0, shell.length],
+              [shell.length, points.length],
+            ],
+          ],
+        );
+        writer.endRow();
+      });
+      return tableFromColumns([geometry]);
+    };
+    const templateDataset = fromArrowTable(polygonTable(contained));
+    templateDataset.info = { ...templateDataset.info, crs_string: 'EPSG:4326' };
+    const template = toArrowTable(templateDataset, { encoding });
+    const field = template.schema.fields[0];
+    const table = (hole: number[][]) => {
+      const geometry =
+        encoding === 'wkb'
+          ? polygonTable(hole).getChild('geometry')!
+          : vectorFromArray(
+              [[shell, hole].map((ring) => ring.map(([x, y]) => ({ x, y })))],
+              field.type,
+            );
+      return tableFromColumns([{ field, data: geometry.data[0] }], template.schema.metadata);
+    };
+    const valid = fromArrowTable(table(contained), { noTopology });
+    expect(
+      getSeededArrowTable(valid, valid.layers[0], { encoding }, undefined, 'input'),
+    ).toBeDefined();
+    const cached = toCachedArrowTable(valid, { encoding });
+    expect(toCachedArrowTable(valid, { encoding })).toBe(cached);
+    const invalid = fromArrowTable(table(orphan), { noTopology });
+    expect(() => toArrowTable(invalid, { encoding })).toThrow(
+      /invalid ring winding or containment/,
+    );
+    expect(() => toCachedArrowTable(invalid, { encoding })).toThrow(
+      /invalid ring winding or containment/,
+    );
+    expect(
+      getSeededArrowTable(invalid, invalid.layers[0], { encoding }, undefined, 'input'),
+    ).toBeUndefined();
+  });
+
   it.each(['id', '__proto__'])('does not seed duplicate attribute names: %s', (name) => {
     const geometry = wkbColumn('geometry', (writer) => {
       writer.writePoint(1, 2);

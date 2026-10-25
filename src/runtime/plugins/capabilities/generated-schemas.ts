@@ -3355,6 +3355,8 @@ export const operationSchemas = {
                       },
                       fontSize: {
                         type: 'number',
+                        description:
+                          'Base CSS-pixel size; zoom-out stops at 12px, or this size when it is smaller.',
                       },
                       fontWeight: {
                         anyOf: [
@@ -3421,8 +3423,7 @@ export const operationSchemas = {
                             enum: ['parallel'],
                           },
                         ],
-                        description:
-                          'Auto: around points, parallel to lines, interior of polygons.',
+                        description: 'Auto: above points, parallel to lines, interior of polygons.',
                       },
                       allowOverlap: {
                         anyOf: [
@@ -3981,6 +3982,8 @@ export const operationSchemas = {
                       },
                       fontSize: {
                         type: 'number',
+                        description:
+                          'Base CSS-pixel size; zoom-out stops at 12px, or this size when it is smaller.',
                       },
                       fontWeight: {
                         anyOf: [
@@ -4047,8 +4050,7 @@ export const operationSchemas = {
                             enum: ['parallel'],
                           },
                         ],
-                        description:
-                          'Auto: around points, parallel to lines, interior of polygons.',
+                        description: 'Auto: above points, parallel to lines, interior of polygons.',
                       },
                       allowOverlap: {
                         anyOf: [
@@ -4751,6 +4753,8 @@ export const operationSchemas = {
                       },
                       fontSize: {
                         type: 'number',
+                        description:
+                          'Base CSS-pixel size; zoom-out stops at 12px, or this size when it is smaller.',
                       },
                       fontWeight: {
                         anyOf: [
@@ -4817,8 +4821,7 @@ export const operationSchemas = {
                             enum: ['parallel'],
                           },
                         ],
-                        description:
-                          'Auto: around points, parallel to lines, interior of polygons.',
+                        description: 'Auto: above points, parallel to lines, interior of polygons.',
                       },
                       allowOverlap: {
                         anyOf: [
@@ -5631,6 +5634,8 @@ export const operationSchemas = {
                   },
                   fontSize: {
                     type: 'number',
+                    description:
+                      'Base CSS-pixel size; zoom-out stops at 12px, or this size when it is smaller.',
                   },
                   fontWeight: {
                     anyOf: [
@@ -5697,7 +5702,7 @@ export const operationSchemas = {
                         enum: ['parallel'],
                       },
                     ],
-                    description: 'Auto: around points, parallel to lines, interior of polygons.',
+                    description: 'Auto: above points, parallel to lines, interior of polygons.',
                   },
                   allowOverlap: {
                     anyOf: [
@@ -5967,6 +5972,57 @@ export const operationSchemas = {
       inputSchema: {
         type: 'object',
         properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    setGeometryLod: {
+      parameters: ['options'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          options: {
+            anyOf: [
+              {
+                type: 'boolean',
+                enum: [false],
+              },
+              {
+                type: 'object',
+                properties: {
+                  pixelTolerance: {
+                    type: 'number',
+                  },
+                },
+                additionalProperties: false,
+              },
+            ],
+          },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    setScreenPathFiltering: {
+      parameters: ['enabled'],
+      flatten: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          enabled: {
+            anyOf: [
+              {
+                type: 'boolean',
+                enum: [false],
+              },
+              {
+                type: 'boolean',
+                enum: [true],
+              },
+            ],
+          },
+        },
         required: [],
         additionalProperties: false,
       },

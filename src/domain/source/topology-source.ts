@@ -233,9 +233,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Sticky simplification floor. mapshaper's `-simplify` writes a
    * `retainedInterval` into the resulting `ArcCollection`; we cache that
    * value here so the render loop's per-frame zoom-LOD doesn't stomp it.
-   * Re-captured on every `setDataset` / `setData`.
+   * Preserved per arc snapshot across `setDataset` / `setData` and history replay.
    */
   private _simplifyFloor: number = 0;
+  // Render intervals mutate live arcs; remember each snapshot's explicit floor for history.
+  private _simplifyFloorByArcs = new WeakMap<ReadonlyArcCollection, number>();
   private _adapter: MapshaperAdapter;
   private _formats: FormatRegistryContract;
   private _formatOwner: object | null = null;
@@ -300,6 +302,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   /** @internal Max-detail threshold the user (or last `-simplify` run) asked for. */
   getSimplifyFloor(): number {
     return this._simplifyFloor;
+  }
+
+  private _captureSimplifyFloor(): void {
+    const arcs = this._dataset?.arcs;
+    this._simplifyFloor = arcs
+      ? (this._simplifyFloorByArcs.get(arcs) ?? arcs.getRetainedInterval?.() ?? 0)
+      : 0;
+    if (arcs) this._simplifyFloorByArcs.set(arcs, this._simplifyFloor);
   }
 
   constructor(id: string, options?: TopologySourceOptions) {
@@ -602,7 +612,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._dataset = dataset;
       // Initialize LOD wrapper for large datasets
       this.refreshDisplayArcs();
-      this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
+      this._captureSimplifyFloor();
       this._data = undefined;
 
       this.fire('data', { reason: 'load' });
@@ -933,9 +943,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this._dataset = dataset;
     if (!keepDisplay) this.refreshDisplayArcs();
     this._displayArcsRevision = dataset.editVersion;
-    // Re-capture the simplification floor: mapshaper's `-simplify` writes
-    // a non-zero `retainedInterval` here; other ops typically leave it at 0.
-    this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;
+    this._captureSimplifyFloor();
     if (notify) {
       // `replace` distinguishes edit-driven dataset swaps from initial `load` —
       // listeners that auto-fit the viewport should only react to `load`.

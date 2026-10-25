@@ -463,7 +463,8 @@ export class LumaPainter implements EditPainter {
         pending &&
         this.paintedContent !== null &&
         this.paintedVisible &&
-        (this.paintedComplete || this.bitmapRetained)
+        (this.paintedComplete || this.bitmapRetained) &&
+        this.requests.some((request) => this.chunks.pending(request))
       ) {
         this.resetNavigationTiming();
         this.bitmapRetained = true;

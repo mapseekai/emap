@@ -702,6 +702,74 @@ it('retains a proven complete frame before the first partial replacement can ove
   f.painter.dispose();
 });
 
+it.each([
+  'webgl2',
+  'webgpu',
+] as const)('presents healthy raster updates after terminal geometry errors on %s', async (renderer) => {
+  const f = await fixture(renderer);
+  const chunks = Reflect.get(f.painter, 'chunks');
+  let failNext = false;
+  let hold: Promise<void> | undefined;
+  let release: (() => void) | undefined;
+  const build = vi.fn(async (packet) => {
+    if (failNext) {
+      failNext = false;
+      throw new Error('geometry preparation failed');
+    }
+    await hold;
+    return buildGeometryPacket(packet);
+  });
+  Reflect.set(chunks, 'worker', { build, dispose() {}, stats: {} });
+  const shapes = Array.from({ length: 100_000 }, (_, i) => [[i, 0]]);
+  const first = Uint32Array.from({ length: 50_000 }, (_, i) => i);
+  const second = Uint32Array.from(first, (i) => i + 50_000);
+  const image = document.createElement('canvas');
+  const frame = (ids: Uint32Array) =>
+    f.frame(() => {
+      f.painter.setTransform(new AffineTransform(0.01, -0.01, 0, 100));
+      f.painter.setLayerContext({
+        id: 'points',
+        sourceId: 's',
+        revision: 0,
+        bounds: [0, 0, 100_000, 1],
+      });
+      f.painter.drawPoints(shapes, { radius: 4 }, ids);
+      f.painter.drawRasterImage(image, [0, 0, 100_000, 1]);
+    });
+  try {
+    frame(first);
+    await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
+    frame(first);
+    expect(f.painter.frameComplete).toBe(true);
+    f.gpu.begin.mockClear();
+    f.gpu.drawImage.mockClear();
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    failNext = true;
+    frame(second);
+    await vi.waitFor(() => expect(chunks.stats.failedRequests).toBe(1));
+    await vi.waitFor(() => expect(chunks.stats.building).toBe(1));
+    frame(second);
+    expect(f.painter.frameRetained).toBe(true);
+    expect(f.gpu.drawImage).not.toHaveBeenCalled();
+    release!();
+    hold = undefined;
+    await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
+    const builds = build.mock.calls.length;
+    for (let i = 0; i < 3; i++) frame(second);
+    expect(build).toHaveBeenCalledTimes(builds);
+    expect(f.gpu.begin).toHaveBeenCalledTimes(3);
+    expect(f.gpu.drawImage).toHaveBeenCalledTimes(3);
+    expect(f.painter.frameRetained).toBe(false);
+    expect(f.painter.framePresented).toBe(true);
+    expect(f.painter.frameComplete).toBe(false);
+  } finally {
+    release?.();
+    f.painter.dispose();
+  }
+});
+
 it('retains a visible cold partial image only under pressure without declaring it complete', async () => {
   const f = await fixture();
   const draw = () => {

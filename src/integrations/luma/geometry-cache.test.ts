@@ -2422,7 +2422,6 @@ it.each([
     await evictFillEntries(f, input);
     expect(f.cache.stats.fillResultCacheEntries).toBe(1);
     const create = f.gpu.createMesh.getMockImplementation()!;
-    let next: GeometryRequest;
     f.gpu.createMesh.mockImplementation((g) => {
       setTimeout(() => {
         if (action === 'clear') f.cache.clear({ sourceId: 's' });
@@ -2434,7 +2433,7 @@ it.each([
       }, 0);
       return create(g);
     });
-    next = f.frame(input);
+    const next = f.frame(input);
     await vi.waitFor(() => expect(Reflect.get(f.cache, 'running')).toBe(false));
     // Wait for the scheduled replay, not only the gap before its pump starts.
     await vi.waitFor(() => expect(f.gpu.createMesh).toHaveBeenCalledTimes(4));

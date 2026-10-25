@@ -1289,6 +1289,17 @@ export class GeometryChunkCache {
   failed(request: GeometryRequest): boolean {
     return !!request.error || !!request.entries?.some((e) => e.state === 'error');
   }
+  pending(request: GeometryRequest): boolean {
+    if (request.error) return this.metadataCanProgress(request);
+    return (
+      request.entries === null ||
+      request.entries.some((entry) =>
+        entry.state === 'error'
+          ? this.admissionCanProgress(request, entry.requiredBytes, entry)
+          : !this.isResident(entry),
+      )
+    );
+  }
   private current(): GeometryRequest[] {
     return [...this.requests.values()].filter(
       (r) => r.frame === this.frame && !r.controller.signal.aborted,

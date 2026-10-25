@@ -3,6 +3,8 @@ import { resolveDatasetCRSMetadata } from '../../domain/geo/crs-resolver';
 import type { MapshaperDataset, MapshaperLayer } from '../../shared/types/mapshaper-types';
 import type { ToArrowTableOptions } from './dataset-to-table';
 import { detectGeometryColumn } from './geometry-column';
+import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
+import { groupPolygonRings } from './group-polygon-rings';
 import {
   ARROW_EXTENSION_NAME,
   ARROW_EXTENSION_METADATA,
@@ -103,6 +105,22 @@ export function seedArrowTable(
 ): void {
   if (dataset.layers.length !== 1 || dataset.layers[0].shapes?.length !== table.numRows) return;
   if (retainedBytes(table) > MAX_BYTES) return;
+  const layer = dataset.layers[0];
+  if (layer.geometry_type === 'polygon') {
+    const arcs = dataset.arcs;
+    if (!arcs) return;
+    const adapter = getDefaultMapshaperAdapter();
+    for (const shape of layer.shapes ?? []) {
+      if (!shape) continue;
+      const paths = adapter.exportPathData(shape as number[][], arcs, 'polygon').pathData;
+      const grouped = groupPolygonRings(paths, arcs, adapter).reduce(
+        (n, rings) => n + rings.length,
+        0,
+      );
+      // Seeds bypass conversion, so apply its ring-preservation check at admission.
+      if (grouped !== paths.filter((path) => (path.area ?? 0) !== 0).length) return;
+    }
+  }
   // Public Arrow tables and IPC input bytes are mutable; retain independent buffers.
   const owned = tableFromIPC(tableToIPC(table, 'stream'));
   cacheArrowTable(dataset, dataset.layers[0], undefined, owned, geometryColumn);
