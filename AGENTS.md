@@ -104,14 +104,9 @@ Compare the same data, view, DPR, and filtering settings, and destroy owned quer
 resources after profiling. Typechecking or CPU timings alone do not verify GPU
 performance or rendering correctness.
 
-## Issue tracking — Multica
+## Multica project binding
 
 Project: `emap`.
-
-Before deferring a non-sensitive bug, performance issue, or follow-up, search the
-emap Multica project and create a concise issue if none exists and issue-writing
-is authorized. If unavailable or unauthorized, record the finding and reproduction
-in the local task report and report the tracking blocker; continue other work.
 
 ## Security reporting
 
