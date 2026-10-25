@@ -203,6 +203,8 @@ test('continuous real wheel events perform no new tile reads or frame swaps unti
   await ready(page);
   const before=await page.evaluate(()=>window.geotiffDemo.stats());
   await page.mouse.move(700,360);
+  let delivered=0;
+  await page.exposeFunction('ackWheelRasterEvent',()=>{delivered++;});
   await page.evaluate(()=>{
     const state=window.geotiffDemo,host=document.querySelector('#map');
     const probe=window.wheelRasterProbe={events:[],samples:[],boundaries:[],pending:0,error:null};
@@ -212,6 +214,7 @@ test('continuous real wheel events perform no new tile reads or frame swaps unti
     const wheel=event=>{
       const index=probe.events.length;
       probe.events.push({time:performance.now(),timeStamp:event.timeStamp,trusted:event.isTrusted,deltaY:event.deltaY,stats:state.stats()});
+      window.ackWheelRasterEvent().catch(error=>{probe.error=String(error);});
       probe.pending++;
       requestAnimationFrame(async()=>{
         const sample={index,time:performance.now(),stats:state.stats(),boundaries:probe.boundaries.map(value=>({...value}))};
@@ -228,15 +231,20 @@ test('continuous real wheel events perform no new tile reads or frame swaps unti
       state.map.off('interactionstart',start);state.map.off('interactionend',end);
     };
   });
-  // Driver/readback round trips can outlast idle. Schedule native input independently
-  // and inspect the actual DOM events and their subsequent rendered-frame samples.
-  const wheels=Array.from({length:8},(_,i)=>(async()=>{
-    await new Promise(resolve=>setTimeout(resolve,i*45));
-    await page.mouse.wheel(0,-25);
-  })());
+  // A queued burst can coalesce in Chrome. Confirm each DOM delivery before the
+  // next native input, without waiting for its RAF sample or pixel readback.
+  const wheels=(async()=>{
+    for(let i=0;i<8;i++){
+      await page.mouse.wheel(0,-25);
+      await expect.poll(()=>delivered,{intervals:[5]}).toBe(i+1);
+      if(i<7)await new Promise(resolve=>setTimeout(resolve,45));
+    }
+  })();
+  let failed=false;
   try{
-    await Promise.all(wheels);
-    await page.waitForFunction(()=>wheelRasterProbe.error||wheelRasterProbe.events.length===8&&wheelRasterProbe.samples.length===8&&wheelRasterProbe.pending===0);
+    await wheels;
+    await expect.poll(()=>page.evaluate(()=>({events:wheelRasterProbe.events.length,samples:wheelRasterProbe.samples.length,pending:wheelRasterProbe.pending,error:wheelRasterProbe.error})))
+      .toEqual({events:8,samples:8,pending:0,error:null});
     const probe=await page.evaluate(()=>window.wheelRasterProbe);
     const gaps=probe.events.slice(1).map((event,i)=>event.time-probe.events[i].time);
     const timing={span:probe.events.at(-1).time-probe.events[0].time,maxGap:Math.max(...gaps)};
@@ -260,10 +268,12 @@ test('continuous real wheel events perform no new tile reads or frame swaps unti
     const ends=await page.evaluate(()=>wheelRasterProbe.boundaries.filter(value=>value.type==='end'));
     expect(ends).toHaveLength(1);expect(ends[0].eventsSeen).toBe(8);
     expect(ends[0].stats.readRequests).toBe(before.readRequests);expect(ends[0].stats.committedFrames).toBe(before.committedFrames);
-  }finally{
+  }catch(error){failed=true;throw error;}finally{
     // Drain every native input before this page can close or another test can start.
-    await Promise.allSettled(wheels);
-    await page.evaluate(()=>window.disposeWheelRasterProbe?.());
+    await Promise.allSettled([wheels]);
+    if(!page.isClosed())try{
+      await page.evaluate(()=>window.disposeWheelRasterProbe?.());
+    }catch(error){if(!failed)throw error;}
   }
 });
 
