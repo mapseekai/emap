@@ -28,13 +28,14 @@ async function paintedText(page, name) {
   },name);
 }
 async function eachLabelPainted(page,name,minimumPixels=30) {
-  const result=await page.evaluate(async name=>{
-    const app=window[name];app.draw('luma');const source=document.querySelector('#webgl');
+  const snapshot=await page.evaluate(async({name,minimumPixels})=>{
+    const app=window[name],placementsBefore=app.labelPlacements;app.draw('luma');const source=document.querySelector('#webgl');
     const image=await createImageBitmap(source),canvas=document.createElement('canvas');
     canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');
     ctx.drawImage(image,0,0);image.close();const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
     const stage=document.querySelector('#stage'),rx=canvas.width/stage.clientWidth,ry=canvas.height/stage.clientHeight;
-    return app.labelPlacements.map(label=>{
+    const placements=app.labelPlacements;
+    const rows=placements.map(label=>{
       const b=label.bounds;let colored=0;
       for(let y=Math.max(0,Math.floor(b[1]*ry));y<Math.min(canvas.height,Math.ceil(b[3]*ry));y++)
         for(let x=Math.max(0,Math.floor(b[0]*rx));x<Math.min(canvas.width,Math.ceil(b[2]*rx));x++) {
@@ -43,10 +44,22 @@ async function eachLabelPainted(page,name,minimumPixels=30) {
         }
       return {text:label.text,owner:label.ownerId,colored};
     });
-  },name);
+    let evidence;
+    if(rows.length<4||rows.some(row=>row.colored<=minimumPixels)) {
+      try {
+        // Keep the exact bitmap used by the assertion; WebGL may discard its
+        // presentation buffer before a later evaluate/toDataURL call.
+        evidence={dpr:devicePixelRatio,inner:[innerWidth,innerHeight],stage:[stage.clientWidth,stage.clientHeight],canvas:[canvas.width,canvas.height],placementsBefore,placements,stats:app.labelStats,snapshot:app.snapshot,png:canvas.toDataURL()};
+      } catch(error) {evidence={diagnosticError:String(error)};}
+    }
+    return {rows,evidence};
+  },{name,minimumPixels});
+  const result=snapshot.rows;
+  if(snapshot.evidence)console.log('LABEL_FAILURE_EVIDENCE',JSON.stringify({name,minimumPixels,result,...snapshot.evidence}));
   expect(result.length).toBeGreaterThanOrEqual(4);
   for(const row of result)expect(row.colored,JSON.stringify(row)).toBeGreaterThan(minimumPixels);
 }
+
 for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-25d']) {
   test(`${backend} ${route}: attached point/line/polygon labels, pixels, ownership and disposal`,async({page},info)=>{
     test.setTimeout(120000);

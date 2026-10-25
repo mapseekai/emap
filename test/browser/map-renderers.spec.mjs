@@ -622,8 +622,15 @@ for (const backend of ['webgl2', 'webgpu']) test(`${backend}: device recovery re
   await runtime(page); await create(page, backend);
   await page.evaluate(()=>{
     const url='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#aa22cc"/></svg>');
-    formalMap.setLayerSymbol('poi',{images:{marker:{url,size:[32,32]}},layout:{'icon-image':'marker','text-field':['get','name'],'text-size':18,'text-offset':[0,1.2]},paint:{'text-color':'#dd1177'}});
+    window.recoverySymbol={images:{marker:{url,size:[32,32]}},layout:{'icon-image':'marker','text-field':['get','name'],'text-size':18,'text-offset':[0,1.2]},paint:{'text-color':'#dd1177'}};
+    formalMap.setLayerSymbol('poi',{...recoverySymbol,layout:{'icon-image':'marker'}});
   });
+  // Fix the icon's avoidance radius before starting a font layout. Superseding
+  // that layout during setup legitimately aborts its Worker font request.
+  await expect.poll(()=>page.evaluate(async()=>{
+    await flushFormal();return formalMap.ctx.render._icons?.stats.images;
+  })).toBe(1);
+  await page.evaluate(()=>formalMap.setLayerSymbol('poi',recoverySymbol));
   await expect.poll(()=>page.evaluate(async()=>{
     await flushFormal();return formalMap.ctx.render._labels?.stats.placed;
   })).toBe(1);

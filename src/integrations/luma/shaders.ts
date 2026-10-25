@@ -17,6 +17,7 @@ layout(std140) uniform emapUniforms {
   vec2 arrow;
   float pixelRatio;
   vec2 lowScale;
+  vec2 framebufferSize;
   vec4 camera;
   vec4 uvRect;
 } emap;

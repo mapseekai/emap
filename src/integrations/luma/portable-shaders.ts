@@ -123,7 +123,7 @@ const uniformWGSL = `
 struct EmapUniforms {
  origin:vec4<f32>,scale:vec2<f32>,viewport:vec2<f32>,color:vec4<f32>,parameters:vec4<f32>,rect:vec4<f32>,
  vertices0:vec4<f32>,vertices1:vec4<f32>,vertices2:vec4<f32>,vertices3:vec4<f32>,vertices4:vec4<f32>,vertices5:vec4<f32>,
- arrow:vec2<f32>,pixelRatio:f32,lowScale:vec2<f32>,camera:vec4<f32>,uvRect:vec4<f32>,
+ arrow:vec2<f32>,pixelRatio:f32,lowScale:vec2<f32>,framebufferSize:vec2<f32>,camera:vec4<f32>,uvRect:vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> emap:EmapUniforms;
 ${cameraWGSL}

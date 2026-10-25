@@ -5,6 +5,8 @@
 // compactStrokeCompatible rejects every active perspective/bearing camera. The
 // affine specialization therefore preserves raw hi/lo arithmetic while removing
 // camera-plane clipping branches from every vertex of these large stroke batches.
+import { capsuleClipWGSL } from './path-shaders';
+
 export const compactStrokeVS = `#version 300 es
 in vec2 corners;
 in vec4 startPosition;
@@ -15,6 +17,7 @@ out vec2 cornerOffset;
 out vec2 pathPosition;
 out float pathLength;
 flat out float capsuleMode;
+flat out vec4 capsuleSegment;
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
@@ -27,6 +30,12 @@ void main() {
  vec2 offset;
  bool capsule = len > 0.0 && (startJoin.w == 2.0 || endJoin.w == 2.0);
  capsuleMode = float(capsule);
+ capsuleSegment=vec4(0.0);
+ if(capsule){
+   vec2 a=rawDifference(startPosition,emap.origin), b=rawDifference(endPosition,emap.origin);
+   vec2 delta=rawDifference(endPosition,startPosition);bool nearStart=dot(a,a)<=dot(b,b);
+   capsuleSegment=vec4(nearStart?a:b,nearStart?delta:-delta);
+ }
  if(capsule) {
    offset = normal * side + dir * (end ? 4.0 : -4.0);
  } else if(join.w == 0.0) {
@@ -49,6 +58,7 @@ struct CompactOut {
  @builtin(position) position:vec4<f32>,
  @location(0) corner:vec2<f32>, @location(1) local:vec2<f32>, @location(2) len:f32,
  @location(3) @interpolate(flat) capsule:f32,
+ @location(4) @interpolate(flat) capsuleSegment:vec4<f32>,
 };
 @vertex fn vertexMain(@location(0) corners:vec2<f32>, @location(1) startPosition:vec4<f32>,
  @location(2) endPosition:vec4<f32>, @location(3) startJoin:vec4<f32>, @location(4) endJoin:vec4<f32>)->CompactOut {
@@ -59,6 +69,12 @@ struct CompactOut {
  let normal=vec2<f32>(-dir.y,dir.x);let join=select(startJoin,endJoin,end);
  var offset:vec2<f32>;
  let capsule=len>0.0 && (startJoin.w==2.0 || endJoin.w==2.0);
+ var capsuleSegment=vec4<f32>(0.0);
+ if(capsule){
+  let a=rawDifference(startPosition,emap.origin);let b=rawDifference(endPosition,emap.origin);
+  let delta=rawDifference(endPosition,startPosition);let nearStart=dot(a,a)<=dot(b,b);
+  capsuleSegment=vec4<f32>(select(b,a,nearStart),select(-delta,delta,nearStart));
+ }
  if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
  else if(join.w==0.0){offset=select(normal*side,dir*4.0*select(-1.0,1.0,end),joint>0.5);}
  else {
@@ -69,16 +85,17 @@ struct CompactOut {
  let fromStart=offset+select(vec2<f32>(0.0),delta,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
  let curr=select(startPosition,endPosition,end);
- return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len,select(0.0,1.0,capsule));
+ return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len,select(0.0,1.0,capsule),capsuleSegment);
 }
+${capsuleClipWGSL}
 // Match the raw path's binary rejection while retaining hardware MSAA coverage.
 // No discard/helper invocation is needed for this side-effect-free fragment.
 struct PathCoverage {
  @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
 };
 @fragment fn fragmentMain(p:CompactOut)->PathCoverage {
- let q=vec2<f32>(p.local.x,p.local.y-clamp(p.local.y,0.0,p.len));
- let outside=(p.local.y<0.0 || p.local.y>p.len) && select(dot(p.corner,p.corner)>1.0,dot(q,q)>1.0,p.capsule>0.5);
+  var outside=(p.local.y<0.0 || p.local.y>p.len) && dot(p.corner,p.corner)>1.0;
+  if(p.capsule>0.5){outside=capsuleOutside(p.capsuleSegment,p.position.xy);}
  return PathCoverage(vec4<f32>(emap.color.rgb*emap.color.a,emap.color.a),select(0xffffffffu,0u,outside));
 }
 `;
