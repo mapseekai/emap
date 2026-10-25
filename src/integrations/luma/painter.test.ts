@@ -892,6 +892,122 @@ it('publishes changed unversioned labels instead of retaining their previous tex
   f.painter.dispose();
 });
 
+it.each([
+  ['webgl2', true, false],
+  ['webgpu', true, false],
+  ['webgl2', false, false],
+  ['webgpu', false, false],
+  ['webgl2', true, true],
+  ['webgpu', true, true],
+] as const)('presents healthy raster updates after terminal geometry errors on %s (formal %s, partial %s)', async (renderer, formal, partial) => {
+  const f = await fixture(renderer);
+  const chunks = Reflect.get(f.painter, 'chunks');
+  let failNext = false;
+  let hold: Promise<void> | undefined;
+  let release: (() => void) | undefined;
+  const build = vi.fn(async (packet) => {
+    if (failNext) {
+      failNext = false;
+      throw new Error('geometry preparation failed');
+    }
+    await hold;
+    return buildGeometryPacket(packet);
+  });
+  Reflect.set(chunks, 'worker', { build, dispose() {}, stats: {} });
+  const shapes = Array.from({ length: 100_000 }, (_, i) => [[i, 0]]);
+  const first = Uint32Array.from({ length: 50_000 }, (_, i) => i);
+  const second = Uint32Array.from(first, (i) => i + 50_000);
+  const image = document.createElement('canvas');
+  const bounds: [number, number, number, number] = [0, 0, 100_000, 1];
+  // renderLayers supplies stable bounds/content across viewport candidate changes;
+  // RasterRenderService marks its cached tile images immutable until replacement.
+  const owner = { id: 'points', sourceId: 's', revision: 0, bounds, content: 'stable point layer' };
+  const frame = (ids: Uint32Array, tile = image) =>
+    f.frame(() => {
+      f.painter.setTransform(new AffineTransform(0.01, -0.01, 0, 100));
+      f.painter.setLayerContext(
+        formal ? owner : { id: 'points', sourceId: 's', revision: 0, bounds: [...bounds] },
+      );
+      f.painter.drawPoints(shapes, { radius: 4 }, ids);
+      f.painter.drawRasterImage(tile, bounds, 1, true, undefined, formal);
+    });
+  try {
+    frame(first);
+    await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
+    frame(first);
+    expect(f.painter.frameComplete).toBe(true);
+    let partialFallbacks = 0;
+    if (partial) {
+      const request = chunks.request.bind(chunks);
+      vi.spyOn(chunks, 'request').mockImplementation((...args) => {
+        const result = request(...args);
+        if (result.fallback?.length > 1) {
+          result.fallback = result.fallback.slice(1);
+          partialFallbacks++;
+        }
+        return result;
+      });
+    }
+    f.gpu.begin.mockClear();
+    f.gpu.drawImage.mockClear();
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    failNext = true;
+    frame(second);
+    if (partial) {
+      expect(partialFallbacks).toBeGreaterThan(0);
+    }
+    if (formal) {
+      expect(f.painter.frameComplete).toBe(false);
+      expect(Reflect.get(f.painter, 'paintedComplete')).toBe(!partial);
+    }
+    await vi.waitFor(() => expect(chunks.stats.failedRequests).toBe(1));
+    await vi.waitFor(() => expect(chunks.stats.building).toBe(1));
+    frame(second);
+    if (formal && !partial) {
+      expect(f.painter.frameRetained).toBe(true);
+      expect(f.gpu.drawImage).not.toHaveBeenCalled();
+    } else {
+      // Unversioned selections and mutable images must replace changed pixels.
+      expect(f.painter.frameRetained).toBe(false);
+      expect(f.gpu.drawImage).toHaveBeenCalled();
+    }
+    release!();
+    hold = undefined;
+    await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
+    const builds = build.mock.calls.length;
+    frame(second);
+    expect(f.painter.frameRetained).toBe(false);
+    expect(f.painter.framePresented).toBe(true);
+    expect(f.painter.frameComplete).toBe(false);
+    f.gpu.begin.mockClear();
+    f.gpu.drawImage.mockClear();
+    const replacements = Array.from({ length: 3 }, () => document.createElement('canvas'));
+    for (const replacement of replacements) frame(second, replacement);
+    expect(build).toHaveBeenCalledTimes(builds);
+    expect(f.gpu.begin).toHaveBeenCalledTimes(3);
+    expect(f.gpu.drawImage).toHaveBeenCalledTimes(3);
+    replacements.forEach((replacement, i) =>
+      expect(f.gpu.drawImage).toHaveBeenNthCalledWith(
+        i + 1,
+        replacement,
+        bounds,
+        1,
+        true,
+        undefined,
+        formal,
+      ),
+    );
+    expect(f.painter.frameRetained).toBe(false);
+    expect(f.painter.framePresented).toBe(true);
+    expect(f.painter.frameComplete).toBe(false);
+  } finally {
+    release?.();
+    f.painter.dispose();
+  }
+});
+
 it('retains a visible cold partial image only under pressure without declaring it complete', async () => {
   const f = await fixture();
   const draw = () => {

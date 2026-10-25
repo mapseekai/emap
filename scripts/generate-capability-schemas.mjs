@@ -67,7 +67,6 @@ for (const [file, name] of [['src/engine/map/mapshaper-ops.ts', 'MapshaperOps'],
       name: parameter.name.getText(source), optional: !!parameter.questionToken || !!parameter.initializer,
       schema: schema(checker.getTypeAtLocation(parameter)),
     }));
-    // Capability arguments stay objects when an options parameter also accepts primitives.
     const flatten = parameters.length === 1 && ['opts', 'options'].includes(parameters[0].name) && parameters[0].schema.type === 'object';
     catalog[id] = {
       parameters: parameters.map(parameter => parameter.name), flatten,

@@ -13,7 +13,8 @@ for (const dpr of [1, 1.25, 2]) test(`Canvas exact path replay and invalidation 
     await page.evaluate(async () => {
       lumaBenchmark.dispose(); document.body.replaceChildren();
       const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0'; document.body.append(host);
-      window.cacheMap = await emap.Emap.create({ container: host, renderer: 'canvas2d', preset: 'viewer' });
+      // Each cache/reference capture compares one fixed view, without user navigation.
+      window.cacheMap = await emap.Emap.create({ container: host, renderer: 'canvas2d', preset: 'viewer', interactive: false });
       const features = Array.from({ length: 3000 }, (_, i) => {
         const x = (i % 60) * .1 - 3, y = Math.floor(i / 60) * .1 - 2.5;
         const ring = (a, b, size) => [[a,b],[a+size,b],[a+size,b+size],[a,b+size],[a,b]];

@@ -493,6 +493,7 @@ export class LumaPainter implements EditPainter {
         sameValues(this.paintedContent, this.frameContent) &&
         this.paintedVisible &&
         (this.paintedComplete || this.bitmapRetained) &&
+        this.requests.some((request) => this.chunks.pending(request)) &&
         !compatible &&
         (!this.passErrors || this.passErrors.failedAt === Infinity)
       ) {
@@ -519,12 +520,19 @@ export class LumaPainter implements EditPainter {
       ];
       const states = this.selected.map(commandState);
       const previous = this.lastPresentation;
-      const unchanged =
-        !retained &&
-        previous &&
-        sameValues(previous.camera, camera) &&
+      const sameCommands =
+        previous !== null &&
         states.length === previous.commands.length &&
         states.every((state, i) => state !== null && sameValues(state, previous.commands[i]));
+      const completeReplay =
+        pending &&
+        this.paintedComplete &&
+        this.paintedVisible &&
+        this.paintedContent !== null &&
+        sameValues(this.paintedContent, this.frameContent) &&
+        sameCommands;
+      const unchanged =
+        !retained && previous && sameValues(previous.camera, camera) && sameCommands;
       if (!unchanged) {
         this.resetNavigationTiming();
         this.lastPresentation = null;
@@ -554,7 +562,9 @@ export class LumaPainter implements EditPainter {
       this.framePresented = this.frameComplete || this.paintedVisible;
       this.paintedCommands = this.commands;
       this.paintedContent = this.frameContent.slice();
-      this.paintedComplete = this.frameComplete;
+      // Replaying every command of a proven complete image preserves its provenance;
+      // replacement work still controls frameComplete and terminal requests cannot retain it.
+      this.paintedComplete = this.frameComplete || completeReplay;
       this.paintedDimensions = dimensions;
       if (!unchanged) {
         this.chunks.didPresent(performance.now() - this.frameStarted);

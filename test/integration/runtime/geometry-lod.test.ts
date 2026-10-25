@@ -109,4 +109,94 @@ describe('geometry LOD public configuration', () => {
       Emap.create({ preset: 'headless', geometryLod: { pixelTolerance: NaN } }),
     ).rejects.toThrow(/geometryLod/);
   });
+
+  it('supports LOD and screen filtering through object-shaped capability arguments', async () => {
+    const map = await Emap.create({ preset: 'headless' });
+    try {
+      await map.ctx.capabilities.execute('view.setGeometryLod', { options: false });
+      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(0);
+      await map.ctx.capabilities.execute('view.setGeometryLod', {
+        options: { pixelTolerance: 2 },
+      });
+      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(2);
+      await map.ctx.capabilities.execute('view.setGeometryLod');
+      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(0.5);
+      await expect(
+        map.ctx.capabilities.execute('view.setGeometryLod', {
+          options: { pixelTolerance: 0 },
+        }),
+      ).rejects.toThrow(/geometryLod/);
+      await map.ctx.capabilities.execute('view.setScreenPathFiltering', { enabled: true });
+      expect(map.ctx.view._viewport.screenPathFiltering).toBe(true);
+      await map.ctx.capabilities.execute('view.setScreenPathFiltering');
+      expect(map.ctx.view._viewport.screenPathFiltering).toBe(false);
+    } finally {
+      await map.dispose();
+    }
+  });
+
+  it.each([
+    0, 0.2,
+  ])('preserves the explicit floor %s through field edits and history', async (floor) => {
+    const map = await Emap.create({ preset: 'headless', geometryLod: false });
+    try {
+      const adapter = getDefaultMapshaperAdapter();
+      const arcs = adapter.createArcCollection([
+        { xx: Float64Array.from([0, 10, 20, 30]), yy: Float64Array.from([0, 20, 0, 0]) },
+      ]);
+      arcs.setThresholds!(Float64Array.from([Infinity, 0.4, 2, Infinity]));
+      arcs.setRetainedInterval!(floor);
+      const source = new TopologySource('s');
+      source.setDataset(
+        {
+          arcs,
+          info: { crs_string: 'EPSG:4326' },
+          layers: [
+            {
+              name: 'road',
+              geometry_type: 'polyline',
+              shapes: [[[0]]],
+              data: adapter.createDataTable([{ a: 1, b: 2 }]),
+            },
+          ],
+        },
+        false,
+      );
+      await map.addSource('s', source);
+      map.addLayer({ id: 'road', source: 's', type: 'line' });
+      const viewport = map.ctx.view._viewport;
+      viewport.updateSize(200, 200);
+      viewport.applyCameraState([15, 10], 1);
+      const draw = () =>
+        renderLayers(
+          {
+            sources: map.ctx.document._sources,
+            layers: map.getRenderedLayers(),
+            viewport,
+            painter: { drawArcs: vi.fn() } as unknown as CorePainter,
+            resolveSourceLayer: (id, layer) => map.ctx.document.layers.resolve(id, layer),
+            getLayerArcIds: () => Uint32Array.of(0),
+          },
+          1 / Math.abs(map.getTransform().mx),
+          1,
+        );
+      map.setGeometryLod({ pixelTolerance: 2 });
+      draw();
+      expect(arcs.getRetainedInterval!()).toBe(2);
+      expect((await map.ops.filterFields({ source: 's', target: 'road', fields: ['a'] })).ok).toBe(
+        true,
+      );
+      map.setGeometryLod(false);
+      for (const action of [() => {}, () => map.undo(), () => map.redo()]) {
+        action();
+        draw();
+        expect(source.getSimplifyFloor()).toBe(floor);
+        expect(source.getArcs()!.getRetainedInterval!()).toBe(floor);
+        expect(map.queryFeatures(map.project(10, 20)).map((feature) => feature.id)).toEqual([0]);
+      }
+      expect(Array.from(arcs.getVertexData!().xx)).toEqual([0, 10, 20, 30]);
+    } finally {
+      await map.dispose();
+    }
+  });
 });

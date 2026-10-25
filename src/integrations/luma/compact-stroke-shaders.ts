@@ -5,7 +5,7 @@
 // compactStrokeCompatible rejects every active perspective/bearing camera. The
 // affine specialization therefore preserves raw hi/lo arithmetic while removing
 // camera-plane clipping branches from every vertex of these large stroke batches.
-import { capsuleClipWGSL } from './path-shaders';
+import { capsuleClipWGSL, capsuleEnvelopeGLSL, capsuleEnvelopeWGSL } from './path-shaders';
 
 export const compactStrokeVS = `#version 300 es
 in vec2 corners;
@@ -18,6 +18,7 @@ out vec2 pathPosition;
 out float pathLength;
 flat out float capsuleMode;
 flat out vec4 capsuleSegment;
+${capsuleEnvelopeGLSL}
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
@@ -31,10 +32,12 @@ void main() {
  bool capsule = len > 0.0 && (startJoin.w == 2.0 || endJoin.w == 2.0);
  capsuleMode = float(capsule);
  capsuleSegment=vec4(0.0);
+ vec2 projected=rawDifference(end?endPosition:startPosition,emap.origin);
  if(capsule){
    vec2 a=rawDifference(startPosition,emap.origin), b=rawDifference(endPosition,emap.origin);
    vec2 delta=rawDifference(endPosition,startPosition);bool nearStart=dot(a,a)<=dot(b,b);
    capsuleSegment=vec4(nearStart?a:b,nearStart?delta:-delta);
+   if(end==nearStart) projected=capsuleEnvelopePosition(projected,capsuleSegment,width);
  }
  if(capsule) {
    offset = normal * side + dir * (end ? 4.0 : -4.0);
@@ -49,11 +52,11 @@ void main() {
  vec2 fromStart = offset + (end ? delta : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = len;
- vec4 curr = end ? endPosition : startPosition;
- gl_Position = clipPosition(rawDifference(curr, emap.origin) + offset * width);
+ gl_Position = clipPosition(projected + offset * width);
 }
 `;
 export const compactStrokeWGSL = `
+${capsuleEnvelopeWGSL}
 struct CompactOut {
  @builtin(position) position:vec4<f32>,
  @location(0) corner:vec2<f32>, @location(1) local:vec2<f32>, @location(2) len:f32,
@@ -70,10 +73,12 @@ struct CompactOut {
  var offset:vec2<f32>;
  let capsule=len>0.0 && (startJoin.w==2.0 || endJoin.w==2.0);
  var capsuleSegment=vec4<f32>(0.0);
+ var projected=rawDifference(select(startPosition,endPosition,end),emap.origin);
  if(capsule){
   let a=rawDifference(startPosition,emap.origin);let b=rawDifference(endPosition,emap.origin);
   let delta=rawDifference(endPosition,startPosition);let nearStart=dot(a,a)<=dot(b,b);
   capsuleSegment=vec4<f32>(select(b,a,nearStart),select(-delta,delta,nearStart));
+  if(end==nearStart){projected=capsuleEnvelopePosition(projected,capsuleSegment,width);}
  }
  if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
  else if(join.w==0.0){offset=select(normal*side,dir*4.0*select(-1.0,1.0,end),joint>0.5);}
@@ -84,8 +89,7 @@ struct CompactOut {
  }
  let fromStart=offset+select(vec2<f32>(0.0),delta,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- let curr=select(startPosition,endPosition,end);
- return CompactOut(clipPosition(rawDifference(curr,emap.origin)+offset*width),offset,local,len,select(0.0,1.0,capsule),capsuleSegment);
+ return CompactOut(clipPosition(projected+offset*width),offset,local,len,select(0.0,1.0,capsule),capsuleSegment);
 }
 ${capsuleClipWGSL}
 // Match the raw path's binary rejection while retaining hardware MSAA coverage.

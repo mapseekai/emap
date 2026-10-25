@@ -3,6 +3,7 @@ import type { RenderPass } from '@luma.gl/core';
 import { MsdfTextRenderer } from './msdf-text-renderer';
 import type { MsdfAtlasPage } from '../../engine/rendering/labels/text-types';
 function setup() {
+  const framebuffer = { width: 100, height: 100 };
   const resources: { destroy: ReturnType<typeof vi.fn> }[] = [];
   const object = () => {
     const o = { destroy: vi.fn() };
@@ -54,21 +55,52 @@ function setup() {
     bounds: [20, 20, 60, 60],
     raster,
   };
-  return { device, pass, draw, page, label, resources };
+  return { device, pass, draw, page, label, resources, framebuffer };
 }
+for (const backend of ['webgl', 'webgpu'] as const)
+  it(`${backend}: updates actual backing dimensions without rebuilding cached glyphs`, () => {
+    const f = setup();
+    f.framebuffer.width = 124;
+    f.framebuffer.height = 126;
+    const renderer = new MsdfTextRenderer(f.device, backend);
+    const frame = { key: 'fractional-dpr', labels: [f.label] };
+    renderer.draw(f.pass, frame, 95, 97, 1.3, f.framebuffer);
+    const uniforms = f.pass.setBindings.mock.calls.map(
+      ([bindings]: any[]) => bindings.textUniforms,
+    );
+    expect(uniforms).toHaveLength(2);
+    for (const [stage, uniform] of uniforms.entries()) {
+      expect(uniform.byteLength).toBe(32);
+      expect(uniform.write.mock.calls[0][0]).toEqual(
+        new Float32Array([95, 97, 1.3, stage, 124, 126, 0, 0]),
+      );
+    }
+    const uploads = renderer.stats.bufferUploads;
+    f.framebuffer.width = 125;
+    renderer.draw(f.pass, frame, 95, 97, 1.3, f.framebuffer);
+    expect(renderer.stats.bufferUploads).toBe(uploads);
+    for (const [stage, uniform] of uniforms.entries()) {
+      expect(uniform.write).toHaveBeenCalledTimes(2);
+      expect(uniform.write.mock.calls[1][0]).toEqual(
+        new Float32Array([95, 97, 1.3, stage, 125, 126, 0, 0]),
+      );
+    }
+    renderer.dispose();
+  });
+
 describe('MSDF pass resource ownership', () => {
   for (const backend of ['webgl', 'webgpu'] as const)
     it(`${backend}: shares numeric texture and keeps separate halo/fill bindings`, () => {
       const f = setup(),
         r = new MsdfTextRenderer(f.device, backend);
-      r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1);
+      r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1, f.framebuffer);
       expect(r.stats.textureUploads).toBe(1);
       expect(r.stats.glyphInstances).toBe(1);
       expect(f.draw.mock.calls.every(([props]) => props.isInstanced)).toBe(true);
       expect(f.pass.setBindings.mock.calls[0][0].textUniforms).not.toBe(
         f.pass.setBindings.mock.calls[1][0].textUniforms,
       );
-      r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1);
+      r.draw(f.pass, { key: 'a', labels: [f.label] }, 100, 100, 1, f.framebuffer);
       expect(r.stats.bufferUploads).toBe(2);
       r.draw(
         f.pass,
@@ -76,6 +108,7 @@ describe('MSDF pass resource ownership', () => {
         100,
         100,
         2,
+        f.framebuffer,
       );
       expect(r.stats.textureUploads).toBe(1);
       expect(r.stats.bufferUploads).toBe(4);
@@ -94,6 +127,7 @@ describe('MSDF pass resource ownership', () => {
       100,
       100,
       1,
+      f.framebuffer,
     );
     expect(r.stats.drawCalls).toBe(4);
     r.dispose();
@@ -112,8 +146,15 @@ for (const backend of ['webgl', 'webgpu'] as const) {
     };
     f.label.raster.glyphs[0].plane = [4, -6, 20, 24];
     const renderer = new MsdfTextRenderer(f.device, backend);
-    renderer.draw(f.pass, { key: 'initial', labels: [f.label] }, 100, 100, 1);
-    renderer.draw(f.pass, { key: 'zoom-out', labels: [{ ...f.label, scale: 0.5 }] }, 100, 100, 1);
+    renderer.draw(f.pass, { key: 'initial', labels: [f.label] }, 100, 100, 1, f.framebuffer);
+    renderer.draw(
+      f.pass,
+      { key: 'zoom-out', labels: [{ ...f.label, scale: 0.5 }] },
+      100,
+      100,
+      1,
+      f.framebuffer,
+    );
     expect(writes.get('emap-msdf-poses')!.slice(0, 2)).toEqual([42, 37]);
     const glyph = writes.get('emap-msdf-glyphs')!;
     expect(glyph.slice(0, 2)).toEqual([10, 12]);
@@ -126,14 +167,14 @@ for (const backend of ['webgl', 'webgpu'] as const) {
     const f = setup(),
       renderer = new MsdfTextRenderer(f.device, backend);
     const frame = { key: 'cached', labels: [f.label] };
-    renderer.draw(f.pass, frame, 100, 100, 1);
+    renderer.draw(f.pass, frame, 100, 100, 1, f.framebuffer);
     const quads = f.label.raster.glyphs;
     Object.defineProperty(f.label.raster, 'glyphs', { configurable: true, get: () => quads });
     const glyphs = vi.spyOn(f.label.raster, 'glyphs', 'get');
-    renderer.draw(f.pass, frame, 100, 100, 1);
+    renderer.draw(f.pass, frame, 100, 100, 1, f.framebuffer);
     expect(glyphs).not.toHaveBeenCalled();
     renderer.clear();
-    renderer.draw(f.pass, frame, 100, 100, 1);
+    renderer.draw(f.pass, frame, 100, 100, 1, f.framebuffer);
     expect(renderer.stats.glyphInstances).toBe(1);
     expect(glyphs).toHaveBeenCalled();
     renderer.dispose();
@@ -152,9 +193,16 @@ for (const backend of ['webgl', 'webgpu'] as const) {
       return buffer;
     };
     const renderer = new MsdfTextRenderer(f.device, backend);
-    renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1);
+    renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1, f.framebuffer);
     writes.length = 0;
-    renderer.draw(f.pass, { key: 'pan', labels: [{ ...f.label, x: 50 }] }, 100, 100, 1);
+    renderer.draw(
+      f.pass,
+      { key: 'pan', labels: [{ ...f.label, x: 50 }] },
+      100,
+      100,
+      1,
+      f.framebuffer,
+    );
     expect(writes).toEqual([16]);
     renderer.dispose();
   });
@@ -162,7 +210,7 @@ for (const backend of ['webgl', 'webgpu'] as const) {
     const f = setup(),
       r = new MsdfTextRenderer(f.device, backend);
     f.label.raster.haloWidth = 0;
-    r.draw(f.pass, { key: 'no-halo', labels: [f.label] }, 100, 100, 1);
+    r.draw(f.pass, { key: 'no-halo', labels: [f.label] }, 100, 100, 1, f.framebuffer);
     expect(f.pass.draw).toHaveBeenCalledOnce();
     r.dispose();
   });
@@ -179,14 +227,14 @@ for (const backend of ['webgl', 'webgpu'] as const) {
       b = new MsdfTextRenderer(f.device, backend);
     const page: MsdfAtlasPage = f.page;
     for (const renderer of [a, b])
-      renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1);
+      renderer.draw(f.pass, { key: 'first', labels: [f.label] }, 100, 100, 1, f.framebuffer);
     page.version = 3;
     page.updates = [
       { version: 2, rect: [8, 16, 20, 30] },
       { version: 3, rect: [20, 30, 24, 20] },
     ];
     for (const renderer of [a, b])
-      renderer.draw(f.pass, { key: 'next', labels: [f.label] }, 100, 100, 1);
+      renderer.draw(f.pass, { key: 'next', labels: [f.label] }, 100, 100, 1, f.framebuffer);
     for (const texture of textures)
       expect(texture.writeData.mock.calls[1][1]).toEqual({
         x: 8,
@@ -199,7 +247,7 @@ for (const backend of ['webgl', 'webgpu'] as const) {
     // A consumer that missed the bounded update history must receive the whole page.
     page.version = 100;
     page.updates = [{ version: 100, rect: [1, 1, 4, 4] }];
-    a.draw(f.pass, { key: 'missed', labels: [f.label] }, 100, 100, 1);
+    a.draw(f.pass, { key: 'missed', labels: [f.label] }, 100, 100, 1, f.framebuffer);
     expect(textures[0].writeData.mock.calls[2][1]).toMatchObject({
       x: 0,
       y: 0,
@@ -218,14 +266,14 @@ it('does not sample recycled atlas glyphs when a previous navigation frame is re
   page.generation = 0;
   f.label.raster.glyphs[0].generation = 0;
   const frame = { key: 'navigation', labels: [f.label] };
-  renderer.draw(f.pass, frame, 100, 100, 1);
+  renderer.draw(f.pass, frame, 100, 100, 1, f.framebuffer);
   expect(renderer.stats.glyphInstances).toBe(1);
   page.generation = 1;
   page.version++;
-  renderer.draw(f.pass, frame, 100, 100, 1);
+  renderer.draw(f.pass, frame, 100, 100, 1, f.framebuffer);
   expect(renderer.stats.glyphInstances).toBe(0);
   f.label.raster.glyphs[0].generation = 1;
-  renderer.draw(f.pass, { key: 'new', labels: [f.label] }, 100, 100, 1);
+  renderer.draw(f.pass, { key: 'new', labels: [f.label] }, 100, 100, 1, f.framebuffer);
   expect(renderer.stats.glyphInstances).toBe(1);
   renderer.dispose();
 });
@@ -234,11 +282,18 @@ for (const backend of ['webgl', 'webgpu'] as const)
   it(`${backend}: navigation rewrites existing glyph buffers without reallocating buffers or VAOs`, () => {
     const f = setup(),
       r = new MsdfTextRenderer(f.device, backend);
-    r.draw(f.pass, { key: 'first', labels: [f.label] }, 200, 200, 1);
+    r.draw(f.pass, { key: 'first', labels: [f.label] }, 200, 200, 1, f.framebuffer);
     const allocated = f.resources.length,
       bytes = r.stats.liveBufferBytes;
     for (let i = 0; i < 20; i++)
-      r.draw(f.pass, { key: 'pan-' + i, labels: [{ ...f.label, x: 40 + i }] }, 200, 200, 1);
+      r.draw(
+        f.pass,
+        { key: 'pan-' + i, labels: [{ ...f.label, x: 40 + i }] },
+        200,
+        200,
+        1,
+        f.framebuffer,
+      );
     expect(f.resources.length).toBe(allocated);
     expect(r.stats.liveBufferBytes).toBe(bytes);
     expect(r.stats.bufferAllocations).toBe(2);
@@ -252,15 +307,15 @@ for (const backend of ['webgl', 'webgpu'] as const)
 it('grows a glyph buffer only when necessary and releases unused batches after membership shrinks', () => {
   const f = setup(),
     r = new MsdfTextRenderer(f.device, 'webgl');
-  r.draw(f.pass, { key: 'one', labels: [f.label] }, 200, 200, 1);
+  r.draw(f.pass, { key: 'one', labels: [f.label] }, 200, 200, 1, f.framebuffer);
   const second = { ...f.label, x: 100, bounds: [80, 20, 120, 60] };
-  r.draw(f.pass, { key: 'two', labels: [f.label, second] }, 200, 200, 1);
+  r.draw(f.pass, { key: 'two', labels: [f.label, second] }, 200, 200, 1, f.framebuffer);
   const allocated = f.resources.length;
-  r.draw(f.pass, { key: 'back', labels: [f.label] }, 200, 200, 1);
+  r.draw(f.pass, { key: 'back', labels: [f.label] }, 200, 200, 1, f.framebuffer);
   expect(f.resources.length).toBe(allocated);
   expect(r.stats.glyphInstances).toBe(1);
   expect(r.stats.bufferAllocations).toBe(4);
-  r.draw(f.pass, { key: 'none', labels: [] }, 200, 200, 1);
+  r.draw(f.pass, { key: 'none', labels: [] }, 200, 200, 1, f.framebuffer);
   expect(r.stats.liveBufferBytes).toBe(0);
   r.dispose();
   expect(f.resources.every((resource) => resource.destroy.mock.calls.length === 1)).toBe(true);

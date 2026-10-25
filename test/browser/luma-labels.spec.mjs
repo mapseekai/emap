@@ -47,9 +47,10 @@ async function eachLabelPainted(page,name,minimumPixels=30) {
     let evidence;
     if(rows.length<4||rows.some(row=>row.colored<=minimumPixels)) {
       try {
-        // Keep the exact bitmap used by the assertion; WebGL may discard its
-        // presentation buffer before a later evaluate/toDataURL call.
-        evidence={dpr:devicePixelRatio,inner:[innerWidth,innerHeight],stage:[stage.clientWidth,stage.clientHeight],canvas:[canvas.width,canvas.height],placementsBefore,placements,stats:app.labelStats,snapshot:app.snapshot,png:canvas.toDataURL()};
+        // Keep the exact counted bitmap; a later GPU read may show another frame.
+        const gl=app.snapshot?.backend==='webgl'?source.getContext('webgl2'):null;
+        const glInfo=gl?{attributes:gl.getContextAttributes(),samples:gl.getParameter(gl.SAMPLES),sampleBuffers:gl.getParameter(gl.SAMPLE_BUFFERS),alphaToCoverage:gl.isEnabled(gl.SAMPLE_ALPHA_TO_COVERAGE),sampleCoverage:gl.isEnabled(gl.SAMPLE_COVERAGE),framebufferIsDefault:gl.getParameter(gl.FRAMEBUFFER_BINDING)===null,renderer:gl.getParameter(gl.RENDERER),version:gl.getParameter(gl.VERSION)}:null;
+        evidence={glInfo,dpr:devicePixelRatio,inner:[innerWidth,innerHeight],stage:[stage.clientWidth,stage.clientHeight],canvas:[canvas.width,canvas.height],placementsBefore,placements,stats:app.labelStats,snapshot:app.snapshot,png:canvas.toDataURL()};
       } catch(error) {evidence={diagnosticError:String(error)};}
     }
     return {rows,evidence};
@@ -166,16 +167,19 @@ test('public Emap labels follow layer filters, visibility and removal without ne
 });
 
 
-for(const backend of ['webgl','webgpu'])test(`${backend}: DPR 2 keeps each attached label at CSS size`,async({browser},info)=>{
-  const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:2});
+for(const dpr of [1.3,2])for(const backend of ['webgl','webgpu'])test(`${backend}: DPR ${dpr} keeps each attached label at CSS size`,async({browser},info)=>{
+  const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try {
     await page.goto(new URL(`/mapseekai/emap/examples/luma-25d/?gpu=${backend}`,info.project.use.baseURL).href);await ready(page,'luma25d');
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});await ready(page,'luma25d');
     await page.evaluate(()=>{for(const l of luma25d.layers)luma25d.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2});});
     await settle(page,'luma25d');await eachLabelPainted(page,'luma25d');
-    const result=await page.evaluate(()=>({dpr:luma25d.snapshot.dpr,labels:luma25d.labelPlacements,stats:luma25d.labelStats}));
-    expect(result.dpr).toBe(2);expect(result.stats.placed).toBe(5);
+    const result=await page.evaluate(()=>({dpr:luma25d.snapshot.dpr,deviceDpr:devicePixelRatio,labels:luma25d.labelPlacements,stats:luma25d.labelStats}));
+    expect(result.dpr).toBe(result.deviceDpr);
+    // Fractional overrides may reach the browser as float32; retain exact DPR 2.
+    if(dpr===2)expect(result.dpr).toBe(2);else expect(Math.fround(result.dpr)).toBe(Math.fround(dpr));
+    expect(result.stats.placed).toBe(5);
     for(const label of result.labels)expect(label.bounds[3]-label.bounds[1]).toBeLessThan(140);
     await info.attach('hidpi-labels',{body:JSON.stringify(result),contentType:'application/json'});
     await page.evaluate(()=>luma25d.dispose());expect(errors).toEqual([]);

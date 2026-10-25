@@ -167,6 +167,7 @@ export class GpuRenderer {
           this.width,
           this.height,
           this.pixelRatio,
+          this.canvas,
           start,
           end,
         );

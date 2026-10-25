@@ -1617,6 +1617,32 @@ describe('TopologySource format plugin routing', () => {
 });
 
 describe('source registration LOD ownership', () => {
+  it('restores each geometry snapshot floor after render intervals and dataset replacement', () => {
+    const source = new TopologySource('floor');
+    const adapter = getDefaultMapshaperAdapter();
+    const makeDataset = (floor: number): MapshaperDataset => {
+      const arcs = adapter.createArcCollection([
+        { xx: Float64Array.from([0, 1, 2]), yy: Float64Array.from([0, 1, 0]) },
+      ]);
+      arcs.setThresholds!(Float64Array.from([Infinity, 1, Infinity]));
+      arcs.setRetainedInterval!(floor);
+      return { arcs, layers: [{ geometry_type: 'polyline', shapes: [[[0]]] }] };
+    };
+    const original = makeDataset(0);
+    const simplified = makeDataset(1);
+    source.setDataset(original, false);
+    original.arcs!.setRetainedInterval!(2);
+    source.setDataset({ ...original }, false);
+    expect(source.getSimplifyFloor()).toBe(0);
+    source.setDataset(simplified, false);
+    expect(source.getSimplifyFloor()).toBe(1);
+    simplified.arcs!.setRetainedInterval!(3);
+    source.setDataset(original, false);
+    expect(source.getSimplifyFloor()).toBe(0);
+    source.setDataset(simplified, false);
+    expect(source.getSimplifyFloor()).toBe(1);
+  });
+
   it('publishes display readiness separately from data and cancels replaced LOD work', async () => {
     const arcs = getDefaultMapshaperAdapter().createArcCollection([
       { xx: Float64Array.from([0, 1, 2, 3]), yy: Float64Array.from([0, 0, 0, 0]) },

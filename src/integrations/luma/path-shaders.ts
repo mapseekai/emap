@@ -5,6 +5,35 @@
 export const PATH_CORNERS = [0, 0, 0, -1, 0, 1, 1, -1, 1, 1, 1, 0];
 export const PATH_INDICES = [0, 1, 2, 1, 4, 2, 1, 3, 4, 3, 5, 4];
 
+// Bound only a distant envelope endpoint, keeping the real segment for fragment
+// clipping. Huge clip coordinates can lose the nearby endpoint during GPU clipping.
+export const capsuleEnvelopeGLSL = `
+vec2 capsuleEnvelopePosition(vec2 position,vec4 segment,float radius) {
+ if(any(greaterThan(abs(segment.xy),emap.viewport*0.5+vec2(radius*4.0)))) return position;
+ float span=max(abs(segment.z),abs(segment.w));
+ if(span==0.0) return position;
+ vec2 scaled=segment.zw/span;float unitLength=length(scaled);
+ vec2 reach=abs(segment.xy)+emap.viewport*0.5;
+ float reachScale=max(reach.x,reach.y),limit=radius*4.0;
+ if(reachScale>0.0) limit+=reachScale*length(reach/reachScale);
+ if(span>limit/unitLength) return segment.xy+(scaled/unitLength)*limit;
+ return position;
+}
+`;
+export const capsuleEnvelopeWGSL = `
+fn capsuleEnvelopePosition(position:vec2<f32>,segment:vec4<f32>,radius:f32)->vec2<f32> {
+ if(any(abs(segment.xy)>emap.viewport*0.5+vec2<f32>(radius*4.0))){return position;}
+ let span=max(abs(segment.z),abs(segment.w));
+ if(span==0.0){return position;}
+ let scaled=segment.zw/span;let unitLength=length(scaled);
+ let reach=abs(segment.xy)+emap.viewport*0.5;let reachScale=max(reach.x,reach.y);
+ var limit=radius*4.0;
+ if(reachScale>0.0){limit+=reachScale*length(reach/reachScale);}
+ if(span>limit/unitLength){return segment.xy+(scaled/unitLength)*limit;}
+ return position;
+}
+`;
+
 export const pathMsaaVS = `#version 300 es
 in vec2 corners;
 in vec4 previousPosition;
@@ -18,6 +47,7 @@ out vec2 pathPosition;
 out float pathLength;
 flat out float capsuleMode;
 flat out vec4 capsuleSegment;
+${capsuleEnvelopeGLSL}
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
@@ -53,17 +83,19 @@ void main() {
  if (capsule) offset = normal * side + dir * (end ? 4.0 : -4.0);
  capsuleMode = float(capsule);
  capsuleSegment = vec4(0.0);
+ vec2 projected=projectSegmentPosition(curr, end ? prev : next);
  if (capsule) {
    vec2 a=projectSegmentPosition(startPosition,endPosition), b=projectSegmentPosition(endPosition,startPosition);
    vec2 delta=projectDifference(endPosition,startPosition);
    bool nearStart=dot(a,a)<=dot(b,b);
    capsuleSegment=vec4(nearStart?a:b,nearStart?delta:-delta);
+   if(end==nearStart) projected=capsuleEnvelopePosition(projected,capsuleSegment,width);
  }
  cornerOffset = offset;
  vec2 fromStart = offset + (end ? da : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = end ? la : lb;
- gl_Position = clipPosition(projectSegmentPosition(curr, end ? prev : next) + offset * width);
+ gl_Position = clipPosition(projected + offset * width);
 }`;
 export const pathMsaaFS = `#version 300 es
 precision highp float;
@@ -114,6 +146,7 @@ fn capsuleOutside(segment:vec4<f32>,fragment:vec2<f32>)->bool {
 `;
 
 export const pathMsaaWGSL = `
+${capsuleEnvelopeWGSL}
 struct PathOut {
  @builtin(position) position: vec4<f32>,
  @location(0) corner: vec2<f32>, @location(1) local: vec2<f32>, @location(2) len: f32,
@@ -153,14 +186,16 @@ struct PathOut {
     ((flags&2u)==0u && all(startPosition==nextPosition)));
  if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
  var capsuleSegment=vec4<f32>(0.0);
+ var projected=projectSegmentPosition(curr,select(next,prev,end));
  if(capsule){
   let a=projectSegmentPosition(startPosition,endPosition);let b=projectSegmentPosition(endPosition,startPosition);
   let delta=projectDifference(endPosition,startPosition);let nearStart=dot(a,a)<=dot(b,b);
   capsuleSegment=vec4<f32>(select(b,a,nearStart),select(-delta,delta,nearStart));
+  if(end==nearStart){projected=capsuleEnvelopePosition(projected,capsuleSegment,width);}
  }
  let fromStart=offset+select(vec2<f32>(0.0),da,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- let position=clipPosition(projectSegmentPosition(curr,select(next,prev,end))+offset*width);
+ let position=clipPosition(projected+offset*width);
  return PathOut(position,offset,local,select(lb,la,end),select(0.0,1.0,capsule),capsuleSegment);
 }
 ${capsuleClipWGSL}
