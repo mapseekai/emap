@@ -58,6 +58,8 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});
     if(route==='luma-benchmark')await page.evaluate(()=>window.lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));
     await ready(page,name);
+    // Geometry-only fit leaves no room for fixed above-point labels and halos.
+    await page.evaluate(async name=>{const a=window[name];if(name==='lumaBenchmark')await a.setView(.75);else a.zoom(.75);},name);
     const before=await page.evaluate(name=>window[name].layers.map(l=>[l.id,l.type]),name);
     expect(new Set(before.map(l=>l[1]))).toEqual(new Set(['circle','line','fill']));
     await page.evaluate(name=>{const a=window[name];for(const l of a.layers)a.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2,priority:['get','rank']});},name);
@@ -67,6 +69,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     expect(labels.some(l=>l.text.includes('Road'))).toBe(true);
     expect(labels.some(l=>l.text.includes('地块'))).toBe(true);
     expect(labels.some(l=>l.text.includes('北京'))).toBe(true);
+    expect(labels.some(l=>l.text.includes('上海'))).toBe(true);
     expect(await paintedText(page,name)).toBeGreaterThan(100);
     await eachLabelPainted(page,name);
     expect(await page.evaluate(name=>window[name].layers.map(l=>[l.id,l.type]),name)).toEqual(before);
@@ -82,7 +85,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     expect(await page.evaluate(({name,owner})=>window[name].labelPlacements.some(l=>l.ownerId===owner),{name,owner})).toBe(true);
     if(route==='luma-25d') {
       for(const pose of [{pitch:0,bearing:0},{pitch:60,bearing:65}]) {
-        await page.evaluate(p=>{window.luma25d.setPose(p);window.luma25d.fit();},pose);await settle(page,name);
+        await page.evaluate(p=>{window.luma25d.setPose(p);window.luma25d.fit();window.luma25d.zoom(.75);},pose);await settle(page,name);
         expect(await paintedText(page,name)).toBeGreaterThan(50);
         await eachLabelPainted(page,name);
         const p=await page.evaluate(()=>window.luma25d.labelPlacements);

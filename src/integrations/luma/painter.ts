@@ -236,8 +236,10 @@ export class LumaPainter implements EditPainter {
   private context:
     | (GeometryOwner & { bounds?: Rect; content?: string; geometryLod?: boolean })
     | null = null;
-  /** Presence marker; owner.content in the chunk cache owns content invalidation. */
-  private paintedContent: true | null = null;
+  /** Semantic frame identity; camera transforms are compared by resident commands. */
+  private paintedContent: readonly unknown[] | null = null;
+  private frameContent: unknown[] = [];
+  private frameVersioned: boolean | undefined;
   private paintedDimensions = '';
   private bitmapRetained = false;
   private paintedComplete = false;
@@ -382,6 +384,18 @@ export class LumaPainter implements EditPainter {
   ): void {
     this.context = context;
     this.cache.contextFor(context);
+    if (this.active && context) {
+      this.frameContent.push(
+        'layer',
+        context.sourceId,
+        context.id,
+        context.revision,
+        context.content,
+        context.bounds,
+        context.geometryLod,
+      );
+      this.frameVersioned = this.frameVersioned !== false && context.content !== undefined;
+    }
   }
   setInteracting(value: boolean): void {
     this.chunks.setInteracting(value);
@@ -439,6 +453,8 @@ export class LumaPainter implements EditPainter {
     this.polygonFrames = [];
     this.strokeScopes.clear();
     this.context = null;
+    this.frameContent = [];
+    this.frameVersioned = undefined;
     // Record an ordered frame before clearing the last complete GPU image.
     this.active = true;
     this.frameComplete = false;
@@ -457,13 +473,28 @@ export class LumaPainter implements EditPainter {
         scope.presentation.update(scope.channels.filter((channel) => channel.valid()));
       this.polygonFrames = this.polygonFrames.filter((polygon) => polygon.valid());
       const pending = this.requests.some((request) => !this.chunks.complete(request));
-      // Complete warm images stay atomic; pressure may also freeze a visible
-      // cold partial image while its old meshes retire. Empty startup stays progressive.
+      const compatible = this.requests.every(
+        (request) =>
+          this.chunks.complete(request) ||
+          (!!request.fallback?.length &&
+            request.fallback.every(
+              (entry) =>
+                this.chunks.isResident(entry) &&
+                (!entry.meshes.some((mesh) => mesh.compactStroke) ||
+                  compactStrokeCompatible(this.transform, entry.screenView)),
+            )),
+      );
+      // Keep unchanged pixels only when resident compatible geometry cannot
+      // reconstruct them. Content edits must invalidate the old image, while
+      // camera-only replacement work can continue reprojecting surviving meshes.
       if (
         pending &&
         this.paintedContent !== null &&
+        sameValues(this.paintedContent, this.frameContent) &&
         this.paintedVisible &&
-        (this.paintedComplete || this.bitmapRetained)
+        (this.paintedComplete || this.bitmapRetained) &&
+        !compatible &&
+        (!this.passErrors || this.passErrors.failedAt === Infinity)
       ) {
         this.resetNavigationTiming();
         this.bitmapRetained = true;
@@ -522,7 +553,7 @@ export class LumaPainter implements EditPainter {
       // An empty loading frame must not become a navigation snapshot that blocks first paint.
       this.framePresented = this.frameComplete || this.paintedVisible;
       this.paintedCommands = this.commands;
-      this.paintedContent = true;
+      this.paintedContent = this.frameContent.slice();
       this.paintedComplete = this.frameComplete;
       this.paintedDimensions = dimensions;
       if (!unchanged) {
@@ -545,6 +576,8 @@ export class LumaPainter implements EditPainter {
       this.preparations = [];
       this.selected = [];
       this.requests = [];
+      this.frameContent = [];
+      this.frameVersioned = undefined;
       this.strokeScopes.clear();
       for (const [key, polygon] of this.polygons)
         if (!this.polygonKeys.has(key)) {
@@ -677,6 +710,12 @@ export class LumaPainter implements EditPainter {
       this.cache.contextFor(owner);
       try {
         entry = resolve();
+        if (owner?.content === undefined) {
+          // Custom draws have no semantic layer version. Reuse only the exact
+          // prepared selection; changed or unowned geometry must replace old pixels.
+          this.frameContent.push('geometry', entry.key);
+          this.frameVersioned = false;
+        }
       } catch (error) {
         if (!errors) throw error;
         errors.failedAt = order;
@@ -740,9 +779,14 @@ export class LumaPainter implements EditPainter {
         ? (input.ids?.length ?? input.shapes?.length ?? 0) >= 50_000
         : (input.arcs?.getPointCount?.() ?? 0) >= 100_000;
     if (!large || (input.filter && !arcVisibilityKey(input.arcs!, input.filter))) return false;
+    this.rememberPaint(paint);
+    if (icon) this.rememberIcon(icon);
     const valid = this.passGuard();
     const view = this.transform;
-    const wholeLayer = input.kind === 'path' && owner.sourceSelection && !this.polygonScope;
+    const sourcePath = input.kind === 'path' && owner.sourceSelection;
+    // Forward outlines keep the legacy viewport partitions and member order in
+    // both the polygon command and its primitive fallback.
+    const wholeLayer = sourcePath && !input.forward;
     const visibility = input.arcs && arcVisibilityKey(input.arcs, input.filter);
     const bounds = owner.bounds ?? ([-180, -90, 180, 90] as const);
     const screen = input.kind === 'path' ? this.screenPath(paint) : undefined;
@@ -795,6 +839,10 @@ export class LumaPainter implements EditPainter {
         ]),
       },
     );
+    if (owner.content === undefined) {
+      this.frameContent.push('geometry', request);
+      this.frameVersioned = false;
+    }
     this.requests.push(request);
     const guards = this.requestGuards.get(request) ?? [];
     guards.push(valid);
@@ -877,7 +925,9 @@ export class LumaPainter implements EditPainter {
       }
       flush();
     };
-    if (wholeLayer) {
+    // Source-owned line layers still publish atomically when their forward
+    // outline geometry uses viewport preparation.
+    if (sourcePath && !this.polygonScope) {
       const key = JSON.stringify(['stroke', owner.sourceId, owner.id]);
       let scope = this.strokeScopes.get(key);
       if (!scope) {
@@ -946,6 +996,7 @@ export class LumaPainter implements EditPainter {
   }
   private draw(resolve: () => CachedGeometry | undefined, paint: MeshPaint): void {
     paint = copyPaint(paint);
+    this.rememberPaint(paint);
     this.record(() => {
       const entry = resolve();
       if (!entry?.mesh) return;
@@ -965,6 +1016,37 @@ export class LumaPainter implements EditPainter {
           : paint,
       });
     });
+  }
+  private rememberPaint(paint: MeshPaint): void {
+    this.frameContent.push(
+      'paint',
+      JSON.stringify([
+        paint.color,
+        paint.width,
+        paint.radius,
+        paint.filled,
+        paint.marker,
+        paint.dash,
+        paint.arrow,
+      ]),
+    );
+  }
+  private rememberIcon(icon: PointIcon): void {
+    this.frameContent.push(
+      'icon',
+      icon.asset.image,
+      JSON.stringify([
+        icon.asset.width,
+        icon.asset.height,
+        icon.color,
+        icon.rect,
+        icon.size,
+        icon.anchor,
+        icon.offset,
+        icon.angle,
+        icon.tint,
+      ]),
+    );
   }
 
   drawPoints(shapes: Shapes, style: PointStyle, ids?: Uint32Array, components?: Uint32Array): void {
@@ -1016,6 +1098,7 @@ export class LumaPainter implements EditPainter {
       ),
     );
     icon = copyIcon(icon);
+    this.rememberIcon(icon);
     this.retainImage(icon.asset.image);
     this.record(() => {
       const mesh = entry()?.mesh;
@@ -1330,9 +1413,15 @@ export class LumaPainter implements EditPainter {
     const slot = this.polygonSlots.get(family) ?? 0;
     this.polygonSlots.set(family, slot + 1);
     const key = family + ':' + slot;
+    // Formal source selections have stable feature/arc provenance for dependency
+    // groups. Unclassified/custom callers retain the conservative atomic path.
+    const atomic = !scope.channels.every(
+      (channel) => channel.request.input.sourceSelection === true,
+    );
     const signature = JSON.stringify([
       owner.revision,
       owner.content,
+      atomic,
       this.chunks.identity(owner.bounds ?? arcs),
       arcs.size(),
       options.fill,
@@ -1350,8 +1439,7 @@ export class LumaPainter implements EditPainter {
         sourceId: owner.sourceId,
         layerId: owner.id,
         presentation: new PolygonPresentation(shapes, {
-          // Publish every face and boundary together, like whole stroke layers.
-          atomic: true,
+          atomic,
           ready: (entry) =>
             this.chunks.isResident(entry) &&
             (!entry.meshes.some((mesh) => mesh.compactStroke) ||
@@ -1435,6 +1523,7 @@ export class LumaPainter implements EditPainter {
       clip: clip && [...clip],
       immutable,
     };
+    this.frameContent.push(...(commandState(command) ?? [Symbol()]));
     this.record(() => this.selected.push(command));
   }
   drawRasterPixels(
@@ -1456,11 +1545,13 @@ export class LumaPainter implements EditPainter {
       clip: clip && [...clip],
       immutable,
     };
+    this.frameContent.push(...(commandState(command) ?? [Symbol()]));
     this.record(() => this.selected.push(command));
   }
   drawLabels(frame: LabelFrame): void {
     if (!this.active) return;
     this.hasLabels = true;
+    this.frameContent.push('labels', this.frameVersioned ? null : frame.key);
     this.record(() =>
       this.selected.push({
         kind: 'forced',
@@ -1472,6 +1563,7 @@ export class LumaPainter implements EditPainter {
    * painter. Normal edit handlers use the map's independent Canvas2D overlay instead. */
   private decorate(draw: (painter: CanvasPainter) => void): void {
     if (!this.active) return;
+    this.frameContent.push(Symbol());
     this.record(() => this.selected.push({ kind: 'forced', draw: () => this.decorateNow(draw) }));
   }
   private decorateNow(draw: (painter: CanvasPainter) => void): void {
@@ -1531,6 +1623,8 @@ export class LumaPainter implements EditPainter {
     this.context = null;
     this.drawnEntries.clear();
     this.paintedContent = null;
+    this.frameContent = [];
+    this.frameVersioned = undefined;
     const errors: unknown[] = [];
     for (const cleanup of [
       () => this.chunks.dispose(),

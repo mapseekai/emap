@@ -22,8 +22,24 @@ async function boot(page,renderer){
   commandMap.setExtent(new emap.Bounds(-4,-4,4,4));commandMap.render();
  },renderer);
 }
-async function settled(page){await expect.poll(()=>page.evaluate(()=>commandErrors)).toEqual([]);await expect.poll(()=>page.evaluate(()=>{const p=commandMap.ctx.render._painter;return p.frameComplete&&p.stats.geometryChunks.pending===0;}),{timeout:60000}).toBe(true);}
-async function warm(page){await page.evaluate(async()=>{for(let i=0;i<4;i++){await new Promise(requestAnimationFrame);commandMap.render();}await commandMap.ctx.render._painter.gpu.waitForIdle();});}
+async function settled(page){await expect.poll(()=>page.evaluate(()=>commandErrors)).toEqual([]);await expect.poll(()=>page.evaluate(()=>{const r=commandMap.ctx.render,p=r._painter;return p.frameComplete&&p.stats.geometryChunks.pending===0&&!r._labels?.stats.pending;}),{timeout:60000}).toBe(true);}
+async function commandStats(page){return page.evaluate(()=>{const s=commandMap.ctx.render._painter.stats;return {frames:s.frames,drawCalls:s.drawCalls,liveBufferBytes:s.liveBufferBytes,...s.renderCommands};});}
+async function warm(page,frames=4){
+ const before=await commandStats(page);
+ await page.evaluate(()=>{window.commandWarmView=commandMap.ctx.view._viewport.transform.clone();});
+ // An unchanged retained frame skips GPU submission. Move the real camera, then
+ // restore it exactly, so every warm pass exercises plans at the same final view.
+ for(let i=0;i<frames;i++){
+  await page.evaluate(async shift=>{await new Promise(requestAnimationFrame);const t=commandMap.ctx.view._viewport.transform;Object.assign(t,commandWarmView);t.translate(shift,0);commandMap.render();},i%2===0?1:0);
+  await settled(page);
+ }
+ const restored=await page.evaluate(async()=>{const t=commandMap.ctx.view._viewport.transform,same=['mx','my','bx','by'].every(key=>t[key]===commandWarmView[key]);delete window.commandWarmView;await commandMap.ctx.render._painter.gpu.waitForIdle();return same;});
+ expect(restored).toBe(true);
+ const after=await commandStats(page);
+ expect(after.frames-before.frames).toBeGreaterThanOrEqual(frames);
+ expect(after.drawCalls).toBeGreaterThan(before.drawCalls);
+ return {before,after};
+}
 async function capture(page){
  // GPU submission and frameComplete do not guarantee a presented screenshot.
  await page.evaluate(async()=>{
@@ -33,9 +49,25 @@ async function capture(page){
  const png=await page.screenshot({clip:{x:0,y:0,width:800,height:600}});
  return page.evaluate(async base64=>{const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();
  const canvas=document.createElement('canvas');canvas.width=800;canvas.height=600;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
- const data=ctx.getImageData(0,0,800,600).data;let hash=2166136261,painted=0;
- for(let i=0;i<data.length;i++){hash=Math.imul(hash^data[i],16777619);if(i%4===0&&(data[i]!==255||data[i+1]!==255||data[i+2]!==255))painted++;}
- return {hash:hash>>>0,painted};},png.toString('base64'));
+ const data=ctx.getImageData(0,0,800,600).data;let hash=2166136261,painted=0,colored=0,green=0;
+ for(let i=0;i<data.length;i++){hash=Math.imul(hash^data[i],16777619);if(i%4===0){const r=data[i],g=data[i+1],b=data[i+2];if(r!==255||g!==255||b!==255)painted++;if(Math.max(r,g,b)-Math.min(r,g,b)>40)colored++;if(g>r+40&&g>b+40)green++;}}
+ return {hash:hash>>>0,painted,colored,green};},png.toString('base64'));
+}
+async function compareCommands(page,renderer,flags=['renderBundlesEnabled','commandPlansEnabled','strokeBatchingEnabled']){
+ await warm(page);const image=await capture(page);expect(image.painted).toBeGreaterThan(100);expect(image.colored).toBeGreaterThan(100);
+ if(!flags.includes('commandPlansEnabled'))expect(image.green).toBeGreaterThan(100);
+ const before=await commandStats(page);
+ await page.evaluate(flags=>{const g=commandMap.ctx.render._painter.gpu;for(const flag of flags)g[flag]=false;},flags);
+ await warm(page,2);const disabled=await commandStats(page);
+ expect(disabled.recordings).toBe(before.recordings);expect(disabled.replays).toBe(before.replays);
+ if(flags.includes('commandPlansEnabled'))expect(disabled.hits).toBe(before.hits);
+ expect(await capture(page)).toEqual(image);
+ await page.evaluate(flags=>{const g=commandMap.ctx.render._painter.gpu;for(const flag of flags)g[flag]=true;},flags);
+ await warm(page);const enabled=await commandStats(page);
+ expect(enabled.hits).toBeGreaterThan(disabled.hits);
+ if(renderer==='webgpu')expect(enabled.replays).toBeGreaterThan(disabled.replays);
+ expect(await capture(page)).toEqual(image);
+ console.log('COMMAND_CACHE_COMPARE',JSON.stringify({renderer,flags,before,disabled,enabled,image}));
 }
 for(const renderer of ['webgl2','webgpu'])test(`${renderer}: cached mesh plans and MSAA bundles retain ordered pixels through camera/style/filter changes`,async({page})=>{
  test.setTimeout(120000);await boot(page,renderer);await settled(page);await warm(page);
@@ -43,12 +75,7 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: cached mesh plans a
  expect(initial.renderCommands.hits).toBeGreaterThan(0);
  if(renderer==='webgpu'){expect(initial.renderCommands.replays).toBeGreaterThan(0);expect(initial.renderCommands.recordings).toBeGreaterThan(0);}
  else expect(initial.renderCommands.recordings).toBe(0);
- const compare=async()=>{
-  await warm(page);const a=await capture(page);expect(a.painted).toBeGreaterThan(100);
-  await page.evaluate(()=>{const g=commandMap.ctx.render._painter.gpu;g.renderBundlesEnabled=false;g.commandPlansEnabled=false;g.strokeBatchingEnabled=false;commandMap.render();});
-  expect(await capture(page)).toEqual(a);
-  await page.evaluate(()=>{const g=commandMap.ctx.render._painter.gpu;g.renderBundlesEnabled=true;g.commandPlansEnabled=true;g.strokeBatchingEnabled=true;commandMap.render();});await warm(page);
- };
+ const compare=()=>compareCommands(page,renderer);
  await compare();
  await page.evaluate(()=>{commandMap.ctx.view._viewport.transform.translate(19,-13);commandMap.render();});await settled(page);await compare();
  await page.evaluate(()=>{commandMap.setPaintProperty('area','fill-color','#17bb66');commandMap.setPaintProperty('line','line-width',5);commandMap.render();});await settled(page);await compare();
@@ -68,39 +95,50 @@ test('webgpu: native MSAA replay interoperates with image commands, MSDF labels 
  try{
   const page=await context.newPage();await boot(page,'webgpu');await settled(page);
   await page.evaluate(()=>{
-   const p=commandMap.ctx.render._painter,finish=p.finishFrame.bind(p);
+   const p=commandMap.ctx.render._painter,g=p.gpu,finish=p.finishFrame.bind(p);
    const image=document.createElement('canvas');image.width=image.height=16;const c=image.getContext('2d');c.fillStyle='#22dd44';c.fillRect(0,0,16,16);
+   window.commandOrder=[];window.commandImageDraws=0;
+   const begin=g.begin.bind(g),mesh=g.drawMeshSequence.bind(g),drawImage=g.drawImage.bind(g),labels=g.drawLabels.bind(g);
+   g.begin=(...args)=>{commandOrder=[];return begin(...args);};
+   g.drawMeshSequence=(...args)=>{commandOrder.push('mesh');return mesh(...args);};
+   g.drawImage=(...args)=>{const before=g.stats.drawCalls;drawImage(...args);if(g.stats.drawCalls>before){commandOrder.push('image');commandImageDraws++;}};
+   g.drawLabels=(...args)=>{commandOrder.push('labels');return labels(...args);};
    // Interleave a genuine image draw between two native-eligible vector scopes.
-   p.finishFrame=()=>{p.commands.splice(1,0,()=>p.gpu.drawImage(image,[-1,-1,1,1],.65,true));finish();};
+   p.finishFrame=()=>{const before=p.commands.length;p.drawRasterImage(image,[-1,-1,1,1],.65,true,undefined,true);if(p.commands.length>before)p.commands.splice(1,0,p.commands.pop());finish();};
    commandMap.setLayerLabel('area',{field:'name',fontSize:18,maxLabels:3});commandMap.render();
   });
   await expect.poll(()=>page.evaluate(()=>commandMap.ctx.render._painter.stats.text.textureUploads),{timeout:30000}).toBeGreaterThan(0);await settled(page);await warm(page);
   expect(await page.evaluate(()=>commandMap.ctx.render._canvas.width)).toBe(1600);
   const compare=async()=>{
-   await warm(page);const image=await capture(page);expect(image.painted).toBeGreaterThan(100);
-   await page.evaluate(()=>{commandMap.ctx.render._painter.gpu.renderBundlesEnabled=false;commandMap.render();});
-   expect(await capture(page)).toEqual(image);
-   await page.evaluate(()=>{commandMap.ctx.render._painter.gpu.renderBundlesEnabled=true;commandMap.render();});
+   await compareCommands(page,'webgpu',['renderBundlesEnabled']);
+   const actual=await page.evaluate(()=>({order:commandOrder,imageDraws:commandImageDraws,text:commandMap.ctx.render._painter.stats.text})),at=actual.order.indexOf('image');
+   expect(actual.imageDraws).toBeGreaterThan(0);expect(actual.order.slice(0,at)).toContain('mesh');expect(actual.order.slice(at+1)).toContain('mesh');expect(actual.order).toContain('labels');expect(actual.text.glyphInstances).toBeGreaterThan(0);
+   console.log('COMMAND_INTERLEAVE',JSON.stringify(actual));
   };
   await compare();
   await page.evaluate(()=>{document.body.firstElementChild.style.width='750px';document.body.firstElementChild.style.height='550px';commandMap.resize();commandMap.render();});await settled(page);await compare();
   expect(await page.evaluate(()=>commandMap.ctx.render._painter.stats.renderCommands.replays)).toBeGreaterThan(0);
-  await page.evaluate(()=>commandMap.dispose());expect(await page.evaluate(()=>commandErrors)).toEqual([]);
+  const released=await page.evaluate(async()=>{const p=commandMap.ctx.render._painter;await commandMap.dispose();return p.stats;});
+  expect(released.renderCommands.entries).toBe(0);expect(released.liveBufferBytes).toBe(0);expect(released.liveTextureBytes).toBe(0);expect(released.text.liveBufferBytes).toBe(0);expect(released.text.liveTextureBytes).toBe(0);
+  await expect.poll(()=>page.workers().length).toBe(0);expect(await page.evaluate(()=>commandErrors)).toEqual([]);
+  console.log('COMMAND_INTERLEAVE_RELEASE',JSON.stringify({liveBufferBytes:released.liveBufferBytes,liveTextureBytes:released.liveTextureBytes,text:released.text,commands:released.renderCommands}));
  }finally{await context.close();}
 });
 
 for (const renderer of ['webgl2','webgpu']) test(`${renderer}: retiring unreferenced geometry retains unrelated recorded scopes`,async({page})=>{
   await boot(page,renderer);await settled(page);await warm(page);
   const image=await capture(page);
-  const result=await page.evaluate(()=>{
+  const before=await commandStats(page);
+  await page.evaluate(()=>{
     const map=commandMap,g=map.ctx.render._painter.gpu;
-    const before={...g.commandStats};
     const extra=g.createMesh({kind:'fill',vertices:new Float32Array(12),indices:new Uint16Array([0,1,2]),count:3});
     g.destroyMesh(extra);map.render();
-    return {before,after:{...g.commandStats}};
   });
-  expect(result.after.builds).toBe(result.before.builds);
-  expect(result.after.recordings).toBe(result.before.recordings);
+  await warm(page,2);const after=await commandStats(page);
+  expect(after.builds).toBe(before.builds);expect(after.recordings).toBe(before.recordings);
+  expect(after.hits).toBeGreaterThan(before.hits);if(renderer==='webgpu')expect(after.replays).toBeGreaterThan(before.replays);
+  expect(after.liveBufferBytes).toBe(before.liveBufferBytes);
+  console.log('COMMAND_RETIRE',JSON.stringify({renderer,before,after}));
   expect(await capture(page)).toEqual(image);
   await page.evaluate(()=>commandMap.dispose());
   expect(await page.evaluate(()=>commandErrors)).toEqual([]);

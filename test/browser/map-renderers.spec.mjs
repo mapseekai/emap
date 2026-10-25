@@ -68,6 +68,7 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: missing MSDF glyphs
   expect(released).toBe(0);
 });
 async function runtime(page) {
+  await installCanvasReadback(page);
   await page.goto(base+'luma-benchmark/');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await page.evaluate(()=>{lumaBenchmark.dispose();document.body.replaceChildren();});
@@ -88,11 +89,12 @@ async function create(page, renderer) {
     await add('poi','circle',{type:'Point',coordinates:[0,0]},{'circle-color':'#ee2222','circle-radius':10});
     map.setExtent(new emap.Bounds(-4,-4,4,4));map.render();
     window.mapPixel=async(x,y)=>{
-      map.render();const canvas=map.ctx.render._canvas;
-      const image=await createImageBitmap(canvas),c=document.createElement('canvas');c.width=image.width;c.height=image.height;
-      const ctx=c.getContext('2d');ctx.drawImage(image,0,0);image.close();
+      map.render();const canvas=map.ctx.render._canvas,pixels=await readCanvasPixels(canvas);
       const p=map.getTransform().project(x,y),dpr=window.devicePixelRatio||1;
-      return [...ctx.getImageData(Math.round(p[0]*dpr),Math.round(p[1]*dpr),1,1).data];
+      const px=Math.round(p[0]*dpr),py=Math.round(p[1]*dpr);
+      if(px<0||py<0||px>=canvas.width||py>=canvas.height)return [0,0,0,0];
+      const at=(py*canvas.width+px)*4;
+      return [...pixels.slice(at,at+4)];
     };
     window.flushFormal=async()=>{for(let i=0;i<3;i++){map.render();await new Promise(r=>requestAnimationFrame(r));await map.ctx.render._labels?.settled();}};
     return {renderer:map.getRenderer(),canvases:[...host.querySelectorAll('canvas')].map(c=>c.dataset.emapRenderer)};
@@ -112,12 +114,9 @@ for(const renderer of ['canvas2d','webgl2','webgpu'])test(`${renderer}: formal E
   await expect.poll(()=>page.evaluate(async()=>{await flushFormal();return formalMap.ctx.render._icons?.stats.images??0;})).toBe(1);
   await expect.poll(()=>page.evaluate(async()=>{await flushFormal();return formalMap.ctx.render._labels?.stats.placed??0;})).toBe(1);
   const symbolPixels=await page.evaluate(async()=>{
-    const icon=await mapPixel(0,0), bitmap=await createImageBitmap(formalMap.ctx.render._canvas);
-    const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
-    const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();
-    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;let text=0;
+    const icon=await mapPixel(0,0),pixels=await readCanvasPixels(formalMap.ctx.render._canvas);let text=0;
     for(let i=0;i<pixels.length;i+=4)if(pixels[i]>200&&pixels[i+1]<60&&pixels[i+2]>90&&pixels[i+2]<145&&pixels[i+3]>100)text++;
-    canvas.width=canvas.height=0;return {icon,text};
+    return {icon,text};
   });
   expect(symbolPixels.icon[2]).toBeGreaterThan(180);expect(symbolPixels.icon[0]).toBeGreaterThan(140);
   expect(symbolPixels.text).toBeGreaterThan(5);
@@ -489,7 +488,8 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: slow GPU navigat
   await runtime(page); await create(page, renderer); await settleRequests(page);
   await page.evaluate(() => formalMap.setLayerSymbol('poi', {
     images: {marker: {url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ee2222"/></svg>'), size: [20, 20]}},
-    layout: {'icon-image': 'marker', 'text-field': ['get', 'name'], 'text-offset': [0, 2]},
+    // Keep the marker-center sample clear of the fixed-above-point label.
+    layout: {'icon-image': 'marker', 'text-field': ['get', 'name'], 'text-offset': [0, 0]},
   }));
   await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._icons?.stats.images; })).toBe(1);
   await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._labels?.stats.placed; })).toBe(1);
@@ -539,13 +539,20 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: slow GPU navigat
   expect(await page.evaluate(() => formalMap.ctx.render._canvas.style.transform)).toBe('');
   expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBeGreaterThan(updated);
   expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+  const settledUploads = await page.evaluate(() => formalMap.ctx.render._painter.stats.uploads);
   const settledFrames = await page.evaluate(() => {
     const painter = formalMap.ctx.render._painter;
+    // Replace a real GPU mesh so the idle prepared callback has new content to present.
+    painter.cache.clear({sourceId: 'road'});
     painter.chunks.options.invalidate();
     return painter.stats.frames;
   });
   await settleRequests(page);
   expect(await page.evaluate(() => formalMap.ctx.render._painter.stats.frames)).toBeGreaterThan(settledFrames);
+  const prepared = await page.evaluate(() => ({frames: formalMap.ctx.render._painter.stats.frames, uploads: formalMap.ctx.render._painter.stats.uploads}));
+  expect(prepared.uploads).toBeGreaterThan(settledUploads);
+  expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
+  await info.attach('slow-navigation-evidence', {body: JSON.stringify({beforeFrames: before.frames, updated, settledFrames, settledUploads, prepared}), contentType: 'application/json'});
   await page.evaluate(() => { delete formalMap.ctx.render._painter.navigationFrameMs; return formalMap.dispose(); });
   expect(errors).toEqual([]);
 });

@@ -1,33 +1,88 @@
 import { test, expect } from '@playwright/test';
 import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
-async function boot(page,renderer) {
+async function boot(page,renderer,exact=false,precision=false) {
  await installCanvasReadback(page);
  await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
- await page.evaluate(async renderer=>{
+ await page.evaluate(async({renderer,exact,precision})=>{
   lumaBenchmark.dispose();document.body.replaceChildren();const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:600px';document.body.append(host);
-  window.strokeMap=await emap.Emap.create({container:host,renderer,preset:'viewer'});window.strokeErrors=[];strokeMap.on('error',e=>strokeErrors.push(String(e.error)));
-  const features=Array.from({length:3000},(_,i)=>{const x=(i%60)*.12-3.5,y=Math.floor(i/60)*.12-3;
-   return {type:'Feature',properties:{},geometry:{type:'LineString',coordinates:i%3===0?[[x,y],[x+.07,y]]:i%3===1?[[x,y],[x+.07,y],[x+.07,y+.07]]:[[x,y],[x+.07,y],[x,y]]}};});
-  features.push({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:Array.from({length:100100},(_,i)=>[i/20000,30+Math.sin(i/4500)*.01])}});
+  // These cases exercise the opt-in screen-space stroke formats.
+  window.strokeMap=await emap.Emap.create({container:host,renderer,preset:'viewer',screenPathFiltering:true});window.strokeErrors=[];strokeMap.on('error',e=>strokeErrors.push(String(e.error)));
+  if(precision){
+   window.strokePrecision={nonzeroLow:0,endpoints:0,maxError:0};
+   const worker=strokeMap.ctx.render._painter.chunks.worker,build=worker.build.bind(worker),batch=worker.buildBatch.bind(worker);
+   const reference=packet=>{
+    const values=new Map(),view=packet.screen&&new emap.AffineTransform(...packet.screen.view);
+    if(view)for(let i=0;i<packet.coordinates.length;i+=2){
+     const p=view.project(packet.coordinates[i],packet.coordinates[i+1]),key=[Math.fround(p[0]),Math.fround(p[1])].join(':');
+     if(!values.has(key))values.set(key,[]);values.get(key).push(p);
+    }
+    return values;
+   };
+   const inspect=(result,values)=>{
+    for(const g of result.geometries)if(g.compactStroke&&!g.compactStrokeXY){
+     for(let i=0;i<g.count;i++)for(const offset of [0,4]){
+      const at=i*16+offset,x=g.vertices[at],y=g.vertices[at+1],lx=g.vertices[at+2],ly=g.vertices[at+3];
+      const expected=values.get([x,y].join(':'))??[];
+      const error=Math.min(...expected.map(p=>Math.max(Math.abs(x+lx-p[0]),Math.abs(y+ly-p[1]))));
+      strokePrecision.nonzeroLow+=Number(lx!==0)+Number(ly!==0);strokePrecision.endpoints++;
+      strokePrecision.maxError=Math.max(strokePrecision.maxError,error);
+     }
+    }
+   };
+   worker.build=async(packet,signal)=>{const expected=reference(packet),result=await build(packet,signal);inspect(result,expected);return result;};
+   worker.buildBatch=async(packets,signal)=>{const expected=packets.map(reference),results=await batch(packets,signal);for(let i=0;i<results.length;i++)if(results[i].result)inspect(results[i].result,expected[i]);return results;};
+  }
+  const step=exact?1/8:.12,segment=exact?1/16:.07;
+  const features=Array.from({length:3000},(_,i)=>{const x=(i%60)*step-3.5,y=Math.floor(i/60)*step-3;
+   return {type:'Feature',properties:{},geometry:{type:'LineString',coordinates:i%3===0?[[x,y],[x+segment,y]]:i%3===1?[[x,y],[x+segment,y],[x+segment,y+segment]]:[[x,y],[x+segment,y],[x,y]]}};});
+  features.push({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:Array.from({length:100100},(_,i)=>exact?[i/16384-4,32]:[i/20000,30+Math.sin(i/4500)*.01])}});
   const source=new emap.TopologySource('s');await source.setData({filename:'stroke.geojson',content:new TextEncoder().encode(JSON.stringify({type:'FeatureCollection',features}))});
   source.getDisplayArcs=()=>null;await strokeMap.addSource('s',source);
   strokeMap.addLayer({id:'lines',type:'line',source:'s','source-layer':source.getLayers()[0].name,paint:{'line-color':'#174bd4','line-width':2}});
-  strokeMap.setExtent(new emap.Bounds(-4,-4,4,4));strokeMap.render();
+  // Dyadic inputs and a power-of-two detail frame give the XY case zero low words.
+  const edge=exact?4.6875:4;
+  strokeMap.setExtent(new emap.Bounds(-edge,-edge,edge,edge));strokeMap.render();
   window.captureStroke=async()=>{const d=await readCanvasPixels(strokeMap.ctx.render._canvas);return d;};
   window.strokeModes=(compact,pages)=>{const p=strokeMap.ctx.render._painter;p.gpu.compactStrokesEnabled=compact;p.gpu.meshPagesEnabled=pages;p.clearGeometryCache();strokeMap.render();};
- },renderer);
+ },{renderer,exact,precision});
 }
 async function settle(page){await expect.poll(()=>page.evaluate(()=>strokeErrors)).toEqual([]);await expect.poll(()=>page.evaluate(()=>{const p=strokeMap.ctx.render._painter;return p.frameComplete&&p.stats.geometryChunks.pending===0;}),{timeout:60000}).toBe(true);}
+async function strokeScreenshot(page,baseline=false,difference=false){
+ await page.evaluate(async()=>{await strokeMap.ctx.render._painter.gpu.waitForIdle();await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);});
+ const png=await page.screenshot({clip:{x:0,y:0,width:800,height:600}});
+ return page.evaluate(async({png,baseline,difference})=>{
+  const image=new Image();image.src='data:image/png;base64,'+png;await image.decode();
+  const canvas=document.createElement('canvas');canvas.width=800;canvas.height=600;
+  const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+  const pixels=ctx.getImageData(0,0,800,600).data;
+  if(baseline){
+   window.strokeScreenshotPixels=pixels;
+   // The empty corner gives the background chroma, including thin MSAA coverage.
+   const redChroma=pixels[2]-pixels[0],greenChroma=pixels[2]-pixels[1];
+   return pixels.some((v,i)=>i%4===0&&pixels[i+2]-v>redChroma&&pixels[i+2]-pixels[i+1]>greenChroma);
+  }
+  if(difference){let changed=0;for(let i=0;i<pixels.length;i+=4)if([0,1,2,3].some(j=>pixels[i+j]!==strokeScreenshotPixels[i+j]))changed++;return changed;}
+  return pixels.every((v,i)=>v===strokeScreenshotPixels[i]);
+ },{png:png.toString('base64'),baseline,difference});
+}
 for(const renderer of ['webgl2','webgpu']) {
  test(`${renderer}: compact valid strokes preserve endpoints, joined corners and pooled draw pixels`,async({page})=>{
-  test.setTimeout(120000);await boot(page,renderer);await settle(page);
+  test.setTimeout(120000);await boot(page,renderer,false,true);await settle(page);
   const compact=await page.evaluate(()=>{const p=strokeMap.ctx.render._painter;return [...p.gpu.meshes].filter(m=>m.compactStroke).length;});expect(compact).toBeGreaterThan(0);
+  // Decimal coordinates legitimately need nonzero low words, unlike the XY case.
+  const precision=await page.evaluate(()=>strokePrecision);
+  console.log('STROKE_PRECISION',renderer,JSON.stringify(precision));
+  expect(precision.nonzeroLow).toBeGreaterThan(0);expect(precision.endpoints).toBeGreaterThan(0);
+  expect(precision.maxError).toBeLessThan(1e-9);
   for(const width of [.6,2,7]){
    await page.evaluate(w=>{strokeMap.setPaintProperty('lines','line-width',w);strokeModes(true,true);},width);await settle(page);
    await page.evaluate(async()=>{window.strokeA=await captureStroke();});
+   expect(await strokeScreenshot(page,true)).toBe(true);
    await page.evaluate(()=>strokeModes(true,false));await settle(page);expect(await page.evaluate(async()=>{const b=await captureStroke();return b.every((v,i)=>v===strokeA[i]);})).toBe(true);
+   expect(await strokeScreenshot(page)).toBe(true);
    await page.evaluate(()=>strokeModes(false,false));await settle(page);const {different,max}=await page.evaluate(async()=>{const a=strokeA,c=await captureStroke();let different=0,max=0;for(let i=0;i<a.length;i+=4){let change=false;for(let j=0;j<4;j++){const d=Math.abs(a[i+j]-c[i+j]);max=Math.max(max,d);change||=!!d;}different+=Number(change);}return {different,max};});
    console.log('STROKE_PIXELS',renderer,width,{different,max});expect(different).toBeLessThan(800*600*.002);
+   expect(await strokeScreenshot(page,false,true)).toBeLessThan(800*600*.002);
   }
   // Native navigation keeps the existing page slices, not a snapshot bitmap.
   await page.evaluate(()=>strokeModes(true,true));await settle(page);
@@ -86,15 +141,19 @@ for(const renderer of ['webgl2','webgpu']) {
 }
 
 for(const renderer of ['webgl2','webgpu'])test(`${renderer}: lossless XY stroke packing equals explicit high/low buffers`,async({page})=>{
-  test.setTimeout(90000);await boot(page,renderer);await settle(page);
+  test.setTimeout(90000);await boot(page,renderer,true);await settle(page);
   await page.evaluate(async()=>{strokeMap.render();window.xyPixels=await captureStroke();});
+  // A retained WebGPU frame can have an empty Canvas readback after presentation.
+  // Also require visible ink and exact compositor pixels for the ABI comparison.
+  expect(await strokeScreenshot(page,true)).toBe(true);
   expect(await page.evaluate(()=>[...strokeMap.ctx.render._painter.gpu.meshes].some(m=>m.compactStrokeXY))).toBe(true);
   await page.evaluate(()=>{
-    const p=strokeMap.ctx.render._painter,worker=p.chunks.worker,build=worker.build.bind(worker);
-    worker.build=async(...args)=>{
-      const result=await build(...args);
+    const p=strokeMap.ctx.render._painter,worker=p.chunks.worker,build=worker.build.bind(worker),batch=worker.buildBatch.bind(worker);
+    window.expandedXY=0;
+    const expand=result=>{
       result.geometries=result.geometries.map(g=>{
         if(!g.compactStrokeXY)return g;
+        expandedXY++;
         const vertices=new Float32Array(g.count*16);
         for(let i=0;i<g.count;i++){
           const a=i*12,b=i*16;
@@ -105,9 +164,18 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: lossless XY stroke 
         return {...g,vertices,compactStrokeXY:false};
       });return result;
     };
+    worker.build=async(...args)=>expand(await build(...args));
+    worker.buildBatch=async(...args)=>{
+      const results=await batch(...args);
+      for(const item of results)if(item.result)expand(item.result);
+      return results;
+    };
     p.clearGeometryCache();strokeMap.render();
   });await settle(page);
+  expect(await page.evaluate(()=>expandedXY)).toBeGreaterThan(0);
+  expect(await page.evaluate(()=>[...strokeMap.ctx.render._painter.gpu.meshes].some(m=>m.compactStrokeXY))).toBe(false);
   expect(await page.evaluate(async()=>{strokeMap.render();return (await captureStroke()).every((v,i)=>v===xyPixels[i]);})).toBe(true);
+  expect(await strokeScreenshot(page)).toBe(true);
   await page.evaluate(()=>strokeMap.dispose());expect(await page.evaluate(()=>strokeErrors)).toEqual([]);
 });
 
