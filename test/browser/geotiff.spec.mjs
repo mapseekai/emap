@@ -199,18 +199,72 @@ for(const [kind,bits,format,first] of [['uint16',16,1,1000],['int16',16,2,-2000]
   });
 }
 
-test('continuous real wheel events perform no new tile reads or frame swaps until idle',async({page})=>{
+test('continuous real wheel events perform no new tile reads or frame swaps until idle',async({page},info)=>{
   await ready(page);
   const before=await page.evaluate(()=>window.geotiffDemo.stats());
   await page.mouse.move(700,360);
-  for(let i=0;i<8;i++){
-    await page.mouse.wheel(0,-25);await page.waitForTimeout(45);
-    const stats=await page.evaluate(()=>window.geotiffDemo.stats());
-    expect(stats.readRequests).toBe(before.readRequests);expect(stats.committedFrames).toBe(before.committedFrames);
-    expect((await page.evaluate(rasterPixels)).count).toBeGreaterThan(1000);
+  await page.evaluate(()=>{
+    const state=window.geotiffDemo,host=document.querySelector('#map');
+    const probe=window.wheelRasterProbe={events:[],samples:[],boundaries:[],pending:0,error:null};
+    const boundary=type=>()=>probe.boundaries.push({type,time:performance.now(),eventsSeen:probe.events.length,stats:state.stats()});
+    const start=boundary('start'),end=boundary('end');
+    state.map.on('interactionstart',start);state.map.on('interactionend',end);
+    const wheel=event=>{
+      const index=probe.events.length;
+      probe.events.push({time:performance.now(),timeStamp:event.timeStamp,trusted:event.isTrusted,deltaY:event.deltaY,stats:state.stats()});
+      probe.pending++;
+      requestAnimationFrame(async()=>{
+        const sample={index,time:performance.now(),stats:state.stats(),boundaries:probe.boundaries.map(value=>({...value}))};
+        try{
+          const bytes=await window.readCanvasPixels(host.querySelector('canvas'));
+          let count=0;for(let i=3;i<bytes.length;i+=4)if(bytes[i]>0)count++;
+          probe.samples.push({...sample,count});
+        }catch(error){probe.error=String(error);}finally{probe.pending--;}
+      });
+    };
+    host.addEventListener('wheel',wheel,{passive:true});
+    window.disposeWheelRasterProbe=()=>{
+      host.removeEventListener('wheel',wheel);
+      state.map.off('interactionstart',start);state.map.off('interactionend',end);
+    };
+  });
+  // Driver/readback round trips can outlast idle. Schedule native input independently
+  // and inspect the actual DOM events and their subsequent rendered-frame samples.
+  const wheels=Array.from({length:8},(_,i)=>(async()=>{
+    await new Promise(resolve=>setTimeout(resolve,i*45));
+    await page.mouse.wheel(0,-25);
+  })());
+  try{
+    await Promise.all(wheels);
+    await page.waitForFunction(()=>wheelRasterProbe.error||wheelRasterProbe.events.length===8&&wheelRasterProbe.samples.length===8&&wheelRasterProbe.pending===0);
+    const probe=await page.evaluate(()=>window.wheelRasterProbe);
+    const gaps=probe.events.slice(1).map((event,i)=>event.time-probe.events[i].time);
+    const timing={span:probe.events.at(-1).time-probe.events[0].time,maxGap:Math.max(...gaps)};
+    await info.attach('continuous-wheel',{body:JSON.stringify({before,timing,...probe},null,2),contentType:'application/json'});
+    expect(probe.error).toBeNull();expect(probe.events).toHaveLength(8);expect(probe.samples).toHaveLength(8);
+    expect(probe.events.every(event=>event.trusted&&event.deltaY<0)).toBe(true);
+    // The native stream must span at least the renderer's 250ms idle window.
+    expect(timing.span).toBeGreaterThanOrEqual(250);
+    expect(probe.boundaries.filter(value=>value.type==='start')).toHaveLength(1);
+    expect(probe.boundaries.filter(value=>value.type==='end').every(value=>value.eventsSeen===8)).toBe(true);
+    for(const event of probe.events){
+      expect(event.stats.readRequests).toBe(before.readRequests);expect(event.stats.committedFrames).toBe(before.committedFrames);
+    }
+    for(const sample of probe.samples){
+      expect(sample.stats.interacting).toBe(true);
+      expect(sample.stats.readRequests).toBe(before.readRequests);expect(sample.stats.committedFrames).toBe(before.committedFrames);
+      expect(sample.count).toBeGreaterThan(1000);
+    }
+    await expect.poll(()=>page.evaluate(()=>window.geotiffDemo.stats().committedFrames)).toBeGreaterThan(before.committedFrames);
+    await idleRaster(page);expect(await page.evaluate(()=>window.geotiffDemo.error)).toBeNull();
+    const ends=await page.evaluate(()=>wheelRasterProbe.boundaries.filter(value=>value.type==='end'));
+    expect(ends).toHaveLength(1);expect(ends[0].eventsSeen).toBe(8);
+    expect(ends[0].stats.readRequests).toBe(before.readRequests);expect(ends[0].stats.committedFrames).toBe(before.committedFrames);
+  }finally{
+    // Drain every native input before this page can close or another test can start.
+    await Promise.allSettled(wheels);
+    await page.evaluate(()=>window.disposeWheelRasterProbe?.());
   }
-  await expect.poll(()=>page.evaluate(()=>window.geotiffDemo.stats().committedFrames)).toBeGreaterThan(before.committedFrames);
-  await idleRaster(page);expect(await page.evaluate(()=>window.geotiffDemo.error)).toBeNull();
 });
 
 test('the last complete raster remains visible while a slow provider prepares replacement tiles',async({page})=>{

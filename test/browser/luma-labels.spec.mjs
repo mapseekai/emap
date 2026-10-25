@@ -28,13 +28,14 @@ async function paintedText(page, name) {
   },name);
 }
 async function eachLabelPainted(page,name,minimumPixels=30) {
-  const result=await page.evaluate(async name=>{
-    const app=window[name];app.draw('luma');const source=document.querySelector('#webgl');
+  const snapshot=await page.evaluate(async({name,minimumPixels})=>{
+    const app=window[name],placementsBefore=app.labelPlacements;app.draw('luma');const source=document.querySelector('#webgl');
     const image=await createImageBitmap(source),canvas=document.createElement('canvas');
     canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');
     ctx.drawImage(image,0,0);image.close();const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
     const stage=document.querySelector('#stage'),rx=canvas.width/stage.clientWidth,ry=canvas.height/stage.clientHeight;
-    return app.labelPlacements.map(label=>{
+    const placements=app.labelPlacements;
+    const rows=placements.map(label=>{
       const b=label.bounds;let colored=0;
       for(let y=Math.max(0,Math.floor(b[1]*ry));y<Math.min(canvas.height,Math.ceil(b[3]*ry));y++)
         for(let x=Math.max(0,Math.floor(b[0]*rx));x<Math.min(canvas.width,Math.ceil(b[2]*rx));x++) {
@@ -43,10 +44,23 @@ async function eachLabelPainted(page,name,minimumPixels=30) {
         }
       return {text:label.text,owner:label.ownerId,colored};
     });
-  },name);
+    let evidence;
+    if(rows.length<4||rows.some(row=>row.colored<=minimumPixels)) {
+      try {
+        // Keep the exact counted bitmap; a later GPU read may show another frame.
+        const gl=app.snapshot?.backend==='webgl'?source.getContext('webgl2'):null;
+        const glInfo=gl?{attributes:gl.getContextAttributes(),samples:gl.getParameter(gl.SAMPLES),sampleBuffers:gl.getParameter(gl.SAMPLE_BUFFERS),alphaToCoverage:gl.isEnabled(gl.SAMPLE_ALPHA_TO_COVERAGE),sampleCoverage:gl.isEnabled(gl.SAMPLE_COVERAGE),framebufferIsDefault:gl.getParameter(gl.FRAMEBUFFER_BINDING)===null,renderer:gl.getParameter(gl.RENDERER),version:gl.getParameter(gl.VERSION)}:null;
+        evidence={glInfo,dpr:devicePixelRatio,inner:[innerWidth,innerHeight],stage:[stage.clientWidth,stage.clientHeight],canvas:[canvas.width,canvas.height],placementsBefore,placements,stats:app.labelStats,snapshot:app.snapshot,png:canvas.toDataURL()};
+      } catch(error) {evidence={diagnosticError:String(error)};}
+    }
+    return {rows,evidence};
+  },{name,minimumPixels});
+  const result=snapshot.rows;
+  if(snapshot.evidence)console.log('LABEL_FAILURE_EVIDENCE',JSON.stringify({name,minimumPixels,result,...snapshot.evidence}));
   expect(result.length).toBeGreaterThanOrEqual(4);
   for(const row of result)expect(row.colored,JSON.stringify(row)).toBeGreaterThan(minimumPixels);
 }
+
 for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-25d']) {
   test(`${backend} ${route}: attached point/line/polygon labels, pixels, ownership and disposal`,async({page},info)=>{
     test.setTimeout(120000);
@@ -58,6 +72,8 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});
     if(route==='luma-benchmark')await page.evaluate(()=>window.lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));
     await ready(page,name);
+    // Geometry-only fit leaves no room for fixed above-point labels and halos.
+    await page.evaluate(async name=>{const a=window[name];if(name==='lumaBenchmark')await a.setView(.75);else a.zoom(.75);},name);
     const before=await page.evaluate(name=>window[name].layers.map(l=>[l.id,l.type]),name);
     expect(new Set(before.map(l=>l[1]))).toEqual(new Set(['circle','line','fill']));
     await page.evaluate(name=>{const a=window[name];for(const l of a.layers)a.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2,priority:['get','rank']});},name);
@@ -67,6 +83,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     expect(labels.some(l=>l.text.includes('Road'))).toBe(true);
     expect(labels.some(l=>l.text.includes('地块'))).toBe(true);
     expect(labels.some(l=>l.text.includes('北京'))).toBe(true);
+    expect(labels.some(l=>l.text.includes('上海'))).toBe(true);
     expect(await paintedText(page,name)).toBeGreaterThan(100);
     await eachLabelPainted(page,name);
     expect(await page.evaluate(name=>window[name].layers.map(l=>[l.id,l.type]),name)).toEqual(before);
@@ -82,7 +99,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     expect(await page.evaluate(({name,owner})=>window[name].labelPlacements.some(l=>l.ownerId===owner),{name,owner})).toBe(true);
     if(route==='luma-25d') {
       for(const pose of [{pitch:0,bearing:0},{pitch:60,bearing:65}]) {
-        await page.evaluate(p=>{window.luma25d.setPose(p);window.luma25d.fit();},pose);await settle(page,name);
+        await page.evaluate(p=>{window.luma25d.setPose(p);window.luma25d.fit();window.luma25d.zoom(.75);},pose);await settle(page,name);
         expect(await paintedText(page,name)).toBeGreaterThan(50);
         await eachLabelPainted(page,name);
         const p=await page.evaluate(()=>window.luma25d.labelPlacements);
@@ -150,16 +167,19 @@ test('public Emap labels follow layer filters, visibility and removal without ne
 });
 
 
-for(const backend of ['webgl','webgpu'])test(`${backend}: DPR 2 keeps each attached label at CSS size`,async({browser},info)=>{
-  const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:2});
+for(const dpr of [1.3,2])for(const backend of ['webgl','webgpu'])test(`${backend}: DPR ${dpr} keeps each attached label at CSS size`,async({browser},info)=>{
+  const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try {
     await page.goto(new URL(`/mapseekai/emap/examples/luma-25d/?gpu=${backend}`,info.project.use.baseURL).href);await ready(page,'luma25d');
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});await ready(page,'luma25d');
     await page.evaluate(()=>{for(const l of luma25d.layers)luma25d.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2});});
     await settle(page,'luma25d');await eachLabelPainted(page,'luma25d');
-    const result=await page.evaluate(()=>({dpr:luma25d.snapshot.dpr,labels:luma25d.labelPlacements,stats:luma25d.labelStats}));
-    expect(result.dpr).toBe(2);expect(result.stats.placed).toBe(5);
+    const result=await page.evaluate(()=>({dpr:luma25d.snapshot.dpr,deviceDpr:devicePixelRatio,labels:luma25d.labelPlacements,stats:luma25d.labelStats}));
+    expect(result.dpr).toBe(result.deviceDpr);
+    // Fractional overrides may reach the browser as float32; retain exact DPR 2.
+    if(dpr===2)expect(result.dpr).toBe(2);else expect(Math.fround(result.dpr)).toBe(Math.fround(dpr));
+    expect(result.stats.placed).toBe(5);
     for(const label of result.labels)expect(label.bounds[3]-label.bounds[1]).toBeLessThan(140);
     await info.attach('hidpi-labels',{body:JSON.stringify(result),contentType:'application/json'});
     await page.evaluate(()=>luma25d.dispose());expect(errors).toEqual([]);

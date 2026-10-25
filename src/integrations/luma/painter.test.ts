@@ -703,9 +703,203 @@ it('retains a proven complete frame before the first partial replacement can ove
 });
 
 it.each([
-  'webgl2',
-  'webgpu',
-] as const)('presents healthy raster updates after terminal geometry errors on %s', async (renderer) => {
+  'content',
+  'revision',
+  'bounds',
+  'sourceId',
+  'id',
+] as const)('discards a retained bitmap when its layer %s changes', async (change) => {
+  const f = await fixture();
+  const owner = {
+    id: 'line',
+    sourceId: 's',
+    revision: 0,
+    content: 'original filter/style/attributes',
+    bounds: [0, 0, 100, 100] as [number, number, number, number],
+  };
+  const draw = () => {
+    f.painter.setLayerContext(owner);
+    f.painter.drawArcs(f.arcs, { width: 1 });
+  };
+  f.frame(draw);
+  f.gpu.begin.mockClear();
+  if (change === 'content') owner.content = 'changed filter/style/attributes';
+  else if (change === 'revision') owner.revision++;
+  else if (change === 'bounds') owner.bounds = [...owner.bounds];
+  else owner[change] += '-replacement';
+  f.frame(() => {
+    draw();
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.painter.framePresented).toBe(true);
+  f.painter.dispose();
+});
+
+it('clears filtered-out content while the new selection is still pending', async () => {
+  const f = await fixture();
+  const draw = (content: string, selected: boolean) => {
+    f.painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, content });
+    f.painter.drawArcs(f.arcs, { width: 1 }, () => selected);
+  };
+  f.frame(() => draw('original-filter', true));
+  f.gpu.begin.mockClear();
+  f.gpu.drawMesh.mockClear();
+  f.frame(() => {
+    draw('changed-filter', false);
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawMesh.mock.calls.every(([mesh]) => (mesh as { count: number }).count === 0)).toBe(
+    true,
+  );
+  f.painter.dispose();
+});
+
+it('discards a retained bitmap when an immediate paint changes without owner content', async () => {
+  const f = await fixture();
+  f.frame(() => f.painter.drawArcs(f.arcs, { width: 1 }));
+  f.gpu.begin.mockClear();
+  f.frame(() => {
+    f.painter.drawArcs(f.arcs, { width: 2 });
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawMesh.mock.calls.at(-1)![1]).toMatchObject({ width: 2 });
+  f.painter.dispose();
+});
+
+it.each([
+  false,
+  true,
+])('replaces changed immediate geometry with unversioned owner %s', async (owned) => {
+  const f = await fixture();
+  const after = { ...f.arcs } as ArcCollection;
+  const draw = (arcs: ArcCollection) => {
+    if (!owned) f.painter.setLayerContext(null);
+    f.painter.drawArcs(arcs, { width: 1 });
+  };
+  f.frame(() => draw(f.arcs));
+  const firstMesh = f.gpu.createMesh.mock.results.at(-1)!.value;
+  f.gpu.begin.mockClear();
+  f.gpu.drawMesh.mockClear();
+  f.frame(() => {
+    draw(after);
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawMesh.mock.calls.at(-1)![0]).not.toBe(firstMesh);
+  f.painter.dispose();
+});
+
+it('replaces an in-place immediate selection change while a sibling is pending', async () => {
+  const f = await fixture();
+  const ids = new Uint32Array([0]);
+  const draw = () => f.painter.drawArcs(f.arcs, { width: 1 }, undefined, ids);
+  f.frame(draw);
+  const firstMesh = f.gpu.createMesh.mock.results.at(-1)!.value;
+  ids[0] = 1;
+  f.gpu.begin.mockClear();
+  f.gpu.drawMesh.mockClear();
+  f.frame(() => {
+    draw();
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawMesh.mock.calls.at(-1)![0]).not.toBe(firstMesh);
+  f.painter.dispose();
+});
+
+it('replaces a changed arbitrary predicate while a sibling is pending', async () => {
+  const f = await fixture();
+  let selected = 0;
+  const filter = (id: number) => id === selected;
+  const draw = () => f.painter.drawArcs(f.arcs, { width: 1 }, filter);
+  f.frame(draw);
+  const firstMesh = f.gpu.createMesh.mock.results.at(-1)!.value;
+  selected = 1;
+  f.gpu.begin.mockClear();
+  f.gpu.drawMesh.mockClear();
+  f.frame(() => {
+    draw();
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawMesh.mock.calls.at(-1)![0]).not.toBe(firstMesh);
+  f.painter.dispose();
+});
+
+it('reprojects a complete resident fallback while replacement geometry is pending', async () => {
+  const f = await fixture();
+  const draw = () => f.painter.drawArcs(f.arcs, { width: 1 });
+  f.frame(draw);
+  f.gpu.begin.mockClear();
+  f.view.pan(20, 0);
+  const chunks = Reflect.get(f.painter, 'chunks');
+  vi.spyOn(chunks, 'isResident').mockReturnValue(true);
+  f.frame(() => {
+    draw();
+    Reflect.get(f.painter, 'requests').push({ entries: null, fallback: [{ meshes: [] }] });
+  });
+  expect(f.painter.frameComplete).toBe(false);
+  expect(f.painter.framePresented).toBe(true);
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  f.painter.dispose();
+});
+
+it('publishes changed immutable raster pixels instead of retaining the old image', async () => {
+  const f = await fixture();
+  const before = { width: 1, height: 1, data: new Uint8ClampedArray(4) } as ImageData,
+    after = { width: 1, height: 1, data: new Uint8ClampedArray(4) } as ImageData;
+  const bounds = [0, 0, 10, 10] as const;
+  f.frame(() => f.painter.drawRasterPixels(before, bounds, 1, true, undefined, true));
+  f.gpu.begin.mockClear();
+  f.gpu.drawImage.mockClear();
+  f.frame(() => {
+    f.painter.drawRasterPixels(after, bounds, 1, true, undefined, true);
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawImage).toHaveBeenLastCalledWith(after, bounds, 1, true, undefined, true);
+  f.painter.dispose();
+});
+
+it('publishes changed unversioned labels instead of retaining their previous text', async () => {
+  const f = await fixture();
+  const before = { key: 'before', labels: [] },
+    after = { key: 'after', labels: [] };
+  const draw = (labels: typeof before) => {
+    f.painter.drawArcs(f.arcs, { width: 1 });
+    f.painter.drawLabels(labels);
+  };
+  f.frame(() => draw(before));
+  f.gpu.begin.mockClear();
+  f.gpu.drawLabels.mockClear();
+  f.frame(() => {
+    draw(after);
+    Reflect.get(f.painter, 'requests').push({ entries: null });
+  });
+  expect(f.painter.frameRetained).toBe(false);
+  expect(f.gpu.begin).toHaveBeenCalledOnce();
+  expect(f.gpu.drawLabels).toHaveBeenCalledWith(after);
+  f.painter.dispose();
+});
+
+it.each([
+  ['webgl2', true, false],
+  ['webgpu', true, false],
+  ['webgl2', false, false],
+  ['webgpu', false, false],
+  ['webgl2', true, true],
+  ['webgpu', true, true],
+] as const)('presents healthy raster updates after terminal geometry errors on %s (formal %s, partial %s)', async (renderer, formal, partial) => {
   const f = await fixture(renderer);
   const chunks = Reflect.get(f.painter, 'chunks');
   let failNext = false;
@@ -724,23 +918,36 @@ it.each([
   const first = Uint32Array.from({ length: 50_000 }, (_, i) => i);
   const second = Uint32Array.from(first, (i) => i + 50_000);
   const image = document.createElement('canvas');
-  const frame = (ids: Uint32Array) =>
+  const bounds: [number, number, number, number] = [0, 0, 100_000, 1];
+  // renderLayers supplies stable bounds/content across viewport candidate changes;
+  // RasterRenderService marks its cached tile images immutable until replacement.
+  const owner = { id: 'points', sourceId: 's', revision: 0, bounds, content: 'stable point layer' };
+  const frame = (ids: Uint32Array, tile = image) =>
     f.frame(() => {
       f.painter.setTransform(new AffineTransform(0.01, -0.01, 0, 100));
-      f.painter.setLayerContext({
-        id: 'points',
-        sourceId: 's',
-        revision: 0,
-        bounds: [0, 0, 100_000, 1],
-      });
+      f.painter.setLayerContext(
+        formal ? owner : { id: 'points', sourceId: 's', revision: 0, bounds: [...bounds] },
+      );
       f.painter.drawPoints(shapes, { radius: 4 }, ids);
-      f.painter.drawRasterImage(image, [0, 0, 100_000, 1]);
+      f.painter.drawRasterImage(tile, bounds, 1, true, undefined, formal);
     });
   try {
     frame(first);
     await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
     frame(first);
     expect(f.painter.frameComplete).toBe(true);
+    let partialFallbacks = 0;
+    if (partial) {
+      const request = chunks.request.bind(chunks);
+      vi.spyOn(chunks, 'request').mockImplementation((...args) => {
+        const result = request(...args);
+        if (result.fallback?.length > 1) {
+          result.fallback = result.fallback.slice(1);
+          partialFallbacks++;
+        }
+        return result;
+      });
+    }
     f.gpu.begin.mockClear();
     f.gpu.drawImage.mockClear();
     hold = new Promise<void>((resolve) => {
@@ -748,19 +955,50 @@ it.each([
     });
     failNext = true;
     frame(second);
+    if (partial) {
+      expect(partialFallbacks).toBeGreaterThan(0);
+    }
+    if (formal) {
+      expect(f.painter.frameComplete).toBe(false);
+      expect(Reflect.get(f.painter, 'paintedComplete')).toBe(!partial);
+    }
     await vi.waitFor(() => expect(chunks.stats.failedRequests).toBe(1));
     await vi.waitFor(() => expect(chunks.stats.building).toBe(1));
     frame(second);
-    expect(f.painter.frameRetained).toBe(true);
-    expect(f.gpu.drawImage).not.toHaveBeenCalled();
+    if (formal && !partial) {
+      expect(f.painter.frameRetained).toBe(true);
+      expect(f.gpu.drawImage).not.toHaveBeenCalled();
+    } else {
+      // Unversioned selections and mutable images must replace changed pixels.
+      expect(f.painter.frameRetained).toBe(false);
+      expect(f.gpu.drawImage).toHaveBeenCalled();
+    }
     release!();
     hold = undefined;
     await vi.waitFor(() => expect(chunks.stats.pending).toBe(0));
     const builds = build.mock.calls.length;
-    for (let i = 0; i < 3; i++) frame(second);
+    frame(second);
+    expect(f.painter.frameRetained).toBe(false);
+    expect(f.painter.framePresented).toBe(true);
+    expect(f.painter.frameComplete).toBe(false);
+    f.gpu.begin.mockClear();
+    f.gpu.drawImage.mockClear();
+    const replacements = Array.from({ length: 3 }, () => document.createElement('canvas'));
+    for (const replacement of replacements) frame(second, replacement);
     expect(build).toHaveBeenCalledTimes(builds);
     expect(f.gpu.begin).toHaveBeenCalledTimes(3);
     expect(f.gpu.drawImage).toHaveBeenCalledTimes(3);
+    replacements.forEach((replacement, i) =>
+      expect(f.gpu.drawImage).toHaveBeenNthCalledWith(
+        i + 1,
+        replacement,
+        bounds,
+        1,
+        true,
+        undefined,
+        formal,
+      ),
+    );
     expect(f.painter.frameRetained).toBe(false);
     expect(f.painter.framePresented).toBe(true);
     expect(f.painter.frameComplete).toBe(false);
@@ -1297,6 +1535,187 @@ it('keeps no-label render-service maintenance comparable without inventing GPU t
   expect(f.gpu.probeCompletion).toHaveBeenCalledOnce();
   expect(probe.dispose).not.toHaveBeenCalled();
   f.painter.dispose();
+});
+
+it.each([
+  ['webgl2', false],
+  ['webgl2', true],
+  ['webgpu', false],
+  ['webgpu', true],
+] as const)('publishes source-owned polygon dependencies independently and reuses primitive preparation on %s (screen %s)', async (renderer, screen) => {
+  const f = await fixture(renderer, screen);
+  Reflect.set(f.arcs, 'getPointCount', () => 100_000);
+  f.arcs.getArcIter = (id) => {
+    const x = (id < 0 ? ~id : id) * 10;
+    const points = [
+      [x, 0],
+      [x + 2, 0],
+      [x + 2, 2],
+      [x, 2],
+      [x, 0],
+    ];
+    let i = 0;
+    return {
+      x: 0,
+      y: 0,
+      hasNext() {
+        if (i === points.length) return false;
+        [this.x, this.y] = points[i++];
+        return true;
+      },
+    };
+  };
+  const shapes = [[[0]], [[1]]];
+  const chunks = Reflect.get(f.painter, 'chunks');
+  chunks.batchJobs = 1;
+  let held = false;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  Reflect.set(chunks, 'worker', {
+    async build(packet: Parameters<typeof buildGeometryPacket>[0]) {
+      if (packet.kind === 'fill' && packet.featureIds?.includes(1)) {
+        held = true;
+        await wait;
+      }
+      return buildGeometryPacket(packet);
+    },
+    dispose() {},
+    stats: {},
+  });
+  const next = chunks.nextQueued.bind(chunks);
+  chunks.nextQueued = () => {
+    for (const request of chunks.current())
+      if (request.input.kind === 'path') {
+        const entry = chunks.queued(request);
+        if (entry) return { request, entry };
+      }
+    return next();
+  };
+  const paint = { fill: { color: 'red' }, stroke: { width: 1 } };
+  const bounds: [number, number, number, number] = [0, 0, 32, 16];
+  const frame = (primitive = false) =>
+    f.frame(() => {
+      f.painter.setLayerContext({
+        id: 'line',
+        sourceId: 's',
+        revision: 0,
+        bounds,
+        sourceSelection: true,
+      });
+      if (primitive) {
+        f.painter.drawPolygonFill(shapes, f.arcs, paint.fill.color);
+        f.painter.drawOutlinePaths(shapes, paint.stroke, f.arcs);
+      } else f.painter.drawPolygon(shapes, f.arcs, paint);
+    });
+  try {
+    frame();
+    await vi.waitFor(() => expect(held).toBe(true));
+    await vi.waitFor(() => {
+      f.gpu.drawMesh.mockClear();
+      frame();
+      expect(f.gpu.drawMesh.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toEqual([
+        'fill',
+        'path',
+      ]);
+    });
+    expect(f.painter.frameComplete).toBe(false);
+    release();
+    await vi.waitFor(() => {
+      f.gpu.drawMesh.mockClear();
+      frame();
+      expect(f.painter.frameComplete).toBe(true);
+      expect(f.gpu.drawMesh.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toEqual([
+        'fill',
+        'fill',
+        'path',
+        'path',
+      ]);
+    });
+    const path = chunks.current().find((r: GeometryRequest) => r.input.kind === 'path');
+    expect(path).toBeDefined();
+    expect(path.input).toMatchObject({
+      sourceSelection: true,
+      wholeLayer: false,
+      spatialOrder: false,
+      forward: true,
+    });
+    expect(path.input.viewBounds).toBeDefined();
+    expect(!!path.input.screen).toBe(screen);
+    const uploads = f.gpu.createMesh.mock.calls.length;
+    frame(true);
+    expect(chunks.current().find((r: GeometryRequest) => r.input.kind === 'path')).toBe(path);
+    expect(f.gpu.createMesh).toHaveBeenCalledTimes(uploads);
+    expect(f.painter.frameComplete).toBe(true);
+  } finally {
+    release();
+    f.painter.dispose();
+  }
+});
+
+it.each([
+  ['webgl2', false],
+  ['webgl2', true],
+  ['webgpu', false],
+  ['webgpu', true],
+] as const)('keeps source-owned forward line outlines atomic with viewport preparation on %s (screen %s)', async (renderer, screen) => {
+  const f = await fixture(renderer, screen);
+  Reflect.set(f.arcs, 'getPointCount', () => 100_000);
+  const chunks = Reflect.get(f.painter, 'chunks');
+  chunks.batchJobs = 1;
+  let held = false;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  Reflect.set(chunks, 'worker', {
+    async build(packet: Parameters<typeof buildGeometryPacket>[0]) {
+      if (packet.coordinates[0] >= 10) {
+        held = true;
+        await wait;
+      }
+      return buildGeometryPacket(packet);
+    },
+    dispose() {},
+    stats: {},
+  });
+  const shapes = [[[0]], [[1]]];
+  const bounds: [number, number, number, number] = [0, 0, 32, 32];
+  const draw = () => {
+    f.painter.setLayerContext({
+      id: 'line',
+      sourceId: 's',
+      revision: 0,
+      bounds,
+      sourceSelection: true,
+    });
+    f.painter.drawOutlinePaths(shapes, { width: 1 }, f.arcs, f.view.getArcFilter(f.arcs));
+  };
+  try {
+    f.frame(draw);
+    await vi.waitFor(() => expect(held).toBe(true));
+    f.frame(draw);
+    expect(f.gpu.drawMesh).not.toHaveBeenCalled();
+    expect(f.painter.frameComplete).toBe(false);
+    const request = chunks.current().find((r: GeometryRequest) => r.input.kind === 'path');
+    expect(request).toBeDefined();
+    expect(request.input).toMatchObject({
+      sourceSelection: true,
+      forward: true,
+      wholeLayer: false,
+    });
+    expect(request.input.viewBounds).toBeDefined();
+    release();
+    await vi.waitFor(() => {
+      f.frame(draw);
+      expect(f.painter.frameComplete).toBe(true);
+      expect(f.gpu.drawMesh).toHaveBeenCalledTimes(2);
+    });
+  } finally {
+    release();
+    f.painter.dispose();
+  }
 });
 
 it('compares fresh member selections by value and notices changed ranges on the same resident mesh', async () => {

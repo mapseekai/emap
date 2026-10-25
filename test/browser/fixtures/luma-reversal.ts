@@ -12,6 +12,10 @@ type Options = {
   scale?: number;
   shift?: number;
   angle?: number;
+  canvasSize?: readonly [number, number];
+  anchor?: Point;
+  reach?: number;
+  farFirst?: boolean;
   scenario?: 'closed' | 'caps' | 'open' | 'tiny' | 'near' | 'precise';
 };
 // Independent screen-space finite-segment distance; no production join or envelope math.
@@ -50,6 +54,10 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
     angle = 0,
     scenario = 'closed',
     shift = scenario === 'tiny' ? 0.5 / dpr : 0.25,
+    canvasSize = [640, 480],
+    anchor = [240, 240],
+    reach = 160,
+    farFirst = false,
   } = options;
   const origin: Point = scenario === 'precise' ? [13000000.001, 4000000.002] : [0, 0];
   const local: Point[] =
@@ -57,7 +65,7 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
       ? [
           [-80, -30],
           [0, 0],
-          [160, 0],
+          [reach, 0],
           [0, 0],
           [-80, 40],
         ]
@@ -70,34 +78,34 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
         : scenario === 'near'
           ? [
               [0, 0],
-              [160, 0],
+              [reach, 0],
               [0, 0.001],
             ]
           : scenario === 'caps'
             ? [
                 [0, 0],
                 [0, 0],
-                [160, 0],
+                [reach, 0],
                 [0, 0],
                 [0, 0],
               ]
             : [
                 [0, 0],
-                [160, 0],
+                [reach, 0],
                 [0, 0],
               ];
   const path = local.map(
     ([x, y]) =>
       [
-        x * Math.cos(angle) - y * Math.sin(angle) + origin[0],
-        x * Math.sin(angle) + y * Math.cos(angle) + origin[1],
+        (farFirst ? reach - x : x) * Math.cos(angle) - y * Math.sin(angle) + origin[0],
+        (farFirst ? reach - x : x) * Math.sin(angle) + y * Math.cos(angle) + origin[1],
       ] as Point,
   );
   const view = new AffineTransform(
     scale,
     scale,
-    240 + shift - origin[0] * scale,
-    240 + shift - origin[1] * scale,
+    anchor[0] + shift - origin[0] * scale,
+    anchor[1] + shift - origin[1] * scale,
   );
   const screen = path.map((p) => view.project(...p) as Point);
   const raw = pathGeometry([path]),
@@ -116,7 +124,7 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
   let samples = 0;
   let reference: Uint8ClampedArray | undefined;
   try {
-    gpu.resize(640, 480, dpr);
+    gpu.resize(canvasSize[0], canvasSize[1], dpr);
     samples = gpu.pathRendering.samples;
     const capture = async (geometry: GeometryBuffer) => {
       const mesh = gpu.createMesh(geometry)!;
@@ -147,6 +155,8 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
       ['compact-hi-lo', preciseLayout(compact)],
     ] as const) {
       const { pixels, width: pixelWidth, height: pixelHeight } = await capture(geometry);
+      const ratioX = pixelWidth / canvasSize[0],
+        ratioY = pixelHeight / canvasSize[1];
       let pixelHash = 2166136261,
         different = 0,
         maxDifference = 0;
@@ -172,8 +182,8 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
         for (let x = 0; x < pixelWidth; x++) {
           const at = (y * pixelWidth + x) * 4;
           const alpha = pixels[at + 3];
-          const sx = (x + 0.5) / dpr,
-            sy = (y + 0.5) / dpr;
+          const sx = (x + 0.5) / ratioX,
+            sy = (y + 0.5) / ratioY;
           if (
             bodyReference &&
             sx > screen[0][0] + 2 / dpr &&
@@ -189,7 +199,7 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
             )
               bodyDifferent++;
           }
-          const delta = distance((x + 0.5) / dpr, (y + 0.5) / dpr, screen) - radius;
+          const delta = distance(sx, sy, screen) - radius;
           if (delta < -margin) {
             interior++;
             if (alpha !== 255) missing++;
@@ -202,10 +212,13 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
           if (alpha > 0 && alpha < 255) fringe++;
         }
       const probe = (normal: number) => {
-        const x = Math.floor((screen[0][0] - radius * 0.25) * dpr);
-        const y = Math.floor((screen[0][1] + radius * normal) * dpr);
+        const x = Math.floor((screen[0][0] - radius * 0.25) * ratioX);
+        const y = Math.floor((screen[0][1] + radius * normal) * ratioY);
         return pixels[(y * pixelWidth + x) * 4 + 3];
       };
+      const target = screen[farFirst ? 1 : 0],
+        targetX = Math.floor(target[0] * ratioX),
+        targetY = Math.floor(target[1] * ratioY);
       rows.push({
         mode,
         pixelHash,
@@ -224,6 +237,7 @@ function preciseLayout(g: GeometryBuffer): GeometryBuffer {
         fringe,
         bodyCompared,
         bodyDifferent,
+        targetAlpha: pixels[(targetY * pixelWidth + targetX) * 4 + 3],
         wedge: [probe(0.96), probe(-0.96)],
       });
     }

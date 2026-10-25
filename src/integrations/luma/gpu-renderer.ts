@@ -167,6 +167,7 @@ export class GpuRenderer {
           this.width,
           this.height,
           this.pixelRatio,
+          this.canvas,
           start,
           end,
         );
@@ -885,6 +886,9 @@ export class GpuRenderer {
     const canvasFramebuffer = this.device.canvasContext!.getCurrentFramebuffer();
     if (this.backend === 'webgpu' && !this.msaaFramebuffer)
       this.resize(this.width, this.height, this.pixelRatio);
+    // These words occupy the existing padding before camera uniforms. Recomputing
+    // backing dimensions in f32 can disagree with resize() at fractional DPRs.
+    this.frameData.set([this.canvas.width, this.canvas.height], 50);
     this.timedFrame = this.timing && !this.queryBusy && Boolean(this.query);
     this.pass = this.device.beginRenderPass({
       framebuffer: this.msaaFramebuffer ?? canvasFramebuffer,

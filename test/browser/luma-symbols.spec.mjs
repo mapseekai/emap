@@ -24,6 +24,8 @@ for(const gpu of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-2
  await page.locator('#file-input').setInputFiles({name:'mapped-symbols.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(data))});
  if(route==='luma-benchmark')await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));
  await page.waitForFunction(name=>window[name].state==='ready',name);
+ // Leave room for the marker and its fixed above-point label; fit covers geometry only.
+ await page.evaluate(async name=>{const a=window[name];if(name==='lumaBenchmark')await a.setView(.75);else a.zoom(.75);},name);
  const before=await page.evaluate(name=>window[name].layers.map(l=>[l.id,l.type]),name);
  await page.evaluate(({name,svg})=>{const a=window[name];for(const l of a.layers)a.setLayerSymbol(l.id,{
   ...(l.type==='circle'?{images:{marker:{url:svg,size:[24,32]}}}:{}),

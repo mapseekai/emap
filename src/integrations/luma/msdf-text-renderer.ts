@@ -27,8 +27,10 @@ layout(location=3) in vec4 atlasRect;
 layout(location=4) in vec4 fillColor;
 layout(location=5) in vec4 outlineColor;
 layout(location=6) in vec4 parameters;
-layout(std140) uniform textUniforms {vec4 viewport;} text;
-out vec2 uv;
+layout(std140) uniform textUniforms {vec4 viewport;vec2 framebufferSize;} text;
+flat out vec4 glyphPose;
+flat out vec4 glyphRect;
+flat out vec2 glyphExtent;
 flat out vec4 color;
 flat out vec4 halo;
 flat out vec4 effects;
@@ -36,19 +38,28 @@ void main(){
  vec2 offset=corners*extent*0.5;offset.x-=parameters.z*offset.y;
  vec2 p=pose.xy+vec2(pose.z*offset.x-pose.w*offset.y,pose.w*offset.x+pose.z*offset.y);
  gl_Position=vec4(p/text.viewport.xy*vec2(2.,-2.)+vec2(-1.,1.),0.,1.);
- uv=mix(atlasRect.xy,atlasRect.zw,(corners+1.)*0.5);color=fillColor;halo=outlineColor;effects=parameters;
+ glyphPose=pose;glyphRect=atlasRect;glyphExtent=extent;color=fillColor;halo=outlineColor;effects=parameters;
 }`;
 const fs = `#version 300 es
 precision highp float;
 uniform sampler2D atlasTexture;
-layout(std140) uniform textUniforms {vec4 viewport;} text;
-in vec2 uv;
+layout(std140) uniform textUniforms {vec4 viewport;vec2 framebufferSize;} text;
+flat in vec4 glyphPose;
+flat in vec4 glyphRect;
+flat in vec2 glyphExtent;
 flat in vec4 color;
 flat in vec4 halo;
 flat in vec4 effects;
 out vec4 fragColor;
 float median3(vec3 v){return max(min(v.r,v.g),min(max(v.r,v.g),v.b));}
 void main(){
+ // MSDF coverage already filters a pixel. Sample its center once even when
+ // multisample rasterization evaluates this shader separately for each sample.
+ vec2 center=(floor(gl_FragCoord.xy)+vec2(0.5))/text.framebufferSize;
+ vec2 p=vec2(center.x,1.0-center.y)*text.viewport.xy-glyphPose.xy;
+ vec2 local=vec2(dot(p,glyphPose.zw),dot(p,vec2(-glyphPose.w,glyphPose.z)))/dot(glyphPose.zw,glyphPose.zw);
+ local.x+=effects.z*local.y;
+ vec2 uv=mix(glyphRect.xy,glyphRect.zw,local/glyphExtent+vec2(0.5));
  vec3 sampleValue=texture(atlasTexture,uv).rgb;
  // Distance data is linear RGB, never premultiplied/sRGB. Placements are CSS-pixel billboards.
  float sd=(median3(sampleValue)-0.5)*effects.x*text.viewport.z;
@@ -60,19 +71,24 @@ void main(){
  float a=paint.a*coverage;if(a<=0.)discard;fragColor=vec4(paint.rgb*a,a);
 }`;
 const wgsl = `
-struct Uniforms{viewport:vec4<f32>};
+struct Uniforms{viewport:vec4<f32>,framebufferSize:vec2<f32>};
 @group(0) @binding(0) var<uniform> text:Uniforms;
 @group(0) @binding(1) var atlasTexture:texture_2d<f32>;
 @group(0) @binding(2) var atlasSampler:sampler;
-struct Out{@builtin(position) position:vec4<f32>,@location(0) uv:vec2<f32>,@location(1) @interpolate(flat) color:vec4<f32>,@location(2) @interpolate(flat) halo:vec4<f32>,@location(3) @interpolate(flat) effects:vec4<f32>};
+struct Out{@builtin(position) position:vec4<f32>,@location(0) @interpolate(flat) glyphPose:vec4<f32>,@location(1) @interpolate(flat) glyphRect:vec4<f32>,@location(2) @interpolate(flat) glyphExtent:vec2<f32>,@location(3) @interpolate(flat) color:vec4<f32>,@location(4) @interpolate(flat) halo:vec4<f32>,@location(5) @interpolate(flat) effects:vec4<f32>};
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,@location(1) pose:vec4<f32>,@location(2) extent:vec2<f32>,@location(3) atlasRect:vec4<f32>,@location(4) fillColor:vec4<f32>,@location(5) outlineColor:vec4<f32>,@location(6) parameters:vec4<f32>)->Out{
  var offset=corners*extent*0.5;offset.x-=parameters.z*offset.y;
  let p=pose.xy+vec2<f32>(pose.z*offset.x-pose.w*offset.y,pose.w*offset.x+pose.z*offset.y);
- return Out(vec4<f32>(p/text.viewport.xy*vec2<f32>(2.,-2.)+vec2<f32>(-1.,1.),0.,1.),mix(atlasRect.xy,atlasRect.zw,(corners+1.)*0.5),fillColor,outlineColor,parameters);
+ return Out(vec4<f32>(p/text.viewport.xy*vec2<f32>(2.,-2.)+vec2<f32>(-1.,1.),0.,1.),pose,atlasRect,extent,fillColor,outlineColor,parameters);
 }
 fn median3(v:vec3<f32>)->f32{return max(min(v.r,v.g),min(max(v.r,v.g),v.b));}
 @fragment fn fragmentMain(p:Out)->@location(0) vec4<f32>{
- let sampleValue=textureSample(atlasTexture,atlasSampler,p.uv).rgb;
+ let center=(floor(p.position.xy)+vec2<f32>(0.5))/text.framebufferSize;
+ let offset=center*text.viewport.xy-p.glyphPose.xy;
+ var local=vec2<f32>(dot(offset,p.glyphPose.zw),dot(offset,vec2<f32>(-p.glyphPose.w,p.glyphPose.z)))/dot(p.glyphPose.zw,p.glyphPose.zw);
+ local.x+=p.effects.z*local.y;
+ let uv=mix(p.glyphRect.xy,p.glyphRect.zw,local/p.glyphExtent+vec2<f32>(0.5));
+ let sampleValue=textureSample(atlasTexture,atlasSampler,uv).rgb;
  let sd=(median3(sampleValue)-0.5)*p.effects.x*text.viewport.z;
  let outline=text.viewport.w<0.5;
  let h=p.effects.y*text.viewport.z;
@@ -176,7 +192,7 @@ export class MsdfTextRenderer {
           stepMode: location ? 'instance' : 'vertex',
         })),
         bindings: [
-          { name: 'textUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 16 },
+          { name: 'textUniforms', type: 'uniform', group: 0, location: 0, minBindingSize: 32 },
           { name: 'atlasTexture', type: 'texture', group: 0, location: 1 },
           ...(webgpu
             ? [{ name: 'atlasSampler', type: 'sampler' as const, group: 0, location: 2 }]
@@ -233,7 +249,7 @@ export class MsdfTextRenderer {
       });
       for (let i = 0; i < 2; i++)
         this.uniforms.push(
-          device.createBuffer({ byteLength: 16, usage: Buffer.UNIFORM | Buffer.COPY_DST }),
+          device.createBuffer({ byteLength: 32, usage: Buffer.UNIFORM | Buffer.COPY_DST }),
         );
     } catch (e) {
       this.dispose();
@@ -307,6 +323,7 @@ export class MsdfTextRenderer {
     width: number,
     height: number,
     dpr: number,
+    framebuffer: { readonly width: number; readonly height: number },
     start = 0,
     end = frame.labels.length,
   ): void {
@@ -383,9 +400,12 @@ export class MsdfTextRenderer {
         this.releaseBatches(reusable.slice(consumed));
       }
     }
-    const size = `${width}:${height}:${dpr}`;
+    const size = `${width}:${height}:${dpr}:${framebuffer.width}:${framebuffer.height}`;
     if (size !== this.size) {
-      for (let i = 0; i < 2; i++) this.uniforms[i].write(new Float32Array([width, height, dpr, i]));
+      for (let i = 0; i < 2; i++)
+        this.uniforms[i].write(
+          new Float32Array([width, height, dpr, i, framebuffer.width, framebuffer.height, 0, 0]),
+        );
       this.size = size;
     }
     pass.setPipeline(this.pipeline);

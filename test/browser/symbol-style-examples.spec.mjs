@@ -80,7 +80,7 @@ for (const [route, title, prefix] of [
 }
 
 for (const renderer of ['canvas2d', 'webgl2', 'webgpu'])
-test(`${renderer} labels: readable text above points and collision avoidance survive zooming`, async ({ page }) => {
+test(`${renderer} labels: readable text above points and collision avoidance survive zooming`, async ({ page }, info) => {
   await page.goto('/mapseekai/emap/examples/luma-benchmark/');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   await page.evaluate(async renderer => {
@@ -131,7 +131,14 @@ test(`${renderer} labels: readable text above points and collision avoidance sur
   expect(pixels.text).toBeGreaterThan(100);
   expect(full).toMatchObject({ scale: 1, intersections: 0, anchorError: 0 });
   await page.mouse.move(500, 300);
-  await page.mouse.wheel(0, 800);
+  // Wheel magnitude selects direction; sustain real input until the intended zoom is reached.
+  let wheelEvents = 0;
+  while (wheelEvents < 60) {
+    await page.mouse.wheel(0, 800);
+    wheelEvents++;
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    if (await page.evaluate(() => symbolZoomSnapshot().mapScale < 0.1)) break;
+  }
   await expect.poll(() => page.evaluate(() => {
     const s = symbolZoomSnapshot(); return !s.pending && !s.navigating && s.count > 0 && s.mapScale < 0.1 && s.fontPixels >= 12 && s.anchorError < 1e-6;
   })).toBe(true);
@@ -145,6 +152,7 @@ test(`${renderer} labels: readable text above points and collision avoidance sur
   expect(smallPixels.text).toBeLessThan(pixels.text);
   await page.evaluate(() => symbolZoomMap.reset());
   await expect.poll(() => page.evaluate(() => symbolZoomSnapshot())).toEqual(full);
+  await info.attach('symbol-zoom-evidence', {body: JSON.stringify({full, small, wheelEvents}), contentType: 'application/json'});
   await page.evaluate(() => symbolZoomMap.remove());
 });
 

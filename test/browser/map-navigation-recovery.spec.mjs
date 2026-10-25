@@ -31,7 +31,8 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
         paint: { 'circle-radius': 4, 'circle-color': ['match', ['get', 'group'], 0, '#e34850', 1, '#288bd2', '#37ac60'] },
         label: { field: 'name', fontSize: 12, maxLabels: 199, allowOverlap: true },
       });
-      map.setExtent(new emap.Bounds(-5, -5, 85, 45));
+      // Keep every glyph box inside the viewport throughout the camera scales.
+      map.setExtent(new emap.Bounds(-10, -5, 90, 45));
       map.render();
       await map.ctx.render._labels.settled();
       map.render();

@@ -91,7 +91,8 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and 
     expect(c.max,JSON.stringify(c)).toBeLessThanOrEqual(tolerance);
   }
   expect(result.representations).toEqual([{continuous:false,pixels:true},{continuous:true,pixels:false}]);
-  expect(result.pixelUploads).toBe(1);expect(result.pipelines).toBe(13);
+  // Initialization also warms the two solid source-path layouts.
+  expect(result.pixelUploads).toBe(1);expect(result.pipelines).toBe(15);
   await page.screenshot({path:info.outputPath('pixel-upload.png')});
   const released=await page.evaluate(async()=>{const g=pixelMap.ctx.render._painter.gpu;await pixelMap.dispose();return g.memoryStats;});
   expect(released.nominalKnownGpuBytes).toBe(0);expect(errors).toEqual([]);expect(await page.evaluate(()=>pixelErrors)).toEqual([]);

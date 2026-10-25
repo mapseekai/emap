@@ -5,6 +5,35 @@
 export const PATH_CORNERS = [0, 0, 0, -1, 0, 1, 1, -1, 1, 1, 1, 0];
 export const PATH_INDICES = [0, 1, 2, 1, 4, 2, 1, 3, 4, 3, 5, 4];
 
+// Bound only a distant envelope endpoint, keeping the real segment for fragment
+// clipping. Huge clip coordinates can lose the nearby endpoint during GPU clipping.
+export const capsuleEnvelopeGLSL = `
+vec2 capsuleEnvelopePosition(vec2 position,vec4 segment,float radius) {
+ if(any(greaterThan(abs(segment.xy),emap.viewport*0.5+vec2(radius*4.0)))) return position;
+ float span=max(abs(segment.z),abs(segment.w));
+ if(span==0.0) return position;
+ vec2 scaled=segment.zw/span;float unitLength=length(scaled);
+ vec2 reach=abs(segment.xy)+emap.viewport*0.5;
+ float reachScale=max(reach.x,reach.y),limit=radius*4.0;
+ if(reachScale>0.0) limit+=reachScale*length(reach/reachScale);
+ if(span>limit/unitLength) return segment.xy+(scaled/unitLength)*limit;
+ return position;
+}
+`;
+export const capsuleEnvelopeWGSL = `
+fn capsuleEnvelopePosition(position:vec2<f32>,segment:vec4<f32>,radius:f32)->vec2<f32> {
+ if(any(abs(segment.xy)>emap.viewport*0.5+vec2<f32>(radius*4.0))){return position;}
+ let span=max(abs(segment.z),abs(segment.w));
+ if(span==0.0){return position;}
+ let scaled=segment.zw/span;let unitLength=length(scaled);
+ let reach=abs(segment.xy)+emap.viewport*0.5;let reachScale=max(reach.x,reach.y);
+ var limit=radius*4.0;
+ if(reachScale>0.0){limit+=reachScale*length(reach/reachScale);}
+ if(span>limit/unitLength){return segment.xy+(scaled/unitLength)*limit;}
+ return position;
+}
+`;
+
 export const pathMsaaVS = `#version 300 es
 in vec2 corners;
 in vec4 previousPosition;
@@ -17,11 +46,13 @@ out vec2 cornerOffset;
 out vec2 pathPosition;
 out float pathLength;
 flat out float capsuleMode;
+flat out vec4 capsuleSegment;
+${capsuleEnvelopeGLSL}
 void main() {
  bool end = corners.x > 0.0;
  float side = corners.y, joint = float(side == 0.0);
  float width = max(emap.parameters.x * 0.5, 1e-12);
- if (pathFlags >= 4.0) { gl_Position=vec4(2.0,2.0,0.0,1.0); cornerOffset=vec2(0.0); pathPosition=vec2(0.0); pathLength=0.0; capsuleMode=0.0; return; }
+ if (pathFlags >= 4.0) { gl_Position=vec4(2.0,2.0,0.0,1.0); cornerOffset=vec2(0.0); pathPosition=vec2(0.0); pathLength=0.0; capsuleMode=0.0; capsuleSegment=vec4(0.0); return; }
  vec4 prev = end ? startPosition : previousPosition;
  vec4 curr = end ? endPosition : startPosition;
  vec4 next = end ? nextPosition : endPosition;
@@ -51,11 +82,20 @@ void main() {
     ((flags & 2) == 0 && all(equal(startPosition, nextPosition))));
  if (capsule) offset = normal * side + dir * (end ? 4.0 : -4.0);
  capsuleMode = float(capsule);
+ capsuleSegment = vec4(0.0);
+ vec2 projected=projectSegmentPosition(curr, end ? prev : next);
+ if (capsule) {
+   vec2 a=projectSegmentPosition(startPosition,endPosition), b=projectSegmentPosition(endPosition,startPosition);
+   vec2 delta=projectDifference(endPosition,startPosition);
+   bool nearStart=dot(a,a)<=dot(b,b);
+   capsuleSegment=vec4(nearStart?a:b,nearStart?delta:-delta);
+   if(end==nearStart) projected=capsuleEnvelopePosition(projected,capsuleSegment,width);
+ }
  cornerOffset = offset;
  vec2 fromStart = offset + (end ? da : vec2(0.0));
  pathPosition = vec2(dot(fromStart, normal), dot(fromStart, dir));
  pathLength = end ? la : lb;
- gl_Position = clipPosition(projectSegmentPosition(curr, end ? prev : next) + offset * width);
+ gl_Position = clipPosition(projected + offset * width);
 }`;
 export const pathMsaaFS = `#version 300 es
 precision highp float;
@@ -63,21 +103,55 @@ in vec2 cornerOffset;
 in vec2 pathPosition;
 in float pathLength;
 flat in float capsuleMode;
+flat in vec4 capsuleSegment;
 out vec4 fragColor;
+bool capsuleOutside() {
+ // MSAA smooth inputs may be evaluated at a sample instead of the pixel center.
+ // Keep binary cap rejection deterministic; the envelope still supplies body MSAA.
+ vec2 center=(floor(gl_FragCoord.xy)+vec2(0.5))/emap.framebufferSize;
+ vec2 p=(center*vec2(1.0,-1.0)-vec2(0.5,-0.5))*emap.viewport-capsuleSegment.xy;
+ float radius=max(emap.parameters.x*0.5,1e-12);
+ float span=max(abs(capsuleSegment.z),abs(capsuleSegment.w));
+ if(span==0.0) return dot(p,p)>radius*radius;
+ vec2 scaled=capsuleSegment.zw/span;
+ float unitLength=length(scaled), len=span*unitLength;
+ vec2 dir=scaled/unitLength;
+ float along=dot(p,dir);
+ if(along>=0.0 && along<=len) return false;
+ vec2 q=vec2(dot(p,vec2(-dir.y,dir.x)),along-clamp(along,0.0,len));
+ return dot(q,q)>radius*radius;
+}
 void main() {
- vec2 q = vec2(pathPosition.x, pathPosition.y - clamp(pathPosition.y, 0.0, pathLength));
  // The envelope alone supplies body-edge MSAA coverage; reject only beyond endpoints.
- bool outside = (pathPosition.y < 0.0 || pathPosition.y > pathLength) &&
-   (capsuleMode > 0.5 ? dot(q, q) > 1.0 : dot(cornerOffset, cornerOffset) > 1.0);
+ bool outside = capsuleMode > 0.5 ? capsuleOutside() :
+   (pathPosition.y < 0.0 || pathPosition.y > pathLength) && dot(cornerOffset, cornerOffset) > 1.0;
  if (outside) discard;
  fragColor = vec4(emap.color.rgb * emap.color.a, emap.color.a);
 }`;
 
+export const capsuleClipWGSL = `
+fn capsuleOutside(segment:vec4<f32>,fragment:vec2<f32>)->bool {
+ let center=(floor(fragment)+vec2<f32>(0.5))/emap.framebufferSize;
+ let p=(center-vec2<f32>(0.5))*emap.viewport-segment.xy;
+ let radius=max(emap.parameters.x*0.5,1e-12);
+ let span=max(abs(segment.z),abs(segment.w));
+ if(span==0.0){return dot(p,p)>radius*radius;}
+ let scaled=segment.zw/span;let unitLength=length(scaled);
+ let len=span*unitLength;let dir=scaled/unitLength;
+ let along=dot(p,dir);
+ if(along>=0.0 && along<=len){return false;}
+ let q=vec2<f32>(dot(p,vec2<f32>(-dir.y,dir.x)),along-clamp(along,0.0,len));
+ return dot(q,q)>radius*radius;
+}
+`;
+
 export const pathMsaaWGSL = `
+${capsuleEnvelopeWGSL}
 struct PathOut {
  @builtin(position) position: vec4<f32>,
  @location(0) corner: vec2<f32>, @location(1) local: vec2<f32>, @location(2) len: f32,
  @location(3) @interpolate(flat) capsule: f32,
+ @location(4) @interpolate(flat) capsuleSegment: vec4<f32>,
 };
 @vertex fn vertexMain(@location(0) corners:vec2<f32>,
  @location(1) previousPosition:vec4<f32>, @location(2) startPosition:vec4<f32>,
@@ -85,7 +159,7 @@ struct PathOut {
  @location(5) pathDistance:vec2<f32>, @location(6) pathFlags:f32)->PathOut {
  let end = corners.x > 0.0; let side = corners.y; let joint = select(0.0,1.0,side==0.0);
  let width = max(emap.parameters.x * 0.5, 1e-12);
- if(pathFlags>=4.0){return PathOut(vec4<f32>(2.0,2.0,0.0,1.0),vec2<f32>(0.0),vec2<f32>(0.0),0.0,0.0);}
+  if(pathFlags>=4.0){return PathOut(vec4<f32>(2.0,2.0,0.0,1.0),vec2<f32>(0.0),vec2<f32>(0.0),0.0,0.0,vec4<f32>(0.0));}
  let prev=select(previousPosition,startPosition,end);
  let curr=select(startPosition,endPosition,end);
  let next=select(endPosition,nextPosition,end);
@@ -111,11 +185,20 @@ struct PathOut {
    (((flags&1u)==0u && all(previousPosition==endPosition)) ||
     ((flags&2u)==0u && all(startPosition==nextPosition)));
  if(capsule){offset=normal*side+dir*select(-4.0,4.0,end);}
+ var capsuleSegment=vec4<f32>(0.0);
+ var projected=projectSegmentPosition(curr,select(next,prev,end));
+ if(capsule){
+  let a=projectSegmentPosition(startPosition,endPosition);let b=projectSegmentPosition(endPosition,startPosition);
+  let delta=projectDifference(endPosition,startPosition);let nearStart=dot(a,a)<=dot(b,b);
+  capsuleSegment=vec4<f32>(select(b,a,nearStart),select(-delta,delta,nearStart));
+  if(end==nearStart){projected=capsuleEnvelopePosition(projected,capsuleSegment,width);}
+ }
  let fromStart=offset+select(vec2<f32>(0.0),da,end);
  let local=vec2<f32>(dot(fromStart,normal),dot(fromStart,dir));
- let position=clipPosition(projectSegmentPosition(curr,select(next,prev,end))+offset*width);
- return PathOut(position,offset,local,select(lb,la,end),select(0.0,1.0,capsule));
+ let position=clipPosition(projected+offset*width);
+ return PathOut(position,offset,local,select(lb,la,end),select(0.0,1.0,capsule),capsuleSegment);
 }
+${capsuleClipWGSL}
 // Reject the same fragments through coverage, without WGSL discard's helper
 // invocation cost on dense overlapping strokes. The rasterizer's MSAA coverage
 // is ANDed with this mask; a rejected fragment writes neither color nor depth.
@@ -123,8 +206,8 @@ struct PathCoverage {
  @location(0) color:vec4<f32>, @builtin(sample_mask) mask:u32,
 };
 @fragment fn fragmentMain(p:PathOut)->PathCoverage {
- let q=vec2<f32>(p.local.x,p.local.y-clamp(p.local.y,0.0,p.len));
- let outside=(p.local.y<0.0||p.local.y>p.len)&&select(dot(p.corner,p.corner)>1.0,dot(q,q)>1.0,p.capsule>0.5);
+  var outside=(p.local.y<0.0||p.local.y>p.len)&&dot(p.corner,p.corner)>1.0;
+  if(p.capsule>0.5){outside=capsuleOutside(p.capsuleSegment,p.position.xy);}
  return PathCoverage(premultiply(1.0),select(0xffffffffu,0u,outside));
 }
 `;
