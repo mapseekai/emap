@@ -102,6 +102,17 @@ export interface CorePainter {
   /** @internal Optional lifecycle for GPU painters; existing synchronous painters remain valid. */
   readonly backend?: import('../map/renderer').RendererBackend;
   finishFrame?(): void;
+  /** @internal Registered synchronous passes retain caller-owned image lifetimes. */
+  setCooperativeRendering?(enabled: boolean): void;
+  /** @internal Deferred Canvas publication updates the painted camera without rebuilding. */
+  setFrameCallback?(
+    callback: ((transform: AffineTransform) => void) | null,
+    isCurrent?: () => boolean,
+  ): void;
+  /** @internal Cancel unpresented work as soon as its source or view is invalidated. */
+  cancelFrame?(): void;
+  /** @internal Device-pixel region; caller proves all changed pixels are inside it. */
+  clearRegion?(rect: readonly [number, number, number, number]): void;
   /** @internal Preserve registered-pass error isolation for deferred geometry preparation. */
   setRenderPassErrorHandler?(report: ((error: unknown) => void) | null): void;
   /** @internal A progressive scene may be presented before every request is ready. */

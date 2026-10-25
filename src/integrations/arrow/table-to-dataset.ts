@@ -1,7 +1,8 @@
-import { DataType, type Table, type Vector } from 'apache-arrow';
+import { DataType, DateUnit, Precision, type Table, type Vector } from 'apache-arrow';
 import { getDefaultMapshaperAdapter, type PathImporterHandle } from '../mapshaper/adapter';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
-import { decodeWkb } from './wkb';
+import { decodeWkbForImport } from './wkb';
+import { seedArrowTable } from './table-cache';
 import { detectGeometryColumn } from './geometry-column';
 import { parseGeoMetadata, type GeoEncoding } from './geoparquet-metadata';
 
@@ -71,20 +72,38 @@ export function fromArrowTable(table: Table, opts: FromArrowTableOptions = {}): 
     );
   }
 
-  const records = buildRecords(
-    table,
-    geom?.fieldIndex ?? -1,
-    getCoveringFieldIndexes(table, geom?.name),
-  );
+  const coveringFields = getCoveringFieldIndexes(table, geom?.name);
+  const records = buildRecords(table, geom?.fieldIndex ?? -1, coveringFields);
   const importer = adapter.createPathImporter({});
   const geomVector = geom ? table.getChildAt(geom.fieldIndex) : null;
+  const state = {
+    hasMultipleParts: false,
+    lossless:
+      new Set(table.schema.fields.map((field) => field.name)).size === table.numCols &&
+      table.schema.fields.every((field, index) => {
+        if (index === geom?.fieldIndex)
+          return geom.encoding === 'WKB' || hasSeparatedFloat64Coordinates(field.type);
+        if (coveringFields.has(index)) return true;
+        const type = field.type;
+        const sample = records.find((record) => record[field.name] != null)?.[field.name];
+        // Match the normalized record-to-Arrow types, not the original storage type.
+        if (DataType.isUtf8(type)) return true;
+        if (typeof sample === 'number')
+          return DataType.isFloat(type) && type.precision === Precision.DOUBLE;
+        if (typeof sample === 'boolean') return DataType.isBool(type);
+        return (
+          sample instanceof Date && DataType.isDate(type) && type.unit === DateUnit.MILLISECOND
+        );
+      }),
+  };
 
   for (let row = 0; row < table.numRows; row++) {
     importer.startShape(records[row]);
     if (!geomVector || !geomVector.isValid(row)) continue;
-    importGeometry(importer, geomVector, row, geom!.encoding);
+    importGeometry(importer, geomVector, row, geom!.encoding, state);
   }
 
+  if (geom?.encoding.startsWith('multi') && !state.hasMultipleParts) state.lossless = false;
   const dataset = importer.done();
   adapter.cleanPathsAfterImport(dataset, {});
   if (dataset.arcs && !opts.noTopology) {
@@ -99,6 +118,14 @@ export function fromArrowTable(table: Table, opts: FromArrowTableOptions = {}): 
   if (geom?.crsString) {
     dataset.info.crs_string = geom.crsString;
   }
+  if (
+    state.lossless &&
+    dataset.layers.length === 1 &&
+    dataset.layers[0].shapes?.every(
+      (shape, row) => Boolean(shape) === Boolean(geomVector?.isValid(row)),
+    )
+  )
+    seedArrowTable(dataset, table, geom?.name);
   return dataset;
 }
 
@@ -111,19 +138,55 @@ function importGeometry(
   vector: Vector,
   row: number,
   encoding: GeoEncoding,
+  state: { lossless: boolean; hasMultipleParts: boolean },
 ): void {
+  const points = (coords: Array<[number, number]>) => {
+    if (
+      !coords.length ||
+      coords.some(
+        ([x, y]) => !Number.isFinite(x) || !Number.isFinite(y) || x <= -1e38 || y <= -1e38,
+      )
+    )
+      state.lossless = false;
+    importer.importPoints(coords);
+  };
+  const path = (coords: Array<[number, number]>, hole?: boolean) => {
+    const ring = hole !== undefined;
+    if (coords.length < (ring ? 4 : 2)) state.lossless = false;
+    let area = 0;
+    for (let i = 0; i < coords.length; i++) {
+      const [x, y] = coords[i];
+      const previous = coords[i - 1];
+      const before = coords[i - 2];
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        (previous && x === previous[0] && y === previous[1]) ||
+        (before && x === before[0] && y === before[1])
+      )
+        state.lossless = false;
+      if (previous) area += previous[0] * y - x * previous[1];
+    }
+    if (
+      ring &&
+      (!area || coords[0]?.[0] !== coords.at(-1)?.[0] || coords[0]?.[1] !== coords.at(-1)?.[1])
+    )
+      state.lossless = false;
+    if (ring) importer.importRing(coords, hole);
+    else importer.importLine(coords);
+  };
   if (encoding === 'WKB') {
     const bytes = vector.get(row) as Uint8Array | null;
     if (!bytes || bytes.length === 0) return;
-    const decoded = decodeWkb(bytes);
-    if (!decoded) return;
+    const { geometry: decoded, hasZ, hasSrid, hasSingletonMulti } = decodeWkbForImport(bytes);
+    if (hasZ || hasSrid || hasSingletonMulti) state.lossless = false;
     if (decoded.type === 'point') {
-      importer.importPoints(decoded.points);
+      points(decoded.points);
     } else if (decoded.type === 'polyline') {
-      for (const path of decoded.paths) importer.importLine(path);
+      for (const coords of decoded.paths) path(coords);
     } else {
       for (let r = 0; r < decoded.rings.length; r++) {
-        importer.importRing(decoded.rings[r], decoded.ringIsHole[r]);
+        path(decoded.rings[r], decoded.ringIsHole[r]);
       }
     }
     return;
@@ -135,34 +198,37 @@ function importGeometry(
   if (value == null) return;
   switch (encoding) {
     case 'point':
-      importer.importPoints([readCoord(value)]);
+      points([readCoord(value, state)]);
       break;
     case 'multipoint':
-      importer.importPoints(readCoordList(value as Vector));
+      if ((value as Vector).length > 1) state.hasMultipleParts = true;
+      points(readCoordList(value as Vector, state));
       break;
     case 'linestring':
-      importer.importLine(readCoordList(value as Vector));
+      path(readCoordList(value as Vector, state));
       break;
     case 'multilinestring': {
       const lines = value as Vector;
+      if (lines.length > 1) state.hasMultipleParts = true;
       for (let i = 0; i < lines.length; i++) {
-        importer.importLine(readCoordList(lines.get(i) as Vector));
+        path(readCoordList(lines.get(i) as Vector, state));
       }
       break;
     }
     case 'polygon': {
       const rings = value as Vector;
       for (let i = 0; i < rings.length; i++) {
-        importer.importRing(readCoordList(rings.get(i) as Vector), i > 0);
+        path(readCoordList(rings.get(i) as Vector, state), i > 0);
       }
       break;
     }
     case 'multipolygon': {
       const polygons = value as Vector;
+      if (polygons.length > 1) state.hasMultipleParts = true;
       for (let p = 0; p < polygons.length; p++) {
         const rings = polygons.get(p) as Vector;
         for (let r = 0; r < rings.length; r++) {
-          importer.importRing(readCoordList(rings.get(r) as Vector), r > 0);
+          path(readCoordList(rings.get(r) as Vector, state), r > 0);
         }
       }
       break;
@@ -170,33 +236,55 @@ function importGeometry(
   }
 }
 
+function hasSeparatedFloat64Coordinates(type: DataType): boolean {
+  if (DataType.isList(type)) return hasSeparatedFloat64Coordinates(type.valueType);
+  return (
+    DataType.isStruct(type) &&
+    type.children.length === 2 &&
+    type.children[0].name === 'x' &&
+    type.children[1].name === 'y' &&
+    type.children.every(
+      (field) => DataType.isFloat(field.type) && field.type.precision === Precision.DOUBLE,
+    )
+  );
+}
+
 let warnedNativeZ = false;
 
 /** Coord leaf → [x, y]. Accepts Struct rows and FixedSizeList vectors. */
-function readCoord(value: unknown): [number, number] {
-  if (value == null) return [NaN, NaN];
-  // Interleaved: FixedSizeList<f64>[2|3] yields a Vector (or typed array)
+function readCoord(value: unknown, state: { lossless: boolean }): [number, number] {
+  if (value == null) {
+    state.lossless = false;
+    return [NaN, NaN];
+  }
+  let x: unknown;
+  let y: unknown;
+  // Interleaved: FixedSizeList<f64>[2|3] yields a Vector (or typed array).
   const v = value as { length?: number; get?: (i: number) => unknown };
   if (typeof v.get === 'function' && typeof v.length === 'number') {
     if (v.length > 2 && !warnedNativeZ) {
       warnedNativeZ = true;
       console.warn('emap formats: 3D GeoArrow coordinates are not supported; Z values dropped');
     }
-    return [Number(v.get(0)), Number(v.get(1))];
-  }
-  if (ArrayBuffer.isView(value)) {
+    x = v.get(0);
+    y = v.get(1);
+  } else if (ArrayBuffer.isView(value)) {
     const arr = value as unknown as ArrayLike<number>;
-    return [Number(arr[0]), Number(arr[1])];
+    x = arr[0];
+    y = arr[1];
+  } else {
+    const coordinate = value as { x?: unknown; y?: unknown };
+    x = coordinate.x;
+    y = coordinate.y;
   }
-  // Separated: StructRow with x / y members
-  const s = value as { x?: unknown; y?: unknown };
-  return [Number(s.x), Number(s.y)];
+  if (typeof x !== 'number' || typeof y !== 'number') state.lossless = false;
+  return [Number(x), Number(y)];
 }
 
-function readCoordList(list: Vector): Array<[number, number]> {
+function readCoordList(list: Vector, state: { lossless: boolean }): Array<[number, number]> {
   const out: Array<[number, number]> = new Array<[number, number]>(list.length);
   for (let i = 0; i < list.length; i++) {
-    out[i] = readCoord(list.get(i));
+    out[i] = readCoord(list.get(i), state);
   }
   return out;
 }

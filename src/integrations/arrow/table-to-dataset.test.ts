@@ -23,6 +23,8 @@ import {
   resetTableImportWarnings,
 } from './table-to-dataset';
 import { WkbWriter } from './wkb';
+import { getSeededArrowTable } from './table-cache';
+import { toArrowTable, toCachedArrowTable } from './dataset-to-table';
 
 function tableFromColumns(
   cols: Array<{ field: Field; data: Data }>,
@@ -142,6 +144,233 @@ describe('recordsFromArrowTable', () => {
 describe('fromArrowTable', () => {
   beforeEach(() => resetTableImportWarnings());
   afterEach(() => vi.restoreAllMocks());
+
+  it.each(['id', '__proto__'])('does not seed duplicate attribute names: %s', (name) => {
+    const geometry = wkbColumn('geometry', (writer) => {
+      writer.writePoint(1, 2);
+      writer.endRow();
+    });
+    const parsed = fromArrowTable(
+      tableFromColumns([
+        geometry,
+        {
+          field: new Field(name, new Float64(), true),
+          data: vectorFromArray([1], new Float64()).data[0],
+        },
+        {
+          field: new Field(name, new Float64(), true),
+          data: vectorFromArray([2], new Float64()).data[0],
+        },
+      ]),
+    );
+    expect(parsed.layers[0].data!.getRecords!()[0][name]).toBe(2);
+    expect(
+      getSeededArrowTable(parsed, parsed.layers[0], { encoding: 'wkb' }, undefined, 'input'),
+    ).toBeUndefined();
+  });
+
+  it('does not seed WKB paths changed by import cleanup or lossy Int64 attributes', () => {
+    const geometry = wkbColumn('geometry', (writer) => {
+      writer.writeLineString(
+        Float64Array.from([0, 1, 1, 2]),
+        Float64Array.from([0, 1, 1, 0]),
+        0,
+        4,
+      );
+      writer.endRow();
+    });
+    const raw = tableFromColumns([geometry]);
+    const parsed = fromArrowTable(raw);
+    expect(
+      getSeededArrowTable(parsed, parsed.layers[0], { encoding: 'wkb' }, undefined, 'input'),
+    ).toBeUndefined();
+    const points = wkbColumn('geometry', (writer) => {
+      writer.writePoint(1, 2);
+      writer.endRow();
+    });
+    const ids = vectorFromArray([9007199254740993n], new Int64());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const lossy = fromArrowTable(
+      tableFromColumns([points, { field: new Field('id', new Int64(), true), data: ids.data[0] }]),
+    );
+    expect(
+      getSeededArrowTable(lossy, lossy.layers[0], { encoding: 'wkb' }, undefined, 'input'),
+    ).toBeUndefined();
+  });
+
+  it('does not seed WKB Z coordinates that import drops', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bytes = new Uint8Array(29);
+    const view = new DataView(bytes.buffer);
+    view.setUint8(0, 1);
+    view.setUint32(1, 1001, true);
+    view.setFloat64(5, 1, true);
+    view.setFloat64(13, 2, true);
+    view.setFloat64(21, 3, true);
+    const data = makeData({
+      type: new Binary(),
+      length: 1,
+      data: bytes,
+      valueOffsets: Int32Array.from([0, 29]),
+      nullCount: 0,
+    });
+    const parsed = fromArrowTable(
+      tableFromColumns([{ field: new Field('geometry', new Binary(), true), data }]),
+    );
+    expect(parsed.layers[0].shapes).toEqual([[[1, 2]]]);
+    expect(
+      getSeededArrowTable(parsed, parsed.layers[0], { encoding: 'wkb' }, undefined, 'input'),
+    ).toBeUndefined();
+  });
+
+  it.each([false, true])('does not restore discarded EWKB SRID (nested: %s)', (nested) => {
+    const base = toArrowTable(
+      {
+        layers: [{ geometry_type: 'point', shapes: [[[1, 2]]] }],
+        info: { crs_string: 'EPSG:4326' },
+      },
+      { encoding: 'wkb' },
+    );
+    const point = new Uint8Array(25);
+    const view = new DataView(point.buffer);
+    view.setUint8(0, 1);
+    view.setUint32(1, 0x20000001, true);
+    view.setUint32(5, 3857, true);
+    view.setFloat64(9, 1, true);
+    view.setFloat64(17, 2, true);
+    let bytes = point;
+    if (nested) {
+      bytes = new Uint8Array(34);
+      const multi = new DataView(bytes.buffer);
+      multi.setUint8(0, 1);
+      multi.setUint32(1, 4, true);
+      multi.setUint32(5, 1, true);
+      bytes.set(point, 9);
+    }
+    const dataset = fromArrowTable(
+      tableFromColumns(
+        [{ field: base.schema.fields[0], data: vectorFromArray([bytes], new Binary()).data[0] }],
+        base.schema.metadata,
+      ),
+    );
+    expect(dataset.info?.crs_string).toBe('EPSG:4326');
+    expect(dataset.layers[0].shapes).toEqual([[[1, 2]]]);
+    const cached = toCachedArrowTable(dataset, { encoding: 'wkb' });
+    expect(cached.getChild('geometry')!.get(0)).toEqual(base.getChild('geometry')!.get(0));
+    expect((cached.getChild('geometry')!.get(0) as Uint8Array).byteLength).toBe(21);
+  });
+
+  it('does not restore a native coordinate null after import coerces it to zero', () => {
+    const base = toArrowTable({
+      layers: [{ geometry_type: 'point', shapes: [[[0, 2]]] }],
+      info: { crs_string: 'EPSG:4326' },
+    });
+    const type = new Struct([
+      new Field('x', new Float64(), true),
+      new Field('y', new Float64(), true),
+    ]);
+    const data = makeData({
+      type,
+      length: 1,
+      nullCount: 0,
+      children: [
+        vectorFromArray([null], new Float64()).data[0],
+        vectorFromArray([2], new Float64()).data[0],
+      ],
+    });
+    const field = new Field('geometry', type, true, base.schema.fields[0].metadata);
+    const dataset = fromArrowTable(tableFromColumns([{ field, data }], base.schema.metadata));
+    expect(dataset.layers[0].shapes).toEqual([[[0, 2]]]);
+    const cached = toCachedArrowTable(dataset);
+    expect(cached.getChild('geometry')!.get(0).toJSON()).toEqual({ x: 0, y: 2 });
+    expect(toCachedArrowTable(dataset)).toBe(cached);
+  });
+
+  it.each([
+    'point',
+    'polyline',
+    'polygon',
+  ] as const)('normalizes singleton WKB Multi %s before reuse', (kind) => {
+    const writer = new WkbWriter();
+    if (kind === 'point') writer.writePoint(1, 2);
+    else if (kind === 'polyline')
+      writer.writeLineString(Float64Array.from([0, 2]), Float64Array.from([0, 2]), 0, 2);
+    else
+      writer.writePolygons(Float64Array.from([0, 0, 2, 2, 0]), Float64Array.from([0, 2, 2, 0, 0]), [
+        [[0, 5]],
+      ]);
+    writer.endRow();
+    const single = writer.finish().bytes;
+    const bytes = new Uint8Array(single.byteLength + 9);
+    const view = new DataView(bytes.buffer);
+    view.setUint8(0, 1);
+    view.setUint32(1, kind === 'point' ? 4 : kind === 'polyline' ? 5 : 6, true);
+    view.setUint32(5, 1, true);
+    bytes.set(single, 9);
+    const dataset = fromArrowTable(new Table({ geometry: vectorFromArray([bytes], new Binary()) }));
+    const cached =
+      getSeededArrowTable(dataset, dataset.layers[0], { encoding: 'wkb' }, undefined, 'input') ??
+      toCachedArrowTable(dataset, { encoding: 'wkb' });
+    expect(cached.getChild('geometry')!.get(0)).toEqual(single);
+  });
+
+  it.each([
+    'point',
+    'polyline',
+    'polygon',
+  ] as const)('normalizes an all-singleton native Multi %s schema before reuse', (kind) => {
+    const writer = new WkbWriter();
+    if (kind === 'point') {
+      writer.writePoint(1, 2);
+      writer.endRow();
+      writer.writeMultiPoint([
+        [3, 4],
+        [5, 6],
+      ]);
+    } else if (kind === 'polyline') {
+      writer.writeLineString(Float64Array.from([0, 2]), Float64Array.from([0, 2]), 0, 2);
+      writer.endRow();
+      writer.writeMultiLineString(
+        Float64Array.from([3, 4, 5, 6]),
+        Float64Array.from([3, 4, 5, 6]),
+        [
+          [0, 2],
+          [2, 4],
+        ],
+      );
+    } else {
+      const xs = Float64Array.from([0, 0, 2, 2, 0, 5, 5, 7, 7, 5]);
+      const ys = Float64Array.from([0, 2, 2, 0, 0, 5, 7, 7, 5, 5]);
+      writer.writePolygons(xs, ys, [[[0, 5]]]);
+      writer.endRow();
+      writer.writePolygons(xs, ys, [[[0, 5]], [[5, 10]]]);
+    }
+    writer.endRow();
+    const { bytes, valueOffsets } = writer.finish();
+    const input = fromArrowTable(
+      tableFromColumns([
+        {
+          field: new Field('geometry', new Binary(), true),
+          data: makeData({ type: new Binary(), length: 2, data: bytes, valueOffsets }),
+        },
+      ]),
+    );
+    input.info = { ...input.info, crs_string: 'EPSG:4326' };
+    const sliced = toArrowTable(input).slice(0, 1);
+    const parsed = fromArrowTable(sliced);
+    const fresh = toArrowTable(parsed);
+    const cached = toCachedArrowTable(parsed);
+    expect(cached.getChild('geometry')!.type.toString()).toBe(
+      fresh.getChild('geometry')!.type.toString(),
+    );
+    expect(cached.schema.fields[0].metadata.get('ARROW:extension:name')).toBe(
+      kind === 'point'
+        ? 'geoarrow.point'
+        : kind === 'polyline'
+          ? 'geoarrow.linestring'
+          : 'geoarrow.polygon',
+    );
+  });
 
   it('uses geo metadata primary_column over name heuristics', () => {
     const decoy = wkbColumn('geometry', (w) => {

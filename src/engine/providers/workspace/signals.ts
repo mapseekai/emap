@@ -8,8 +8,19 @@ export class RenderSignals {
     private readonly events: EventDispatcher,
     private readonly document: Pick<WorkspaceDocument, '_removed'>,
   ) {}
-  requestRender(action: RenderAction = 'redraw', navDelta?: AffineDelta, settle = false): void {
-    if (!this.document._removed) this.events.fire('renderrequest', { action, navDelta, settle });
+  requestRender(
+    action: RenderAction = 'redraw',
+    navDelta?: AffineDelta,
+    settle = false,
+    dirtyBounds?: readonly [number, number, number, number],
+  ): void {
+    if (!this.document._removed)
+      this.events.fire('renderrequest', {
+        action,
+        navDelta,
+        settle,
+        ...(dirtyBounds ? { dirtyBounds } : {}),
+      });
   }
   requestOverlay(): void {
     if (!this.document._removed) this.events.fire('overlayrequest');

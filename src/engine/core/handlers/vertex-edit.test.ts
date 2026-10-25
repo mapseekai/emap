@@ -700,6 +700,7 @@ describe('VertexEditHandler', () => {
       })),
       setEditVertexState: vi.fn(),
       render: vi.fn(),
+      fire: vi.fn(),
     };
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
@@ -731,6 +732,7 @@ describe('VertexEditHandler', () => {
     callPrivate(handler, '_handleDrag', 11, 0);
 
     expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
+    expect(mapMock.fire).toHaveBeenCalledWith('rendercacheclear', { sourceId: 'src-a' });
   });
 
   it('fires vertex_moved and avoids the full-bounds rebuild on finish drag', () => {
@@ -1056,7 +1058,7 @@ describe('VertexEditHandler', () => {
     handler.handlePointer(event);
 
     expect(mapMock.setEditVertexState).toHaveBeenCalledTimes(1);
-    expect(mapMock.render).toHaveBeenCalledTimes(1);
+    expect(mapMock.render).not.toHaveBeenCalled();
   });
 });
 

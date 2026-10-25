@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { tableFromArrays } from 'apache-arrow';
-import { runPipeline } from './pipeline';
+import {
+  tableFromArrays,
+  vectorFromArray,
+  Dictionary,
+  DateMillisecond,
+  DateDay,
+  TimestampMillisecond,
+  Int32,
+  Float32,
+  Float64,
+  Bool,
+} from 'apache-arrow';
+import { fromArrowTable } from '../../arrow/table-to-dataset';
+import { runPipeline, arrowResultToDataset, datasetToArrowInput } from './pipeline';
+import { datasetFromGeoJSON } from '../../../../test/utils/arrow';
+import { toArrowTable } from '../../arrow/dataset-to-table';
+import { Table, Schema, RecordBatch } from 'apache-arrow';
 import type { DuckDbConnection, DuckDbRuntime } from '../runtime';
 
 function setup() {
@@ -137,5 +152,102 @@ describe('pipeline cancellation ownership', () => {
       name: 'AggregateError',
       errors: [null, reason],
     });
+  });
+});
+
+describe('Arrow input reuse', () => {
+  it('reseeds bare WKB results after inheriting CRS without re-encoding the next input', async () => {
+    const primary = await datasetFromGeoJSON({ type: 'Point', coordinates: [3, 4] });
+    primary.info = { ...primary.info, crs_string: 'EPSG:3857' };
+    const table = toArrowTable(primary, { encoding: 'wkb' });
+    const schema = new Schema(
+      table.schema.fields.map((field) => field.clone({ metadata: new Map() })),
+    );
+    const bare = new Table(
+      schema,
+      table.batches.map((batch) => new RecordBatch(schema, batch.data)),
+    );
+    const result = arrowResultToDataset(bare, { layerName: 'result' }, primary, 'test');
+    const cached = datasetToArrowInput(result, { layer: 'result' }, 'test');
+    expect(cached).not.toBe(bare);
+    expect(datasetToArrowInput(result, { layer: 'result' }, 'test')).toBe(cached);
+    bare.getChild('geometry')!.get(0).fill(0);
+    expect(cached.getChild('geometry')!.get(0)[0]).toBe(1);
+    const exported = toArrowTable(result, { encoding: 'wkb' });
+    expect(JSON.parse(exported.schema.metadata.get('geo')!).columns.geometry.crs.id.code).toBe(
+      3857,
+    );
+    result.attributeVersion = 1;
+    expect(datasetToArrowInput(result, {}, 'test')).not.toBe(cached);
+  });
+});
+
+describe('seed attribute normalization', () => {
+  it.each([
+    {
+      label: 'dictionary dates',
+      vector: () =>
+        vectorFromArray(
+          [new Date('2024-01-02')],
+          new Dictionary(new DateMillisecond(), new Int32()),
+        ),
+      type: 'Float64',
+      value: 1704153600000,
+    },
+    {
+      label: 'Int32',
+      vector: () => vectorFromArray([50000], new Int32()),
+      type: 'Float64',
+      value: 50000,
+    },
+    {
+      label: 'Float32',
+      vector: () => vectorFromArray([50000], new Float32()),
+      type: 'Float64',
+      value: 50000,
+    },
+    {
+      label: 'all-null Float64',
+      vector: () => vectorFromArray([null], new Float64()),
+      type: 'Utf8',
+      value: null,
+    },
+    {
+      label: 'all-null Bool',
+      vector: () => vectorFromArray([null], new Bool()),
+      type: 'Utf8',
+      value: null,
+    },
+    {
+      label: 'all-null Date',
+      vector: () => vectorFromArray([null], new DateMillisecond()),
+      type: 'Utf8',
+      value: null,
+    },
+    {
+      label: 'DateDay',
+      vector: () => vectorFromArray([new Date('2024-01-02')], new DateDay()),
+      type: 'Date64<MILLISECOND>',
+      value: 1704153600000,
+    },
+    {
+      label: 'TimestampMillisecond',
+      vector: () => vectorFromArray([new Date('2024-01-02')], new TimestampMillisecond()),
+      type: 'Date64<MILLISECOND>',
+      value: 1704153600000,
+    },
+  ])('keeps fresh SQL input semantics for $label', ({ vector, type, value }) => {
+    const geometry = toArrowTable(
+      { layers: [{ geometry_type: 'point', shapes: [[[1, 2]]] }] },
+      { encoding: 'wkb' },
+    ).getChild('geometry')!;
+    const dataset = fromArrowTable(new Table({ geometry, value: vector() }));
+    const fresh = toArrowTable(dataset, { encoding: 'wkb' });
+    const cached = datasetToArrowInput(dataset, {}, 'review');
+    expect(fresh.getChild('value')!.type.toString()).toBe(type);
+    expect(fresh.getChild('value')!.get(0)).toBe(value);
+    expect(cached.getChild('value')!.type.toString()).toBe(type);
+    expect(cached.getChild('value')!.get(0)).toBe(value);
+    expect(datasetToArrowInput(dataset, {}, 'review')).toBe(cached);
   });
 });

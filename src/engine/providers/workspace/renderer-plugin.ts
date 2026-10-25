@@ -14,7 +14,11 @@ export const rendererPainterPlugin: Plugin.Object = {
       yield ctx.provide('painterFactory', {
         async create(canvas, options) {
           if (options?.role === 'overlay' || backend === 'canvas2d')
-            return Object.assign(new CanvasPainter(canvas), { backend: 'canvas2d' as const });
+            return new CanvasPainter(canvas, {
+              cooperative: options?.role === 'main',
+              signal: options?.signal,
+              report: options?.report,
+            });
           const { LumaPainter } = await import('../../../integrations/luma/painter');
           options?.signal.throwIfAborted();
           return LumaPainter.create(canvas, backend, {

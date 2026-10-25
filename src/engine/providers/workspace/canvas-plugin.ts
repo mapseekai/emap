@@ -5,7 +5,14 @@ export const canvasPainterPlugin: Plugin.Object = {
   provide: ['painterFactory'],
   apply(ctx) {
     ctx.effect(function* () {
-      yield ctx.provide('painterFactory', { create: (canvas) => new CanvasPainter(canvas) });
+      yield ctx.provide('painterFactory', {
+        create: (canvas, options) =>
+          new CanvasPainter(canvas, {
+            cooperative: options?.role === 'main',
+            signal: options?.signal,
+            report: options?.report,
+          }),
+      });
     });
   },
 };

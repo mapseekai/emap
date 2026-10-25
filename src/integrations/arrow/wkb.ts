@@ -39,6 +39,8 @@ class WkbReader {
   private _view: DataView;
   private _pos = 0;
   sawZ = false;
+  sawSrid = false;
+  sawSingletonMulti = false;
 
   constructor(bytes: Uint8Array) {
     this._view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -68,6 +70,7 @@ class WkbReader {
       }
       case 4: {
         const n = this._u32(littleEndian);
+        if (n === 1) this.sawSingletonMulti = true;
         const points: Array<[number, number]> = [];
         for (let i = 0; i < n; i++) {
           const child = this.readGeometry();
@@ -78,6 +81,7 @@ class WkbReader {
       }
       case 5: {
         const n = this._u32(littleEndian);
+        if (n === 1) this.sawSingletonMulti = true;
         const paths: Array<Array<[number, number]>> = [];
         for (let i = 0; i < n; i++) {
           const child = this.readGeometry();
@@ -88,6 +92,7 @@ class WkbReader {
       }
       case 6: {
         const n = this._u32(littleEndian);
+        if (n === 1) this.sawSingletonMulti = true;
         const rings: Array<Array<[number, number]>> = [];
         const ringIsHole: boolean[] = [];
         for (let i = 0; i < n; i++) {
@@ -108,6 +113,7 @@ class WkbReader {
     let hasZ = false;
     if (t & EWKB_SRID_FLAG) {
       // Skip embedded SRID (EWKB); CRS comes from file metadata instead.
+      this.sawSrid = true;
       this._pos += 4;
       t &= ~EWKB_SRID_FLAG;
     }
@@ -171,13 +177,28 @@ class WkbReader {
 /** Decode one WKB buffer; returns null for empty input (null geometry). */
 export function decodeWkb(bytes: Uint8Array): WkbGeometry | null {
   if (bytes.length === 0) return null;
+  return decodeWkbForImport(bytes).geometry;
+}
+
+/** Dropped dimensions or embedded CRS must not seed the original representation. */
+export function decodeWkbForImport(bytes: Uint8Array): {
+  geometry: WkbGeometry;
+  hasZ: boolean;
+  hasSrid: boolean;
+  hasSingletonMulti: boolean;
+} {
   const reader = new WkbReader(bytes);
   const geometry = reader.readGeometry();
   if (reader.sawZ && !warnedZ) {
     warnedZ = true;
     console.warn('emap formats: WKB Z coordinates are not supported; Z values were dropped');
   }
-  return geometry;
+  return {
+    geometry,
+    hasZ: reader.sawZ,
+    hasSrid: reader.sawSrid,
+    hasSingletonMulti: reader.sawSingletonMulti,
+  };
 }
 
 /**

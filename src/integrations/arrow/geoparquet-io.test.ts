@@ -1,8 +1,24 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
 import { exportGeoParquet, importGeoParquet } from './geoparquet-io';
 import { setParquetWasm } from './parquet-wasm-loader';
 import { datasetFromGeoJSON, injectParquetWasmForTests } from '../../../test/utils/arrow';
-import { tableFromIPC } from 'apache-arrow';
+import {
+  tableFromIPC,
+  Field,
+  FixedSizeList,
+  Float64,
+  Struct,
+  Table,
+  Schema,
+  RecordBatch,
+  makeData,
+  vectorFromArray,
+  DataType,
+} from 'apache-arrow';
+import { toArrowTable, toCachedArrowTable } from './dataset-to-table';
+import { fromArrowTable } from './table-to-dataset';
+import { getSeededArrowTable } from './table-cache';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import type { ParquetWasmModule } from './parquet-wasm-loader';
 import { readFile } from 'node:fs/promises';
@@ -402,4 +418,57 @@ describe('GeoParquet round trip', () => {
     expect(back.layers[0].shapes).toHaveLength(2);
     expect(back.info?.crs_string).toBeUndefined();
   });
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+it('exports a compatible parsed GeoParquet table without rebuilding paths and honors changed options', async () => {
+  const dataset = await datasetFromGeoJSON(FC);
+  dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+  const parsed = await importGeoParquet(await exportGeoParquet(dataset));
+  const convert = vi.spyOn(getDefaultMapshaperAdapter(), 'exportPathData');
+  const bytes = await exportGeoParquet(parsed);
+  expect(convert).not.toHaveBeenCalled();
+  const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+  expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry.covering?.bbox?.xmin).toEqual([
+    'bbox',
+    'xmin',
+  ]);
+  expect(
+    table.schema.fields
+      .find((field) => field.name === 'geometry')!
+      .metadata.has('ARROW:extension:name'),
+  ).toBe(false);
+  await exportGeoParquet(parsed, { bboxColumn: false });
+  expect(convert).toHaveBeenCalled();
+});
+
+it('normalizes imported interleaved coordinates before native GeoParquet export', async () => {
+  const base = toArrowTable({
+    layers: [{ geometry_type: 'point', shapes: [[[1, 2]]] }],
+    info: { crs_string: 'EPSG:4326' },
+  });
+  const type = new FixedSizeList(2, new Field('xy', new Float64(), false));
+  const field = new Field('geometry', type, true, base.schema.fields[0].metadata);
+  const schema = new Schema([field], base.schema.metadata);
+  const data = makeData({
+    type: new Struct([field]),
+    length: 1,
+    children: [vectorFromArray([[1, 2]], type).data[0]],
+  });
+  const dataset = fromArrowTable(new Table(schema, [new RecordBatch(schema, data)]));
+  expect(
+    getSeededArrowTable(
+      dataset,
+      dataset.layers[0],
+      { encoding: 'native', bboxColumn: false },
+      undefined,
+      'geoparquet',
+    ),
+  ).toBeUndefined();
+  expect(DataType.isStruct(toCachedArrowTable(dataset).getChild('geometry')!.type)).toBe(true);
+  const bytes = await exportGeoParquet(dataset, { encoding: 'native', bboxColumn: false });
+  const written = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+  expect(DataType.isStruct(written.getChild('geometry')!.type)).toBe(true);
+  expect(written.getChild('geometry')!.get(0).toJSON()).toEqual({ x: 1, y: 2 });
 });

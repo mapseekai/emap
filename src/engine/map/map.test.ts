@@ -382,7 +382,7 @@ describe('Emap rendering', () => {
       return vertexArcFilter;
     });
     setPrivate(map, '_viewport', {
-      transform: { mx: 1, my: 1, bx: 0, by: 0 },
+      transform: new AffineTransform(1, 1, 0, 0),
       getLineScale: () => 1,
       getArcFilter,
     });
@@ -432,7 +432,7 @@ describe('Emap rendering', () => {
     });
     setPrivate(map, '_scheduler', { recordFrame });
     setPrivate(map, '_viewport', {
-      transform: { mx: 1, my: 1, bx: 0, by: 0 },
+      transform: new AffineTransform(1, 1, 0, 0),
       getLineScale: () => 1,
       getArcFilter: vi.fn(),
     });

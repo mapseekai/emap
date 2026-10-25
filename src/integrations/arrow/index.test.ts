@@ -1,3 +1,4 @@
+import { tableFromIPC } from 'apache-arrow';
 import { createTestMap, fixtureSet } from '../../../test/utils/plugin-test-map';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerArrowFormats } from './index';
@@ -55,6 +56,28 @@ describe('Arrow module registration', () => {
     registerArrowFormats(formats);
   });
   afterEach(() => formats.dispose());
+  it.each([
+    'setDataset',
+    'replaceDataset',
+  ] as const)('invalidates cached exports when %s recommits the same edited dataset', async (method) => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'Feature',
+      properties: { id: 1 },
+      geometry: { type: 'Point', coordinates: [3, 4] },
+    });
+    const source = new TopologySource('same-object', { formats });
+    source.setDataset(dataset);
+    await source.export({ format: 'geoarrow' });
+    dataset.layers[0].data!.getRecords!()[0].id = 2;
+    await source[method](dataset);
+    const blob = await source.export({ format: 'geoarrow' });
+    expect(
+      tableFromIPC(new Uint8Array(await blob.arrayBuffer()))
+        .getChild('id')!
+        .get(0),
+    ).toBe(2);
+  });
+
   it('registers import handling for all plugin extensions', () => {
     for (const ext of ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather']) {
       expect(getFormatForExtension(formats, ext)?.name).toBe('geoarrow-formats');

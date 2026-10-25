@@ -17,18 +17,18 @@ export class SelectionServiceImpl {
     style?: HighlightStyle,
   ): void {
     this.deps.document._highlightManager.setHighlightedFeatures(features, style);
-    this.deps.signals.requestRender();
+    this.deps.signals.requestOverlay();
   }
 
   public clearHighlightedFeatures(): void {
     if (this.deps.document._highlightManager.clearHighlightedFeatures()) {
-      this.deps.signals.requestRender();
+      this.deps.signals.requestOverlay();
     }
   }
 
   public setHighlightStyle(style: HighlightStyle): void {
     if (this.deps.document._highlightManager.setHighlightStyle(style)) {
-      this.deps.signals.requestRender();
+      this.deps.signals.requestOverlay();
     }
   }
 
@@ -69,7 +69,7 @@ export class SelectionServiceImpl {
     let removed = false;
     for (const key of layerKeys)
       removed = this.deps.document._highlightManager.removeLayer(sourceId, key) || removed;
-    if (removed) this.deps.signals.requestRender();
+    if (removed) this.deps.signals.requestOverlay();
   }
 
   constructor(private readonly deps: Dependencies) {}

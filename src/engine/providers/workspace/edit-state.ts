@@ -23,7 +23,7 @@ export class EditStateServiceImpl {
 
       this.deps.events.fire('editmodechange', { mode: change.current.mode });
     }
-    if (change.modeChanged || change.current.mode === 'vertex') this.deps.signals.requestRender();
+    if (change.modeChanged) this.deps.signals.requestRender();
     else this.deps.signals.requestOverlay();
   });
 

@@ -1,7 +1,8 @@
 import type { Table } from 'apache-arrow';
 import { resolveLayerInList } from '../../../engine/map/layer-registry';
-import { toArrowTable } from '../../arrow/dataset-to-table';
+import { toCachedArrowTable } from '../../arrow/dataset-to-table';
 import { fromArrowTable } from '../../arrow/table-to-dataset';
+import { getSeededArrowTable, refreshSeededArrowCrs } from '../../arrow/table-cache';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import { inheritPrimaryDatasetCrs } from './dataset-crs';
 import { DuckDbOperationError } from '../errors';
@@ -64,7 +65,15 @@ export function datasetToArrowInput(
   label: string,
 ): Table {
   try {
-    return toArrowTable(dataset, {
+    const layer =
+      typeof opts.layer === 'string'
+        ? resolveLayerInList(dataset.layers, opts.layer)
+        : dataset.layers[opts.layer ?? 0];
+    const seeded =
+      layer &&
+      getSeededArrowTable(dataset, layer, { ...opts, encoding: 'wkb' }, undefined, 'input');
+    if (seeded) return seeded;
+    return toCachedArrowTable(dataset, {
       layer: opts.layer,
       encoding: 'wkb',
       geometryColumn: opts.geometryColumn ?? 'geometry',
@@ -87,7 +96,9 @@ export function arrowResultToDataset(
       layerName: opts.layerName,
       geometryColumn: opts.geometryColumn,
     });
-    return inheritPrimaryDatasetCrs(converted, primaryDataset);
+    inheritPrimaryDatasetCrs(converted, primaryDataset);
+    refreshSeededArrowCrs(converted);
+    return converted;
   } catch (err) {
     throw new DuckDbOperationError('conversion-failed', pipelineMessages(label).resultConversion, {
       cause: err,

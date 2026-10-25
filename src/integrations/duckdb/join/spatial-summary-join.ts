@@ -1,5 +1,5 @@
 import type { Table } from 'apache-arrow';
-import { toArrowTable } from '../../arrow/dataset-to-table';
+import { toCachedArrowTable } from '../../arrow/dataset-to-table';
 import type { MapshaperDataset } from '../../../shared/types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from '../core/dataset-crs';
 import { DuckDbOperationError } from '../errors';
@@ -109,7 +109,7 @@ export async function spatialSummaryJoin(
       );
     }
     if (rowCount > 0) {
-      targetTable = toArrowTable(
+      targetTable = toCachedArrowTable(
         createTargetInputDataset(targetDataset, target.layer, rowIdColumn),
         {
           encoding: 'wkb',
@@ -118,7 +118,7 @@ export async function spatialSummaryJoin(
         },
       );
     }
-    joinTable = toArrowTable(alignedJoinDataset, {
+    joinTable = toCachedArrowTable(alignedJoinDataset, {
       encoding: 'wkb',
       geometryColumn: joinGeometryColumn,
       layer: join.index,

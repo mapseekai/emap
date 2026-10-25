@@ -1,7 +1,7 @@
 import { Table, tableFromIPC, tableToIPC } from 'apache-arrow';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
-import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
+import { toCachedArrowTable, type ToArrowTableOptions } from './dataset-to-table';
 
 export type ImportGeoArrowOptions = FromArrowTableOptions;
 
@@ -28,6 +28,9 @@ export function exportGeoArrow(
   dataset: MapshaperDataset,
   opts: ExportGeoArrowOptions = {},
 ): Uint8Array {
-  const table: Table = toArrowTable(dataset, { ...opts, encoding: opts.encoding ?? 'native' });
+  const table: Table = toCachedArrowTable(dataset, {
+    ...opts,
+    encoding: opts.encoding ?? 'native',
+  });
   return tableToIPC(table, 'file');
 }

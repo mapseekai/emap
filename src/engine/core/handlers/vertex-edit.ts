@@ -275,7 +275,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _onMapMove(): void {
     if ((this._hoveredFeature && !this._dragging) || this._bandStart) {
       this._updateEditState();
-      this._map.render();
     }
   }
 
@@ -283,7 +282,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (this._selectedNodes.length === 0) return;
     this._clearSelectedNodes();
     this._updateEditState();
-    this._map.render();
   }
 
   /**
@@ -571,7 +569,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
             this._neighborShapes = [];
             if (this._getHoverSignature() !== previousHoverSignature) {
               this._updateEditState();
-              this._map.render();
             }
             return;
           }
@@ -585,17 +582,13 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._layers ? { layers: this._layers } : undefined,
     );
     if (hits.length === 0) {
-      if (this._clearHoverState()) {
-        this._map.render();
-      }
+      this._clearHoverState();
       return;
     }
 
     const hit = hits[0];
     if (hit.geometryType === 'point') {
-      if (this._clearHoverState()) {
-        this._map.render();
-      }
+      this._clearHoverState();
       return;
     }
 
@@ -635,7 +628,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       return;
     }
     this._updateEditState();
-    this._map.render();
   }
 
   /**
@@ -1052,20 +1044,25 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       for (const part of shape) {
         for (const rawArcId of part) {
           const iter = arcs.getArcIter(rawArcId);
+          const candidates: Array<[number, number]> = [];
           while (iter.hasNext()) {
             const screen = this._map.project(iter.x, iter.y);
             if (screen[0] < minX || screen[0] > maxX || screen[1] < minY || screen[1] > maxY)
               continue;
-            const key = `${hit.source}:${iter.x},${iter.y}`;
+            candidates.push([iter.x, iter.y]);
+          }
+          // Topology lookups reuse mapshaper's arc iterator; consume it first.
+          for (const coords of candidates) {
+            const key = `${hit.source}:${coords[0]},${coords[1]}`;
             if (seen.has(key)) continue;
-            const vertexIds = adapter.findNearestVertices([iter.x, iter.y], shape, arcs);
+            const vertexIds = adapter.findNearestVertices(coords, shape, arcs);
             if (vertexIds.length === 0) continue;
             seen.add(key);
             selected.push({
               source: hit.source,
               layer: hit.layer,
               vertexIds,
-              coords: [iter.x, iter.y],
+              coords,
             });
           }
         }
@@ -1145,6 +1142,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
         arcs as ArcCollection,
       );
     }
+    for (const sourceId of new Set(this._selectedNodes.map((node) => node.source)))
+      this._map.fire('rendercacheclear', { sourceId });
     this._updateEditState();
     this._map.render();
   }
@@ -1210,7 +1209,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._detachedNode.coords = [dataCoords[0], dataCoords[1]];
     }
 
-    // Update edit state and repaint — vertex dots + data layer on same canvas
+    // Live previews mutate arcs before the commit bumps editVersion.
+    this._map.fire('rendercacheclear', { sourceId: this._hoveredFeature.source });
     this._updateEditState();
     this._map.render();
   }

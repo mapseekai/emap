@@ -237,6 +237,7 @@ interface ArrowDotCacheEntry {
   shapes: ArrowDotPathOptions['shapes'];
   shapeIndices: Uint32Array | undefined;
   geometryRevision: number;
+  interval: number | undefined;
   mx: number;
   my: number;
   bx: number;
@@ -271,7 +272,189 @@ function partPassesArcFilter(part: readonly number[], filter?: (i: number) => bo
   return false;
 }
 
+interface CanvasFrameOptions {
+  cooperative?: boolean;
+  signal?: AbortSignal;
+  report?: (error: Error) => void;
+}
+
 export class CanvasPainter implements EditPainter {
+  readonly drawOutlinePaths?: EditPainter['drawPaths'];
+  readonly clearRegion?: (rect: readonly [number, number, number, number]) => void;
+  readonly backend = 'canvas2d' as const;
+  private _display: CanvasRenderingContext2D;
+  private _staging: HTMLCanvasElement | null = null;
+  private _recording = false;
+  private _cooperative = false;
+  private _executing = false;
+  private _disposed = false;
+  private _continuation = 0;
+  private _frameEpoch = 0;
+  private _jobs: {
+    iterator: Generator<void>;
+    layer: LayerContext;
+    arcs?: ArcCollection;
+    interval?: number;
+    pass: { report: (error: unknown) => void; failed: boolean } | null;
+  }[] = [];
+  private _jobIndex = 0;
+  private _passError: { report: (error: unknown) => void; failed: boolean } | null = null;
+  private _present: ((transform: AffineTransform) => void) | null = null;
+  private _isCurrent: (() => boolean) | undefined;
+  private _hasImage = false;
+  private _complete = true;
+  private _region: readonly [number, number, number, number] | null = null;
+  get frameComplete(): boolean {
+    return this._complete;
+  }
+  get frameRetained(): boolean {
+    return this._hasImage && !this._complete;
+  }
+  get framePresented(): boolean {
+    return this._complete && this._hasImage;
+  }
+
+  setCooperativeRendering(enabled: boolean): void {
+    const next = !!this._frameOptions.cooperative && enabled;
+    if (next === this._cooperative) return;
+    this.cancelFrame();
+    this._cooperative = next;
+  }
+
+  setFrameCallback(
+    callback: ((transform: AffineTransform) => void) | null,
+    isCurrent?: () => boolean,
+  ): void {
+    this._isCurrent = isCurrent;
+    this._present = callback;
+  }
+
+  setRenderPassErrorHandler(report: ((error: unknown) => void) | null): void {
+    this._passError = report ? { report, failed: false } : null;
+  }
+
+  cancelFrame(): void {
+    this._frameEpoch++;
+    if (this._continuation) cancelAnimationFrame(this._continuation);
+    this._continuation = 0;
+    this._jobs = [];
+    this._jobIndex = 0;
+    this._recording = false;
+    this._region = null;
+    this._ctx = this._display;
+  }
+
+  private _submit(iterator: Generator<void>, arcs?: ArcCollection): void {
+    if (this._disposed || this._frameOptions.signal?.aborted) return;
+    if (!this._recording || this._executing) {
+      while (!iterator.next().done) {
+        /* Synchronous painters keep the same primitives. */
+      }
+      return;
+    }
+    this._jobs.push({
+      iterator,
+      layer: this._layerContext,
+      arcs,
+      interval: arcs?.getRetainedInterval?.(),
+      pass: this._passError,
+    });
+  }
+
+  private _defer(draw: () => void): boolean {
+    if (this._disposed || this._frameOptions.signal?.aborted) return true;
+    if (!this._recording || this._executing) return false;
+    this._submit(
+      (function* () {
+        draw();
+      })(),
+    );
+    return true;
+  }
+
+  private _drain(deferred = false): void {
+    const epoch = this._frameEpoch;
+    const ownsFrame = () => epoch === this._frameEpoch && this._recording && !this._disposed;
+    if (!ownsFrame()) return;
+    if (this._isCurrent && !this._isCurrent()) {
+      if (ownsFrame()) this.cancelFrame();
+      return;
+    }
+    if (!ownsFrame()) return;
+    const started = performance.now();
+    let steps = 0;
+    while (this._jobIndex < this._jobs.length) {
+      const job = this._jobs[this._jobIndex];
+      if (job.pass?.failed) {
+        this._jobIndex++;
+      } else {
+        const interval = job.arcs?.getRetainedInterval?.();
+        this._layerContext = job.layer;
+        this._updateScreenTransform();
+        this._executing = true;
+        let done = false;
+        let failure: { error: unknown } | undefined;
+        try {
+          if (job.interval !== undefined) job.arcs?.setRetainedInterval?.(job.interval);
+          done = !!job.iterator.next().done;
+        } catch (error) {
+          failure = { error };
+        } finally {
+          this._executing = false;
+          if (interval !== undefined) job.arcs?.setRetainedInterval?.(interval);
+        }
+        if (!ownsFrame()) return;
+        if (failure) {
+          if (job.pass) {
+            job.pass.failed = true;
+            // Error listeners can dispose, cancel, or start an entirely new frame.
+            job.pass.report(failure.error);
+            if (!ownsFrame()) return;
+            this._jobIndex++;
+          } else {
+            this.cancelFrame();
+            if (!deferred) throw failure.error;
+            this._frameOptions.report?.(
+              failure.error instanceof Error ? failure.error : new Error(String(failure.error)),
+            );
+            return;
+          }
+        } else if (done) this._jobIndex++;
+      }
+      if (++steps >= 256 || performance.now() - started >= 8) break;
+    }
+    if (!ownsFrame()) return;
+    if (this._jobIndex < this._jobs.length) {
+      this._continuation = requestAnimationFrame(() => {
+        if (!ownsFrame()) return;
+        this._continuation = 0;
+        this._drain(true);
+      });
+      return;
+    }
+    if (this._isCurrent && !this._isCurrent()) {
+      if (ownsFrame()) this.cancelFrame();
+      return;
+    }
+    if (!ownsFrame()) return;
+    const stagingContext = this._ctx;
+    this._recording = false;
+    this._jobs = [];
+    this._jobIndex = 0;
+    this._ctx = this._display;
+    if (this._region) {
+      stagingContext.restore();
+      this._display.clearRect(...this._region);
+      this._display.drawImage(this._staging!, ...this._region, ...this._region);
+      this._region = null;
+    } else {
+      this._display.clearRect(0, 0, this._canvas.width, this._canvas.height);
+      this._display.drawImage(this._staging!, 0, 0);
+    }
+    this._complete = this._hasImage = true;
+    if (deferred) this._present?.(this._transform.clone());
+  }
+
   private _ctx: CanvasRenderingContext2D;
   private _layerContext: LayerContext = null;
   private _fillPathCaches = new Map<string, FillPathCache>();
@@ -286,6 +469,7 @@ export class CanvasPainter implements EditPainter {
     ids?: Uint32Array,
     components?: Uint32Array,
   ): void {
+    if (this._defer(() => this.drawPointIcons(shapes, icon, ids, components))) return;
     (this._icons ??= new CanvasPointIcons()).draw(
       this._ctx,
       this._transform,
@@ -313,22 +497,37 @@ export class CanvasPainter implements EditPainter {
   private _computedStyle: CSSStyleDeclaration | null | undefined;
   private _arcVisitMarks = new Uint32Array(0);
   private _arcVisitEpoch = 0;
+  private _independentIterators = new WeakSet<ArcIterator>();
   private _pathArcCache = new WeakMap<
     Uint32Array,
     {
       shapes: readonly (FeatureShape | null | undefined)[];
       arcs: ArcCollection;
       revision: number;
+      forward: boolean;
       arcIds: Int32Array;
     }
   >();
 
-  constructor(private _canvas: HTMLCanvasElement) {
+  constructor(
+    private _canvas: HTMLCanvasElement,
+    private readonly _frameOptions: CanvasFrameOptions = {},
+  ) {
     const ctx = _canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
-    this._ctx = ctx;
+    this._ctx = this._display = ctx;
+    this._cooperative = !!_frameOptions.cooperative;
+    if (_frameOptions.cooperative) {
+      this.clearRegion = (rect) => this._clearRegion(rect);
+      this.drawOutlinePaths = (shapes, style, arcs, filter, indices, revision) => {
+        this._submit(this._drawPaths(shapes, style, arcs, filter, indices, revision, true), arcs);
+      };
+    }
+    this._frameOptions.signal?.addEventListener('abort', this._onAbort, { once: true });
     this._updateScreenTransform();
   }
+
+  private readonly _onAbort = () => this.cancelFrame();
 
   private _resolveColor(value: string | undefined, role: ThemeColorRole): string {
     const color = value || EMAP_THEME_COLORS[role];
@@ -353,14 +552,16 @@ export class CanvasPainter implements EditPainter {
   }
 
   setTransform(transform: AffineTransform): void {
+    this.cancelFrame();
     const key = [transform.mx, transform.my, transform.bx, transform.by].join(',');
     if (key !== this._fillPathTransform) this.clearGeometryCache();
     this._fillPathTransform = key;
-    this._transform = transform;
+    this._transform = new AffineTransform(transform.mx, transform.my, transform.bx, transform.by);
     this._updateScreenTransform();
   }
 
   setPixelRatio(ratio: number): void {
+    if (ratio !== this._pixelRatio) this.cancelFrame();
     if (ratio !== this._pixelRatio) this.clearGeometryCache();
     this._pixelRatio = ratio;
     this._updateScreenTransform();
@@ -410,12 +611,20 @@ export class CanvasPainter implements EditPainter {
   }
 
   finishFrame(): void {
+    if (this._recording) this._drain();
     for (const id of this._fillPathCaches.keys()) {
       if (!this._seenLayers.has(id)) this.clearGeometryCache({ layerId: id });
     }
   }
 
   dispose(): void {
+    this._disposed = true;
+    this.cancelFrame();
+    this._frameOptions.signal?.removeEventListener('abort', this._onAbort);
+    if (this._staging) this._staging.width = this._staging.height = 0;
+    this._staging = null;
+    this._present = null;
+    this._isCurrent = undefined;
     this.clearGeometryCache();
     this.clearIcons();
     this._arrowDotCache.clear();
@@ -480,6 +689,21 @@ export class CanvasPainter implements EditPainter {
     shapeIndices?: Uint32Array,
     geometryRevision?: number,
   ): void {
+    this._submit(
+      this._drawPaths(shapes, style, arcs, arcFilter, shapeIndices, geometryRevision),
+      arcs,
+    );
+  }
+
+  private *_drawPaths(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    style: StrokeStyle,
+    arcs: ArcCollection,
+    arcFilter?: (i: number) => boolean,
+    shapeIndices?: Uint32Array,
+    geometryRevision?: number,
+    forward = false,
+  ): Generator<void> {
     if (style.width === 0) return;
     if (shapeIndices && geometryRevision !== undefined) {
       let cached = this._pathArcCache.get(shapeIndices);
@@ -487,19 +711,23 @@ export class CanvasPainter implements EditPainter {
         !cached ||
         cached.shapes !== shapes ||
         cached.arcs !== arcs ||
-        cached.revision !== geometryRevision
+        cached.revision !== geometryRevision ||
+        cached.forward !== forward
       ) {
         const epoch = this._beginArcVisit(arcs.size());
         const ids: number[] = [];
+        let visited = 0;
         for (const shapeId of shapeIndices) {
+          if (++visited % 256 === 0 && this._recording) yield;
           const shape = shapes[shapeId];
           if (!shape) continue;
           for (const part of shape as PathShape) {
             for (const signedId of part) {
+              if (++visited % 256 === 0 && this._recording) yield;
               const id = absArcId(signedId);
               if (this._arcVisitMarks[id] === epoch) continue;
               this._arcVisitMarks[id] = epoch;
-              ids.push(signedId);
+              ids.push(forward ? id : signedId);
             }
           }
         }
@@ -507,11 +735,12 @@ export class CanvasPainter implements EditPainter {
           shapes,
           arcs,
           revision: geometryRevision,
+          forward,
           arcIds: Int32Array.from(ids),
         };
         this._pathArcCache.set(shapeIndices, cached);
       }
-      this.drawArcs(arcs, style, arcFilter, cached.arcIds);
+      yield* this._drawArcs(arcs, style, arcFilter, cached.arcIds);
       return;
     }
     const ctx = this._ctx;
@@ -534,12 +763,15 @@ export class CanvasPainter implements EditPainter {
       hasPath = false;
     };
 
+    let visited = 0;
     const shapeCount = shapeIndices?.length ?? shapes.length;
     for (let i = 0; i < shapeCount; i++) {
+      if (i % 256 === 255 && this._recording) yield;
       const shape = shapes[shapeIndices?.[i] ?? i];
       if (!shape) continue;
       for (const part of shape as PathShape) {
         for (const signedArcId of part) {
+          if (++visited % 256 === 0 && this._recording) yield;
           const arcId = absArcId(signedArcId);
           if (arcFilter && !arcFilter(arcId)) continue;
           if (this._arcVisitMarks[arcId] === visitEpoch) continue;
@@ -552,7 +784,11 @@ export class CanvasPainter implements EditPainter {
           ) {
             flush();
           }
-          this.drawPathSnapping(arcs.getArcIter(signedArcId), ctx, filtering);
+          yield* this.drawPathSnapping(
+            this._arcIterator(arcs, forward ? arcId : signedArcId),
+            ctx,
+            filtering,
+          );
           arcCount++;
           vertexCount += arcVertexCount;
           hasPath = true;
@@ -580,9 +816,19 @@ export class CanvasPainter implements EditPainter {
     arcIds?: Uint32Array | Int32Array,
     arrowDot?: ArrowDotPathOptions,
   ): void {
+    this._submit(this._drawArcs(arcs, style, filter, arcIds, arrowDot), arcs);
+  }
+
+  private *_drawArcs(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    filter?: (i: number) => boolean,
+    arcIds?: Uint32Array | Int32Array,
+    arrowDot?: ArrowDotPathOptions,
+  ): Generator<void> {
     if (style.width === 0) return;
     if (style.dashType === 'arrow-dot' && arrowDot) {
-      this.drawArrowDotPaths(arcs, style, filter, arrowDot);
+      yield* this.drawArrowDotPaths(arcs, style, filter, arrowDot);
       return;
     }
 
@@ -607,6 +853,7 @@ export class CanvasPainter implements EditPainter {
     };
 
     for (let index = 0; index < n; index++) {
+      if (index % 256 === 255 && this._recording) yield;
       const signedArcId = arcIds?.[index] ?? index;
       const arcId = absArcId(signedArcId);
       if (filter && !filter(arcId)) continue;
@@ -618,8 +865,8 @@ export class CanvasPainter implements EditPainter {
       ) {
         flush();
       }
-      const iter = arcs.getArcIter(signedArcId);
-      this.drawPathSnapping(iter, ctx, filtering);
+      const iter = this._arcIterator(arcs, signedArcId);
+      yield* this.drawPathSnapping(iter, ctx, filtering);
       arcCount++;
       vertexCount += arcVertexCount;
       hasPath = true;
@@ -627,13 +874,70 @@ export class CanvasPainter implements EditPainter {
     flush();
   }
 
+  private _arcIterator(arcs: ArcCollection, signedId: number): ArcIterator {
+    const data = this._recording ? arcs.getVertexData?.() : undefined;
+    if (!data?.xx || !data.ii) return arcs.getArcIter(signedId);
+    const id = absArcId(signedId),
+      start = data.ii[id],
+      count = data.nn[id];
+    const step = signedId < 0 ? -1 : 1;
+    let index = signedId < 0 ? start + count : start - 1;
+    const limit = arcs.getRetainedInterval?.() ?? 0;
+    let first = true;
+    const iterator: ArcIterator = {
+      x: 0,
+      y: 0,
+      hasNext() {
+        while (true) {
+          index += step;
+          if (index < start || index >= start + count) return false;
+          if (!first && limit && data.zz && data.zz[index] < limit) continue;
+          first = false;
+          this.x = data.xx[index];
+          this.y = data.yy[index];
+          return true;
+        }
+      },
+    };
+    this._independentIterators.add(iterator);
+    return iterator;
+  }
+
+  private _shapeIterator(arcs: ArcCollection, part: number[]): ArcIterator {
+    if (!this._recording || !arcs.getVertexData?.().xx) return arcs.getShapeIter!(part);
+    let index = 0,
+      iter: ArcIterator | null = null;
+    const nextArc = () => this._arcIterator(arcs, part[index++]);
+    const iterator: ArcIterator = {
+      x: 0,
+      y: 0,
+      hasNext() {
+        while (true) {
+          if (!iter) {
+            if (index >= part.length) return false;
+            iter = nextArc();
+            if (index > 1) iter.hasNext();
+          }
+          if (iter.hasNext()) {
+            this.x = iter.x;
+            this.y = iter.y;
+            return true;
+          }
+          iter = null;
+        }
+      },
+    };
+    this._independentIterators.add(iterator);
+    return iterator;
+  }
+
   // Screen cells select vertices without moving their source positions.
-  private drawPathSnapping(
+  private *drawPathSnapping(
     iter: ArcIterator,
     ctx: CanvasRenderingContext2D,
     filtering: boolean,
-  ): void {
-    const count = this._traceSnapped(iter, ctx, undefined, filtering);
+  ): Generator<void> {
+    const count = yield* this._traceSnapped(iter, ctx, undefined, filtering);
 
     // Draw tiny line if all coords round to same location (Mapshaper behavior)
     if (filtering && count === 0 && Number.isFinite(iter.x) && Number.isFinite(iter.y)) {
@@ -666,12 +970,12 @@ export class CanvasPainter implements EditPainter {
     );
   }
 
-  private _traceSnapped(
+  private *_traceSnapped(
     iter: ArcIterator,
     ctx: Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo'>,
     point?: Float64Array,
     filtering = true,
-  ): number {
+  ): Generator<void, number> {
     const view = filtering ? this._screenView : this._pixelView;
     let x: number, y: number;
     let count = 0;
@@ -694,7 +998,9 @@ export class CanvasPainter implements EditPainter {
       point[1] = y;
     }
 
+    let work = 0;
     while (iter.hasNext()) {
+      if (++work % 256 === 0 && this._recording && this._independentIterators.has(iter)) yield;
       const [rawX, rawY] = view.project(iter.x, iter.y);
       let nextX = rawX,
         nextY = rawY;
@@ -722,14 +1028,14 @@ export class CanvasPainter implements EditPainter {
     return count;
   }
 
-  private drawArrowDotPaths(
+  private *drawArrowDotPaths(
     arcs: ArcCollection,
     style: StrokeStyle,
     filter: ((i: number) => boolean) | undefined,
     options: ArrowDotPathOptions,
-  ): void {
+  ): Generator<void> {
     const ctx = this._ctx;
-    const commands = this.getArrowDotCommands(arcs, style, filter, options);
+    const commands = yield* this.getArrowDotCommands(arcs, style, filter, options);
     if (commands.length === 0) return;
 
     this._applyStrokeStyle(style, []);
@@ -737,6 +1043,7 @@ export class CanvasPainter implements EditPainter {
     let segmentCount = 0;
     ctx.beginPath();
     for (let i = 0; i < commands.length; i += 4) {
+      if (i % 1024 === 1020 && this._recording) yield;
       ctx.moveTo(commands[i], commands[i + 1]);
       ctx.lineTo(commands[i + 2], commands[i + 3]);
       segmentCount += 1;
@@ -749,12 +1056,12 @@ export class CanvasPainter implements EditPainter {
     if (segmentCount > 0) ctx.stroke();
   }
 
-  private getArrowDotCommands(
+  private *getArrowDotCommands(
     arcs: ArcCollection,
     style: StrokeStyle,
     filter: ((i: number) => boolean) | undefined,
     options: ArrowDotPathOptions,
-  ): Float64Array {
+  ): Generator<void, Float64Array> {
     const transform = this._transform;
     const pixelRatio = this._pixelRatio;
     const spacing = Math.max(
@@ -772,6 +1079,7 @@ export class CanvasPainter implements EditPainter {
       cached.shapes === options.shapes &&
       cached.shapeIndices === options.shapeIndices &&
       cached.geometryRevision === options.geometryRevision &&
+      cached.interval === arcs.getRetainedInterval?.() &&
       cached.mx === transform.mx &&
       cached.my === transform.my &&
       cached.bx === transform.bx &&
@@ -787,7 +1095,7 @@ export class CanvasPainter implements EditPainter {
       return cached.commands;
     }
 
-    const commands = this.buildArrowDotCommands(
+    const commands = yield* this.buildArrowDotCommands(
       arcs,
       filter,
       options.shapes,
@@ -800,6 +1108,7 @@ export class CanvasPainter implements EditPainter {
       shapes: options.shapes,
       shapeIndices: options.shapeIndices,
       geometryRevision: options.geometryRevision,
+      interval: arcs.getRetainedInterval?.(),
       mx: transform.mx,
       my: transform.my,
       bx: transform.bx,
@@ -838,14 +1147,14 @@ export class CanvasPainter implements EditPainter {
     this._arrowDotCacheBytes += bytes;
   }
 
-  private buildArrowDotCommands(
+  private *buildArrowDotCommands(
     arcs: ArcCollection,
     filter: ((i: number) => boolean) | undefined,
     shapes: ArrowDotPathOptions['shapes'],
     shapeIndices: Uint32Array | undefined,
     spacing: number,
     size: number,
-  ): Float64Array {
+  ): Generator<void, Float64Array> {
     const commands: number[] = [];
     const clipped = new Float64Array(4);
     const mx = this._transform.mx * this._pixelRatio;
@@ -855,16 +1164,20 @@ export class CanvasPainter implements EditPainter {
     const right = this._canvas.width;
     const bottom = this._canvas.height;
 
+    let visits = 0;
     const shapeCount = shapeIndices?.length ?? shapes.length;
     for (let shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++) {
+      if (shapeIndex % 256 === 255 && this._recording) yield;
       const shape = shapes[shapeIndices?.[shapeIndex] ?? shapeIndex];
       if (!shape) continue;
       for (const part of shape) {
+        if (++visits % 256 === 0 && this._recording) yield;
         let visibleDistance = 0;
         let lastVisibleX = Number.NaN;
         let lastVisibleY = Number.NaN;
 
         for (const signedArcId of part) {
+          if (++visits % 256 === 0 && this._recording) yield;
           if (filter && !filter(absArcId(signedArcId))) {
             visibleDistance = 0;
             lastVisibleX = Number.NaN;
@@ -872,12 +1185,15 @@ export class CanvasPainter implements EditPainter {
             continue;
           }
 
-          const iter = arcs.getArcIter(signedArcId);
+          const iter = this._arcIterator(arcs, signedArcId);
           if (!iter.hasNext()) continue;
           let x0 = iter.x * mx + bx;
           let y0 = iter.y * my + by;
 
+          let work = 0;
           while (iter.hasNext()) {
+            if (++work % 256 === 0 && this._recording && this._independentIterators.has(iter))
+              yield;
             const x1 = iter.x * mx + bx;
             const y1 = iter.y * my + by;
             if (
@@ -891,7 +1207,7 @@ export class CanvasPainter implements EditPainter {
               ) {
                 visibleDistance = 0;
               }
-              visibleDistance = this.appendArrowDotSegment(
+              visibleDistance = yield* this.appendArrowDotSegment(
                 commands,
                 clipped[0],
                 clipped[1],
@@ -900,6 +1216,7 @@ export class CanvasPainter implements EditPainter {
                 visibleDistance,
                 spacing,
                 size,
+                this._independentIterators.has(iter),
               );
               lastVisibleX = clipped[2];
               lastVisibleY = clipped[3];
@@ -917,7 +1234,7 @@ export class CanvasPainter implements EditPainter {
     return Float64Array.from(commands);
   }
 
-  private appendArrowDotSegment(
+  private *appendArrowDotSegment(
     commands: number[],
     x0: number,
     y0: number,
@@ -926,7 +1243,8 @@ export class CanvasPainter implements EditPainter {
     startDistance: number,
     spacing: number,
     size: number,
-  ): number {
+    suspendable: boolean,
+  ): Generator<void, number> {
     const dx = x1 - x0;
     const dy = y1 - y0;
     const length = Math.hypot(dx, dy);
@@ -941,7 +1259,9 @@ export class CanvasPainter implements EditPainter {
     const backLength = Math.sqrt(size * size - halfWidth * halfWidth);
     let cycle = Math.floor(startDistance / spacing);
 
+    let work = 0;
     while (cycle * spacing < endDistance) {
+      if (++work % 256 === 0 && this._recording && suspendable) yield;
       const cycleStart = cycle * spacing;
       const visibleDashStart = Math.max(startDistance, cycleStart);
       const visibleDashEnd = Math.min(endDistance, cycleStart + dashLength);
@@ -975,6 +1295,15 @@ export class CanvasPainter implements EditPainter {
     shapeIndices?: Uint32Array,
     componentIndices?: Uint32Array,
   ): void {
+    this._submit(this._drawPoints(_shapes, _style, shapeIndices, componentIndices));
+  }
+
+  private *_drawPoints(
+    _shapes: readonly (FeatureShape | null | undefined)[],
+    _style: PointStyle,
+    shapeIndices?: Uint32Array,
+    componentIndices?: Uint32Array,
+  ): Generator<void> {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -1015,12 +1344,14 @@ export class CanvasPainter implements EditPainter {
 
     const shapeCount = shapeIndices?.length ?? _shapes.length;
     for (let shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++) {
+      if (shapeIndex % 256 === 255 && this._recording) yield;
       const shape = _shapes[shapeIndices?.[shapeIndex] ?? shapeIndex];
       if (!shape) continue;
       const points = normalizePointShape(shape);
       const first = componentIndices?.[shapeIndex] ?? 0;
       const end = componentIndices ? first + 1 : points.length;
       for (let component = first; component < end; component++) {
+        if (component % 256 === 255 && this._recording) yield;
         const p = points[component];
         if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
         const x = p[0] * mx + bx;
@@ -1052,6 +1383,7 @@ export class CanvasPainter implements EditPainter {
     arcs: ArcCollection,
     style: VertexDotStyle = {},
   ): void {
+    if (this._defer(() => this.drawVertexDots(shapes, arcs, style))) return;
     const ctx = this._ctx;
 
     const pr = this._pixelRatio;
@@ -1153,6 +1485,7 @@ export class CanvasPainter implements EditPainter {
   }
 
   drawVertexBand(band: { x0: number; y0: number; x1: number; y1: number }): void {
+    if (this._defer(() => this.drawVertexBand(band))) return;
     const pr = this._pixelRatio;
     const ctx = this._ctx;
     const x = Math.min(band.x0, band.x1) * pr;
@@ -1188,6 +1521,22 @@ export class CanvasPainter implements EditPainter {
     opacity?: number,
     options: PolygonFillOptions = {},
   ): void {
+    this._submit(this._drawPolygonFill(shapes, arcs, fillColor, filter, opacity, options), arcs);
+  }
+
+  private *_drawPolygonFill(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
+    fillColor: string,
+    filter?: (i: number) => boolean,
+    /**
+     * Multiplier on top of `fillColor`'s own alpha. `1` (default) leaves
+     * the colour as-is; `0.5` halves the resulting alpha. Matches MapLibre's
+     * `fill-opacity` semantics, independent of the colour's own alpha.
+     */
+    opacity?: number,
+    options: PolygonFillOptions = {},
+  ): Generator<void> {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
     const ctx = this._ctx;
@@ -1207,11 +1556,11 @@ export class CanvasPainter implements EditPainter {
       for (let b = 0; b < buckets.buckets.length; b++) {
         if (buckets.buckets[b].length === 0) continue;
         ctx.fillStyle = this._resolveColor(buckets.colors[b], 'muted');
-        this._fillShapeIndices(shapes, arcs, buckets.buckets[b], filter, viewBBox);
+        yield* this._fillShapeIndices(shapes, arcs, buckets.buckets[b], filter, viewBBox);
       }
     } else {
       ctx.fillStyle = this._resolveColor(fillColor, 'muted');
-      this._fillShapeIndices(shapes, arcs, options.shapeIndices ?? null, filter, viewBBox);
+      yield* this._fillShapeIndices(shapes, arcs, options.shapeIndices ?? null, filter, viewBBox);
     }
 
     if (overrideAlpha) ctx.globalAlpha = prevAlpha;
@@ -1223,20 +1572,22 @@ export class CanvasPainter implements EditPainter {
    * Opacity uses normal per-feature source-over compositing. Style buckets
    * still avoid redundant style changes; viewport culling stays part-aware.
    */
-  private _fillShapeIndices(
+  private *_fillShapeIndices(
     shapes: readonly (FeatureShape | null | undefined)[],
     arcs: ArcCollection,
     indices: Uint32Array | null,
     filter: ((i: number) => boolean) | undefined,
     viewBBox: readonly [number, number, number, number] | number[] | null,
-  ): void {
+  ): Generator<void> {
     const ctx = this._ctx;
     const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox?.bind(arcs) : undefined;
     const cache = this._fillPathCache(shapes, arcs, viewBBox, filter);
     const bbox = [0, 0, 0, 0];
     const point = cache ? new Float64Array(2) : undefined;
+    let visits = 0;
     const indexCount = indices ? indices.length : shapes.length;
     for (let k = 0; k < indexCount; k++) {
+      if (k % 256 === 255 && this._recording) yield;
       const id = indices ? indices[k] : k;
       const state = cache?.states[id] ?? 0;
       if (state) {
@@ -1252,6 +1603,7 @@ export class CanvasPainter implements EditPainter {
       let moves = 0;
       let hasVisiblePart = false;
       for (const part of shape as PathShape) {
+        if (++visits % 256 === 0 && this._recording) yield;
         const visible =
           getSimpleShapeBbox && viewBBox
             ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
@@ -1259,7 +1611,7 @@ export class CanvasPainter implements EditPainter {
         if (!visible) continue;
         if (!hasVisiblePart) ctx.beginPath();
         hasVisiblePart = true;
-        const count = this._traceSnapped(arcs.getShapeIter!(part), ctx, point, false);
+        const count = yield* this._traceSnapped(this._shapeIterator(arcs, part), ctx, point, false);
         segments += Math.max(0, count);
         if (count >= 0) moves++;
       }
@@ -1279,6 +1631,7 @@ export class CanvasPainter implements EditPainter {
    * and snap indicator.
    */
   drawDrawingOverlay(state: DrawOverlayState): void {
+    if (this._defer(() => this.drawDrawingOverlay(state))) return;
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -1363,6 +1716,7 @@ export class CanvasPainter implements EditPainter {
   }
 
   drawMeasurementOverlay(state: MeasurementOverlayState): void {
+    if (this._defer(() => this.drawMeasurementOverlay(state))) return;
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -1460,6 +1814,8 @@ export class CanvasPainter implements EditPainter {
     smoothing = true,
     clipBounds?: readonly [number, number, number, number],
   ): void {
+    if (this._defer(() => this.drawRasterImage(image, bounds, opacity, smoothing, clipBounds)))
+      return;
     const [left, top] = this._transform.project(bounds[0], bounds[3]);
     const [right, bottom] = this._transform.project(bounds[2], bounds[1]);
     if (![left, top, right, bottom, opacity].every(Number.isFinite) || opacity <= 0) return;
@@ -1501,16 +1857,41 @@ export class CanvasPainter implements EditPainter {
 
   /** @internal Renderer-owned label frame; configure labels through LayerSpecification. */
   drawLabels(frame: LabelFrame): void {
+    if (this._defer(() => this.drawLabels(frame))) return;
     drawCanvasLabels(this._ctx, frame, this._pixelRatio);
   }
 
+  private _clearRegion(rect: readonly [number, number, number, number]): void {
+    this.clear();
+    if (!this._recording) return;
+    this._region = rect;
+    this._ctx.save();
+    this._ctx.beginPath();
+    this._ctx.rect(...rect);
+    this._ctx.clip();
+  }
+
   clear(): void {
+    this.cancelFrame();
+    if (this._disposed || this._frameOptions.signal?.aborted) return;
+    if (this._cooperative) {
+      this._staging ??= this._canvas.ownerDocument.createElement('canvas');
+      this._staging.width = this._canvas.width;
+      this._staging.height = this._canvas.height;
+      this._ctx = this._staging.getContext('2d')!;
+      this._recording = true;
+      this._complete = false;
+    } else {
+      this._complete = this._hasImage = true;
+    }
     this._seenLayers.clear();
     this._computedStyle = undefined;
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   }
 
   resize(width: number, height: number): void {
+    this.cancelFrame();
+    this._hasImage = false;
     this.clearGeometryCache();
     const pr = this._pixelRatio;
     this._canvas.width = width * pr;

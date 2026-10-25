@@ -741,9 +741,9 @@ describe('spatialSummaryJoin', () => {
   ] as const)('rejects invalid %s Arrow field types before connecting', async (operation, field) => {
     const target = await targetDataset();
     const join = await joinDataset();
-    const realToArrowTable = datasetToTable.toArrowTable;
+    const realToArrowTable = datasetToTable.toCachedArrowTable;
     const targetTable = realToArrowTable(target, { encoding: 'wkb' });
-    const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+    const spy = vi.spyOn(datasetToTable, 'toCachedArrowTable');
     spy.mockReturnValueOnce(targetTable).mockReturnValueOnce(craftedJoinTable(field));
     try {
       const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
@@ -967,7 +967,7 @@ describe('spatialSummaryJoin', () => {
     [
       'target conversion',
       async () => {
-        const spy = vi.spyOn(datasetToTable, 'toArrowTable').mockImplementation(() => {
+        const spy = vi.spyOn(datasetToTable, 'toCachedArrowTable').mockImplementation(() => {
           throw new Error('target conversion');
         });
         return spy;
@@ -977,9 +977,9 @@ describe('spatialSummaryJoin', () => {
       'join conversion',
       async () => {
         const target = await targetDataset();
-        const real = datasetToTable.toArrowTable;
+        const real = datasetToTable.toCachedArrowTable;
         const targetTable = real(target, { encoding: 'wkb' });
-        const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+        const spy = vi.spyOn(datasetToTable, 'toCachedArrowTable');
         spy.mockReturnValueOnce(targetTable).mockImplementationOnce(() => {
           throw new Error('join conversion');
         });
@@ -1542,11 +1542,11 @@ describeDuckDbIntegration('DuckDB-Wasm spatial summary join integration', () => 
     const duckDbRuntime = await getIntegrationRuntime();
     const target = datasetWithTargetRowIds(await fixtureDataset([square('A', 0, 0, 10, 10)]));
     const join = await fixtureDataset([point('join', [5, 5])]);
-    const targetTable = datasetToTable.toArrowTable(target, {
+    const targetTable = datasetToTable.toCachedArrowTable(target, {
       encoding: 'wkb',
       geometryColumn: 'geometry',
     });
-    const joinTable = datasetToTable.toArrowTable(join, {
+    const joinTable = datasetToTable.toCachedArrowTable(join, {
       encoding: 'wkb',
       geometryColumn: 'geometry',
     });

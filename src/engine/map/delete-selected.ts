@@ -1,3 +1,5 @@
+import { Bounds } from '../../domain/geo/bounds';
+import { normalizePointShape } from '../../domain/source/layer-utils';
 import type { MutableTopologySource } from '../../domain/source/source';
 import type { EditCommand } from '../../domain/edit/edit-command';
 import { CompositeCommand } from '../../domain/edit/commands/composite';
@@ -5,13 +7,14 @@ import {
   BulkFeatureDeleteCommand,
   type BulkFeatureDeleteCommandOptions,
 } from '../../domain/edit/commands/feature-delete';
-import type { MapshaperLayer } from '../../shared/types/mapshaper-types';
+import type { MapshaperLayer, PathShape } from '../../shared/types/mapshaper-types';
 import { resolveLayerInList } from './layer-registry';
 import type { FeatureRef } from './types';
 
 export interface SelectedFeatureDeletion {
   command: EditCommand;
   sourceIds: string[];
+  dirtyBounds: [number, number, number, number] | null;
 }
 
 export function deleteSelectedFeatures(
@@ -23,6 +26,8 @@ export function deleteSelectedFeatures(
   const grouped = groupSelectedFeatureIds(refs);
   const children: EditCommand[] = [];
   let totalDeleted = 0;
+  const dirty = new Bounds();
+  let bounded = true;
 
   for (const [sourceId, byLayer] of grouped) {
     const source = sources.get(sourceId);
@@ -34,6 +39,30 @@ export function deleteSelectedFeatures(
 
       const snapshots = collectDeleteSnapshots(target, ids);
       if (snapshots.length === 0) continue;
+
+      const arcs = source.getArcs?.();
+      for (const { shape } of snapshots) {
+        if (!shape) continue;
+        const bounds = new Bounds();
+        if (target.geometry_type === 'point') {
+          for (const point of normalizePointShape(shape)) {
+            if (!point.every(Number.isFinite)) bounded = false;
+            else bounds.mergePoint(point[0], point[1]);
+          }
+        } else if (arcs?.getSimpleShapeBbox) {
+          for (const part of shape as PathShape) {
+            const box: number[] = [];
+            arcs.getSimpleShapeBbox(part, box);
+            if (box.length !== 4 || !box.every(Number.isFinite)) bounded = false;
+            else {
+              bounds.mergePoint(box[0], box[1]);
+              bounds.mergePoint(box[2], box[3]);
+            }
+          }
+        } else bounded = false;
+        if (!bounds.hasBounds()) bounded = false;
+        dirty.merge(bounds);
+      }
 
       const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots, source });
       bulk.do();
@@ -50,6 +79,8 @@ export function deleteSelectedFeatures(
       `Delete ${totalDeleted} feature${totalDeleted > 1 ? 's' : ''}`,
     ),
     sourceIds: [...grouped.keys()],
+    dirtyBounds:
+      bounded && dirty.hasBounds() ? [dirty.xmin, dirty.ymin, dirty.xmax, dirty.ymax] : null,
   };
 }
 

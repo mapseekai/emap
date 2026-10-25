@@ -5,12 +5,12 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Bounds } from '../../../src/domain/geo/bounds';
 import { TopologySource } from '../../../src/domain/source/topology-source';
 import { VertexMoveCommand } from '../../../src/domain/edit/commands/vertex-move';
-const clearRect = vi.fn();
+const clearRect = vi.fn<(canvas: HTMLCanvasElement) => void>();
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = () =>
-    ({
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+    return {
       scale: () => {},
-      clearRect,
+      clearRect: () => clearRect(this),
       fillRect: () => {},
       strokeRect: () => {},
       beginPath: () => {},
@@ -25,7 +25,8 @@ beforeAll(() => {
       setTransform: () => {},
       drawImage: () => {},
       measureText: () => ({ width: 0 }),
-    }) as any;
+    } as any;
+  };
 });
 function container(): HTMLElement {
   const el = document.createElement('div');
@@ -121,7 +122,8 @@ describe('Emap camera facade (DX P9)', () => {
       map.reset();
       while (callbacks.length) callbacks.shift()?.(0);
       expect(map.getTransform()).toEqual(initialTransform);
-      expect(clearRect).toHaveBeenCalledTimes(1);
+      const canvas = Reflect.get(map.ctx.render, '_canvas') as HTMLCanvasElement;
+      expect(clearRect.mock.calls.filter(([target]) => target === canvas)).toHaveLength(1);
     } finally {
       await map.dispose();
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;

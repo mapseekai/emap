@@ -1768,3 +1768,360 @@ describe('progressive raster clipping', () => {
     expect(ctx.restore).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('cooperative Canvas frames', () => {
+  function harness(cooperative = true) {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock++);
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      frames.set(++next, cb);
+      return next;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const contexts: {
+      canvas: HTMLCanvasElement;
+      commands: unknown[][];
+      published: unknown[][][];
+    }[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      const commands: unknown[][] = [];
+      const published: unknown[][][] = [];
+      const ctx = new Proxy(
+        { canvas: this, globalAlpha: 1, commands, published },
+        {
+          get(target, name) {
+            if (name in target) return Reflect.get(target, name);
+            return (...args: unknown[]) => {
+              if (name === 'drawImage' && args[0] instanceof HTMLCanvasElement) {
+                const source = [...contexts].reverse().find((c) => c.canvas === args[0]);
+                if (source) published.push(source.commands.slice());
+              }
+              commands.push([name, ...args]);
+            };
+          },
+          set(target, name, value) {
+            Reflect.set(target, name, value);
+            commands.push(['set', name, value]);
+            return true;
+          },
+        },
+      );
+      contexts.push(ctx);
+      return ctx as unknown as CanvasRenderingContext2D;
+    } as unknown as typeof HTMLCanvasElement.prototype.getContext);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 100;
+    const painter = new CanvasPainter(canvas, cooperative ? { cooperative: true } : undefined);
+    painter.setPixelRatio(1);
+    painter.setTransform(new AffineTransform());
+    const flush = () => {
+      let count = 0;
+      while (frames.size) {
+        if (++count > 1000) throw Error('endless frames');
+        const batch = [...frames.values()];
+        frames.clear();
+        for (const cb of batch) cb(0);
+      }
+      return count;
+    };
+    return { painter, frames, contexts, flush };
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps small frames synchronous and retains the old image until a large replacement completes', () => {
+    const h = harness();
+    h.painter.clear();
+    h.painter.drawPoints([[[1.25, 2.75]]], { color: '#123456' });
+    h.painter.finishFrame();
+    expect(h.painter.frameComplete).toBe(true);
+    expect(h.frames.size).toBe(0);
+    const published = h.contexts[0].published.length;
+    h.painter.clear();
+    h.painter.drawPoints(
+      Array.from({ length: 20_000 }, () => [[1.25, 2.75]]),
+      { color: 'rgba(0,0,0,.5)' },
+    );
+    h.painter.finishFrame();
+    expect(h.painter.frameComplete).toBe(false);
+    expect(h.painter.frameRetained).toBe(true);
+    expect(h.contexts[0].published).toHaveLength(published);
+    expect(h.frames.size).toBe(1);
+    expect(h.flush()).toBeGreaterThan(1);
+    expect(h.painter.frameComplete).toBe(true);
+    expect(h.contexts[0].published).toHaveLength(published + 1);
+  });
+
+  it.each([
+    'points',
+    'arcs',
+    'polygons',
+    'arrow-dot',
+  ] as const)('preserves complete %s command ordering and fractional geometry across yields', (kind) => {
+    const parts = Array.from(
+      { length: 5000 },
+      (_, i) =>
+        [
+          [(i % 80) + 0.25, 10.5],
+          [(i % 80) + 0.75, 11.25],
+          [(i % 80) + 0.25, 10.5],
+        ] as [number, number][],
+    );
+    const arcs = {
+      ...makeArrowArcs(parts),
+      getVertexData: () => ({
+        xx: Float64Array.from(parts.flatMap((part) => part.map(([x]) => x))),
+        yy: Float64Array.from(parts.flatMap((part) => part.map(([, y]) => y))),
+        nn: Uint32Array.from(parts.map((part) => part.length)),
+        ii: Uint32Array.from(parts.map((_, i) => i * 3)),
+        zz: null,
+      }),
+      getShapeIter(part: number[]) {
+        return this.getArcIter(part[0]);
+      },
+    };
+    const data = arcs.getVertexData();
+    arcs.getVertexData = () => data;
+    const draw = (painter: CanvasPainter) => {
+      painter.clear();
+      if (kind === 'points') painter.drawPoints(parts, { color: 'rgba(20,30,40,.5)' });
+      else if (kind === 'arcs') painter.drawArcs(arcs, { color: 'rgba(20,30,40,.5)', width: 2 });
+      else if (kind === 'arrow-dot')
+        painter.drawArcs(
+          arcs,
+          { color: '#123456', width: 2, dashType: 'arrow-dot' },
+          undefined,
+          undefined,
+          { shapes: parts.map((_, i) => [[i]]), cacheKey: 'test', geometryRevision: 1 },
+        );
+      else
+        painter.drawPolygonFill(
+          parts.map((_, i) => [[i]]),
+          arcs,
+          '#12345680',
+          undefined,
+          0.5,
+        );
+      painter.drawPoints([[[30.5, 40.25]]], { color: '#abcdef' });
+      painter.finishFrame();
+    };
+    const sync = harness(false);
+    draw(sync.painter);
+    const expected = sync.contexts[0].commands;
+    vi.restoreAllMocks();
+    const async = harness();
+    draw(async.painter);
+    expect(async.painter.frameComplete).toBe(false);
+    expect(async.contexts[0].published).toHaveLength(0);
+    if (kind !== 'points')
+      expect(async.contexts[1].commands.filter(([name]) => name === 'lineTo').length).toBeLessThan(
+        expected.filter(([name]) => name === 'lineTo').length,
+      );
+    async.flush();
+    expect(async.contexts[0].published[0]).toEqual(expected);
+  });
+
+  it.each([
+    ['polygon', false],
+    ['polygon', true],
+    ['arrow', false],
+    ['arrow', true],
+  ] as const)('bounds one multipart %s feature including filtered=%s parts', (kind, filtered) => {
+    const h = harness();
+    const count = 10_000;
+    const data = {
+      xx: Float64Array.from({ length: count * 2 }, (_, i) => i % 2),
+      yy: new Float64Array(count * 2),
+      nn: new Uint32Array(count).fill(2),
+      ii: Uint32Array.from({ length: count }, (_, i) => i * 2),
+      zz: null,
+    };
+    let consumed = 0;
+    const filter = () => {
+      consumed++;
+      return !filtered;
+    };
+    const arcs: ArcCollection = {
+      size: () => count,
+      getVertexData: () => data,
+      getArcIter: () => {
+        throw Error('use independent raw iterator');
+      },
+      getShapeIter: () => {
+        throw Error('use independent raw iterator');
+      },
+    };
+    h.painter.clear();
+    if (kind === 'polygon')
+      h.painter.drawPolygonFill(
+        [Array.from({ length: count }, (_, i) => [i])],
+        arcs,
+        '#123456',
+        filter,
+      );
+    else
+      h.painter.drawArcs(arcs, { width: 1, dashType: 'arrow-dot' }, filter, undefined, {
+        shapes: [[Array.from({ length: count }, (_, i) => i)]],
+        cacheKey: 'many-short-arcs',
+        geometryRevision: 1,
+      });
+    h.painter.finishFrame();
+    expect(consumed).toBeGreaterThan(0);
+    expect(consumed).toBeLessThan(count);
+    expect(h.painter.frameComplete).toBe(false);
+    h.flush();
+    expect(consumed).toBe(count);
+    expect(h.painter.frameComplete).toBe(true);
+  });
+
+  it.each([
+    'cancel',
+    'dispose',
+    'replace',
+  ] as const)('honors %s performed by a deferred pass error handler', (action) => {
+    const h = harness();
+    h.painter.clear();
+    Reflect.set(h.contexts[1], 'drawImage', () => {
+      throw Error('broken pass raster');
+    });
+    const report = vi.fn(() => {
+      if (action === 'dispose') h.painter.dispose();
+      else if (action === 'cancel') h.painter.cancelFrame();
+      else {
+        h.painter.clear();
+        h.painter.drawPoints(
+          Array.from({ length: 20_000 }, () => [[1, 2]]),
+          { color: '#00ff00' },
+        );
+        h.painter.finishFrame();
+      }
+    });
+    h.painter.setRenderPassErrorHandler(report);
+    h.painter.drawRasterImage({} as CanvasImageSource, [0, 10, 10, 0]);
+    h.painter.setRenderPassErrorHandler(null);
+    h.painter.finishFrame();
+    expect(report).toHaveBeenCalledOnce();
+    expect(h.contexts[0].commands.filter(([name]) => name === 'drawImage')).toHaveLength(0);
+    expect(h.contexts[0].published).toHaveLength(0);
+    if (action === 'replace') {
+      expect(h.painter.frameComplete).toBe(false);
+      h.flush();
+      expect(h.contexts[0].published).toHaveLength(1);
+    } else {
+      h.flush();
+      expect(h.contexts[0].published).toHaveLength(0);
+    }
+  });
+
+  it('skips commands after a deferred failure in the same pass while continuing unrelated layers', () => {
+    const h = harness();
+    h.painter.clear();
+    Reflect.set(h.contexts[1], 'drawImage', () => {
+      throw Error('broken pass raster');
+    });
+    const report = vi.fn();
+    h.painter.setRenderPassErrorHandler(report);
+    h.painter.drawRasterImage({} as CanvasImageSource, [0, 10, 10, 0]);
+    h.painter.drawPoints([[[1, 2]]], { color: '#ff0000' });
+    h.painter.setRenderPassErrorHandler(null);
+    h.painter.drawPoints([[[3, 4]]], { color: '#00ff00' });
+    h.painter.finishFrame();
+    h.flush();
+    expect(report).toHaveBeenCalledOnce();
+    const colors = h.contexts[0].published[0]
+      .filter(([operation, property]) => operation === 'set' && property === 'fillStyle')
+      .map(([, , value]) => value);
+    expect(colors).toEqual(['#00ff00']);
+  });
+
+  it('finishes many cheap batches synchronously when they fit the time budget', () => {
+    const h = harness();
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+    h.painter.clear();
+    h.painter.drawPoints(
+      Array.from({ length: 10_000 }, () => [[1, 2]]),
+      { color: '#123456' },
+    );
+    h.painter.finishFrame();
+    expect(h.painter.frameComplete).toBe(true);
+    expect(h.frames.size).toBe(0);
+  });
+
+  it('yields within a single long path and restores captured LOD after every slice', () => {
+    const h = harness();
+    const count = 20_000;
+    const data = {
+      xx: Float64Array.from({ length: count }, (_, i) => i / 1000),
+      yy: new Float64Array(count),
+      nn: new Uint32Array([count]),
+      ii: new Uint32Array([0]),
+      zz: Float64Array.from({ length: count }, (_, i) => (i % 2 ? 0.5 : Infinity)),
+    };
+    let interval = 1;
+    const arcs: ArcCollection = {
+      size: () => 1,
+      getVertexData: () => data,
+      getRetainedInterval: () => interval,
+      setRetainedInterval(value) {
+        interval = value;
+        return this;
+      },
+      getArcIter: () => {
+        throw Error('shared iterator must not survive a yield');
+      },
+    };
+    h.painter.clear();
+    h.painter.drawArcs(arcs, { width: 1 });
+    interval = 7;
+    h.painter.finishFrame();
+    expect(interval).toBe(7);
+    expect(h.painter.frameComplete).toBe(false);
+    expect(h.contexts[0].published).toHaveLength(0);
+    h.flush();
+    expect(interval).toBe(7);
+    expect(h.contexts[0].published[0].filter(([name]) => name === 'lineTo')).toHaveLength(
+      count / 2 - 1,
+    );
+  });
+
+  it('defers outline collection and keeps shared arcs in forward orientation', () => {
+    const h = harness();
+    const arcs = makeArrowArcs([
+      [
+        [1, 2],
+        [3, 4],
+      ],
+    ]) as unknown as ArcCollection;
+    h.painter.clear();
+    h.painter.drawOutlinePaths!([[[~0]], [[0]]], { width: 1 }, arcs);
+    expect(arcs.getArcIter).toBeDefined();
+    h.painter.finishFrame();
+    h.flush();
+    const commands = h.contexts[0].published[0];
+    expect(commands.filter(([method]) => method === 'moveTo')).toEqual([['moveTo', 1, 2]]);
+    expect(commands.filter(([method]) => method === 'lineTo')).toEqual([['lineTo', 3, 4]]);
+  });
+
+  it.each(['cancelFrame', 'dispose', 'resize'] as const)('does not publish after %s', (action) => {
+    const h = harness();
+    h.painter.clear();
+    h.painter.drawPoints(
+      Array.from({ length: 20_000 }, () => [[1, 2]]),
+      {},
+    );
+    h.painter.finishFrame();
+    expect(h.frames.size).toBe(1);
+    if (action === 'resize') h.painter.resize(200, 200);
+    else h.painter[action]();
+    h.flush();
+    expect(h.frames.size).toBe(0);
+    expect(h.contexts[0].published).toHaveLength(0);
+  });
+});

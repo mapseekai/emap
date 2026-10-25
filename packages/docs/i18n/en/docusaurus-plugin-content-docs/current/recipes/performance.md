@@ -21,6 +21,14 @@ const map = await Emap.create({
 });
 ```
 
+## Interaction updates and data reuse
+
+Ordinary highlights and vertex hover update an independent overlay without redrawing unchanged base geometry. Large Canvas2D vector frames yield while drawing into a staging canvas, then publish the completed frame; small frames finish synchronously. Frames with registered drawing passes remain synchronous, preserving image consumption and release within those callbacks. Cooperative rendering preserves drawing order and polygon fill/boundary coherence, and cancels old work on navigation, data changes or disposal. It does not guarantee shorter total render time: spatial indexes, style preparation and individual native drawing calls may still occupy the main thread.
+
+Canvas2D can redraw only the affected region after a local deletion when styles are static and compositing is stable per feature. Stroke batching, filters, labels, navigation, incomplete frames and other unsafe cases fall back to full redraw. Undo and redo retain full redraws.
+
+Internal Arrow queries and exports reuse compatible conversions by data revision, layer and output options. Each dataset retains at most two tables and 64 MiB; oversized or incompatible results rebuild normally. Reusable imported tables and query results use independent snapshots. Public `toArrowTable` / `toArrowTableFromSource` still return independently mutable tables.
+
 ## Core parameters
 
 These `MapOptions` select where dataset-replace operations such as `clip`, `dissolve`, `simplify`, and `project` run:

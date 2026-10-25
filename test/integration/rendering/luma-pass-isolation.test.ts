@@ -78,7 +78,6 @@ async function fixture() {
   } as never);
   service._painter = painter;
   for (const name of [
-    '_syncLiveEditGeometry',
     '_prepareIcons',
     '_renderBoundLabels',
     '_renderHighlight',

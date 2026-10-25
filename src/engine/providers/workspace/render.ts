@@ -161,6 +161,9 @@ export class CanvasRenderService {
 
   _pendingRender = 0;
 
+  private _dirtyBounds: readonly [number, number, number, number] | null = null;
+  private _dirtyQueryBounds: readonly number[] | null = null;
+
   _rafId = 0;
 
   _pendingAction: RenderAction = 'redraw';
@@ -182,6 +185,7 @@ export class CanvasRenderService {
     // A new gesture may overtake the previous gesture's queued settle redraw.
     // Its reference is the pixels we actually painted, not the current camera.
     const t = this._paintedTransform ?? this.deps.view._viewport.transform;
+    this._painter?.cancelFrame?.();
     this._navSnapshotTransform = { mx: t.mx, my: t.my, bx: t.bx, by: t.by };
     this._painter?.setInteracting?.(true);
     this.deps.events.fire('interactionstart');
@@ -215,7 +219,8 @@ export class CanvasRenderService {
     this._painter?.setInteracting?.(false);
     this._scheduler.notifyInteractionEnd(hasPendingNav);
     // Adaptive Canvas frames can leave labels paused without a queued settle redraw.
-    if (refreshLabels) this._scheduleRender('redraw', undefined, true);
+    if (refreshLabels || this._painter?.frameComplete === false)
+      this._scheduleRender('redraw', undefined, true);
     this.deps.events.fire('interactionend');
   }
 
@@ -233,8 +238,18 @@ export class CanvasRenderService {
     action: RenderAction = 'redraw',
     navDelta?: AffineDelta,
     settleRedraw = false,
+    dirtyBounds?: readonly [number, number, number, number],
   ): void {
     if (this.deps.document._removed || this.deps.signal.aborted) return;
+    this._dirtyBounds =
+      dirtyBounds &&
+      !this._pendingRender &&
+      !this._navSnapshotTransform &&
+      this._painter?.frameComplete !== false &&
+      !this._canvas?.style.transform
+        ? dirtyBounds
+        : null;
+    this._painter?.cancelFrame?.();
     const hadPendingRender = this._pendingRender > 0;
     this._pendingRender++;
     if (!hadPendingRender) {
@@ -298,9 +313,13 @@ export class CanvasRenderService {
     this._scheduler.schedule(req ?? { action: 'redraw' });
   }
 
+  private _frameStarted = 0;
+  private _frameCurrent = () => true;
+
   _renderFull(): void {
     this._clearFastTransform();
     const t0 = performance.now();
+    this._frameStarted = t0;
     this._renderImpl();
     if (this._painter?.frameComplete === false && !this._painter.framePresented) {
       if (this._painter.frameRetained && this._paintedTransform) {
@@ -314,7 +333,10 @@ export class CanvasRenderService {
           tx: current.bx - sx * previous.bx,
           ty: current.by - sy * previous.by,
         });
-        this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
+        this._scheduler.recordFrame(
+          Math.max(SLOW_FRAME_MS + 1, performance.now() - t0),
+          this._captureRenderSnapshot(),
+        );
       } else this._paintedTransform = null;
       return;
     }
@@ -352,37 +374,119 @@ export class CanvasRenderService {
     );
     this._icons.retain(icons);
   }
-  private _liveVertexState: unknown = null;
-  private _liveEditArcs: object | null = null;
-
-  private _syncLiveEditGeometry(): void {
-    if (!this._painter.clearGeometryCache) return;
-    const vertex =
-      this.deps.editState._editState.mode === 'vertex'
-        ? this.deps.editState._editState.vertex
-        : null;
-    if (vertex === this._liveVertexState) return;
-    const previous = this._liveEditArcs;
-    this._liveVertexState = vertex;
-    this._liveEditArcs = vertex?.arcs ?? null;
-    // Live vertex dragging deliberately avoids bumping dataset versions on every
-    // pointer event. Invalidate only its source when the preview state changes;
-    // unrelated sources keep their GPU buffers, and unchanged hovers are free.
-    for (const [sourceId, source] of this.deps.document._sources) {
-      const arcs = source.getArcs();
-      if ((previous && arcs === previous) || (this._liveEditArcs && arcs === this._liveEditArcs))
-        this._painter.clearGeometryCache({ sourceId });
+  private _deletionRegion(
+    bounds: readonly [number, number, number, number] | null,
+  ): [number, number, number, number] | null {
+    const view = this.deps.view._viewport;
+    const painted = this._paintedTransform;
+    const transform = view.transform;
+    if (
+      !bounds ||
+      !bounds.every(Number.isFinite) ||
+      !this._painter.clearRegion ||
+      this._painter.backend !== 'canvas2d' ||
+      this._painter.frameComplete === false ||
+      this._passes.size ||
+      this._navSnapshotTransform ||
+      !painted ||
+      view.screenPathFiltering ||
+      (view.geometryLodTolerance ?? 0) > 0 ||
+      ['mx', 'my', 'bx', 'by'].some(
+        (key) => Reflect.get(transform, key) !== Reflect.get(painted, key),
+      )
+    )
+      return null;
+    let padding = 2;
+    for (const layer of this.deps.layers._getEffectiveLayers()) {
+      if (layer.layout?.visibility === 'none') continue;
+      if (
+        layer.label ||
+        layer.filter ||
+        layer.styleSource ||
+        Object.values(layer.paint ?? {}).some((value) => typeof value === 'object')
+      )
+        return null;
+      // Global stroke/opaque-point batch boundaries can move far beyond the deleted bounds.
+      if (layer.type !== 'circle') {
+        if (layer.type !== 'fill' || layer.paint?.['line-width'] !== 0) return null;
+      } else {
+        const color = layer.paint?.['circle-color'];
+        const translucent =
+          typeof color === 'string' &&
+          ((/^#[\da-f]{8}$/i.test(color) && color.slice(-2).toLowerCase() !== 'ff') ||
+            /^rgba\([^()]+,\s*(?:0(?:\.\d+)?|\.\d+)\s*\)$/i.test(color));
+        if (
+          layer.icon ||
+          layer.pointLod !== false ||
+          layer.paint?.['circle-fill'] === false ||
+          !translucent
+        )
+          return null;
+        const radius = layer.paint?.['circle-radius'] ?? 4;
+        if (!Number.isFinite(radius) || radius < 0) return null;
+        padding = Math.max(padding, radius + 2);
+      }
     }
+    const ratio = window.devicePixelRatio || 1;
+    const [ax, ay] = transform.project(bounds[0], bounds[1]);
+    const [bx, by] = transform.project(bounds[2], bounds[3]);
+    const x0 = Math.max(0, Math.floor((Math.min(ax, bx) - padding) * ratio));
+    const y0 = Math.max(0, Math.floor((Math.min(ay, by) - padding) * ratio));
+    const x1 = Math.min(this._canvas.width, Math.ceil((Math.max(ax, bx) + padding) * ratio));
+    const y1 = Math.min(this._canvas.height, Math.ceil((Math.max(ay, by) + padding) * ratio));
+    if (x1 <= x0 || y1 <= y0) return null;
+    const first = transform.unproject(x0 / ratio - padding, y0 / ratio - padding);
+    const last = transform.unproject(x1 / ratio + padding, y1 / ratio + padding);
+    this._dirtyQueryBounds = [
+      Math.min(first[0], last[0]),
+      Math.min(first[1], last[1]),
+      Math.max(first[0], last[0]),
+      Math.max(first[1], last[1]),
+    ];
+    return [x0, y0, x1 - x0, y1 - y0];
   }
 
   _renderImpl(): void {
-    this._syncLiveEditGeometry();
+    this._painter.setCooperativeRendering?.(this._passes.size === 0);
     this._prepareIcons();
     const transform = this.deps.view._viewport.transform;
+    const captured = transform.clone();
+    const sources = [...this.deps.document._sources].map(([id, source]) => {
+      const dataset = source.getDataset?.();
+      return {
+        id,
+        source,
+        dataset,
+        geometry: dataset?.editVersion,
+        attributes: dataset?.attributeVersion,
+      };
+    });
+    this._frameCurrent = () => {
+      const view = this.deps.view._viewport.transform;
+      return (
+        !this._disposed &&
+        !this.deps.signal.aborted &&
+        view.mx === captured.mx &&
+        view.my === captured.my &&
+        view.bx === captured.bx &&
+        view.by === captured.by &&
+        sources.length === this.deps.document._sources.size &&
+        sources.every(
+          ({ id, source, dataset, geometry, attributes }) =>
+            this.deps.document._sources.get(id) === source &&
+            source.getDataset?.() === dataset &&
+            dataset?.editVersion === geometry &&
+            dataset?.attributeVersion === attributes,
+        )
+      );
+    };
     this._painter.setScreenPathFiltering?.(this.deps.view._viewport.screenPathFiltering ?? false);
+    const region = this._deletionRegion(this._dirtyBounds);
+    this._dirtyBounds = null;
     this._painter.setTransform(transform);
 
-    this._painter.clear();
+    if (region) this._painter.clearRegion!(region);
+    else this._painter.clear();
 
     const lineScale = this.deps.view._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
@@ -392,10 +496,10 @@ export class CanvasRenderService {
       this._painter.setLayerContext?.(null);
       this._renderPasses('after-layers');
       this._renderBoundLabels();
-      this._renderHighlight(transform, lineScale);
     } finally {
       this._painter.setLayerContext?.(null);
       this._painter.finishFrame?.();
+      this._dirtyQueryBounds = null;
     }
     this._renderEditOverlay();
   }
@@ -403,14 +507,18 @@ export class CanvasRenderService {
   _renderEditOverlay(): void {
     this._overlayPending = false;
     const hasOverlay = !!(
+      this.deps.document._highlightManager.size ||
       this.deps.editState._editState.vertex ||
       this.deps.editState._editState.draw ||
       this.deps.editState._editState.measurement
     );
     if (!hasOverlay && !this._overlayPainted) return;
-    this._overlayPainter.setTransform(this.deps.view._viewport.transform);
+    const viewport = this.deps.view._viewport;
+    this._overlayPainter.setScreenPathFiltering?.(viewport.screenPathFiltering ?? false);
+    this._overlayPainter.setTransform(viewport.transform);
     this._overlayPainter.clear();
     this._overlayPainted = hasOverlay;
+    this._renderHighlight(viewport.transform, viewport.getLineScale());
     const vertexState = this.deps.editState._editState.vertex;
     const vertexArcFilter =
       this.deps.editState._editState.mode === 'vertex' && vertexState
@@ -508,7 +616,11 @@ export class CanvasRenderService {
           this.deps.document.layers.resolve(sourceId, sourceLayerName),
         getLayerArcIds: (sourceId, ml, arcs) => this.deps.cache._getLayerArcIds(sourceId, ml, arcs),
         getRenderCandidates: (sourceId, ml, bounds) =>
-          this.deps.cache._featureQuery?.getRenderCandidates(sourceId, ml, bounds) ?? null,
+          this.deps.cache._featureQuery?.getRenderCandidates(
+            sourceId,
+            ml,
+            this._dirtyQueryBounds ?? bounds,
+          ) ?? null,
       },
       pixelSize,
       lineScale,
@@ -574,7 +686,7 @@ export class CanvasRenderService {
   _renderHighlight(transform: AffineTransform, lineScale: number): void {
     const visibleKeys = this.deps.layers._getVisibleLayerKeys();
     this.deps.document._highlightManager.renderHighlights(
-      this._painter,
+      this._overlayPainter,
       this.deps.document._sources,
       transform,
       lineScale,
@@ -599,6 +711,21 @@ export class CanvasRenderService {
     this._canvas.style.left = '0';
     container.appendChild(this._canvas);
     this._painter = await this._createPainter(this._canvas, 'main');
+    this._painter.setFrameCallback?.(
+      (transform) => {
+        if (this._disposed || this.deps.signal.aborted) return;
+        this._clearFastTransform();
+        const { mx, my, bx, by } = transform;
+        this._paintedTransform = { mx, my, bx, by };
+        if (this._navSnapshotTransform) this._navSnapshotTransform = this._paintedTransform;
+        this._scheduler.recordFrame(
+          performance.now() - this._frameStarted,
+          this._captureRenderSnapshot(),
+        );
+        this._renderEditOverlay();
+      },
+      () => this._frameCurrent(),
+    );
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._overlayCanvas = document.createElement('canvas');
     this._overlayCanvas.style.position = 'absolute';
@@ -660,11 +787,14 @@ export class CanvasRenderService {
   }
   clearLodCache(options: { sourceId?: string; layerId?: string } = {}): void {
     if (!this._painter) return;
+    const interrupted = this._painter.frameComplete === false && !!this._painter.cancelFrame;
+    this._painter.cancelFrame?.();
     this._painter.clearGeometryCache?.(options);
     const cache = pointLodForPainter(this._painter);
     if (options.layerId !== undefined) cache.clear(options.layerId);
     else if (options.sourceId !== undefined) cache.clearSource(options.sourceId);
     else cache.clear();
+    if (interrupted && !this._disposed) this._scheduleRender();
   }
   get closed(): Promise<void> {
     return settleDisposals([
@@ -694,8 +824,7 @@ export class CanvasRenderService {
       return;
     }
     this._disposed = true;
-    this._liveVertexState = null;
-    this._liveEditArcs = null;
+    this._frameCurrent = () => false;
     this._paintedTransform = null;
     this._icons?.dispose();
     this._icons = null;

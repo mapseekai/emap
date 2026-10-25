@@ -20,6 +20,7 @@ import {
   type MapshaperAdapter,
 } from '../mapshaper/adapter';
 import { resolveDatasetCRSMetadata } from '../../domain/geo/crs-resolver';
+import { resolveLayerInList } from '../../engine/map/layer-registry';
 import { getLayerId, normalizePointShape } from '../../domain/source/layer-utils';
 import type {
   ArcCollection,
@@ -37,6 +38,7 @@ import {
   type GeoEncoding,
 } from './geoparquet-metadata';
 import { WkbWriter } from './wkb';
+import { getCachedArrowTable, cacheArrowTable, getSeededArrowTable } from './table-cache';
 
 export interface ToArrowTableOptions {
   /** Geometry encoding: GeoArrow native nested arrays or WKB binary. */
@@ -68,8 +70,62 @@ export interface ToArrowTableOptions {
  * `insertArrowTable` input.
  */
 export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOptions = {}): Table {
+  return prepareArrowTable(dataset, opts, false);
+}
+
+/** Integration-only reuse; cached tables never escape through the public converter. */
+export function toCachedArrowTable(
+  dataset: MapshaperDataset,
+  opts: ToArrowTableOptions = {},
+): Table {
+  return prepareArrowTable(dataset, opts, true);
+}
+
+function prepareArrowTable(
+  dataset: MapshaperDataset,
+  opts: ToArrowTableOptions,
+  reuse: boolean,
+): Table {
+  const layer = resolveArrowLayer(dataset, opts.layer);
+  const sourceCrsString = resolveDatasetCRSMetadata(dataset);
+  const reprojectToWgs84 = opts.reprojectToWgs84 === true && isWebMercatorCrs(sourceCrsString);
+  const crs =
+    opts.projjsonCrs !== undefined
+      ? opts.projjsonCrs
+      : reprojectToWgs84
+        ? undefined
+        : crsStringToProjjson(sourceCrsString, opts.crsProjjsonLookup);
+  const key = JSON.stringify([
+    opts.encoding ?? 'native',
+    opts.geometryColumn || 'geometry',
+    opts.bboxColumn || false,
+    reprojectToWgs84,
+    { crs },
+  ]);
+  const cached =
+    reuse &&
+    (getCachedArrowTable(dataset, layer, key) ?? getSeededArrowTable(dataset, layer, opts, crs));
+  if (cached) return cached;
+  const arcs = dataset.arcs;
+  const interval = arcs?.getRetainedInterval?.() ?? 0;
+  try {
+    if (interval) arcs?.setRetainedInterval?.(0);
+    const table = convertToArrowTable(dataset, layer, opts, crs, reprojectToWgs84);
+    if (reuse) cacheArrowTable(dataset, layer, key, table);
+    return table;
+  } finally {
+    if (interval) arcs?.setRetainedInterval?.(interval);
+  }
+}
+
+function convertToArrowTable(
+  dataset: MapshaperDataset,
+  layer: MapshaperLayer,
+  opts: ToArrowTableOptions,
+  crs: unknown,
+  reprojectToWgs84: boolean,
+): Table {
   const adapter = getDefaultMapshaperAdapter();
-  const layer = resolveLayer(dataset, opts.layer);
   const geometryType = layer.geometry_type;
   if (!geometryType) {
     throw new Error('Layer has no geometry; attribute-only export is not supported');
@@ -86,15 +142,7 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
     adapter,
     getLayerId(layer, dataset.layers.indexOf(layer)),
   );
-  const sourceCrsString = resolveDatasetCRSMetadata(dataset);
-  const reprojectToWgs84 = opts.reprojectToWgs84 === true && isWebMercatorCrs(sourceCrsString);
   const outputGeometry = reprojectToWgs84 ? webMercatorGeometryToWgs84(geometry) : geometry;
-  const crs =
-    opts.projjsonCrs !== undefined
-      ? opts.projjsonCrs
-      : reprojectToWgs84
-        ? undefined
-        : crsStringToProjjson(sourceCrsString, opts.crsProjjsonLookup);
 
   const { geomData, encoding } = useWkb
     ? buildWkbColumn(outputGeometry)
@@ -158,11 +206,14 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
 // Layer resolution
 // ---------------------------------------------------------------------------
 
-function resolveLayer(dataset: MapshaperDataset, selector?: number | string): MapshaperLayer {
+export function resolveArrowLayer(
+  dataset: MapshaperDataset,
+  selector?: number | string,
+): MapshaperLayer {
   const layers = dataset.layers ?? [];
   if (layers.length === 0) throw new Error('Dataset has no layers to export');
   if (typeof selector === 'string') {
-    const found = layers.find((l) => l.name === selector || l.id === selector);
+    const found = resolveLayerInList(layers, selector);
     if (!found) throw new Error(`Layer '${selector}' not found in dataset`);
     return found;
   }

@@ -17,6 +17,7 @@
   "treatWarningsAsErrors": true,
   "intentionallyNotExported": [
     "AttributeOps",
+    "CanvasFrameOptions",
     "CircleLayerSpecification",
     "CorePainter",
     "PainterCreationOptions",

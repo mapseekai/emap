@@ -28,7 +28,7 @@ export class FeatureMutationService {
 
     // Clear the selection; the refs no longer exist.
     this.deps.selection._fireSelectionChange(this.deps.document._selection.clear());
-    this.deps.signals.requestRender();
+    this.deps.signals.requestRender('redraw', undefined, false, deletion.dirtyBounds ?? undefined);
 
     return true;
   }

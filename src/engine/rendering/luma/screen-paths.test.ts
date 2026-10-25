@@ -49,7 +49,15 @@ function canvasCommands(path: number[][], view: AffineTransform, pixelRatio: num
   const { painter } = createCanvasPainterHarness(ctx, { pixelRatio });
   painter.setTransform(view);
   painter.setLayerContext({ id: 'line', sourceId: 's', revision: 0, bounds: sourceBounds });
-  Reflect.get(painter, 'drawPathSnapping').call(painter, iter, ctx, true);
+  const trace = Reflect.get(painter, 'drawPathSnapping').call(
+    painter,
+    iter,
+    ctx,
+    true,
+  ) as Generator<void>;
+  while (!trace.next().done) {
+    // Compare complete native commands after draining the cooperative primitive.
+  }
   return commands;
 }
 describe('Canvas screen-path parity (not geometry LOD)', () => {

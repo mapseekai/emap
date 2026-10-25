@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { toArrowTable } from './dataset-to-table';
+import { toArrowTable, toCachedArrowTable } from './dataset-to-table';
 import { fromArrowTable } from './table-to-dataset';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import { decodeWkb } from './wkb';
@@ -20,6 +20,144 @@ const TWO_LAYER_INPUT = {
 
 describe('toArrowTable', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('keeps public conversion results and imported Arrow buffers independent from internal reuse', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+    const publicTable = toArrowTable(dataset);
+    publicTable.getChild('id')!.set(0, 99);
+    expect(toCachedArrowTable(dataset).getChild('id')!.get(0)).toBe(7);
+    const fresh = toArrowTable(dataset);
+    expect(fresh.getChild('id')!.get(0)).toBe(7);
+    const parsed = fromArrowTable(fresh);
+    fresh.getChild('id')!.set(0, 88);
+    const cached = toCachedArrowTable(parsed);
+    expect(cached.getChild('id')!.get(0)).toBe(7);
+    expect(toCachedArrowTable(parsed)).toBe(cached);
+    const publicParsed = toArrowTable(parsed);
+    publicParsed.getChild('id')!.set(0, 77);
+    expect(toCachedArrowTable(parsed).getChild('id')!.get(0)).toBe(7);
+  });
+
+  it('reuses fresh tables across layer aliases and invalidates revisions and option values', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.layers[0].name = 'points';
+    dataset.layers[0].id = 'points-id';
+    const first = toCachedArrowTable(dataset, { encoding: 'wkb' });
+    expect(toCachedArrowTable(dataset, { encoding: 'wkb', layer: 'points' })).toBe(first);
+    expect(toCachedArrowTable(dataset, { encoding: 'wkb', layer: 'points-id' })).toBe(first);
+    const native = toCachedArrowTable(dataset);
+    expect(native).not.toBe(first);
+    expect(toCachedArrowTable(dataset, { encoding: 'wkb', layer: 0 })).toBe(first);
+    dataset.layers[0].data!.getRecords!()[0].label = 'changed';
+    dataset.attributeVersion = 1;
+    const edited = toCachedArrowTable(dataset, { encoding: 'wkb' });
+    expect(edited).not.toBe(first);
+    expect(edited.getChild('label')!.get(0)).toBe('changed');
+    dataset.editVersion = 1;
+    expect(toCachedArrowTable(dataset, { encoding: 'wkb' })).not.toBe(edited);
+    const beforeCrs = toCachedArrowTable(dataset);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+    expect(toCachedArrowTable(dataset)).not.toBe(beforeCrs);
+    const projected = toCachedArrowTable(dataset, { reprojectToWgs84: true });
+    expect(toCachedArrowTable(dataset, { reprojectToWgs84: true })).toBe(projected);
+    expect(toCachedArrowTable(dataset, { geometryColumn: 'geom' }).getChild('geom')).not.toBeNull();
+    expect(toCachedArrowTable(dataset, { bboxColumn: 'bbox' }).getChild('bbox')).not.toBeNull();
+    const crs = { name: 'first' };
+    const explicit = toCachedArrowTable(dataset, { projjsonCrs: crs });
+    crs.name = 'second';
+    expect(toCachedArrowTable(dataset, { projjsonCrs: crs })).not.toBe(explicit);
+  });
+
+  it('invalidates point edits, undo and redo while retaining unchanged option reuse', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    const coordinates = dataset.layers[0].shapes![0] as number[][];
+    for (const [revision, x] of [
+      [0, 3],
+      [1, 9],
+      [2, 3],
+      [3, 9],
+    ]) {
+      coordinates[0][0] = x;
+      dataset.editVersion = revision;
+      const table = toCachedArrowTable(dataset, { encoding: 'wkb' });
+      expect(decodeWkb(table.getChild('geometry')!.get(0) as Uint8Array)).toEqual({
+        type: 'point',
+        points: [[x, 4]],
+      });
+      expect(toCachedArrowTable(dataset, { encoding: 'wkb' })).toBe(table);
+    }
+  });
+
+  it('distinguishes omitted CRS metadata from an explicit unknown CRS override', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+    const defaultCrs = toCachedArrowTable(dataset);
+    const unknownCrs = toCachedArrowTable(dataset, { projjsonCrs: null });
+    expect(parseGeoMetadata(unknownCrs.schema.metadata)!.columns.geometry.crs).toBeNull();
+    expect(parseGeoMetadata(defaultCrs.schema.metadata)!.columns.geometry).not.toHaveProperty(
+      'crs',
+    );
+  });
+
+  it('releases old representations and never reuses a replaced layer or dataset', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    const first = toCachedArrowTable(dataset);
+    toCachedArrowTable(dataset, { encoding: 'wkb' });
+    toCachedArrowTable(dataset, { geometryColumn: 'alternate' });
+    expect(toCachedArrowTable(dataset)).not.toBe(first);
+    const current = toCachedArrowTable(dataset);
+    dataset.layers[0] = { ...dataset.layers[0] };
+    expect(toCachedArrowTable(dataset)).not.toBe(current);
+    expect(toCachedArrowTable({ ...dataset })).not.toBe(toCachedArrowTable(dataset));
+  });
+
+  it.each([
+    'native',
+    'wkb',
+  ] as const)('reuses compatible parsed %s tables and preserves export metadata', async (encoding) => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+    const original = toCachedArrowTable(dataset, { encoding });
+    const parsed = fromArrowTable(original, { layerName: 'parsed' });
+    const cached = toCachedArrowTable(parsed, { encoding, layer: 'parsed' });
+    expect(cached).not.toBe(original);
+    expect(toCachedArrowTable(parsed, { encoding, layer: 'parsed' })).toBe(cached);
+    expect(toCachedArrowTable(parsed, { encoding, bboxColumn: 'bbox' })).not.toBe(original);
+    expect(toCachedArrowTable(parsed, { encoding, geometryColumn: 'geom' })).not.toBe(original);
+  });
+
+  it('always converts full detail and restores the retained interval even on failure', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+    });
+    const arcs = dataset.arcs!;
+    arcs.setThresholds!(Float64Array.from([Infinity, 1, Infinity]));
+    arcs.setRetainedInterval!(2);
+    const table = toCachedArrowTable(dataset, { encoding: 'wkb' });
+    expect(decodeWkb(table.getChild('geometry')!.get(0) as Uint8Array)).toEqual({
+      type: 'polyline',
+      paths: [
+        [
+          [0, 0],
+          [1, 1],
+          [2, 0],
+        ],
+      ],
+    });
+    expect(arcs.getRetainedInterval!()).toBe(2);
+    dataset.editVersion = 1;
+    vi.spyOn(getDefaultMapshaperAdapter(), 'exportPathData').mockImplementation(() => {
+      throw new Error('conversion failed');
+    });
+    expect(() => toCachedArrowTable(dataset)).toThrow('conversion failed');
+    expect(arcs.getRetainedInterval!()).toBe(2);
+  });
 
   it.each([
     'native',

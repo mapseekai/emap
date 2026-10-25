@@ -2,7 +2,12 @@ import { Field, RecordBatch, Schema, Table, tableFromIPC, tableToIPC } from 'apa
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import { resolveDatasetCRSMetadata } from '../../domain/geo/crs-resolver';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
-import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
+import {
+  toCachedArrowTable,
+  resolveArrowLayer,
+  type ToArrowTableOptions,
+} from './dataset-to-table';
+import { getSeededArrowTable } from './table-cache';
 import { initParquetWasm, type InitParquetWasmOptions } from './parquet-wasm-loader';
 import { findAuthorityProjjsonAsync, type EpsgProjjsonFetchOptions } from './epsg-projjson';
 import {
@@ -90,14 +95,21 @@ export async function exportGeoParquet(
           },
           { strict: true },
         );
+  const tableOptions: ToArrowTableOptions = {
+    ...opts,
+    encoding: opts.encoding ?? 'wkb',
+    bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
+    reprojectToWgs84,
+    projjsonCrs,
+  };
   const table = stripFieldExtensionMetadata(
-    toArrowTable(dataset, {
-      ...opts,
-      encoding: opts.encoding ?? 'wkb',
-      bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
-      reprojectToWgs84,
+    getSeededArrowTable(
+      dataset,
+      resolveArrowLayer(dataset, opts.layer),
+      tableOptions,
       projjsonCrs,
-    }),
+      'geoparquet',
+    ) ?? toCachedArrowTable(dataset, tableOptions),
   );
   const wasmTable = wasm.Table.fromIPCStream(tableToIPC(table, 'stream'));
 

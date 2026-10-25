@@ -268,34 +268,34 @@ describe('navigation snapshots during a continuous gesture', () => {
   });
 });
 
-describe('live vertex geometry invalidation', () => {
-  it('invalidates only edited source buffers on preview changes, including clearing the preview', () => {
-    const arcs = {},
-      other = {};
-    const state = { mode: 'vertex', vertex: { arcs } };
+describe('independent highlight painter', () => {
+  it.each([
+    'canvas2d',
+    'webgl2',
+    'webgpu',
+  ])('uses the overlay with a %s main backend', (backend) => {
+    const transform = new AffineTransform();
+    const renderHighlights = vi.fn();
+    const mask = vi.fn();
+    const visible = new Map();
+    const sources = new Map();
     const render = new CanvasRenderService({
-      editState: { _editState: state },
-      document: {
-        _sources: new Map([
-          ['edited', { getArcs: () => arcs }],
-          ['other', { getArcs: () => other }],
-        ]),
-      },
+      document: { _highlightManager: { renderHighlights }, _sources: sources },
+      layers: { _getVisibleLayerKeys: () => visible, _featureMaskForPick: mask },
+      view: { _viewport: { geometryLodTolerance: 0 } },
     } as never);
-    const clearGeometryCache = vi.fn();
-    Reflect.set(render, '_painter', { clearGeometryCache });
-    const sync = () => Reflect.get(render, '_syncLiveEditGeometry').call(render);
-    sync();
-    sync();
-    expect(clearGeometryCache.mock.calls).toEqual([[{ sourceId: 'edited' }]]);
-    state.vertex = { arcs };
-    sync();
-    expect(clearGeometryCache).toHaveBeenCalledTimes(2);
-    state.mode = 'none';
-    sync();
-    sync();
-    expect(clearGeometryCache).toHaveBeenCalledTimes(3);
-    expect(clearGeometryCache).toHaveBeenLastCalledWith({ sourceId: 'edited' });
+    render._painter = { backend } as never;
+    render._overlayPainter = { backend: 'canvas2d' } as never;
+    render._renderHighlight(transform, 2);
+    expect(renderHighlights).toHaveBeenCalledWith(
+      render._overlayPainter,
+      sources,
+      transform,
+      2,
+      visible,
+      mask,
+      0,
+    );
   });
 });
 

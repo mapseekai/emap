@@ -5,6 +5,9 @@ engine built on `mapshaper` data structures and HTML5 Canvas.
 
 ## Read only what the task needs
 
+`AGENTS.md` is the single source of repository-wide agent rules. Load its linked
+guidance only when the task matches the stated condition.
+
 | Task | Guidance |
 | --- | --- |
 | Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture) and the [architecture guide](packages/docs/docs/concepts/architecture.md) |
@@ -103,9 +106,14 @@ performance or rendering correctness.
 
 ## Issue tracking — Multica
 
+Project: `emap`.
+
 Before deferring a non-sensitive bug, performance issue, or follow-up, search the
 emap Multica project and create a concise issue if none exists and issue-writing
 is authorized. If unavailable or unauthorized, record the finding and reproduction
 in the local task report and report the tracking blocker; continue other work.
+
+## Security reporting
+
 For vulnerabilities, follow `SECURITY.md`'s private reporting route rather than a
 public issue; obtain authorization before sending a report externally.

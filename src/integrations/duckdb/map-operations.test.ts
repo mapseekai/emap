@@ -1,6 +1,7 @@
 import { tableFromArrays, type Table } from 'apache-arrow';
 import { describe, expect, it, vi } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
+import { datasetToArrowInput } from './core/pipeline';
 import { datasetFromGeoJSON } from '../../../test/utils/arrow';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
@@ -1062,4 +1063,34 @@ describe('DuckDB map adapter stale-result protection', () => {
     expect((await second).ok).toBe(true);
     expect(state.writes).toHaveLength(2);
   });
+});
+
+it('consumes the committed result seed in a chained source operation', async () => {
+  const dataset = await polygonDataset();
+  const ctx = makeContext('input', dataset);
+  ctx.sources.set('mask', new FakeSource(dataset));
+  const raw = toArrowTable(dataset, { encoding: 'wkb' });
+  const firstRuntime = new FakeRuntime(raw);
+  const first = await duckDbOverlayLayer(ctx, {
+    src: 'input',
+    mask: 'mask',
+    operation: 'intersect',
+    output: { sourceId: 'first' },
+    runtime: firstRuntime,
+  });
+  expect(first.ok).toBe(true);
+  const committed = ctx.outputDatasets.get('first')!;
+  ctx.sources.set('first', new FakeSource(committed));
+  const seeded = datasetToArrowInput(committed, {}, 'chain');
+  const secondRuntime = new FakeRuntime(raw);
+  const second = await duckDbOverlayLayer(ctx, {
+    src: 'first',
+    mask: 'mask',
+    operation: 'intersect',
+    output: { sourceId: 'second' },
+    runtime: secondRuntime,
+  });
+  expect(second.ok).toBe(true);
+  expect(secondRuntime.connection.inserted[0].table).toBe(seeded);
+  expect(ctx.outputDatasets.get('second')!.layers[0].shapes).toHaveLength(1);
 });

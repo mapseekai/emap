@@ -6,10 +6,13 @@ import { Emap } from '../../../src/engine/map/map';
 import { Bounds } from '../../../src/domain/geo/bounds';
 import type { NormalizedPointerEvent } from '../../../src/engine/core/handler';
 import type { RenderScheduler } from '../../../src/engine/rendering/render-scheduler';
+import { TopologySource } from '../../../src/domain/source/topology-source';
+import { getDefaultMapshaperAdapter } from '../../../src/integrations/mapshaper/adapter';
 const contexts = new Map<HTMLCanvasElement, ReturnType<typeof makeContext>>();
 function makeContext() {
   return {
     clearRect: vi.fn(),
+    drawImage: vi.fn<(image: CanvasImageSource, ...coordinates: number[]) => void>(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
@@ -92,7 +95,197 @@ function startTool(mode: 'measure' | 'draw' | 'reshape' | 'auto-complete') {
   tool.enable();
   return tool;
 }
+async function addRoad() {
+  const source = new TopologySource('data');
+  const arcs = getDefaultMapshaperAdapter().createArcCollection([
+    { xx: new Float64Array([-20, 0, 20]), yy: new Float64Array([0, 20, 0]) },
+  ]);
+  source.setDataset(
+    {
+      arcs,
+      info: { crs_string: 'EPSG:4326' },
+      layers: [{ name: 'road', geometry_type: 'polyline', shapes: [[[0]]] }],
+    },
+    false,
+  );
+  await map.addSource('data', source);
+  map.addLayer({ id: 'road', source: 'data', type: 'line' });
+  map.setExtent(new Bounds(-100, -60, 100, 60));
+  flushFrame();
+  return source;
+}
 describe('temporary overlays with expensive map layers', () => {
+  it('coalesces ordinary highlights and style changes on the overlay, then clears stale pixels', async () => {
+    await addRoad();
+    const [base, overlay] = [...contexts.values()];
+    base.clearRect.mockClear();
+    overlay.clearRect.mockClear();
+    for (let i = 0; i < 20; i++)
+      map.setHighlightedFeatures([{ source: 'data', layer: 'road', id: 0 }]);
+    map.setHighlightStyle({ color: '#ff0000', width: 5 });
+    flushFrame();
+    expect(base.clearRect).not.toHaveBeenCalled();
+    expect(overlay.clearRect).toHaveBeenCalledTimes(1);
+    expect(overlay.lineTo).toHaveBeenCalled();
+    expect(Reflect.get(overlay, 'strokeStyle')).toBe('#ff0000');
+    overlay.clearRect.mockClear();
+    overlay.lineTo.mockClear();
+    map.clearHighlightedFeatures();
+    flushFrame();
+    expect(overlay.clearRect).toHaveBeenCalledTimes(1);
+    expect(overlay.lineTo).not.toHaveBeenCalled();
+    expect(base.clearRect).not.toHaveBeenCalled();
+  });
+
+  it('keeps vertex hover off the base canvas but invalidates live drag geometry and history', async () => {
+    const source = await addRoad();
+    map.vertexEdit.enable();
+    flushFrame();
+    const [base, overlay] = [...contexts.values()];
+    const clear = vi.fn();
+    Reflect.set(Reflect.get(map, '_painter'), 'clearGeometryCache', clear);
+    base.clearRect.mockClear();
+    overlay.arc.mockClear();
+    const [x, y] = map.project(-20, 0);
+    map.vertexEdit.handlePointer(pointer('move', x, y));
+    flushFrame();
+    expect(base.clearRect).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+    expect(overlay.arc).toHaveBeenCalled();
+    map.render();
+    flushFrame();
+    expect(clear).not.toHaveBeenCalled();
+    base.clearRect.mockClear();
+    map.vertexEdit.handlePointer(pointer('down', x, y));
+    map.vertexEdit.handlePointer(pointer('move', x - 40, y));
+    flushFrame();
+    expect(base.clearRect).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'data' }));
+    expect(source.getArcs()!.getVertex2!(0)![0]).toBeCloseTo(map.unproject(x - 40, y)[0]);
+    map.vertexEdit.handlePointer(pointer('up', x - 40, y));
+    flushFrame();
+    map.undo();
+    flushFrame();
+    expect(source.getArcs()!.getVertex2!(0)![0]).toBeCloseTo(-20);
+    map.redo();
+    flushFrame();
+    expect(source.getArcs()!.getVertex2!(0)![0]).toBeCloseTo(map.unproject(x - 40, y)[0]);
+    clear.mockClear();
+    map.render();
+    flushFrame();
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('respects highlight masks and hidden layers and refreshes styles on a base invalidation', async () => {
+    await addRoad();
+    const [base, overlay] = [...contexts.values()];
+    map.setHighlightedFeatures([{ source: 'data', layer: 'road', id: 0 }]);
+    flushFrame();
+    overlay.lineTo.mockClear();
+    map.setFilter('road', ['==', 0, 1]);
+    flushFrame();
+    expect(overlay.lineTo).not.toHaveBeenCalled();
+    map.setFilter('road', null);
+    flushFrame();
+    expect(overlay.lineTo).toHaveBeenCalled();
+    overlay.lineTo.mockClear();
+    map.setLayerVisibility('road', 'none');
+    flushFrame();
+    expect(overlay.lineTo).not.toHaveBeenCalled();
+    map.setLayerVisibility('road', 'visible');
+    flushFrame();
+    expect(overlay.lineTo).toHaveBeenCalled();
+    base.clearRect.mockClear();
+    map.setPaintProperty('road', 'line-color', '#00ff00');
+    flushFrame();
+    expect(base.clearRect).toHaveBeenCalledTimes(1);
+    const frame = base.drawImage.mock.lastCall?.[0];
+    expect(frame).toBeInstanceOf(HTMLCanvasElement);
+    if (!(frame instanceof HTMLCanvasElement)) throw new Error('No completed base frame');
+    expect(Reflect.get(contexts.get(frame)!, 'strokeStyle')).toBe('#00ff00');
+    overlay.lineTo.mockClear();
+    map.removeSource('data');
+    flushFrame();
+    expect(overlay.lineTo).not.toHaveBeenCalled();
+  });
+
+  it('invalidates a source once when dragging multiple selected vertices through pointer events', async () => {
+    const source = await addRoad();
+    map.vertexEdit.enable();
+    const [x, y] = map.project(-20, 0);
+    const [middleX, middleY] = map.project(0, 20);
+    const deltaX = map.unproject(x - 40, y)[0] - map.unproject(x, y)[0];
+    map.vertexEdit.handlePointer(pointer('down', x - 20, middleY - 20));
+    map.vertexEdit.handlePointer(pointer('move', middleX + 20, y + 20));
+    map.vertexEdit.handlePointer(pointer('up', middleX + 20, y + 20));
+    flushFrame();
+    map.vertexEdit.handlePointer(pointer('move', x, y));
+    flushFrame();
+    expect(Reflect.get(map.vertexEdit, '_selectedNodes')).toEqual([
+      expect.objectContaining({ coords: [-20, 0], vertexIds: [0] }),
+      expect.objectContaining({ coords: [0, 20], vertexIds: [1] }),
+    ]);
+    const clear = vi.fn();
+    Reflect.set(Reflect.get(map, '_painter'), 'clearGeometryCache', clear);
+    const [base] = [...contexts.values()];
+    base.clearRect.mockClear();
+    map.vertexEdit.handlePointer(pointer('down', x, y));
+    map.vertexEdit.handlePointer(pointer('move', x - 40, y));
+    flushFrame();
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'data' }));
+    expect(base.clearRect).toHaveBeenCalledTimes(1);
+    expect(source.getArcs()!.getVertex2!(0)![0]).toBeCloseTo(-20 + deltaX);
+    expect(source.getArcs()!.getVertex2!(1)![0]).toBeCloseTo(deltaX);
+    expect(source.getArcs()!.getVertex2!(2)![0]).toBeCloseTo(20);
+    map.vertexEdit.handlePointer(pointer('up', x - 40, y));
+    flushFrame();
+    map.undo();
+    flushFrame();
+    expect(source.getArcs()!.getVertex2!(0)![0]).toBeCloseTo(-20);
+    expect(source.getArcs()!.getVertex2!(1)![0]).toBeCloseTo(0);
+  });
+
+  it('keeps highlights aligned during fast navigation and resize and cancels removal work', async () => {
+    await addRoad();
+    map.vertexEdit.enable();
+    const [vertexX, vertexY] = map.project(-20, 0);
+    map.vertexEdit.handlePointer(pointer('move', vertexX, vertexY));
+    map.setHighlightedFeatures([{ source: 'data', layer: 'road', id: 0 }]);
+    flushFrame();
+    const [base, overlay] = [...contexts.values()];
+    const clear = vi.fn();
+    Reflect.set(Reflect.get(map, '_painter'), 'clearGeometryCache', clear);
+    const scheduler = Reflect.get(map, '_scheduler') as RenderScheduler;
+    scheduler.recordFrame(100, {
+      canvasWidth: 800,
+      canvasHeight: 600,
+      pixelRatio: window.devicePixelRatio || 1,
+    });
+    base.clearRect.mockClear();
+    overlay.moveTo.mockClear();
+    const zoom = map.scrollZoom;
+    if (!(zoom instanceof EventDispatcher)) throw new Error('Expected scroll events');
+    zoom.fire('mousewheel', { direction: 1, multiplier: 1, x: 400, y: 300 });
+    flushFrame();
+    expect(base.clearRect).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+    const [x, y] = map.project(-20, 0);
+    expect(overlay.moveTo).toHaveBeenCalledWith(expect.closeTo(x), expect.closeTo(y));
+    map.resize();
+    flushFrame();
+    const [mainCanvas, overlayCanvas] = [...contexts.keys()];
+    expect([overlayCanvas.width, overlayCanvas.height]).toEqual([
+      mainCanvas.width,
+      mainCanvas.height,
+    ]);
+    map.clearHighlightedFeatures();
+    await map.dispose();
+    overlay.clearRect.mockClear();
+    flushFrame();
+    expect(overlay.clearRect).not.toHaveBeenCalled();
+    expect(frames.size).toBe(0);
+  });
   it.each([
     'measure',
     'draw',

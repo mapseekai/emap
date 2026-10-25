@@ -7,6 +7,7 @@ import { Bounds } from '../geo/bounds';
 import { unzip, strFromU8, zipSync } from 'fflate';
 import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
+import { bumpEditVersion } from '../../shared/types/mapshaper-types';
 import type {
   MapshaperDataset,
   ReadonlyArcCollection,
@@ -916,6 +917,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * @internal
    */
   public setDataset(dataset: MapshaperDataset, notify = true): void {
+    // Recommitting an edited live object invalidates revision-based derived data.
+    if (dataset === this._dataset) bumpEditVersion(dataset);
     for (const layer of dataset.layers) bindLayerFields(layer);
     // Source registration changes CRS metadata on a shallow dataset wrapper.
     // Keep the already prepared LOD only for that silent, unchanged-geometry

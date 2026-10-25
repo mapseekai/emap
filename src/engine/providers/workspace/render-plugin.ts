@@ -47,9 +47,10 @@ export const renderPlugin: Plugin.Object = {
         action?: import('../../map/types').RenderAction;
         navDelta?: import('../../map/types').AffineDelta;
         settle?: boolean;
+        dirtyBounds?: readonly [number, number, number, number];
       }) => {
         if (event.action === 'nav' && !event.navDelta) value.updateNavigation();
-        else value._scheduleRender(event.action, event.navDelta, event.settle);
+        else value._scheduleRender(event.action, event.navDelta, event.settle, event.dirtyBounds);
       };
       const onMoveStart = () => value.beginNavigation();
       const onMoveEnd = () => value.endNavigation();

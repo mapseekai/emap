@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getDefaultMapshaperAdapter } from '../mapshaper/adapter';
 import { tableFromIPC } from 'apache-arrow';
 import { exportGeoArrow, importGeoArrow } from './geoarrow-io';
 import { datasetFromGeoJSON } from '../../../test/utils/arrow';
@@ -250,4 +251,29 @@ describe('GeoArrow IPC round trip', () => {
     expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry).not.toHaveProperty('crs');
     expect(importGeoArrow(bytes).info?.crs_string).toBe('EPSG:4326');
   });
+});
+
+afterEach(() => vi.restoreAllMocks());
+it.each([
+  'native',
+  'wkb',
+] as const)('reuses parsed %s geometry for export until a revision changes', async (encoding) => {
+  const dataset = await datasetFromGeoJSON(LINES_FC);
+  dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+  const input = exportGeoArrow(dataset, { encoding });
+  const parsed = importGeoArrow(input);
+  input.fill(0);
+  const convert = vi.spyOn(getDefaultMapshaperAdapter(), 'exportPathData');
+  const bytes = exportGeoArrow(parsed, { encoding });
+  expect(convert).not.toHaveBeenCalled();
+  expect(shapeCoords(importGeoArrow(bytes), 0)).toEqual([
+    [
+      [0, 0],
+      [5, 5],
+      [10, 0],
+    ],
+  ]);
+  parsed.editVersion = 1;
+  exportGeoArrow(parsed, { encoding });
+  expect(convert).toHaveBeenCalled();
 });
