@@ -1,0 +1,33 @@
+name: Browser tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.15.1'
+
+jobs:
+  browser:
+    name: Browser and GPU verification
+    runs-on: macos-15
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run browser:install
+      - name: Verify browser GPU adapters and pixel readback
+        run: caffeinate -di node scripts/check-browser-gpu.mjs
+        timeout-minutes: 2
+      - run: pnpm run release:verify
+        shell: caffeinate -di bash -e {0}

@@ -11,16 +11,18 @@ local edits use [scoped verification](../AGENTS.md#verification). Publishing, ta
 
 Review and commit the intended worktree changes before creating a release tag. The tag must
 match `package.json` and point at the verified release commit. Local publication uses
-`release:verify:local`; CI and GitHub publication use the complete `release:verify` gate.
+`release:verify:local`; automatic CI and GitHub publication use the same non-browser gate.
 Perform version updates, tag creation, and publication as separate authorized release steps.
 
 Use `verifiedVersion: unreleased` for guides describing unreleased work. Before tagging,
 replace it with the actual version validated for that release and promote the matching
 `CHANGELOG.md` entries. Keep `unreleased` during development and set the validated version in the reviewed release commit.
 
-CI runs the complete gate in `Core quality and build` and retains `Minimum Node compatibility`.
+CI runs the non-browser gate in `Core quality and build` and retains `Minimum Node compatibility`.
 Update any repository rules that previously required the retired per-area jobs before merging.
-The publication workflow independently runs the complete gate on its checked-out release tag.
+The publication workflow independently runs the non-browser gate on its checked-out release tag.
+Browser automation runs only when explicitly requested through the `Browser tests`
+workflow or a local browser verification command.
 
 ## Static Outputs
 
@@ -41,14 +43,16 @@ when dependency installation uses a mirror. Authenticate with
 
 Local `npm publish` runs `release:verify:local` through `prepublishOnly`. It retains
 source, package, documentation, distribution and dependency-audit checks, but does
-not install or launch browsers. Playwright and browser pixel checks are opt-in locally:
+not install or launch browsers. Automatic CI and GitHub publication use this same gate:
 
 ```bash
 pnpm run release:verify:local
 ```
 
-For complete verification, including browsers, run the gate used by CI and the
-GitHub publication workflow:
+For complete verification, including browsers, manually run `Browser tests` from
+the GitHub Actions page. It has only a `workflow_dispatch` trigger; pushes, pull
+requests, and release publication do not start browser tests. Select the branch
+to verify. Alternatively, run the complete gate locally:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -71,14 +75,15 @@ This gate validates one headed Firefox instance on macOS; validate multi-instanc
 loads separately when that deployment scenario matters. Keep
 the display awake when running headed GPU checks.
 
-GitHub Actions runs the complete gate on a hosted macOS 15 runner with Metal.
+The manually triggered `Browser tests` workflow runs the complete gate on a
+hosted macOS 15 runner with Metal.
 `node scripts/check-browser-gpu.mjs` uses the Playwright project options to check
 WebGL2 pixels in all three browsers, plus WebGPU texture and canvas snapshot
 pixels in Chrome and Firefox. This preflight runs before the complete gate.
-CI and GitHub npm publication use `caffeinate -di` to keep headed Firefox rendering
+The manual browser workflow uses `caffeinate -di` to keep headed Firefox rendering
 active. The separate minimum Node compatibility job runs on Linux.
 Publishing a GitHub Release triggers `.github/workflows/publish-npm.yml`, which
-checks the release tag, runs the gate, and publishes through npm trusted publishing.
+checks the release tag, runs the non-browser gate, and publishes through npm trusted publishing.
 
 `release:verify` runs `release:verify:local` followed by `browser:check`, stopping
 at the first failed gate and reusing one production build:

@@ -46,7 +46,7 @@ async function requestPreview(handler: PreviewHandler, url: string, method = 'GE
 }
 
 describe('release documentation checklist', () => {
-  it('keeps browser checks in CI and explicit verification but out of local publishing', async () => {
+  it('keeps browser checks opt-in for CI and publishing', async () => {
     const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8'));
     expect(manifest.scripts.prepublishOnly).toBe('npm run release:verify:local');
     const local = manifest.scripts['release:verify:local'];
@@ -85,16 +85,26 @@ describe('release documentation checklist', () => {
     );
     for (const workflow of ['ci.yml', 'publish-npm.yml']) {
       const yaml = await readFile(resolve(process.cwd(), '.github/workflows', workflow), 'utf8');
-      expect(yaml).toContain('run: pnpm run release:verify');
-      expect(yaml.indexOf('run: pnpm run browser:install')).toBeLessThan(
-        yaml.indexOf('run: pnpm run release:verify'),
-      );
+      expect(yaml).toMatch(/^\s+(?:- )?run: pnpm run release:verify:local\s*$/m);
+      expect(yaml).not.toMatch(/^\s+(?:- )?run: pnpm run release:verify\s*$/m);
+      expect(yaml).not.toMatch(/browser:install|browser:check|playwright|check-browser-gpu/);
       if (workflow === 'publish-npm.yml') {
-        expect(yaml.indexOf('run: pnpm run release:verify')).toBeLessThan(
+        expect(yaml.indexOf('run: pnpm run release:verify:local')).toBeLessThan(
           yaml.indexOf('run: npm publish'),
         );
       }
     }
+    const browserWorkflow = await readFile(
+      resolve(process.cwd(), '.github/workflows/browser-tests.yml'),
+      'utf8',
+    );
+    const triggers = browserWorkflow.match(/^on:\n([\s\S]*?)(?=^\S)/m)?.[1];
+    expect(triggers?.trim()).toBe('workflow_dispatch:');
+    expect(browserWorkflow).toMatch(/^\s+(?:- )?run: pnpm run release:verify\s*$/m);
+    expect(browserWorkflow.indexOf('run: pnpm run browser:install')).toBeGreaterThan(-1);
+    expect(browserWorkflow.indexOf('run: pnpm run browser:install')).toBeLessThan(
+      browserWorkflow.indexOf('run: pnpm run release:verify'),
+    );
   });
 
   it('lists every required release verification gate', async () => {

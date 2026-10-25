@@ -31,13 +31,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run browser:install
-      - name: Verify browser GPU adapters and pixel readback
-        run: caffeinate -di node scripts/check-browser-gpu.mjs
-        timeout-minutes: 2
-      # One build, one checkout, and exactly the same gate as npm publication.
-      - run: pnpm run release:verify
-        shell: caffeinate -di bash -e {0}
+      - run: pnpm run release:verify:local
 
   node-compatibility:
     name: Minimum Node compatibility
