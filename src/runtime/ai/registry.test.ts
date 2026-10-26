@@ -161,6 +161,30 @@ describe('capability registry', () => {
   });
 });
 describe('GIS capability integration', () => {
+  it('accepts object arguments for view filtering and geometry LOD capabilities', async () => {
+    const map = await Emap.create({ preset: 'headless', authorizeCapability: () => true });
+    try {
+      const viewport = map.ctx.view._viewport;
+      await map.capabilities.execute('view.setGeometryLod', { options: false });
+      expect(viewport.geometryLodTolerance).toBe(0);
+      await invokeAgentTool(map.capabilities, 'view.setGeometryLod', {
+        options: { pixelTolerance: 2 },
+      });
+      expect(viewport.geometryLodTolerance).toBe(2);
+      await map.capabilities.execute('view.setGeometryLod');
+      expect(viewport.geometryLodTolerance).toBe(0.5);
+      await invokeAgentTool(map.capabilities, 'view.setScreenPathFiltering', { enabled: true });
+      expect(viewport.screenPathFiltering).toBe(true);
+      await map.capabilities.execute('view.setScreenPathFiltering');
+      expect(viewport.screenPathFiltering).toBe(false);
+      await expect(
+        invokeAgentTool(map.capabilities, 'view.setGeometryLod', { options: true }),
+      ).rejects.toThrow();
+      expect(viewport.geometryLodTolerance).toBe(0.5);
+    } finally {
+      await map.dispose();
+    }
+  });
   it('reuses the real operation, history and source state', async () => {
     const map = await Emap.create({
       preset: 'headless',
