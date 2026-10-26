@@ -5,7 +5,7 @@ import {
 } from '../../shared/import-resource-limits';
 import type { MapshaperDataset } from '../../shared/types/mapshaper-types';
 
-/** Bounded FeatureCollection framing. JSON.parse still validates each complete feature and metadata. */
+/** Streaming FeatureCollection framing. JSON.parse validates each complete feature and metadata. */
 export class GeoJSONFeatureFramer {
   private phase: 'header' | 'features' | 'tail' = 'header';
   private quoted = false;
@@ -138,8 +138,6 @@ export class GeoJSONFeatureFramer {
     if (this.phase === 'header') this.header += text.slice(start);
     else if (this.phase === 'features' && this.depth > 0)
       this.appendFeature(text, start, text.length);
-    if (this.header.length + this.tail.length > 2 * 1024 ** 2)
-      throw new RangeError('GeoJSON collection metadata exceeds 2 MiB.');
     if (this.pending.length > 64 * 1024 ** 2)
       throw new RangeError('A single GeoJSON feature exceeds the 64 MiB parsing window.');
   }
