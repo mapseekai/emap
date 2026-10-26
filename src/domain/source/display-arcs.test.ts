@@ -177,15 +177,14 @@ describe('DisplayArcs.markDirty', () => {
 
   it('on a large dataset zoomed-in, markDirty defers the rebuild', () => {
     const arcs = makeMockArcs(600_000);
+    const getFilteredCopy = vi.spyOn(arcs, 'getFilteredCopy');
     const da = new DisplayArcs(arcs);
-    const before = da.getScaledArcs(100); // build/access the filtered copy
+    expect(getFilteredCopy).toHaveBeenCalledOnce();
     da.markDirty();
-    // While zoomed in, the filtered copy is not consulted, so no rebuild.
-    da.getScaledArcs(0.001);
-    // The reference inside the instance is still the same (no rebuild fired).
-    // We can't observe this directly; the contract is "no error / no work
-    // unless the filtered copy is needed". Just exercise the path.
-    expect(before).toBeDefined();
+    expect(da.getScaledArcs(0.001)).toBe(arcs);
+    expect(getFilteredCopy).toHaveBeenCalledOnce();
+    da.getScaledArcs(100);
+    expect(getFilteredCopy).toHaveBeenCalledTimes(2);
   });
 
   it('on a large dataset, markDirty + zoomed-out request triggers a rebuild', () => {

@@ -281,8 +281,12 @@ describe('CanvasPainter arrow-dot rendering', () => {
       geometryRevision: 0,
     });
 
-    expect(arrowWings(forward.segments).every(([tipX, , tailX]) => tipX > tailX)).toBe(true);
-    expect(arrowWings(reverse.segments).every(([tipX, , tailX]) => tipX < tailX)).toBe(true);
+    const forwardWings = arrowWings(forward.segments);
+    const reverseWings = arrowWings(reverse.segments);
+    expect(forwardWings.length).toBeGreaterThan(0);
+    expect(reverseWings).toHaveLength(forwardWings.length);
+    expect(forwardWings.every(([tipX, , tailX]) => tipX > tailX)).toBe(true);
+    expect(reverseWings.every(([tipX, , tailX]) => tipX < tailX)).toBe(true);
   });
 
   it('draws outer and inner polygon rings in each ring coordinate order', () => {

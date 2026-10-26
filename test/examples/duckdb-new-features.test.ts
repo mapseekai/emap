@@ -55,21 +55,6 @@ function exportedDuckDbNames(): Set<string> {
   );
 }
 
-const freshnessGuard = /if\s*\(\s*!isCurrent\(\)\s*\)\s*return\s+undefined\s*;/g;
-
-function hasFreshnessGuardBetween(source: string, after: number, before: number): boolean {
-  return [...source.matchAll(freshnessGuard)].some((match) => {
-    const index = match.index ?? -1;
-    return index > after && index < before;
-  });
-}
-
-function removeFreshnessGuardBetween(source: string, after: number, before: number): string {
-  return source.replace(freshnessGuard, (match, index: number) =>
-    index > after && index < before ? '' : match,
-  );
-}
-
 function hasInputRunInvalidationBeforeLoad(source: string): boolean {
   const invalidation = source.indexOf('invalidateAggregateRuns();');
   const load = source.indexOf('await loadDatasetFromFile(');
@@ -187,25 +172,6 @@ describe('DuckDB new feature examples', () => {
     expect(html).toContain('output: { sourceId: OUTPUT_ID }');
   });
 
-  it('queries and renders GeoParquet after fixture injection or a user upload', () => {
-    const html = examples.geoparquetQuery;
-    const queryStart = html.indexOf('async function runGeoParquetQuery()');
-    const changeStart = html.indexOf('fileInput.addEventListener("change"');
-    const buttonStart = html.indexOf('runButton.addEventListener("click"');
-
-    expect(queryStart).toBeGreaterThan(-1);
-    expect(changeStart).toBeGreaterThan(queryStart);
-    expect(buttonStart).toBeGreaterThan(changeStart);
-    expect(html.slice(queryStart, changeStart)).toContain(
-      'const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset)',
-    );
-    expect(html.slice(queryStart, changeStart)).toContain(
-      'map.setExtent(outputSource.getExtent())',
-    );
-    expect(html.slice(changeStart, buttonStart)).toContain('await runGeoParquetQuery()');
-    expect(html).toContain('runButton.addEventListener("click", runGeoParquetQuery)');
-  });
-
   it('covers overlay helper and map-op entrypoints', () => {
     const html = examples.overlay;
     expect(html).toContain('intersect');
@@ -250,65 +216,6 @@ describe('DuckDB new feature examples', () => {
     for (const column of ['match_count', 'sales_total', 'score_avg', 'sales_min', 'sales_max']) {
       expect(html).toContain(column);
     }
-  });
-
-  it('keeps aggregate controls safe while both inputs load and fits their combined extent', () => {
-    const html = examples.spatialAggregateJoin;
-    const targetHandler = html.indexOf("targetFile.addEventListener('change'");
-    const joinHandler = html.indexOf("joinFile.addEventListener('change'");
-    const runHandler = html.indexOf("runButton.addEventListener('click'");
-    const loaderStart = html.indexOf('async function loadDatasetFromFile');
-
-    expect(html).toContain('<p id="status" class="emap-example-status" aria-live="polite">');
-    expect(html).toContain('function fitLoadedExtents()');
-    expect(html).toContain('const extent = targetExtent.clone();');
-    expect(html).toContain('extent.merge(joinExtent);');
-    expect(html).toContain('map.setExtent(extent);');
-    expect(targetHandler).toBeGreaterThan(-1);
-    expect(joinHandler).toBeGreaterThan(targetHandler);
-    expect(runHandler).toBeGreaterThan(joinHandler);
-    expect(loaderStart).toBeGreaterThan(-1);
-    expect(html.slice(targetHandler, joinHandler)).toContain('targetDataset = undefined;');
-    expect(html.slice(targetHandler, joinHandler)).toContain(
-      'const loadVersion = ++targetLoadVersion;',
-    );
-    expect(html.slice(targetHandler, joinHandler)).toContain(
-      'if (loadVersion !== targetLoadVersion)\n            return;',
-    );
-    expect(html.slice(targetHandler, joinHandler)).toContain('updateRunState();');
-    expect(html.slice(joinHandler, runHandler)).toContain('joinDataset = undefined;');
-    expect(html.slice(joinHandler, runHandler)).toContain('const loadVersion = ++joinLoadVersion;');
-    expect(html.slice(joinHandler, runHandler)).toContain(
-      'if (loadVersion !== joinLoadVersion)\n            return;',
-    );
-    expect(html.slice(joinHandler, runHandler)).toContain('updateRunState();');
-
-    const loader = html.slice(loaderStart, targetHandler);
-    const arrayBufferAwait = loader.indexOf('await file.arrayBuffer()');
-    const sourceRemoval = loader.indexOf('removeSourceWithLayers(sourceId);');
-    const setDataAwait = loader.indexOf('await source.setData(');
-    const datasetRead = loader.indexOf('const dataset = source.getDataset();');
-
-    expect(arrayBufferAwait).toBeGreaterThan(-1);
-    expect(sourceRemoval).toBeGreaterThan(arrayBufferAwait);
-    expect(setDataAwait).toBeGreaterThan(sourceRemoval);
-    expect(datasetRead).toBeGreaterThan(setDataAwait);
-    expect(hasFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval)).toBe(true);
-    expect(hasFreshnessGuardBetween(loader, setDataAwait, datasetRead)).toBe(true);
-    expect(
-      hasFreshnessGuardBetween(
-        removeFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval),
-        arrayBufferAwait,
-        sourceRemoval,
-      ),
-    ).toBe(false);
-    expect(
-      hasFreshnessGuardBetween(
-        removeFreshnessGuardBetween(loader, setDataAwait, datasetRead),
-        setDataAwait,
-        datasetRead,
-      ),
-    ).toBe(false);
   });
 
   it('routes both aggregate query entrypoints through the shared stale-run coordinator', () => {

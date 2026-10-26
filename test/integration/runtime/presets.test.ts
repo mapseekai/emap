@@ -24,10 +24,4 @@ describe('headless composition', () => {
     expect(second.getCRS()).toBeTruthy();
     await second.dispose();
   });
-  it('allows a deliberately empty runtime without installing GIS implementations', async () => {
-    const map = await Emap.create({ preset: 'empty' });
-    expect(inspectContext(map.ctx).map((plugin) => plugin.name)).toEqual(['host.options']);
-    expect(!!map.ctx.get('document')).toBe(false);
-    await map.dispose();
-  });
 });

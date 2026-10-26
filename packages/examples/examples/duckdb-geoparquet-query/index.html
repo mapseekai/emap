@@ -233,7 +233,7 @@ fileInput.addEventListener("change", async () => {
     runButton.disabled = true;
     status.textContent = `正在读取 ${file.name}...`;
     try {
-        await (await closeGeoParquetQuerySource()).catch((err) => console.warn(err));
+        await closeGeoParquetQuerySource().catch((err) => console.warn(err));
         geoParquetBytes = new Uint8Array(await file.arrayBuffer());
         geoParquetFileName = file.name;
         contextSources.clear();
@@ -254,7 +254,7 @@ fileInput.addEventListener("change", async () => {
 runButton.addEventListener("click", runGeoParquetQuery);
 window.addEventListener("resize", () => map.resize());
 window.addEventListener("pagehide", async () => {
-    void (await closeGeoParquetQuerySource()).finally(() => runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+    void closeGeoParquetQuerySource().finally(() => runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
 });
 await autoLoadExampleFixtures('duckdb-geoparquet-query');
 </script>

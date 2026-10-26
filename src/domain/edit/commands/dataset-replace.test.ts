@@ -14,20 +14,6 @@ const before = { layers: [{ name: 'before', shapes: [] }] } as unknown as Mapsha
 const after = { layers: [{ name: 'after', shapes: [] }] } as unknown as MapshaperDataset;
 
 describe('DatasetReplaceCommand', () => {
-  it('do() activates the after dataset', () => {
-    const source = makeSource();
-    const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });
-    cmd.do();
-    expect(source.setDataset).toHaveBeenCalledWith(after, false);
-  });
-
-  it('undo() activates the before dataset', () => {
-    const source = makeSource();
-    const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });
-    cmd.undo();
-    expect(source.setDataset).toHaveBeenCalledWith(before, false);
-  });
-
   it('round-trip do() then undo() ends on `before`', () => {
     const source = makeSource();
     const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });

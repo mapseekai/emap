@@ -7,13 +7,10 @@ import {
 } from './fixtures';
 
 describe('test-utils/fixtures', () => {
-  it('loadFixtureBytes returns a Uint8Array', () => {
+  it('loadFixtureText decodes UTF-8 and parses as JSON', () => {
     const bytes = loadFixtureBytes('tiny.geojson');
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(bytes.byteLength).toBeGreaterThan(0);
-  });
-
-  it('loadFixtureText decodes UTF-8 and parses as JSON', () => {
     const txt = loadFixtureText('tiny.geojson');
     const obj = JSON.parse(txt);
     expect(obj.type).toBe('FeatureCollection');

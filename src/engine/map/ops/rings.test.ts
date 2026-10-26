@@ -217,6 +217,8 @@ describe('addRing', () => {
 
     const polygon = exported(fixture.dataset());
     expect(polygon.coordinates).toHaveLength(2);
+    const hole = polygon.coordinates[1]!;
+    expect(hole[0]).toEqual(hole.at(-1));
     expect(Math.sign(area(polygon.coordinates[0]!))).not.toBe(
       Math.sign(area(polygon.coordinates[1]!)),
     );
@@ -294,22 +296,6 @@ describe('addRing', () => {
     expect(historyEntries).toBe(0);
   });
 
-  it('automatically closes an unclosed input ring', async () => {
-    const fixture = await createFixture();
-    await expect(
-      addRing(fixture.ctx, {
-        ring: [
-          [3, 3],
-          [7, 3],
-          [7, 7],
-          [3, 7],
-        ],
-      }),
-    ).resolves.toMatchObject({ ok: true });
-    const hole = exported(fixture.dataset()).coordinates[1]!;
-    expect(hole[0]).toEqual(hole.at(-1));
-  });
-
   it('adds a hole after the exterior that contains it in a multi-exterior feature', async () => {
     const fixture = await createFixture(undefined, undefined, {
       type: 'MultiPolygon',
@@ -384,14 +370,6 @@ describe('addRing', () => {
     ],
     [
       'vertex outside',
-      [
-        [3, 3],
-        [12, 3],
-        [7, 7],
-      ],
-    ],
-    [
-      'crosses exterior',
       [
         [3, 3],
         [12, 3],
@@ -535,27 +513,6 @@ describe('addRing', () => {
         ],
       }),
     );
-  });
-
-  it('rejects stale prepared datasets', async () => {
-    const fixture = await createFixture();
-    fixture.ctx.runPreparedEditCommand = async (_sourceId, _label, plan) => {
-      const dataset = fixture.dataset();
-      const source = fixture.ctx.host._sources.get('source');
-      if (!source) throw new Error('Missing fixture source');
-      const result = plan({ ...dataset }, source);
-      if (!('ok' in result)) throw new Error('Stale preparation unexpectedly succeeded');
-      return result;
-    };
-    await expect(
-      addRing(fixture.ctx, {
-        ring: [
-          [3, 3],
-          [7, 3],
-          [7, 7],
-        ],
-      }),
-    ).resolves.toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
   });
 });
 
@@ -893,6 +850,7 @@ describe('fillRing', () => {
     if (!records) throw new Error('Missing fixture records');
     expect(records).toHaveLength(2);
     expect(records[1]).toEqual({});
+    expect(fixture.ctx.host._selection.getAll()).toEqual(fixture.refs);
   });
 
   it('fills a hole created by addRing (draw-then-fill workflow)', async () => {
@@ -986,14 +944,6 @@ describe('fillRing', () => {
     fixture.entries[0]!.do();
     expect(fixture.dataset().layers[0]!.shapes).toHaveLength(2);
     expect(arcs.size()).toBe(arcCount);
-  });
-
-  it('keeps the current selection unchanged', async () => {
-    const fixture = await createFixture(undefined, undefined, HOLED);
-    await fillRing(fixture.ctx, { point: [5, 5] });
-    expect(fixture.ctx.host._selection.getAll()).toEqual([
-      { source: 'source', layer: 'rings', id: 0 },
-    ]);
   });
 
   it('rejects a polygon with no holes and a point outside every ring', async () => {

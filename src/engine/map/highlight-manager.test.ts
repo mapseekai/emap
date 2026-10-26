@@ -87,8 +87,7 @@ describe('HighlightManager state', () => {
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
     ]);
-    // Internal storage uses a Set — only one render call per id.
-    expect(h.size).toBe(1);
+    expect(h.getByLayer('s', 'l')).toEqual([1]);
   });
 
   it('clearHighlightedFeatures returns true when there were features', () => {
@@ -194,25 +193,6 @@ describe('HighlightManager.renderHighlights', () => {
       undefined,
       0.3,
     );
-    expect(painter.drawPaths).toHaveBeenCalled();
-  });
-
-  it('keeps polygon highlights outline-only without fillOpacity', () => {
-    const h = new HighlightManager();
-    const layer: MapshaperLayer = {
-      name: 'parks',
-      geometry_type: 'polygon',
-      shapes: [[[0]], [[1]], [[2]]],
-    } as MapshaperLayer;
-    const sources = new globalThis.Map<string, MutableTopologySource>([
-      ['src1', makeSource([layer])],
-    ]);
-    h.setHighlightedFeatures([
-      { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
-    ]);
-    const painter = makePainterStub();
-    h.renderHighlights(painter, sources, new AffineTransform(), 1);
-    expect(painter.drawPolygonFill).not.toHaveBeenCalled();
     expect(painter.drawPaths).toHaveBeenCalled();
   });
 

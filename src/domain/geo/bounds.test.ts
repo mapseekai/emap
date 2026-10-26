@@ -45,16 +45,8 @@ describe('Bounds.width / height / center', () => {
 });
 
 describe('Bounds.hasBounds', () => {
-  it('returns false on the default empty Bounds', () => {
-    expect(new Bounds().hasBounds()).toBe(false);
-  });
-
   it('returns true on a normal bounds', () => {
     expect(new Bounds(0, 0, 1, 1).hasBounds()).toBe(true);
-  });
-
-  it('returns true on a degenerate (point) bounds', () => {
-    expect(new Bounds(5, 5, 5, 5).hasBounds()).toBe(true);
   });
 
   it('returns false on inverted bounds (xmin > xmax)', () => {

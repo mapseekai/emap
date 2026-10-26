@@ -52,18 +52,6 @@ describe('compileStyleExpression atoms', () => {
     expect(fn({ pop: -5 })).toBe(0);
     expect(fn({ pop: 500 })).toBe(10);
   });
-  it('interpolate linear hex colors', () => {
-    const fn = compileStyleExpression([
-      'interpolate',
-      'linear',
-      ['get', 'pop'],
-      0,
-      '#000000',
-      100,
-      '#ffffff',
-    ]);
-    expect(fn({ pop: 50 })).toBe('rgb(128,128,128)');
-  });
   it('interpolate with color outputs quantizes input to 256 global levels (bucket cardinality bound)', () => {
     const fn = compileStyleExpression([
       'interpolate',

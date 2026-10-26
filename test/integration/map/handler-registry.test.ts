@@ -1,4 +1,7 @@
 import { createBrowserTestMap } from '../../utils/plugin-test-map';
+import { TopologySource } from '../../../src/domain/source/topology-source';
+import { Bounds } from '../../../src/domain/geo/bounds';
+import { getDefaultMapshaperAdapter } from '../../../src/integrations/mapshaper/adapter';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 // jsdom does not implement CanvasRenderingContext2D; stub getContext so
@@ -508,18 +511,52 @@ describe('Emap handler registry (Phase 1)', () => {
   });
   it('combined sink fans out: one move reaches BOTH feature hover and mousemove', async () => {
     const map = await createBrowserTestMap({ container: container() });
-    const mgr = (map as any)._handlers;
-    const fcb = vi.fn();
-    const pcb = vi.fn();
-    map.on('feature:hover', {}, fcb); // no data loaded → hover may not fire, but must not throw
-    map.on('mousemove', pcb);
-    mgr._pointerSink({
-      kind: 'move',
-      point: { x: 5, y: 5 },
-      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-      button: 0,
-      originalEvent: new Event('pointermove'),
-    });
-    expect(pcb).toHaveBeenCalledTimes(1); // pointer-move always delivered
+    try {
+      const source = new TopologySource('points');
+      await source.replaceDataset({
+        info: { crs_string: 'EPSG:4326' },
+        layers: [
+          {
+            name: 'points',
+            geometry_type: 'point',
+            shapes: [[[5, 5]]],
+            data: getDefaultMapshaperAdapter().createDataTable([{ name: 'center' }]),
+          },
+        ],
+      });
+      await map.addSource('points', source);
+      map.addLayer({ id: 'dots', source: 'points', type: 'circle' });
+      map.setExtent(new Bounds(0, 0, 10, 10));
+      const mgr = (map as any)._handlers;
+      const fcb = vi.fn();
+      const pcb = vi.fn();
+      map.on('feature:hover', {}, fcb);
+      map.on('mousemove', pcb);
+      const [x, y] = map.getTransform().project(5, 5);
+      const move = {
+        kind: 'move',
+        point: { x, y },
+        modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+        button: 0,
+        originalEvent: new Event('pointermove'),
+      };
+      mgr._pointerSink(move);
+      expect(fcb).toHaveBeenCalledOnce();
+      expect(fcb.mock.calls[0]![0]).toMatchObject({
+        type: 'feature:hover',
+        ref: { source: 'points', id: 0 },
+        feature: { properties: { name: 'center' } },
+        point: { x, y },
+      });
+      expect(pcb).toHaveBeenCalledOnce();
+      expect(pcb.mock.calls[0]![0].point).toEqual({ x, y });
+      expect(pcb.mock.calls[0]![0].mapCoord[0]).toBeCloseTo(5);
+      expect(pcb.mock.calls[0]![0].mapCoord[1]).toBeCloseTo(5);
+      mgr._pointerSink({ ...move, point: { x: 0, y: 0 } });
+      expect(fcb).toHaveBeenCalledOnce();
+      expect(pcb).toHaveBeenCalledTimes(2);
+    } finally {
+      await map.dispose();
+    }
   });
 });

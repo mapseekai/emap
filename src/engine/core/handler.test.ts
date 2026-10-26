@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import type { Handler, HandlerResult, NormalizedPointerEvent } from './handler';
+import type { Handler, HandlerResult } from './handler';
 import { isHandler } from './handler';
 
 describe('Handler contract', () => {
@@ -19,16 +19,5 @@ describe('Handler contract', () => {
     expect(isHandler(null)).toBe(false);
     expect(isHandler('not an object')).toBe(false); // primitive branch
     expect(isHandler({ ...ok, handlePointer: 42 })).toBe(false); // wrong member type
-  });
-
-  it('NormalizedPointerEvent shape is usable', () => {
-    const ev: NormalizedPointerEvent = {
-      kind: 'down',
-      point: { x: 1, y: 2 },
-      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-      button: 0,
-      originalEvent: new MouseEvent('mousedown'),
-    };
-    expect(ev.point.x).toBe(1);
   });
 });

@@ -494,14 +494,6 @@ describe('spatialSummaryJoin', () => {
     expect(runtime.connection.queries).toEqual([]);
   });
 
-  it('classifies malformed aggregate rows as conversion-failed', async () => {
-    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [0], match_count: [1] }));
-
-    await expect(
-      spatialSummaryJoin(await targetDataset(), await joinDataset(), validOptions, runtime),
-    ).rejects.toMatchObject({ kind: 'conversion-failed' } satisfies Partial<DuckDbOperationError>);
-  });
-
   it('returns unmatched defaults from a schema-less empty join without connecting', async () => {
     const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
 

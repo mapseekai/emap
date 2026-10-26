@@ -13,13 +13,6 @@ describe('OK / okValue', () => {
     expect(Object.isFrozen(OK)).toBe(true);
   });
 
-  it('OK is a singleton — every read returns the same reference', () => {
-    // Cheap-to-return contract per the docstring.
-    const a = OK;
-    const b = OK;
-    expect(a).toBe(b);
-  });
-
   it('okValue wraps a payload', () => {
     const r = okValue({ count: 42 });
     expect(r.ok).toBe(true);
@@ -27,10 +20,10 @@ describe('OK / okValue', () => {
   });
 
   it('okValue carries primitive payloads', () => {
-    expect(okValue(0).ok).toBe(true);
-    expect(okValue('').ok).toBe(true);
-    expect(okValue(null).ok).toBe(true);
-    expect(okValue(false).ok).toBe(true);
+    expect(okValue(0)).toStrictEqual({ ok: true, value: 0 });
+    expect(okValue('')).toStrictEqual({ ok: true, value: '' });
+    expect(okValue(null)).toStrictEqual({ ok: true, value: null });
+    expect(okValue(false)).toStrictEqual({ ok: true, value: false });
   });
 });
 

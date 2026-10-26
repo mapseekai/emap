@@ -86,12 +86,26 @@ describe('Emap camera facade (DX P9)', () => {
   });
   it('legacy view methods still work (back-compat)', async () => {
     const map = await createBrowserTestMap({ container: container() });
-    const c0 = map.getCenter();
-    map.zoomIn();
-    map.zoomOut();
-    expect(map.getCenter()).toBeDefined();
-    expect(typeof map.getZoom()).toBe('number');
-    expect(Array.isArray(c0)).toBe(true);
+    map.setExtent(new Bounds(0, 0, 100, 100));
+    const center = map.getCenter();
+    // The default geographic CRS has no numeric zoom level; observe its view scale.
+    const scale = Math.abs(map.getTransform().mx);
+    vi.useFakeTimers({
+      toFake: ['Date', 'requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+    try {
+      map.zoomIn();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(Math.abs(map.getTransform().mx)).toBeGreaterThan(scale);
+      map.zoomOut();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(Math.abs(map.getTransform().mx)).toBeCloseTo(scale);
+      expect(map.getCenter()[0]).toBeCloseTo(center[0]);
+      expect(map.getCenter()[1]).toBeCloseTo(center[1]);
+    } finally {
+      await map.dispose();
+      vi.useRealTimers();
+    }
   });
   it('redraws the restored view when reset interrupts active navigation', async () => {
     const callbacks: FrameRequestCallback[] = [];

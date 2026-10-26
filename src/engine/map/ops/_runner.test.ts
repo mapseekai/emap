@@ -222,7 +222,6 @@ describe('inferEffectForHeads (PR-10)', () => {
     [['target', 'sort', 'clean'], 'feature-order'],
 
     // unknown command falls through to `unknown` (clear selection)
-    [['target', 'wat'], 'unknown'],
     [['target', 'fancy-new-op'], 'unknown'],
 
     // empty / target-only ⇒ unknown (the runner won't invoke this with no

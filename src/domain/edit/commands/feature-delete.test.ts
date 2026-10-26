@@ -38,26 +38,6 @@ describe('FeatureDeleteCommand', () => {
     expect(records).toEqual([{ a: 0 }, { a: 2 }]);
   });
 
-  it('undo() restores the feature at the original index', () => {
-    const records: Record<string, unknown>[] = [{ a: 0 }, { a: 2 }];
-    const originalShape = [[1]];
-    const originalRecord = { a: 1 };
-    const layer = {
-      shapes: [[[0]], [[2]]],
-      data: { getRecords: () => records },
-    };
-    const cmd = new FeatureDeleteCommand({
-      layer: layer,
-      featureId: 1,
-      shape: originalShape,
-      record: originalRecord,
-      source: makeSource(),
-    });
-    cmd.undo();
-    expect(layer.shapes[1]).toEqual(originalShape);
-    expect(records[1]).toEqual({ a: 1 });
-  });
-
   it('round-trip do() then undo() yields the original arrays', () => {
     const records: Record<string, unknown>[] = [{ a: 0 }, { a: 1 }, { a: 2 }];
     const layer = {

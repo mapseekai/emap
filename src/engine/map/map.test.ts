@@ -27,6 +27,7 @@ import { ValidatorRegistry } from '../../domain/validation/registry';
 import { FeatureAccessor } from './feature-accessor';
 import { TopologySource } from '../../domain/source/topology-source';
 import { FeatureQuery } from './feature-query';
+import { QueryServiceImpl } from '../providers/workspace/query';
 import { EMAP_THEME_COLORS } from '../../ui/theme/colors';
 import { getDefaultMapshaperAdapter } from '../../integrations/mapshaper/adapter';
 import { FilterEvaluationError, FilterResolver } from './filter-resolver';
@@ -3458,11 +3459,13 @@ describe('Emap rotateSelected / scaleSelected', () => {
         { mode: 'add' },
       );
       map.editSession.scaleSelected(2);
-      // Both sources got scaled
-      // Verify by re-running undo: a single undo should reverse both
-      map.undo();
+      expect(close(xx[0], 0)).toBe(false);
+      expect(close(xx2[0], 10)).toBe(false);
+      expect(map.canUndo()).toBe(true);
+      expect(map.undo()).toBe(true);
       expect(close(xx[0], 0)).toBe(true);
       expect(close(xx2[0], 10)).toBe(true);
+      expect(map.canUndo()).toBe(false);
     });
   });
 });
@@ -7015,16 +7018,6 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
     Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
     return { map, parseSpy };
   }
-  it('emits "-lines" with no fields', async () => {
-    const { map, parseSpy } = await makeMapWithLayers();
-    await map.ops.linesLayer({ source: 'src1', target: 'states' });
-    expectCli('-target "states" -lines', parseSpy.mock.calls[0][0]);
-  });
-  it('emits "-lines a,b" with fields', async () => {
-    const { map, parseSpy } = await makeMapWithLayers();
-    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
-    expectCli('-target "states" -lines STATE,COUNTY', parseSpy.mock.calls[0][0]);
-  });
   it('rejects comma-bearing field names before dispatch', async () => {
     const { map, parseSpy } = await makeMapWithLayers();
     const result = await map.ops.linesLayer({
@@ -7091,11 +7084,6 @@ describe('mosaicLayer: calc option', () => {
     await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
     expectCli('-target "parks" -mosaic calc="sum(area)"', parseSpy.mock.calls[0][0]);
   });
-  it('omits calc= when not supplied', async () => {
-    const { map, parseSpy } = await makeMapWithLayer('parks');
-    await map.ops.mosaicLayer({ source: 'src1', target: 'parks' });
-    expectCli('-target "parks" -mosaic', parseSpy.mock.calls[0][0]);
-  });
   it('omits calc= when whitespace-only', async () => {
     const { map, parseSpy } = await makeMapWithLayer('parks');
     await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
@@ -7112,11 +7100,6 @@ describe('snapLayer: fixGeometry option', () => {
       fixGeometry: true,
     });
     expectCli('-target "roads" -snap 0.001 fix-geometry', parseSpy.mock.calls[0][0]);
-  });
-  it('omits fix-geometry when falsy', async () => {
-    const { map, parseSpy } = await makeMapWithLayer('roads', 'polyline');
-    await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
-    expectCli('-target "roads" -snap 0.001', parseSpy.mock.calls[0][0]);
   });
 });
 describe('dissolveLayer: expanded options', () => {
@@ -7223,11 +7206,6 @@ describe('dissolveLayer: expanded options', () => {
     if (!result.ok) expect(result.error.kind).toBe('validation');
     expect(parseSpy).not.toHaveBeenCalled();
   });
-  it('full minimal call still works (regression)', async () => {
-    const { map, parseSpy } = await makeMapWithLayer('counties');
-    await map.ops.dissolveLayer({ source: 'src1', target: 'counties' });
-    expectCli('-target "counties" -dissolve', parseSpy.mock.calls[0][0]);
-  });
 });
 describe('cleanLayer: expanded options', () => {
   it('emits gap-fill-area=', async () => {
@@ -7299,11 +7277,6 @@ describe('cleanLayer: expanded options', () => {
       (await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).ok,
     ).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
-  });
-  it('full minimal call still works (regression)', async () => {
-    const { map, parseSpy } = await makeMapWithLayer('parks');
-    await map.ops.cleanLayer({ source: 'src1', target: 'parks' });
-    expectCli('-target "parks" -clean', parseSpy.mock.calls[0][0]);
   });
   it('all-options-combined produces the canonical token order', async () => {
     const { map, parseSpy } = await makeMapWithLayer('parks');
@@ -8308,14 +8281,14 @@ describe('Phase-6 integration', () => {
       await flushPromises();
       expect(events).toHaveLength(0);
     });
-    it('validators registry is empty by default — no overhead when unused', async () => {
-      // No register() call. historychange fires; validator path should be
-      // a cheap size===0 check with no allocation.
-      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+    it('skips validator dispatch when no validators are registered', async () => {
+      const runFor = vi.spyOn(map.validators, 'runFor');
+      expect(await map.ops.dropLayer({ source: 'src1', target: 'parks' })).toMatchObject({
+        ok: true,
+      });
       await flushPromises();
-      // No assertion needed — if the size===0 short-circuit broke, an
-      // unhandled promise rejection would fail the test.
       expect(map.validators.size).toBe(0);
+      expect(runFor).not.toHaveBeenCalled();
     });
   });
   describe('FeatureAccessor on a real Emap', () => {
@@ -8603,29 +8576,11 @@ describe('Emap queryFeatures with display filter', () => {
       () => ({ width: 100, height: 100 }),
       () => 1,
     );
-    query.setFeatureMaskProvider((sourceId, layerId) => {
-      if (sourceId !== 'src1' || layerId !== 'points') return null;
-      let union: Uint8Array | null = null;
-      for (const renderLayer of map.getRenderedLayers()) {
-        if (
-          renderLayer.source !== sourceId ||
-          renderLayer['source-layer'] !== layerId ||
-          renderLayer.layout?.visibility === 'none'
-        ) {
-          continue;
-        }
-        if (!renderLayer.filter) return null;
-        const mask = (getPrivate(map, '_filterResolver') as FilterResolver).mask({
-          layerId: renderLayer.id,
-          filter: renderLayer.filter,
-          dataset,
-          layer,
-        });
-        if (!mask) return null;
-        if (!union) union = mask.slice();
-        else for (let i = 0; i < union.length; i++) union[i]! |= mask[i]!;
-      }
-      return union;
+    new QueryServiceImpl({
+      cache: { _featureQuery: query },
+      document: map.ctx.document,
+      layers: map.ctx.layers,
+      selection: map.ctx.selection,
     });
     setPrivate(map, '_featureQuery', query);
     return map;

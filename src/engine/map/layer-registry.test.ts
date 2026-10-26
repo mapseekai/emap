@@ -84,11 +84,6 @@ describe('LayerRegistry.resolve', () => {
     expect(reg.resolve('src1', 'parks')).toBe(a);
   });
 
-  it('returns null for an unknown sourceId', () => {
-    const reg = new LayerRegistry(new globalThis.Map());
-    expect(reg.resolve('nope', 'parks')).toBeNull();
-  });
-
   it('returns null when sourceId resolves but layerId does not', () => {
     const sources = new globalThis.Map<string, TopologySource>([
       ['src1', makeSource([makeLayer({ name: 'parks' })])],

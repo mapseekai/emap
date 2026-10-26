@@ -185,21 +185,22 @@ describe('GeoArrow IPC round trip', () => {
         const dataset = await datasetFromGeoJSON(ADJACENT_POLYGONS_FC);
         const back = importGeoArrow(exportGeoArrow(dataset, { encoding }));
         expect(back.layers[0].shapes).toHaveLength(2);
-        // 2 squares with one shared edge → after buildTopology the arc count
-        // is below the naive 2-rings count because the shared boundary is
-        // one arc referenced by both shapes.
-        expect(back.arcs!.size()).toBeGreaterThan(2);
-        const referenced = new Set<number>();
-        for (const shape of back.layers[0].shapes! as number[][][]) {
-          for (const part of shape) {
-            for (const id of part) referenced.add(id >= 0 ? id : ~id);
-          }
-        }
-        const total = (back.layers[0].shapes! as number[][][]).reduce(
-          (sum, shp) => sum + shp.reduce((s, part) => s + part.length, 0),
-          0,
+        const [left, right] = (back.layers[0].shapes! as number[][][]).map((shape) => shape.flat());
+        const rightIds = new Set(right!.map((id) => (id < 0 ? ~id : id)));
+        const shared = left!.filter((id) => rightIds.has(id < 0 ? ~id : id));
+        expect(shared).toHaveLength(1);
+        expect(right).toContain(~shared[0]!);
+        const iter = back.arcs!.getArcIter!(shared[0]!);
+        const edge: number[][] = [];
+        while (iter.hasNext()) edge.push([iter.x, iter.y]);
+        expect(edge).toHaveLength(2);
+        expect(edge).toEqual(
+          expect.arrayContaining([
+            [1, 0],
+            [1, 1],
+          ]),
         );
-        expect(total).toBeGreaterThan(referenced.size - 1); // at least one arc shared or split
+        expect(recordsOf(back).map((record) => record.side)).toEqual(['left', 'right']);
       });
 
       it('preserves null geometries', async () => {

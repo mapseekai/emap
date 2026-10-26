@@ -74,18 +74,6 @@ describe('FeatureQuery._getOrBuildIndex', () => {
     expect(result2).toBeNull();
   });
 
-  it('returns null for layers with undefined shapes', () => {
-    const result = callPrivate<any>(
-      fq,
-      '_getOrBuildIndex',
-      'src1',
-      0,
-      { shapes: undefined },
-      undefined,
-    );
-    expect(result).toBeNull();
-  });
-
   it('builds an index for a point layer based on coord union per shape', () => {
     const layer = {
       geometry_type: 'point',

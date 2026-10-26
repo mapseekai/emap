@@ -1,21 +1,27 @@
-import { describe, expect, it } from 'vitest';
-import { MapshaperOps } from './mapshaper-ops';
-import type { EmapHostInternal } from './emap-host';
+import { describe, expect, it, vi } from 'vitest';
+import { Emap } from './map';
+import * as filterFieldOps from './ops/filter-fields';
 
 describe('MapshaperOps context lifecycle', () => {
-  it('reuses one operation context per facade instance', () => {
-    const ops = new MapshaperOps({} as EmapHostInternal);
-    const first = Reflect.get(ops, '_ctx');
-    const second = Reflect.get(ops, '_ctx');
-
-    expect(first).toBe(second);
-  });
-
-  it('does not share a context between facade instances', () => {
-    const host = {} as EmapHostInternal;
-    const first = new MapshaperOps(host);
-    const second = new MapshaperOps(host);
-
-    expect(Reflect.get(first, '_ctx')).not.toBe(Reflect.get(second, '_ctx'));
+  it('reuses its operation context across real dispatches', async () => {
+    const dispatch = vi.spyOn(filterFieldOps, 'filterFields');
+    const map = await Emap.create({ preset: 'headless' });
+    try {
+      const options = { source: 'missing', target: 'missing', fields: ['name'] };
+      for (let i = 0; i < 2; i++) {
+        await expect(map.ops.filterFields(options)).resolves.toMatchObject({
+          ok: false,
+          error: { kind: 'not-found' },
+        });
+      }
+      expect(dispatch).toHaveBeenCalledTimes(2);
+      const first = dispatch.mock.calls[0]![0];
+      expect(first.host._sources).toBe(map.ctx.document._sources);
+      expect(first.runDatasetCommandParsed).toBeTypeOf('function');
+      expect(dispatch.mock.calls[1]![0]).toBe(first);
+    } finally {
+      await map.dispose();
+      dispatch.mockRestore();
+    }
   });
 });

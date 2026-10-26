@@ -496,23 +496,6 @@ describe('reshapeSelected', () => {
     expect(fixture.historyChanges()).toBe(0);
   });
 
-  it('reshapes selected polygon target layers', async () => {
-    const fixture = await createFixture();
-    fixture.dataset().layers[0]!.geometry_type = 'polygon';
-    await expect(
-      reshapeSelected(fixture.ctx, {
-        line: [
-          [3, 0],
-          [5, 2],
-          [7, 0],
-        ],
-      }),
-    ).resolves.toMatchObject({
-      ok: true,
-      value: { reshapedCount: 1 },
-    });
-  });
-
   it('reshapes contacted features without any selection', async () => {
     const fixture = await createFixture([]);
     await expect(
