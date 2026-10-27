@@ -10,7 +10,7 @@ for (const backend of ['webgl', 'webgpu']) for (const dpr of [1, 1.25, 2]) {
     test.setTimeout(180000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     await page.evaluate(() => window.lumaBenchmark.dispose());
     await page.addScriptTag({ path: bundle });
@@ -53,7 +53,7 @@ for (const backend of ['webgl', 'webgpu']) for (const dpr of [1, 1.25, 2]) {
 for(const backend of ['webgl','webgpu'])test(`${backend}: capsule clipping uses actual backing sizes and nearby anchors`,async({page})=>{
   test.setTimeout(180000);
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await page.evaluate(()=>window.lumaBenchmark.dispose());
   await page.addScriptTag({path:bundle});

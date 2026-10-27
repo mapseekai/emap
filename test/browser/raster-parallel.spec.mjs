@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { installTasklaneProbe } from './fixtures/tasklane-probe.mjs';
-const route='/mapseekai/emap/examples/geotiff-viewer/';
+const route='/mapseekai/emap/examples/geotiff-viewer/?parameters=open';
 async function idle(page){
   const pending=()=>page.evaluate(()=>{
     const s=window.geotiffDemo,v=s.stats(),p=s.processing();

@@ -3,7 +3,7 @@ import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 
 async function setup(page, renderer) {
   await installCanvasReadback(page);
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   await page.evaluate(async renderer => {
     lumaBenchmark.dispose();

@@ -66,7 +66,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
     test.setTimeout(120000);
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
     const name=apiName(route);
-    await page.goto(`/mapseekai/emap/examples/${route}/?gpu=${backend}`);
+    await page.goto(`/mapseekai/emap/examples/${route}/?parameters=open&gpu=${backend}`);
     await page.waitForFunction(name=>window[name],name);
     if(route==='luma-benchmark') await page.waitForFunction(()=>window.lumaBenchmark.state==='idle');else await ready(page,name);
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});
@@ -129,7 +129,7 @@ for(const backend of ['webgl','webgpu'])for(const route of ['luma-benchmark','lu
 
 test('public Emap labels follow layer filters, visibility and removal without new layer IDs', async ({page}) => {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await page.evaluate(async()=>{
     window.lumaBenchmark.dispose();
@@ -171,7 +171,7 @@ for(const dpr of [1.3,2])for(const backend of ['webgl','webgpu'])test(`${backend
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try {
-    await page.goto(new URL(`/mapseekai/emap/examples/luma-25d/?gpu=${backend}`,info.project.use.baseURL).href);await ready(page,'luma25d');
+    await page.goto(new URL(`/mapseekai/emap/examples/luma-25d/?parameters=open&gpu=${backend}`,info.project.use.baseURL).href);await ready(page,'luma25d');
     await page.locator('#file-input').setInputFiles({name:'labels.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(collection))});await ready(page,'luma25d');
     await page.evaluate(()=>{for(const l of luma25d.layers)luma25d.setLayerLabel(l.id,{field:'name',fontSize:18,color:'#dd1177',haloWidth:2});});
     await settle(page,'luma25d');await eachLabelPainted(page,'luma25d');
@@ -190,7 +190,7 @@ test('real point file: opt-in labels retain original point LOD and bounded atlas
   test.skip(!process.env.EMAP_BENCHMARK_DATA_DIR,'Requires authorized real points.geojson.');test.setTimeout(120000);
   const {join}=await import('node:path');
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await page.locator('#file-input').setInputFiles(join(process.env.EMAP_BENCHMARK_DATA_DIR,'points.geojson'));
   await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));await ready(page,'lumaBenchmark');
   const before=await page.evaluate(()=>({lod:lumaBenchmark.lodStats,labels:lumaBenchmark.labelStats,first:lumaBenchmark.scene.dataset.layers[0].shapes[0]}));
@@ -217,7 +217,7 @@ test('real point file: opt-in labels retain original point LOD and bounded atlas
 for(const backend of ['webgl','webgpu'])test(`${backend}: true MSDF reuses glyphs across paint, size and live DPR changes`,async({page,browserName},info)=>{
   test.setTimeout(120000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend);
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+backend);
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   const features=[[-10,-6,''],[10,6,''],[-4,-2,'京A'],[4,-2,'京A'],[-4,2,'京A'],[4,2,'京A']].map(([x,y,name])=>({type:'Feature',properties:{name},geometry:{type:'Point',coordinates:[x,y]}}));
   await page.locator('#file-input').setInputFiles({name:'msdf-reuse.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({type:'FeatureCollection',features}))});

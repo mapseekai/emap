@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { join } from 'node:path';
 const gpu=process.env.EMAP_GPU_BACKEND??'webgl';
-const route='/mapseekai/emap/examples/luma-benchmark/?gpu='+gpu;
+const route='/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+gpu;
 const directory=process.env.EMAP_BENCHMARK_DATA_DIR;
 async function ready(page) {
   await page.goto(route);

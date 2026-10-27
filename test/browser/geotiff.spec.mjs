@@ -6,9 +6,9 @@ import { join, resolve } from 'node:path';
 
 test.beforeEach(async ({page}) => installCanvasReadback(page));
 
-const route = '/mapseekai/emap/examples/geotiff-viewer/';
+const route = '/mapseekai/emap/examples/geotiff-viewer/?parameters=open';
 async function ready(page, renderer) {
-  await page.goto(route + (renderer ? "?renderer=" + renderer : ""));
+  await page.goto(route + (renderer ? "&renderer=" + renderer : ""));
   await expect(page.locator('#levels')).toHaveText('4');
   await expect.poll(() => page.evaluate(() => window.geotiffDemo.stats().cachedBytes)).toBeGreaterThan(0);
   await idleRaster(page);

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const route = '/mapseekai/emap/examples/geopackage-viewer/';
+const route = '/mapseekai/emap/examples/geopackage-viewer/?parameters=open';
 
 test('GeoPackage worker imports all vector tables into one rendered source without external assets', async ({ page }) => {
   const errors = [];

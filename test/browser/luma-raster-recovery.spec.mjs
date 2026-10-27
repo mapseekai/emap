@@ -8,7 +8,7 @@ for (const backend of ['webgl', 'webgpu']) test(`${backend}: numeric raster reco
   const before = await stat(file), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto('/mapseekai/emap/examples/luma-raster/?gpu=' + backend);
+  await page.goto('/mapseekai/emap/examples/luma-raster/?parameters=open&gpu=' + backend);
   await page.waitForFunction(() => window.lumaRaster?.state === 'idle');
   await page.locator('#file-input').setInputFiles(file);
   await page.locator('#load').click();

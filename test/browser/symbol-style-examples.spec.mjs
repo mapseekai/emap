@@ -32,7 +32,7 @@ for (const [route, title, prefix] of [
   test(`${renderer} ${route}: loads data and applies symbol settings`, async ({ page }, info) => {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto(`/mapseekai/emap/examples/${route}/?renderer=${renderer}`);
+    await page.goto(`/mapseekai/emap/examples/${route}/?parameters=open&renderer=${renderer}`);
     await expect(page).toHaveTitle(new RegExp(title));
     await expect(page.locator('#status')).toHaveAttribute('data-state', 'ready');
     await expect(page.locator('body')).toHaveClass(/emap-example-with-floating-header/);
@@ -81,7 +81,7 @@ for (const [route, title, prefix] of [
 
 for (const renderer of ['canvas2d', 'webgl2', 'webgpu'])
 test(`${renderer} labels: readable text above points and collision avoidance survive zooming`, async ({ page }, info) => {
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   await page.evaluate(async renderer => {
     window.lumaBenchmark.dispose();
@@ -157,7 +157,7 @@ test(`${renderer} labels: readable text above points and collision avoidance sur
 });
 
 test('benchmark links to standalone styling examples', async ({ page }) => {
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await expect(page.locator('a[href="../labels/"]')).toBeVisible();
   await expect(page.locator('a[href="../point-icons/"]')).toBeVisible();
   await expect(page.locator('#label-settings, #icon-settings')).toHaveCount(0);
@@ -165,7 +165,7 @@ test('benchmark links to standalone styling examples', async ({ page }) => {
 
 test('catalog exposes both examples in the styling category', async ({ page }) => {
   await page.goto('/mapseekai/emap/examples/');
-  await page.locator('button[data-category="style"]').click();
-  await expect(page.locator('a[href="/mapseekai/emap/examples/labels/"]')).toBeVisible();
-  await expect(page.locator('a[href="/mapseekai/emap/examples/point-icons/"]')).toBeVisible();
+  await page.locator('.catalog-category-button[data-category="style"]').click();
+  await expect(page.locator('a.example-card[href="/mapseekai/emap/examples/labels/"]')).toBeVisible();
+  await expect(page.locator('a.example-card[href="/mapseekai/emap/examples/point-icons/"]')).toBeVisible();
 });

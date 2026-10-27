@@ -7,6 +7,10 @@ import {
   getExampleRenderer,
   getExampleGpuBackend,
   syncExampleRendererToolbar,
+  exampleNavigationUrl,
+  getExamplePixelRatio,
+  getExamplePointLodEnabled,
+  getExampleFastNavigationEnabled,
 } from '../../packages/examples/src/renderer-choice';
 
 const base = 'http://localhost/mapseekai/emap/examples/';
@@ -140,6 +144,92 @@ describe('shared example renderer selection', () => {
     expect(
       document.querySelector('[data-example-renderer="webgpu"]')?.getAttribute('aria-pressed'),
     ).toBe('true');
+  });
+  it('keeps live backend changes in the URL without reloading or losing the comparison GPU', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/mapseekai/emap/examples/luma-benchmark/?gpu=webgpu&parameters=open#stats',
+    );
+    document.body.innerHTML = '<header id="header"></header>';
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<a id="example-link" href="../getting-started/lines/">Lines</a>',
+    );
+    syncExampleRendererToolbar('canvas2d');
+    let url = new URL(window.location.href);
+    expect(url.searchParams.get('renderer')).toBe('canvas2d');
+    expect(url.searchParams.get('gpu')).toBe('webgpu');
+    expect(url.searchParams.get('parameters')).toBe('open');
+    expect(url.hash).toBe('#stats');
+    expect(
+      new URL((document.getElementById('example-link') as HTMLAnchorElement).href).searchParams.get(
+        'renderer',
+      ),
+    ).toBe('canvas2d');
+    syncExampleRendererToolbar('webgl2');
+    url = new URL(window.location.href);
+    expect(url.searchParams.get('renderer')).toBe('webgl2');
+    expect(url.searchParams.get('gpu')).toBe('webgl');
+  });
+  it('keeps explicit renderer choices in local example navigation without copying page-specific settings', () => {
+    const from = new URL(
+      base + 'getting-started/lines/?renderer=webgpu&tab=source&parameters=open#code',
+    );
+    const next = new URL(exampleNavigationUrl('../point-style/', from), from);
+    expect(next.pathname).toBe('/mapseekai/emap/examples/getting-started/point-style/');
+    expect(next.searchParams.get('renderer')).toBe('webgpu');
+    expect(next.searchParams.has('tab')).toBe(false);
+    expect(next.searchParams.has('parameters')).toBe(false);
+    const gallery = new URL(exampleNavigationUrl(base, from), from);
+    expect(gallery.searchParams.get('renderer')).toBe('webgpu');
+  });
+  it('carries a legacy comparison choice and uses a supported backend for dedicated GPU pages', () => {
+    const from = new URL(base + 'luma-benchmark/?renderer=canvas&gpu=webgpu');
+    const ordinary = new URL(exampleNavigationUrl('../labels/', from), from);
+    expect(ordinary.searchParams.get('renderer')).toBe('canvas2d');
+    const gpu = new URL(exampleNavigationUrl('../luma-25d/', from), from);
+    expect(gpu.searchParams.get('renderer')).toBe('webgl2');
+    expect(gpu.searchParams.get('gpu')).toBe('webgl');
+    const comparison = new URL(exampleNavigationUrl('./', from), from);
+    expect(comparison.searchParams.get('renderer')).toBe('canvas2d');
+    expect(comparison.searchParams.get('gpu')).toBe('webgpu');
+  });
+  it('leaves ordinary default links, documentation, external links and data downloads intact', () => {
+    expect(exampleNavigationUrl('../labels/', new URL(base + 'point-icons/'))).toBe('../labels/');
+    const from = new URL(base + 'point-icons/?renderer=webgpu');
+    for (const href of [
+      '/mapseekai/emap/intro',
+      '../fixtures/example.geojson',
+      'https://example.com/mapseekai/emap/examples/labels/',
+    ])
+      expect(exampleNavigationUrl(href, from)).toBe(href);
+    expect(
+      exampleNavigationUrl('../labels/', new URL(base + 'point-icons/?renderer=invalid')),
+    ).toBe('../labels/');
+  });
+  it('uses the main map device ratio, including high density screens', () => {
+    for (const devicePixelRatio of [1, 1.25, 2, 3])
+      expect(getExamplePixelRatio({ devicePixelRatio })).toBe(devicePixelRatio);
+    expect(getExamplePixelRatio({ devicePixelRatio: 0 })).toBe(1);
+  });
+  it('uses the same point grid default and explicit opt-out across native vector examples', () => {
+    for (const id of ['luma-benchmark', 'luma-25d', 'luma-vertex-editing']) {
+      expect(getExamplePointLodEnabled(new URL(base + id + '/'))).toBe(true);
+      expect(getExamplePointLodEnabled(new URL(base + id + '/?pointLod=off'))).toBe(false);
+      expect(getExampleFastNavigationEnabled(new URL(base + id + '/'))).toBe(true);
+      expect(getExampleFastNavigationEnabled(new URL(base + id + '/?nav=off'))).toBe(false);
+    }
+  });
+  it.each([
+    '',
+    '/',
+    '/index.html',
+  ])('recognizes native experiment URLs ending with %s', (suffix) => {
+    const url = new URL(base + 'luma-25d' + suffix + '?gpu=webgpu');
+    expect(resolveExampleRenderer(url)).toBe('webgpu');
+    window.history.replaceState({}, '', url.pathname + '?renderer=canvas2d');
+    expect(() => getExampleRenderer()).toThrow('Canvas2D');
   });
   it('does not claim Canvas2D support for a GPU-only experiment', () => {
     document.body.innerHTML = '<header id="header"></header>';

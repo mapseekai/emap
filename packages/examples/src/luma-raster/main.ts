@@ -1,5 +1,6 @@
 import {
   getExampleRenderer,
+  getExamplePixelRatio,
   installExampleRendererToolbar,
   syncExampleRendererToolbar,
 } from '../renderer-choice';
@@ -79,7 +80,7 @@ function error(e: unknown) {
 }
 function dimensions() {
   const r = host.getBoundingClientRect();
-  return { width: r.width, height: r.height, dpr: Math.min(2, devicePixelRatio || 1) };
+  return { width: r.width, height: r.height, dpr: getExamplePixelRatio() };
 }
 function request() {
   if (disposed || scheduled) return;
@@ -490,4 +491,4 @@ Object.assign(window, {
     },
   },
 });
-setState('idle', '选择本地 TIFF；Canvas 使用正式栅格流程，GPU 使用动态 UInt16 数据纹理。');
+setState('idle', '请选择 GeoTIFF 文件。');

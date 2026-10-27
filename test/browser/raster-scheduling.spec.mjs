@@ -7,7 +7,7 @@ test('adaptive reader admission grows, reclaims optional replicas and reopens th
   await page.route(/\/(?:emap[^/]*|mapshaper-vendor)\.mjs$/, route => route.fulfill({
     path: resolve('dist', basename(new URL(route.request().url()).pathname)), contentType: 'text/javascript',
   }));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     const { openGeoTIFF } = await import('../emap-geotiff.mjs');
@@ -49,7 +49,7 @@ test('trimmed reader caches recover on demand within runtime targets across borr
   await page.route(/\/(?:emap[^/]*|mapshaper-vendor)\.mjs$/, route => route.fulfill({
     path: resolve('dist', basename(new URL(route.request().url()).pathname)), contentType: 'text/javascript',
   }));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const realFile = process.env.EMAP_SCHEDULING_FILE;
   if (realFile) await page.locator('#file-input').setInputFiles(realFile);
@@ -114,7 +114,7 @@ test('compare spatial and cache-aware scheduling on the same raster windows', as
   await page.route(/\/(?:emap[^/]*|mapshaper-vendor)\.mjs$/, route => route.fulfill({
     path: resolve('dist', basename(new URL(route.request().url()).pathname)), contentType: 'text/javascript',
   }));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const file = process.env.EMAP_SCHEDULING_FILE;
   if (file) await page.locator('#file-input').setInputFiles(file);
@@ -191,7 +191,7 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: cach
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
   await installCanvasReadback(page);
-  await page.goto(`/mapseekai/emap/examples/geotiff-viewer/?renderer=${renderer}`);
+  await page.goto(`/mapseekai/emap/examples/geotiff-viewer/?parameters=open&renderer=${renderer}`);
   await page.waitForFunction(() => window.geotiffDemo?.metadata && !window.geotiffDemo.loading);
   await page.evaluate(() => {
     const loader = geotiffDemo.map.ctx.geoTIFF, add = loader.addFile;

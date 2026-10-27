@@ -32,7 +32,7 @@ test('example catalog is generated from the shared manifest', async ({ page }) =
 
 test('vector file viewer paints a real Canvas and survives pointer navigation', async ({ page }) => {
   const errors = collectRuntimeErrors(page);
-  await page.goto('/mapseekai/emap/examples/getting-started/vector-file/');
+  await page.goto('/mapseekai/emap/examples/getting-started/vector-file/?parameters=open');
 
   const status = page.locator('#status');
   await expect(status).toContainText('当前:');
@@ -53,7 +53,7 @@ test('vector file viewer paints a real Canvas and survives pointer navigation', 
     .toBeGreaterThan(0);
 
   const map = page.locator('#map');
-  await page.locator('details.emap-example-workbench > summary').click();
+  await page.getByRole('button', { name: '关闭操作', exact: true }).click();
   await map.click({ position: { x: 320, y: 240 } });
   await page.mouse.wheel(0, -240);
   await page.waitForTimeout(150);

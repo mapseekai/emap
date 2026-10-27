@@ -5,7 +5,7 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: direct RGBA and 
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/geotiff-viewer/?renderer='+renderer);
+  await page.goto('/mapseekai/emap/examples/geotiff-viewer/?parameters=open&renderer='+renderer);
   await expect(page.locator('#levels')).toHaveText('4');
   await expect.poll(()=>page.evaluate(()=>{const s=geotiffDemo.stats();return s.activeReads+s.queuedReads+s.pendingFrames;})).toBe(0);
   await page.evaluate(()=>{
@@ -106,7 +106,7 @@ for(const renderer of ['webgl2','webgpu'])for(const name of ['GJ_COG_zip.tif','S
   test.skip(!realDirectory,'Requires authorized original TIFF files.');test.setTimeout(180000);
   const file=join(realDirectory,name),before=await stat(file),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/geotiff-viewer/?renderer='+renderer);await expect(page.locator('#levels')).toHaveText('4');
+  await page.goto('/mapseekai/emap/examples/geotiff-viewer/?parameters=open&renderer='+renderer);await expect(page.locator('#levels')).toHaveText('4');
   await page.locator('#file-input').setInputFiles(file);
   try{await stat(file+'.ovr');await page.locator('#overview-input').setInputFiles(file+'.ovr');}catch{}
   await page.locator('#load').click();

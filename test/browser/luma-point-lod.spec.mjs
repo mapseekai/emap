@@ -5,7 +5,7 @@ test.describe('existing PointLod in luma using complete authorized point files',
  test.skip(!directory,'Set EMAP_BENCHMARK_DATA_DIR; no generated throughput dataset.');test.setTimeout(180000);
  for(const gpu of ['webgl','webgpu'])for(const filename of ['points.geojson','pppp.geojson'])test(`${gpu} ${filename}: 3px default, warm reuse, off, cell change, near full, disposal`,async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+gpu);await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+gpu);await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await expect(page.locator('#point-lod-enabled')).toBeChecked();await expect(page.locator('#point-lod-cell')).toHaveValue('3');
   await page.locator('#file-input').setInputFiles(join(directory,filename));await page.locator('#load-file').click();
   await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state));

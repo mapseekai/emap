@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { makeRasterFixture } from '../utils/raster-fixture.ts';
 
-const url = '/mapseekai/emap/examples/geotiff-viewer/';
+const url = '/mapseekai/emap/examples/geotiff-viewer/?parameters=open';
 test.beforeEach(async ({ page }) => installCanvasReadback(page));
 async function idle(page) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

@@ -180,6 +180,7 @@ function openExampleSourceDialog(sourceText: string, root: Document): void {
   else dialog.setAttribute('open', '');
 }
 function installExampleIntro(root: Document): void {
+  if (root.body.classList.contains('example-detail')) return;
   const body = root.querySelector('.emap-example-workbench-body');
   if (!body || body.querySelector('.emap-example-lede')) return;
   const path = root.location?.pathname ?? '';

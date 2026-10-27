@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 async function openInspector(page) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/mapseekai/emap/examples/plugin-install/');
+  await page.goto('/mapseekai/emap/examples/plugin-install/?parameters=open');
   await expect(page.locator('#runtime-proof')).toContainText('Context.is(map.ctx) = true');
   await expect(page.locator('#runtime-proof')).toContainText('cordis@4.0.0-rc.10');
   await expect(page.locator('#selected-status')).toContainText('ACTIVE');
@@ -11,9 +11,12 @@ async function openInspector(page) {
 }
 
 async function pan(page) {
-  await page.mouse.move(1050, 540);
+  const box = await page.locator('#map').boundingBox();
+  const x = box.x + box.width * 0.55;
+  const y = box.y + box.height * 0.55;
+  await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(1140, 585, { steps: 8 });
+  await page.mouse.move(x + box.width * 0.15, y + box.height * 0.1, { steps: 8 });
   await page.mouse.up();
 }
 
@@ -74,7 +77,7 @@ test('dynamically registers formats and suspends DuckDB capabilities through nat
 test('invokes a capability from the dedicated capability example', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/mapseekai/emap/examples/plugin-capability/');
+  await page.goto('/mapseekai/emap/examples/plugin-capability/?parameters=open');
   await expect(page.locator('#runtime-proof')).toContainText('Context.is(map.ctx) = true');
   await expect.poll(() => page.evaluate(() => Boolean(window.emapHarness?.map))).toBe(true);
   const actualCrs = await page.evaluate(() => window.emapHarness.map.getCRS());

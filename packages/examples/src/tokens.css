@@ -1,0 +1,46 @@
+/* Hallmark · shared tokens · theme: brand · scope: app · v2.0.0 */
+:root {
+  --color-paper: oklch(100% 0 0);
+  --color-paper-2: oklch(98% 0.004 155);
+  --color-paper-3: oklch(95% 0.008 155);
+  --color-ink: oklch(26% 0.018 155);
+  --color-ink-2: oklch(43% 0.018 155);
+  --color-muted: oklch(51% 0.02 155);
+  --color-rule: oklch(89% 0.008 155);
+  --color-accent: #16715b;
+  --color-accent-ink: oklch(100% 0 0);
+  --color-focus: #16715b;
+  --color-selection: oklch(95% 0.02 155);
+  --color-error: oklch(46% 0.17 27);
+  --color-error-paper: oklch(97% 0.012 27);
+  --color-code-keyword: oklch(41% 0.065 170);
+  --color-code-string: oklch(43% 0.075 140);
+  --color-code-number: oklch(42% 0.065 50);
+  --color-transparent: transparent;
+  --font-body:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: var(--font-body);
+  --font-outlier: "Geist Mono Variable", ui-monospace, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --container: 1440px;
+  --gutter: var(--space-lg);
+  --radius-input: 4px;
+  --radius-card: 8px;
+  --duration-micro: 120ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --z-raised: 10;
+}

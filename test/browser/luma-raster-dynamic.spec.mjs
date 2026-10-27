@@ -12,7 +12,7 @@ for(const backend of ['webgl','webgpu'])for(const [key,name] of files)test(`${ba
  test.skip(!directory,'Requires the complete authorized real TIFFs.');test.setTimeout(180000);
  const path=join(directory,name),before=await stat(path),errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
- await page.goto('/mapseekai/emap/examples/luma-raster/?gpu='+backend);
+ await page.goto('/mapseekai/emap/examples/luma-raster/?parameters=open&gpu='+backend);
  await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
  await page.addScriptTag({content:helper,type:'module'});await page.waitForFunction(()=>Boolean(window.checkNumericPixels&&window.checkStripWindows));
  await page.locator('#file-input').setInputFiles(path);await page.locator('#load').click();

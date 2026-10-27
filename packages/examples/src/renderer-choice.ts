@@ -11,7 +11,7 @@ function currentUrl(): URL {
   return new URL(globalThis.location?.href ?? 'http://localhost/');
 }
 function experiment(url: URL): string | undefined {
-  return /\/examples\/(luma-benchmark|luma-raster|luma-25d|luma-vertex-editing)\/(?:index\.html)?$/.exec(
+  return /\/examples\/(luma-benchmark|luma-raster|luma-25d|luma-vertex-editing)(?:\/(?:index\.html)?)?$/.exec(
     url.pathname,
   )?.[1];
 }
@@ -42,6 +42,17 @@ export function getExampleRenderer(): RendererBackend {
     );
   return renderer;
 }
+/** Match the main Emap canvas: use the device ratio without a per-example cap. */
+export function getExamplePixelRatio(view: Pick<Window, 'devicePixelRatio'> = window): number {
+  return view.devicePixelRatio || 1;
+}
+/** Shared opt-out for the point-grid rendering used by the native vector examples. */
+export function getExamplePointLodEnabled(url: URL = currentUrl()): boolean {
+  return url.searchParams.get('pointLod') !== 'off';
+}
+export function getExampleFastNavigationEnabled(url: URL = currentUrl()): boolean {
+  return url.searchParams.get('nav') !== 'off';
+}
 /** The experimental adapters call WebGL2 "webgl" internally; no rendering change is made here. */
 export function getExampleGpuBackend(): 'webgl' | 'webgpu' {
   const renderer = getExampleRenderer();
@@ -63,6 +74,33 @@ export function exampleRendererUrl(renderer: RendererBackend, url: URL = current
 }
 export function navigateExampleRenderer(renderer: RendererBackend): void {
   globalThis.location.assign(exampleRendererUrl(renderer));
+}
+/** Carry an explicit renderer through example navigation, including the gallery. */
+export function exampleNavigationUrl(href: string, url: URL = currentUrl()): string {
+  let next: URL;
+  try {
+    next = new URL(href, url);
+  } catch {
+    return href;
+  }
+  if (
+    next.origin !== url.origin ||
+    !/^\/mapseekai\/emap\/examples\/(?:[\w-]+\/)*(?:[\w-]+|index\.html)?$/.test(next.pathname) ||
+    (!url.searchParams.has('renderer') && !(experiment(url) && url.searchParams.has('gpu')))
+  )
+    return href;
+  let renderer: RendererBackend;
+  try {
+    renderer = resolveExampleRenderer(url);
+  } catch {
+    return href;
+  }
+  // A Canvas2D example can link to the dedicated GPU camera/editor without an invalid URL.
+  if (renderer === 'canvas2d' && gpuOnly(next)) renderer = 'webgl2';
+  if (renderer === 'canvas2d' && experiment(next) === 'luma-benchmark')
+    next.searchParams.set('gpu', url.searchParams.get('gpu') === 'webgpu' ? 'webgpu' : 'webgl');
+  next = new URL(exampleRendererUrl(renderer, next));
+  return next.pathname + next.search + next.hash;
 }
 /** Shared header shell survives map re-creation, initialization failures and inspector-only pages. */
 export function installExampleRendererToolbar(root: Document = document): HTMLElement | null {
@@ -172,6 +210,19 @@ export function syncExampleRendererToolbar(
   root: Document = document,
 ): void {
   installExampleRendererToolbar(root);
+  const view = root.defaultView;
+  if (view) {
+    view.history.replaceState(
+      view.history.state,
+      '',
+      exampleRendererUrl(renderer, new URL(view.location.href)),
+    );
+    for (const anchor of root.querySelectorAll<HTMLAnchorElement>('a[href]'))
+      anchor.setAttribute(
+        'href',
+        exampleNavigationUrl(anchor.getAttribute('href')!, new URL(view.location.href)),
+      );
+  }
   for (const button of root.querySelectorAll<HTMLElement>('[data-example-renderer]'))
     button.setAttribute('aria-pressed', String(button.dataset.exampleRenderer === renderer));
 }

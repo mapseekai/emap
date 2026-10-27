@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
 
-const route='/mapseekai/emap/examples/geotiff-viewer/';
+const route='/mapseekai/emap/examples/geotiff-viewer/?parameters=open';
 async function ready(page){
   await page.goto(route);
   await expect(page.locator('#levels')).toHaveText('4');

@@ -1,6 +1,9 @@
 import {
   getExampleRenderer,
   getExampleGpuBackend,
+  getExamplePixelRatio,
+  getExamplePointLodEnabled,
+  getExampleFastNavigationEnabled,
   installExampleRendererToolbar,
   navigateExampleRenderer,
   syncExampleRendererToolbar,
@@ -106,7 +109,7 @@ invalidatePreviewOnError = () => {
 };
 const fastNavToggle = el<HTMLInputElement>('fast-nav'),
   pathCullingToggle = el<HTMLInputElement>('path-culling');
-renderers.navigation.setEnabled(new URLSearchParams(location.search).get('nav') !== 'off');
+renderers.navigation.setEnabled(getExampleFastNavigationEnabled());
 renderers.pathCullingEnabled = new URLSearchParams(location.search).get('cull') !== 'off';
 fastNavToggle.checked = renderers.navigation.enabled;
 pathCullingToggle.checked = renderers.pathCullingEnabled;
@@ -235,7 +238,7 @@ function requestDraw() {
 }
 function resize() {
   const rect = stage.getBoundingClientRect();
-  const nextDpr = window.devicePixelRatio || 1;
+  const nextDpr = getExamplePixelRatio();
   const nextWidth = Math.max(1, Math.floor(rect.width));
   const nextHeight = Math.max(1, Math.floor(rect.height));
   if (nextWidth === width && nextHeight === height && nextDpr === dpr) return;
@@ -388,7 +391,7 @@ for (const control of [pointLodToggle, pointLodCell])
   control.addEventListener('change', () => {
     void setPointLod(pointLodToggle.checked, Number(pointLodCell.value)).catch(fail);
   });
-if (new URLSearchParams(location.search).get('pointLod') === 'off') {
+if (!getExamplePointLodEnabled()) {
   renderers.setPointLod(false, 3);
   pointLodToggle.checked = false;
 }
@@ -995,7 +998,7 @@ async function start() {
   });
   refreshCounters();
   setStatus(
-    '请选择真实本地数据：big、building、lucc、points 或 pppp。不会自动生成测试数据。',
+    '请选择矢量或 GeoTIFF 文件。',
     'idle',
   );
   lock(false);

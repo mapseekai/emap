@@ -157,6 +157,9 @@ export class NumericRasterRenderer {
           useDevicePixels: false,
           alphaMode: 'premultiplied',
         },
+        // Match the main vector renderer when selecting the shared GPU adapter.
+        powerPreference: 'high-performance',
+        featureLevel: 'core',
         onError: report,
       });
     } else

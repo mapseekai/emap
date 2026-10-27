@@ -19,7 +19,7 @@
 <label>GeoTIFF / OVR<input id="raster-file" type="file" accept=".tif,.tiff,.ovr" multiple></label>
 <label>或选择数据文件夹<input id="raster-folder" type="file" webkitdirectory multiple></label>
 <label>影像<select id="raster-select"></select></label><button id="load-raster">加载所选影像</button>
-<label class="check"><input id="bilinear" type="checkbox" checked>双线性采样</label>
+<label class="check"><input id="bilinear" type="checkbox">双线性采样（关闭时为最近邻）</label>
 <div class="row"><button id="demo">演示数据</button><button id="clear">清空</button><button id="cancel">取消加载</button></div>
 <p class="hint">支持 UInt8/UInt16、1–4 波段 TIFF 及外部 OVR。文件只在本机读取，不上传、不改写。没有 DEM 起伏、建筑拉伸或自动重投影。</p></section>
 

@@ -45,7 +45,7 @@ for(const backend of ['webgl','webgpu']){
     test.setTimeout(150000);
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-    await page.goto('/mapseekai/emap/examples/luma-25d/?gpu='+backend);
+    await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open&gpu='+backend);
     await ready(page);
     const initial=await page.evaluate(()=>window.luma25d.snapshot);
     expect(initial.rasterGpu.liveTextures).toBeGreaterThan(0);
@@ -108,7 +108,7 @@ for(const backend of ['webgl','webgpu']){
   test(`${backend}: tilted real GeoTIFF keeps the bounded native reader`,async({page},info)=>{
     test.skip(!process.env.EMAP_BENCHMARK_DATA_DIR,'Requires an authorized real TIFF; calibration does not replace this test.');
     test.setTimeout(180000);
-    await page.goto('/mapseekai/emap/examples/luma-25d/?gpu='+backend);await ready(page);
+    await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open&gpu='+backend);await ready(page);
     await page.locator('#raster-file').setInputFiles(join(process.env.EMAP_BENCHMARK_DATA_DIR,'GJ_COG_zip.tif'));
     await page.locator('#load-raster').click();await ready(page);
     await page.evaluate(()=>{window.luma25d.setPose({pitch:60,bearing:65});window.luma25d.zoom(3);});
@@ -137,7 +137,7 @@ for (const gpu of ['webgl', 'webgpu']) for (const file of ['points.geojson', 'lu
     test.setTimeout(240000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto('/mapseekai/emap/examples/luma-25d/?gpu=' + gpu);
+    await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open&gpu=' + gpu);
     await optimizedFrameReady(page);
     await page.locator('#file-input').setInputFiles(join(directory, file));
     await optimizedFrameReady(page);

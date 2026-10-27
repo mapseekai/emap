@@ -12,7 +12,7 @@ test.beforeAll(async()=>{
 for(const backend of ['webgl','webgpu'])test(`${backend}: full real paths preserve multisample coverage and compositing order`,async({page},info)=>{
  test.skip(!directory,'Provide the authorized real data folder.');test.setTimeout(180000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend);
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+backend);
  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
  await page.locator('#file-input').setInputFiles(join(directory,'lucc.geojson'));await page.locator('#load-file').click();
  await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state),null,{timeout:120000});

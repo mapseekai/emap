@@ -4,7 +4,7 @@ import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 for (const alphaMode of ['premultiplied', 'opaque']) {
   test(`webgpu: raw snapshots retain ${alphaMode} submitted pixels without replaying draws`, async ({page}, info) => {
     await installCanvasReadback(page);
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     const result = await page.evaluate(async alphaMode => {
       lumaBenchmark.dispose(); document.body.replaceChildren();
@@ -67,7 +67,7 @@ for (const alphaMode of ['premultiplied', 'opaque']) {
 
 test('webgpu: raw snapshots follow canvas command buffers across unrelated submissions', async ({page}, info) => {
   await installCanvasReadback(page);
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     lumaBenchmark.dispose(); document.body.replaceChildren();
