@@ -14,6 +14,43 @@ function dependency(...chain: string[]) {
   return entry;
 }
 
+it('removes namespace and control-character executable links in the docs SVG optimizer', () => {
+  const require = createRequire(import.meta.url);
+  const { optimize } = require(
+    dependency(
+      '@docusaurus/bundler/package.json',
+      'cssnano/package.json',
+      'cssnano-preset-default/package.json',
+      'postcss-svgo/package.json',
+      'svgo',
+    ),
+  );
+  const optimizeLinks = (content: string) =>
+    optimize(
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${content}</svg>`,
+      { plugins: ['removeScriptElement'] },
+    ).data;
+  for (const tag of ['a', 'svg:a']) {
+    for (const attribute of ['href', 'xlink:href']) {
+      for (const scheme of [
+        'javascript:',
+        'java&#9;script:',
+        'java&#10;script:',
+        'java&#13;script:',
+      ]) {
+        const output = optimizeLinks(
+          `<${tag} ${attribute}="${scheme}alert(1)"><text>label</text></${tag}>`,
+        );
+        expect(output).not.toContain('href=');
+        expect(output).toContain('<text>label</text>');
+      }
+    }
+  }
+  const ordinary = optimizeLinks('<a href="https://example.com/guide"><text>guide</text></a>');
+  expect(ordinary).toContain('href="https://example.com/guide"');
+  expect(ordinary).toContain('<text>guide</text>');
+});
+
 it('bounds brace and parenthesis nesting, including direct AST callers, while preserving ordinary globs', () => {
   const entry = dependency('chokidar', 'braces');
   // Fresh processes prevent JIT-dependent stack sizes from hiding the old overflow.
