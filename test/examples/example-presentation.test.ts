@@ -1,10 +1,42 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installExamplePresentation } from '../../packages/examples/src/example-presentation';
 
 let dispose: (() => void) | undefined;
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const text = '<html><body>Example source</body></html>\n';
+      const value = url.endsWith('/manifest.json')
+        ? {
+            files: [
+              {
+                id: 'index.html',
+                name: '完整 HTML',
+                path: 'examples/getting-started/lines/index.html',
+                origin: 'packages/examples/examples/getting-started/lines/index.html',
+                language: 'html',
+                lineCount: 1,
+                url: '/source.json',
+              },
+            ],
+            defaultFile: 'index.html',
+          }
+        : {
+            text,
+            html: `<pre><code>${text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>`,
+            language: 'html',
+            lineCount: 1,
+          };
+      return { ok: true, json: async () => value };
+    }),
+  );
+});
 afterEach(() => {
   dispose?.();
+  dispose = undefined;
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.body.className = '';
   window.history.replaceState(null, '', '/');
@@ -18,7 +50,69 @@ function mount() {
     <script id="emap-example-source" type="application/json">${JSON.stringify('<html><body>Example source</body></html>')}</script>`;
 }
 describe('example presentation', () => {
-  it('keeps source in its own view and retains the running map across switches', () => {
+  it('opens operations on the map and preserves controls through collapse and keyboard recovery', () => {
+    mount();
+    dispose = installExamplePresentation();
+    const dialog = document.querySelector<HTMLDialogElement>('.example-parameters')!;
+    const control = document.querySelector<HTMLInputElement>('#line-width')!;
+    const toggle = document.querySelector<HTMLButtonElement>('.example-parameters-toggle')!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.closest('.example-application')).toBeTruthy();
+    expect(document.querySelector('.example-detail-heading .example-parameters-toggle')).toBeNull();
+    control.value = '7';
+    document.querySelector<HTMLButtonElement>('.example-parameters-close')!.click();
+    expect(dialog.open).toBe(false);
+    expect(toggle.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle);
+    expect(new URL(window.location.href).searchParams.get('parameters')).toBe('closed');
+    toggle.click();
+    expect(dialog.open).toBe(true);
+    expect(document.querySelector('#line-width')).toBe(control);
+    expect(control.value).toBe('7');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(dialog.open).toBe(false);
+    expect(document.activeElement).toBe(toggle);
+  });
+  it('restores collapsed operations from a shared URL', () => {
+    mount();
+    window.history.replaceState(null, '', `${window.location.pathname}?parameters=closed`);
+    dispose = installExamplePresentation();
+    expect(document.querySelector<HTMLDialogElement>('.example-parameters')!.open).toBe(false);
+    expect(document.querySelector<HTMLButtonElement>('.example-parameters-toggle')!.hidden).toBe(
+      false,
+    );
+  });
+  it('keeps success text out of the map and exposes loading and errors from the original status node', async () => {
+    mount();
+    const status = document.createElement('p');
+    status.id = 'status';
+    status.textContent = '正在显示线图层';
+    document.body.append(status);
+    dispose = installExamplePresentation();
+    expect(document.querySelector('.example-application > #status')).toBe(status);
+    expect(status.dataset.exampleFeedback).toBe('');
+    status.textContent = '正在加载 test.geojson...';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('loading');
+    status.textContent = '错误: 无法读取文件';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('error');
+    status.textContent = '已加载 test.geojson';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('');
+    status.dataset.state = 'error';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('error');
+    status.dataset.state = 'ready';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('');
+    // Legacy examples can retain "ready" when reporting a later file error.
+    status.textContent = 'Error: invalid GeoJSON';
+    await Promise.resolve();
+    expect(status.dataset.exampleFeedback).toBe('error');
+  });
+  it('keeps source in its own view and retains the running map across switches', async () => {
     mount();
     const map = document.querySelector('#map');
     dispose = installExamplePresentation();
@@ -27,7 +121,9 @@ describe('example presentation', () => {
     expect(document.querySelector('#example-live #example-source')).toBeNull();
     document.querySelector<HTMLButtonElement>('[data-example-tab="source"]')!.click();
     expect(source.hidden).toBe(false);
-    expect(source.querySelector('code')?.textContent).toContain('Example source');
+    await vi.waitFor(() =>
+      expect(source.querySelector('code')?.textContent).toContain('Example source'),
+    );
     expect(source.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
       '完整 HTML',
     );
@@ -71,7 +167,7 @@ describe('example presentation', () => {
     expect(document.querySelector<HTMLElement>('#example-live')!.hidden).toBe(false);
     expect(new URL(window.location.href).searchParams.has('tab')).toBe(false);
   });
-  it('supports keyboard view changes and only installs once', () => {
+  it('supports keyboard view changes and only installs once', async () => {
     mount();
     dispose = installExamplePresentation();
     installExamplePresentation();
@@ -81,7 +177,11 @@ describe('example presentation', () => {
     expect(
       document.querySelector('[data-example-tab="source"]')?.getAttribute('aria-selected'),
     ).toBe('true');
-    expect(document.querySelector('#example-source code')?.textContent).toContain('Example source');
+    await vi.waitFor(() =>
+      expect(document.querySelector('#example-source code')?.textContent).toContain(
+        'Example source',
+      ),
+    );
   });
   it('preserves the luma host used by dynamically installed symbol controls', () => {
     window.history.replaceState(null, '', '/mapseekai/emap/examples/luma-25d/');

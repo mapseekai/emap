@@ -151,6 +151,7 @@
     "api:build": "typedoc --options typedoc.json",
     "examples:dev": "pnpm --filter @mapseekai/emap-examples dev",
     "examples:build": "pnpm --filter @mapseekai/emap-examples build",
+    "examples:previews": "node scripts/capture-example-previews.mjs",
     "examples:build:cdn": "node scripts/build-examples-cdn.mjs",
     "docs:compose-examples": "node scripts/compose-docs-release.mjs",
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",

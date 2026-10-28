@@ -11,11 +11,12 @@
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",
-    "@mapseekai/emap": "workspace:*",
-    "prismjs": "^1.30.0"
+    "@mapseekai/emap": "workspace:*"
   },
   "devDependencies": {
-    "@types/prismjs": "^1.26.6",
-    "flatgeobuf": "^4.4.0"
+    "flatgeobuf": "^4.4.0",
+    "parse5": "^8.0.1",
+    "prettier": "^3.9.10",
+    "shiki": "^4.5.0"
   }
 }

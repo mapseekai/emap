@@ -997,10 +997,7 @@ async function start() {
     },
   });
   refreshCounters();
-  setStatus(
-    '请选择矢量或 GeoTIFF 文件。',
-    'idle',
-  );
+  setStatus('请选择矢量或 GeoTIFF 文件。', 'idle');
   lock(false);
 }
 void start().catch(fail);

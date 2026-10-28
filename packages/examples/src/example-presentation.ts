@@ -1,15 +1,11 @@
-import * as Prism from 'prismjs';
 import { examples, type ExampleDefinition } from '../../../docs-meta/examples';
 import { categoryLabel, exampleCategories } from './example-content';
 import './example-presentation.css';
+import { renderExampleSource } from './example-source-viewer';
 import { exampleNavigationUrl, installExampleRendererToolbar } from './renderer-choice';
 
 const base = '/mapseekai/emap/examples/';
 const installations = new WeakMap<Document, () => void>();
-const sourceModules = import.meta.glob<string>(
-  ['./luma-*/main.ts', './duckdb-spatial-example.ts', './cordis-runtime-demo.ts'],
-  { query: '?raw', import: 'default' },
-);
 type Tab = 'live' | 'source';
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -39,139 +35,6 @@ function currentExample(root: Document): ExampleDefinition | undefined {
   } catch {
     return;
   }
-}
-
-function renderSource(root: Document, pane: HTMLElement, example: ExampleDefinition): void {
-  if (pane.childElementCount) return;
-  const embedded = root.getElementById('emap-example-source')?.textContent;
-  let source = '';
-  try {
-    const value: unknown = JSON.parse(embedded ?? 'null');
-    if (typeof value === 'string') source = value;
-  } catch {
-    /* Keep a source link when embedded code is unavailable. */
-  }
-  const toolbar = element(root, 'div', 'example-code-toolbar');
-  const name = element(root, 'select', 'example-source-file');
-  name.setAttribute('aria-label', '源码文件');
-  const files = new Map<
-    string,
-    { text?: string; load?: () => Promise<string>; language: string }
-  >();
-  const parsed = new DOMParser().parseFromString(source, 'text/html');
-  const inline = Array.from(parsed.querySelectorAll<HTMLScriptElement>('script[type="module"]'))
-    .map((script) => script.textContent?.trim())
-    .filter(Boolean)
-    .join('\n\n');
-  if (inline) files.set('JavaScript', { text: inline, language: 'javascript' });
-  for (const script of parsed.querySelectorAll<HTMLScriptElement>('script[src]')) {
-    const path = script.getAttribute('src')?.replace(/^\/src\//, './');
-    if (path && sourceModules[path])
-      files.set(path.slice(2), { load: sourceModules[path], language: 'javascript' });
-  }
-  files.set('index.html', { text: source, language: 'html' });
-  for (const filename of files.keys()) name.append(new Option(filename, filename));
-  const fileTabs = element(root, 'div', 'example-source-tabs');
-  fileTabs.setAttribute('role', 'tablist');
-  fileTabs.setAttribute('aria-label', '源码类型');
-  for (const filename of files.keys()) {
-    const label =
-      filename === 'index.html' ? '完整 HTML' : filename.endsWith('.ts') ? 'TypeScript' : filename;
-    const button = element(root, 'button', 'example-source-tab', label);
-    button.type = 'button';
-    button.id = `source-file-${fileTabs.children.length}`;
-    button.dataset.filename = filename;
-    button.setAttribute('role', 'tab');
-    button.setAttribute('aria-controls', 'example-source-code');
-    button.addEventListener('click', () => {
-      name.value = filename;
-      name.dispatchEvent(new Event('change'));
-    });
-    button.addEventListener('keydown', (event) => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const tabs = Array.from(fileTabs.querySelectorAll<HTMLButtonElement>('button'));
-      const index =
-        event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? tabs.length - 1
-            : (tabs.indexOf(button) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) %
-              tabs.length;
-      tabs[index].click();
-      tabs[index].focus();
-    });
-    fileTabs.append(button);
-  }
-  name.hidden = true;
-  const copy = element(root, 'button', '', '复制代码');
-  copy.type = 'button';
-  const copyStatus = element(root, 'span', 'example-copy-status');
-  copyStatus.setAttribute('role', 'status');
-  copy.disabled = !source;
-  copy.addEventListener('click', () => {
-    void (async () => {
-      try {
-        if (!root.defaultView?.navigator.clipboard) throw new Error('Clipboard unavailable');
-        await root.defaultView.navigator.clipboard.writeText(source);
-        copyStatus.textContent = '已复制';
-      } catch {
-        copyStatus.textContent = '请选中代码手动复制';
-      }
-    })();
-  });
-  toolbar.append(
-    fileTabs,
-    name,
-    copyStatus,
-    copy,
-    link(
-      root,
-      '在 GitHub 查看',
-      `https://github.com/mapseekai/emap/blob/master/${example.source.html}`,
-    ),
-  );
-  const pre = element(root, 'pre', 'example-source-code');
-  pre.id = 'example-source-code';
-  pre.tabIndex = 0;
-  pre.setAttribute('role', 'tabpanel');
-  const code = element(root, 'code', 'language-html');
-  const showFile = async () => {
-    const filename = name.value;
-    for (const button of fileTabs.querySelectorAll<HTMLButtonElement>('button')) {
-      const selected = button.dataset.filename === filename;
-      button.setAttribute('aria-selected', String(selected));
-      button.tabIndex = selected ? 0 : -1;
-      if (selected) pre.setAttribute('aria-labelledby', button.id);
-    }
-    const file = files.get(filename)!;
-    if (file.load && file.text === undefined) {
-      code.textContent = '正在读取源码…';
-      copy.disabled = true;
-      try {
-        file.text = await file.load();
-      } catch {
-        if (name.value !== filename) return;
-        code.textContent = '无法读取源码，请使用 GitHub 链接。';
-        return;
-      }
-    }
-    if (name.value !== filename) return;
-    source = file.text ?? '';
-    copy.disabled = !source;
-    copyStatus.textContent = '';
-    code.innerHTML = Prism.highlight(
-      source || '<!-- 请通过 GitHub 链接查看本示例源码。 -->',
-      Prism.languages[file.language],
-      file.language,
-    );
-  };
-  name.addEventListener('change', () => {
-    void showFile();
-  });
-  void showFile();
-  pre.append(code);
-  pane.append(toolbar, pre);
 }
 
 /** Keeps the running map in one viewport while preserving its controls and listeners. */
@@ -258,6 +121,7 @@ export function installExamplePresentation(root: Document = document): (() => vo
     source: element(root, 'section', 'example-source'),
   };
   const buttons = new Map<Tab, HTMLButtonElement>();
+  let disposeSource: (() => void) | undefined;
   const activate = (tab: Tab, focus = false) => {
     for (const [key, panel] of Object.entries(panels)) {
       panel.hidden = key !== tab;
@@ -266,8 +130,8 @@ export function installExamplePresentation(root: Document = document): (() => vo
       button.setAttribute('aria-selected', String(key === tab));
       button.tabIndex = key === tab ? 0 : -1;
     }
-    if (tab === 'source') renderSource(root, panels.source, example);
-    parameterToggle.hidden = !parameterDialog || tab !== 'live';
+    if (tab === 'source' && !disposeSource)
+      disposeSource = renderExampleSource(root, panels.source, example);
     if (focus) buttons.get(tab)!.focus();
     if (tab === 'live') view.requestAnimationFrame(() => view.dispatchEvent(new Event('resize')));
     const url = new URL(view.location.href);
@@ -306,26 +170,30 @@ export function installExamplePresentation(root: Document = document): (() => vo
     buttons.set(tab, button);
     tabs.append(button);
   }
-  const actions = element(root, 'div', 'example-detail-actions');
   let parameterDialog: HTMLDialogElement | undefined;
-  const parameterToggle = element(root, 'button', 'example-parameters-toggle', '操作');
+  const parameterToggle = element(root, 'button', 'example-parameters-toggle', '展开操作');
   parameterToggle.type = 'button';
+  parameterToggle.setAttribute('aria-label', '展开操作');
   parameterToggle.setAttribute('aria-controls', 'example-parameters-dialog');
   parameterToggle.setAttribute('aria-expanded', 'false');
-  const setParametersOpen = (open: boolean) => {
+  const setParametersOpen = (open: boolean, focus = false) => {
     if (!parameterDialog) return;
-    if (open && !parameterDialog.open) parameterDialog.show();
-    else if (!open && parameterDialog.open) parameterDialog.close();
+    parameterDialog.open = open;
+    parameterToggle.hidden = open;
     parameterToggle.setAttribute('aria-expanded', String(open));
-    if (!open) parameterToggle.focus();
+    if (focus) {
+      const target = open
+        ? parameterDialog.querySelector<HTMLButtonElement>('.example-parameters-close')
+        : parameterToggle;
+      target?.focus({ preventScroll: true });
+    }
     const url = new URL(view.location.href);
-    if (open) url.searchParams.set('parameters', 'open');
-    else url.searchParams.delete('parameters');
+    if (open) url.searchParams.delete('parameters');
+    else url.searchParams.set('parameters', 'closed');
     view.history.replaceState(view.history.state, '', url);
   };
-  parameterToggle.addEventListener('click', () => setParametersOpen(!parameterDialog?.open));
-  actions.append(parameterToggle);
-  toolbar.append(tabs, actions);
+  parameterToggle.addEventListener('click', () => setParametersOpen(true, true));
+  toolbar.append(tabs);
   heading.append(toolbar);
   const previewTools = element(root, 'div', 'example-demo-toolbar');
   previewTools.append(header);
@@ -336,10 +204,33 @@ export function installExamplePresentation(root: Document = document): (() => vo
     (example.id === 'luma-25d' ? root.querySelector<HTMLElement>('.layout > aside') : null);
   const map = root.getElementById('map') ?? root.getElementById('stage');
   const runtimeStatus = root.getElementById('status');
+  let statusObserver: MutationObserver | undefined;
   if (runtimeStatus) {
     runtimeStatus.classList.add('example-runtime-status');
     runtimeStatus.setAttribute('role', 'status');
     runtimeStatus.remove();
+    const syncStatus = () => {
+      const message = runtimeStatus.textContent?.trim() ?? '';
+      const state = runtimeStatus.dataset.state;
+      // Older examples report plain text; native examples already expose a state.
+      runtimeStatus.dataset.exampleFeedback =
+        state === 'error' || state === 'loading' || state === 'rendering'
+          ? state
+          : /错误|失败|出错|(?:^|\s)(?:\w*Error|Failed|Unable)(?::|\s)/i.test(message)
+            ? 'error'
+            : /^正在(?:加载|执行|生成|导入|处理)|^(?:Loading|Rendering|Importing)\b/i.test(message)
+              ? 'loading'
+              : '';
+    };
+    syncStatus();
+    statusObserver = new MutationObserver(syncStatus);
+    statusObserver.observe(runtimeStatus, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-state'],
+    });
   }
   if (map) {
     const parameters = element(root, 'dialog', 'example-parameters');
@@ -347,10 +238,12 @@ export function installExamplePresentation(root: Document = document): (() => vo
     parameters.id = 'example-parameters-dialog';
     parameters.setAttribute('aria-label', '示例操作');
     const parameterHeader = element(root, 'div', 'example-parameter-heading');
-    const closeParameters = element(root, 'button', 'example-parameters-close', '关闭');
+    const closeParameters = element(root, 'button', 'example-parameters-close', '收起');
     closeParameters.type = 'button';
-    closeParameters.setAttribute('aria-label', '关闭操作');
-    closeParameters.addEventListener('click', () => setParametersOpen(false));
+    closeParameters.setAttribute('aria-label', '收起操作');
+    closeParameters.setAttribute('aria-controls', parameters.id);
+    closeParameters.setAttribute('aria-expanded', 'true');
+    closeParameters.addEventListener('click', () => setParametersOpen(false, true));
     parameterHeader.append(element(root, 'h2', '', '操作'), closeParameters);
     parameters.append(parameterHeader);
     const panelHost = panel
@@ -359,7 +252,7 @@ export function installExamplePresentation(root: Document = document): (() => vo
         : panel
       : (root.getElementById('benchmark') ?? root.getElementById('editor'));
     demoArea.append(map);
-    application.append(demoArea, parameters);
+    application.append(demoArea, parameters, parameterToggle);
     application.classList.add('example-with-parameters');
     if (panelHost) {
       if (panel instanceof HTMLDetailsElement) panel.open = true;
@@ -378,7 +271,7 @@ export function installExamplePresentation(root: Document = document): (() => vo
     application.append(demoArea);
   }
   panels.live.append(previewTools, application);
-  if (runtimeStatus) panels.live.append(runtimeStatus);
+  if (runtimeStatus) application.append(runtimeStatus);
   const panes = element(root, 'div', 'example-panels');
   panes.append(panels.live, panels.source);
   main.append(heading, panes);
@@ -395,13 +288,22 @@ export function installExamplePresentation(root: Document = document): (() => vo
     (parameterDialog ?? demoArea).append(performance);
   }
   activate(new URL(view.location.href).searchParams.get('tab') === 'source' ? 'source' : 'live');
-  if (new URL(view.location.href).searchParams.get('parameters') === 'open')
-    setParametersOpen(true);
+  setParametersOpen(new URL(view.location.href).searchParams.get('parameters') !== 'closed');
   const escape = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && parameterDialog?.open) setParametersOpen(false);
+    if (
+      event.key === 'Escape' &&
+      !event.defaultPrevented &&
+      !panels.live.hidden &&
+      parameterDialog?.open
+    ) {
+      event.preventDefault();
+      setParametersOpen(false, true);
+    }
   };
   root.addEventListener('keydown', escape);
   const dispose = () => {
+    disposeSource?.();
+    statusObserver?.disconnect();
     root.removeEventListener('keydown', escape);
     installations.delete(root);
   };

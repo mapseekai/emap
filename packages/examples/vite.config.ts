@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import { exampleIds } from '../../docs-meta/examples';
+import { exampleIds, examples } from '../../docs-meta/examples';
+import { exampleSourcePlugin } from './build/example-source-plugin';
 import { runtimeAssetsPlugin } from './build/runtime-assets-plugin';
 import { upstreamBrowserBuiltinsPlugin } from './build/upstream-browser-builtins-plugin';
 
@@ -770,6 +771,7 @@ export default defineConfig({
     __EMAP_VERSION__: JSON.stringify(version),
   },
   plugins: [
+    exampleSourcePlugin(fileURLToPath(new URL('.', import.meta.url)), examples),
     upstreamBrowserBuiltinsPlugin(),
     examplesBrandPlugin(),
     examplesRouteRewritePlugin(),

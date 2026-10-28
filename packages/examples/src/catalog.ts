@@ -373,20 +373,15 @@ function renderCatalogLocale(
     link.className = 'catalog-starter';
     link.href = exampleNavigationUrl(examplePublicHref(id));
     const preview = createExamplePreview(example);
-    if (preview) {
-      const image = preview.querySelector('img');
-      if (image) image.loading = 'eager';
-      link.append(preview);
-    } else link.classList.add('catalog-starter-text');
+    preview.querySelector('img')!.loading = 'eager';
+    link.append(preview);
     const text = document.createElement('span');
     const strong = document.createElement('strong');
     strong.textContent = example.title[locale];
     text.append(strong);
-    if (preview) {
-      const description = document.createElement('p');
-      description.textContent = example.description[locale];
-      text.append(description);
-    }
+    const description = document.createElement('p');
+    description.textContent = example.description[locale];
+    text.append(description);
     link.append(text);
     starterList.append(link);
   }
@@ -665,10 +660,8 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
   body.className = 'example-card-body';
   body.append(heading, description, apiList);
   const preview = createExamplePreview(example);
-  if (preview) {
-    card.dataset.preview = 'true';
-    card.append(preview);
-  }
+  card.dataset.preview = 'true';
+  card.append(preview);
   card.append(body);
   return card;
 }

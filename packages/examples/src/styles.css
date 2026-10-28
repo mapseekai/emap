@@ -277,20 +277,6 @@
 .catalog-starter:hover {
   border-color: var(--color-accent);
 }
-.catalog-starter-text {
-  grid-column: 1 / -1;
-  border: 0;
-  overflow: visible;
-  align-items: start;
-}
-.catalog-starter-text > span {
-  padding: 0;
-}
-.catalog-starter-text strong {
-  font-size: var(--text-sm);
-  font-weight: 400;
-  text-decoration: underline;
-}
 .catalog-starter .example-preview {
   display: block;
 }

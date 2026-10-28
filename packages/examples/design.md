@@ -14,7 +14,7 @@ and page contents. A detail page dedicates one viewport to the running map.
 - Genre: modern minimal, application screens.
 - Theme: existing emap brand, restrained green accent and neutral surfaces.
 - Fonts: system sans for the interface, Geist Mono for code and API identifiers.
-- Hierarchy: a compact title, the running map, and essential operations on demand.
+- Hierarchy: a compact title, the running map, and immediately available operations.
 - Navigation: example links on the left, category filters above the gallery, page
   contents on the right; a category selector on smaller screens.
 - Layout: centered at 1440px; the map keeps its size when switching detail tabs.
@@ -24,11 +24,20 @@ and page contents. A detail page dedicates one viewport to the running map.
 - Use the roles in [tokens.css](src/tokens.css) for colors, fonts and spacing.
 - Default to two columns of example cards; retain a compact list as an alternative.
 - Show source code in its own view, with keyboard-accessible file tabs.
+- Format source with Prettier and highlight it with Shiki at build time. Keep
+  these tools out of the browser bundle; load source files when requested.
+- Separate inline JavaScript, CSS and complete HTML. Include the example's
+  imported TypeScript modules and local dependencies, with paths and line numbers.
+  Copy the formatted current file and link to its original file on GitHub.
 - Remove the guide tab, parameter tables and repeated explanatory text.
-- Keep the native map and essential controls; collect controls under “操作”.
-- Open operations beside the map, or in a modeless dialog on phones.
-  The `parameters=open` URL state preserves an open panel when sharing an example.
-- Keep operation status visible beneath the map while the parameter dialog is closed.
+- Keep native controls in a modeless panel on the map, expanded by default.
+  Offer “收起” in its header and “展开操作” on the map; never resize the map when toggling.
+  Preserve a collapsed panel with `parameters=closed`; accept existing `parameters=open` links.
+- Place operations at the top right on desktop. On phones use the bottom right and
+  at most half of the map height, leaving navigation controls available above.
+- Align the renderer toolbar with the map frame and keep its controls inside it.
+- Remove the persistent status footer. Show loading and errors on the map only
+  while relevant, preserving the native status node and announcements.
 - Favor native controls. Use a surface only to separate distinct work.
 - Show actual map captures in the catalog's card view. Do not draw placeholder maps.
 - Keep all example routes, controls, data loading, rendering choices and event handlers.
@@ -60,3 +69,25 @@ and page contents. A detail page dedicates one viewport to the running map.
 - [base.css](src/base.css): shared browser and accessibility behavior.
 - [styles.css](src/styles.css): the catalog.
 - [example-presentation.css](src/example-presentation.css): live example pages.
+
+## Preview captures
+
+Every catalog entry has a real map capture at `public/previews/<example-id>.jpg`.
+Nested ids retain their directory structure. Captures use WebGL2, DPR 1, the same
+viewport, and the example's public starter data. Operations are prepared where
+applicable and closed before capturing; the script rejects empty maps and failed
+operations. The plugin installation example captures its active runtime inspector.
+`captures.json` records the source route, dimensions, pixel checks and image hash.
+
+Build the examples, serve that build, then refresh the captures in another terminal:
+
+```bash
+pnpm run examples:build
+pnpm --filter @mapseekai/emap-examples exec vite preview --host 127.0.0.1 --port 4187 --strictPort
+pnpm run examples:previews
+```
+
+Use `--only <example-id>` to refresh one example or `--missing` to resume an
+interrupted capture. `--base-url`, `--executable-path` and `--software` support
+other local preview servers and headless environments. `examples:check` verifies
+that every catalog entry ships its image.

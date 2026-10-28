@@ -246,7 +246,7 @@ describe('shared example map UI', () => {
     expect(map.controls).toHaveLength(2);
     expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
   });
-  it('opens an embedded example source in an in-page dialog', async () => {
+  it('opens embedded HTML safely when the full source presentation is unavailable', async () => {
     window.history.replaceState({}, '', '/mapseekai/emap/examples/getting-started/points/');
     const source = '<!doctype html>\n<title>Points example</title>';
     const encodedSource = JSON.stringify(source).replace(/</g, '\\u003c');
@@ -267,8 +267,7 @@ describe('shared example map UI', () => {
     expect(dialog?.hasAttribute('open')).toBe(true);
     expect(dialog?.querySelector('code')?.textContent).toBe(source);
     expect(dialog?.querySelector('code')?.classList).toContain('language-html');
-    expect(dialog?.querySelector('.token.doctype')).not.toBeNull();
-    expect(dialog?.querySelector('.token.tag')).not.toBeNull();
+    expect(dialog?.querySelector('code title')).toBeNull();
     dialog?.querySelector<HTMLButtonElement>('.emap-example-source-close')?.click();
     expect(dialog?.isConnected).toBe(false);
   });

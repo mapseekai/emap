@@ -10,7 +10,7 @@ async function actual(page, renderer) {
 async function loadNativeVectorFixture(page, id) {
   if (['luma-raster', 'luma-benchmark', 'luma-vertex-editing'].includes(id) &&
       !(await page.locator('.example-parameters').isVisible()))
-    await page.getByRole('button', { name: '操作', exact: true }).click();
+    await page.getByRole('button', { name: '展开操作', exact: true }).click();
   if (id === 'luma-raster') {
     await page.waitForFunction(() => Boolean(window.lumaRaster));
     await page.locator('#file-input').setInputFiles('packages/examples/public/fixtures/example-geotiff-uint16.tif');

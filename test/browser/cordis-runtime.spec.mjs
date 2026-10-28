@@ -12,7 +12,7 @@ async function openInspector(page) {
 
 async function pan(page) {
   const box = await page.locator('#map').boundingBox();
-  const x = box.x + box.width * 0.55;
+  const x = box.x + box.width * 0.2;
   const y = box.y + box.height * 0.55;
   await page.mouse.move(x, y);
   await page.mouse.down();
