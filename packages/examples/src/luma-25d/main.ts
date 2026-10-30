@@ -1,5 +1,8 @@
 import {
   getExampleGpuBackend,
+  getExamplePixelRatio,
+  getExamplePointLodEnabled,
+  getExampleFastNavigationEnabled,
   installExampleRendererToolbar,
   navigateExampleRenderer,
 } from '../renderer-choice';
@@ -49,7 +52,7 @@ const lifetime = new AbortController(),
 const errors: string[] = [];
 let width = Math.max(1, stage.clientWidth),
   height = Math.max(1, stage.clientHeight),
-  dpr = Math.min(2, devicePixelRatio || 1);
+  dpr = getExamplePixelRatio();
 let view = new PerspectiveTransform(
   new AffineTransform(1, -1, width / 2, height / 2),
   width,
@@ -73,7 +76,7 @@ let selections: readonly RasterFileSelection[] = [];
 let importMs = 0,
   loadMs = 0;
 let lastRasterStats: unknown = null;
-let style: RasterStyle = { stretch: 'auto', resampling: 'bilinear', opacity: 1 };
+let style: RasterStyle = { stretch: 'auto', resampling: 'nearest', opacity: 1 };
 function status(state: string, text: string): void {
   phase = state;
   el('status').dataset.state = state;
@@ -107,8 +110,10 @@ const renderers = await BenchmarkRenderers.create(
 );
 if (!renderers.gpu) throw new Error(renderers.unavailableReason ?? 'GPU initialization failed');
 renderers.setScreenFilters(false, false);
-renderers.setPointLod(true);
-renderers.navigation.setEnabled(true);
+el<HTMLInputElement>('point-lod-enabled').checked = getExamplePointLodEnabled();
+renderers.setPointLod(getExamplePointLodEnabled());
+el<HTMLInputElement>('fast-nav').checked = getExampleFastNavigationEnabled();
+renderers.navigation.setEnabled(getExampleFastNavigationEnabled());
 renderers.setPointStyle(3, 1);
 renderers.show('luma');
 labelControls = installLabelControls(
@@ -327,8 +332,8 @@ async function loadDemo(): Promise<void> {
       sceneCrs = crs = 'EPSG:3857';
       native = prepared.layer;
       rasterCanvas = prepared.canvas;
-      style = { stretch: 'auto', resampling: 'bilinear', opacity: 1 };
-      el<HTMLInputElement>('bilinear').checked = true;
+      style = { stretch: 'auto', resampling: 'nearest', opacity: 1 };
+      el<HTMLInputElement>('bilinear').checked = false;
       fit();
       await renderers.prepare(next, signal, view);
       signal.throwIfAborted();
@@ -462,7 +467,7 @@ const removeNavigation = installNavigation(
 function resize(): void {
   const w = Math.max(1, stage.clientWidth),
     h = Math.max(1, stage.clientHeight),
-    pr = Math.min(2, devicePixelRatio || 1);
+    pr = getExamplePixelRatio();
   if (w === width && h === height && pr === dpr) return;
   width = w;
   height = h;

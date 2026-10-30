@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) {
   test(`${renderer}: 199 labeled points retain slow navigation snapshots with 20 hidden layers`, async ({ page }, info) => {
     test.setTimeout(120000);
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     await page.evaluate(async (renderer) => {
       lumaBenchmark.dispose();

@@ -1,0 +1,1068 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 604
+  },
+  "captures": {
+    "attribute-editing": {
+      "file": "attribute-editing.jpg",
+      "route": "/mapseekai/emap/examples/attribute-editing/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "540bbb1121e55b076a489cf81b354e67178e47706fb771b35fa6d3fa76dde710"
+    },
+    "attribute-expressions": {
+      "file": "attribute-expressions.jpg",
+      "route": "/mapseekai/emap/examples/attribute-expressions/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "52a3d7ddd6c63fc5d0d8c23f4e567b8ec6d7bd122db45ad20eafe518c4b4ec6b"
+    },
+    "attribute-styling": {
+      "file": "attribute-styling.jpg",
+      "route": "/mapseekai/emap/examples/attribute-styling/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 261148,
+      "colors": 60,
+      "sha256": "3bdef7bb93f80c347c3a45fd0d951110728ebd4f3cc9ac65ce1cf4af65d6a152"
+    },
+    "buffer": {
+      "file": "buffer.jpg",
+      "route": "/mapseekai/emap/examples/buffer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "07bc81b96ccc3efc239437b2c58e12cf9b92499da28590afebf301c0d63418bf"
+    },
+    "check-geometry": {
+      "file": "check-geometry.jpg",
+      "route": "/mapseekai/emap/examples/check-geometry/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "b6e6db530222ca31a9248d54175a53dc1c53510460fb574fee968511a876fc99"
+    },
+    "china-editing": {
+      "file": "china-editing.jpg",
+      "route": "/mapseekai/emap/examples/china-editing/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 12358,
+      "colors": 5,
+      "sha256": "b4652f32032610a4871fbe6f6e3342f0928ca15b42beb79ef377ee2cf68fb63b"
+    },
+    "clip": {
+      "file": "clip.jpg",
+      "route": "/mapseekai/emap/examples/clip/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6827,
+      "colors": 5,
+      "sha256": "c6ff62f689628a915b2dbaf20836fce7d807a23296d2711bd198e2606fc2eefb"
+    },
+    "create-layer": {
+      "file": "create-layer.jpg",
+      "route": "/mapseekai/emap/examples/create-layer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3199,
+      "colors": 5,
+      "sha256": "82e6419f74d47e056ab5ca3e6b488bce9495807745c970d37434c8062618ab59"
+    },
+    "crs-switch": {
+      "file": "crs-switch.jpg",
+      "route": "/mapseekai/emap/examples/crs-switch/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "07bc81b96ccc3efc239437b2c58e12cf9b92499da28590afebf301c0d63418bf"
+    },
+    "dissolve": {
+      "file": "dissolve.jpg",
+      "route": "/mapseekai/emap/examples/dissolve/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "22229e86096b6ddc810be36498a1c889f8b87c3927ebdcea466c22780a1ece57"
+    },
+    "divide": {
+      "file": "divide.jpg",
+      "route": "/mapseekai/emap/examples/divide/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 5138,
+      "colors": 5,
+      "sha256": "2c2e79baf3561f96883d63df4a8c321b9966370736e812515b4265d25e6ba98a"
+    },
+    "draw-snap": {
+      "file": "draw-snap.jpg",
+      "route": "/mapseekai/emap/examples/draw-snap/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 7641,
+      "colors": 5,
+      "sha256": "22ae5b4f8084f847675f7a3f8fe03da824a8c6263eb2ada00e11a96fca25c012"
+    },
+    "drop-layer": {
+      "file": "drop-layer.jpg",
+      "route": "/mapseekai/emap/examples/drop-layer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "duckdb-buffer": {
+      "file": "duckdb-buffer.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-buffer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 222368,
+      "colors": 42,
+      "sha256": "a88f7b16ed4c155a5b98791212b68a7ac8149d54193adf68bbaa9449df44d022"
+    },
+    "duckdb-geoparquet-query": {
+      "file": "duckdb-geoparquet-query.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-geoparquet-query/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 100511,
+      "colors": 8,
+      "sha256": "4daef7a5f4663ae365caee0ac16092128e6a8dcd68a68d14c326ab13f75891d9"
+    },
+    "duckdb-overlay": {
+      "file": "duckdb-overlay.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-overlay/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 208509,
+      "colors": 64,
+      "sha256": "9ab1dc399deee9d1ca8d698ebc6f55ff0cd8aaaa3e0984d66d9fd544240d74f2"
+    },
+    "duckdb-query": {
+      "file": "duckdb-query.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-query/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216484,
+      "colors": 12,
+      "sha256": "a94805f46e3987d8f0b39541d67b2adfc70c7168d92a5463a6e2932922f5f263"
+    },
+    "duckdb-spatial-aggregate-join": {
+      "file": "duckdb-spatial-aggregate-join.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-spatial-aggregate-join/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 143852,
+      "colors": 80,
+      "sha256": "d2bfc873ca00f7df4bcecee48bd3c988f9a56ff9ad7e87f66f172d816d75d77c"
+    },
+    "duckdb-toolbox": {
+      "file": "duckdb-toolbox.jpg",
+      "route": "/mapseekai/emap/examples/duckdb-toolbox/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 208509,
+      "colors": 64,
+      "sha256": "9ab1dc399deee9d1ca8d698ebc6f55ff0cd8aaaa3e0984d66d9fd544240d74f2"
+    },
+    "duckdb/aggregate/collect": {
+      "file": "duckdb/aggregate/collect.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/aggregate/collect/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 205903,
+      "colors": 9,
+      "sha256": "94f64774e5fdaf79ebc61b1adac11635601f4a0a14c07e3aeb5f5a128545bc76"
+    },
+    "duckdb/aggregate/dissolve": {
+      "file": "duckdb/aggregate/dissolve.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/aggregate/dissolve/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 9,
+      "sha256": "480f894cc4870cab855597e2fe2bd50af8e3c4ef8712905e6b066b9249713a02"
+    },
+    "duckdb/attribute/coordinates": {
+      "file": "duckdb/attribute/coordinates.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/attribute/coordinates/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 179,
+      "colors": 26,
+      "sha256": "23bc70dd85afbb47b20d21baca0bcf04a2664a3aee4f2acc94dc22c3f3c1ec91"
+    },
+    "duckdb/attribute/geometry-checks": {
+      "file": "duckdb/attribute/geometry-checks.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/attribute/geometry-checks/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/attribute/geometry-type": {
+      "file": "duckdb/attribute/geometry-type.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/attribute/geometry-type/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/attribute/measures": {
+      "file": "duckdb/attribute/measures.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/attribute/measures/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 171264,
+      "colors": 13,
+      "sha256": "5b2b3d74baad809eb51d70b229e38a6eced0d392b518c6ae52782e83742999ff"
+    },
+    "duckdb/data-management/append": {
+      "file": "duckdb/data-management/append.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/data-management/append/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 161579,
+      "colors": 9,
+      "sha256": "7d98770782e5964d3eb899cdbf1bf3453b4da8bc739c33ddbc56a9483d8f6ab9"
+    },
+    "duckdb/data-management/merge": {
+      "file": "duckdb/data-management/merge.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/data-management/merge/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 161579,
+      "colors": 9,
+      "sha256": "7d98770782e5964d3eb899cdbf1bf3453b4da8bc739c33ddbc56a9483d8f6ab9"
+    },
+    "duckdb/data-management/reproject": {
+      "file": "duckdb/data-management/reproject.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/data-management/reproject/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/geometry/boundary": {
+      "file": "duckdb/geometry/boundary.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/boundary/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 10833,
+      "colors": 5,
+      "sha256": "3891c56dd57bdd1ab8eb9a5df4687e465785e06fb3f5e22152d514d0c06b6b27"
+    },
+    "duckdb/geometry/centroid": {
+      "file": "duckdb/geometry/centroid.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/centroid/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 269,
+      "colors": 43,
+      "sha256": "cfea3f4628773a561b22ca3423eb2f6a994c684f02a59a8c68d5b462339c7367"
+    },
+    "duckdb/geometry/convex-hull": {
+      "file": "duckdb/geometry/convex-hull.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/convex-hull/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/geometry/densify": {
+      "file": "duckdb/geometry/densify.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/densify/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6260,
+      "colors": 5,
+      "sha256": "e4c530b61409250771d6f28d62b9a622e6e5f543e0b79efd7034ff51a057e495"
+    },
+    "duckdb/geometry/envelope": {
+      "file": "duckdb/geometry/envelope.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/envelope/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/geometry/extract-vertices": {
+      "file": "duckdb/geometry/extract-vertices.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/extract-vertices/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 890,
+      "colors": 132,
+      "sha256": "2ca2f1fb905d832fbd42089c8e664b977fc7e104c2bc5d6086d33994cefa1283"
+    },
+    "duckdb/geometry/make-valid": {
+      "file": "duckdb/geometry/make-valid.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/make-valid/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/geometry/multipart-to-singlepart": {
+      "file": "duckdb/geometry/multipart-to-singlepart.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/multipart-to-singlepart/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6280,
+      "colors": 5,
+      "sha256": "5f111adfdf8dcb5a216cc628c898810af54bef8b1b5a3aa31dab591245213dfc"
+    },
+    "duckdb/geometry/simplify": {
+      "file": "duckdb/geometry/simplify.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/simplify/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/geometry/simplify-preserve-topology": {
+      "file": "duckdb/geometry/simplify-preserve-topology.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/geometry/simplify-preserve-topology/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 216487,
+      "colors": 13,
+      "sha256": "f35cf854a26f70975957e5afd5dace86f242492a8f3400777bc8b818c21725de"
+    },
+    "duckdb/join/attribute-join": {
+      "file": "duckdb/join/attribute-join.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/join/attribute-join/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 100685,
+      "colors": 8,
+      "sha256": "7e3f091abcbfc455292231f7930c04f402c42e99356505ac8b12b4a13a7f91de"
+    },
+    "duckdb/join/spatial-join": {
+      "file": "duckdb/join/spatial-join.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/join/spatial-join/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 166091,
+      "colors": 21,
+      "sha256": "f39c20d4411e4608bacb8f5d963e1e27ea5855a44fa7250ae4946d3719995810"
+    },
+    "duckdb/proximity/near": {
+      "file": "duckdb/proximity/near.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/proximity/near/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 45,
+      "colors": 9,
+      "sha256": "a56e0c7e11e5464bd81debe951cd6bdf8a37d885b3bda59eae7ef76ab86d1b46"
+    },
+    "duckdb/proximity/nearest": {
+      "file": "duckdb/proximity/nearest.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/proximity/nearest/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 45,
+      "colors": 9,
+      "sha256": "a56e0c7e11e5464bd81debe951cd6bdf8a37d885b3bda59eae7ef76ab86d1b46"
+    },
+    "duckdb/relation/spatial-relations": {
+      "file": "duckdb/relation/spatial-relations.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/relation/spatial-relations/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 166091,
+      "colors": 13,
+      "sha256": "d9c91fa71ca9a5a0e8b5e80a8be9cc294eec967be087ae9a861586464e20410f"
+    },
+    "duckdb/selection/spatial-filter": {
+      "file": "duckdb/selection/spatial-filter.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/selection/spatial-filter/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 113011,
+      "colors": 13,
+      "sha256": "c01bb1666d9fefbb13272972fac43be8aa328f0afc73d6b1c9a6c28a341c9cc1"
+    },
+    "duckdb/transform/line-to-polygon": {
+      "file": "duckdb/transform/line-to-polygon.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/transform/line-to-polygon/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 23406,
+      "colors": 6,
+      "sha256": "71ee1652542c3081fe4281772c46e1c47d256f634cd8473a8d505ee5efc8861f"
+    },
+    "duckdb/transform/point-to-line": {
+      "file": "duckdb/transform/point-to-line.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/transform/point-to-line/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 2224,
+      "colors": 5,
+      "sha256": "2553dc2ded67139c6fd12c214cfd89a6d77e72fce2f0b82747951d9944fac9f9"
+    },
+    "duckdb/transform/polygon-to-line": {
+      "file": "duckdb/transform/polygon-to-line.jpg",
+      "route": "/mapseekai/emap/examples/duckdb/transform/polygon-to-line/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 10833,
+      "colors": 5,
+      "sha256": "3891c56dd57bdd1ab8eb9a5df4687e465785e06fb3f5e22152d514d0c06b6b27"
+    },
+    "erase": {
+      "file": "erase.jpg",
+      "route": "/mapseekai/emap/examples/erase/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6827,
+      "colors": 5,
+      "sha256": "c6ff62f689628a915b2dbaf20836fce7d807a23296d2711bd198e2606fc2eefb"
+    },
+    "explode": {
+      "file": "explode.jpg",
+      "route": "/mapseekai/emap/examples/explode/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "22229e86096b6ddc810be36498a1c889f8b87c3927ebdcea466c22780a1ece57"
+    },
+    "export-formats": {
+      "file": "export-formats.jpg",
+      "route": "/mapseekai/emap/examples/export-formats/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "79631ba8af33f3353deae1cbde3e6a471850000c9afcfcc2d5e66efe7acbac7a"
+    },
+    "feature-attributes": {
+      "file": "feature-attributes.jpg",
+      "route": "/mapseekai/emap/examples/feature-attributes/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "4ceb3b9af019e95f9cf9417a09a2094304fc0b9ab5bbe5ee0b5798b2fb0d6447"
+    },
+    "feature-rotate": {
+      "file": "feature-rotate.jpg",
+      "route": "/mapseekai/emap/examples/feature-rotate/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "feature-scale": {
+      "file": "feature-scale.jpg",
+      "route": "/mapseekai/emap/examples/feature-scale/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "feature-selection": {
+      "file": "feature-selection.jpg",
+      "route": "/mapseekai/emap/examples/feature-selection/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "35da9ccfdd7036629dffee1848951ee47f53cd5f237743bc212bb41053acefb8"
+    },
+    "feature-translate": {
+      "file": "feature-translate.jpg",
+      "route": "/mapseekai/emap/examples/feature-translate/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "filter-features": {
+      "file": "filter-features.jpg",
+      "route": "/mapseekai/emap/examples/filter-features/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 1998,
+      "colors": 5,
+      "sha256": "16ce1ab3e8e92a0e53172bdc7d80fd44e293bc0b5efe92e0c9957090a3adc0d6"
+    },
+    "filter-fields": {
+      "file": "filter-fields.jpg",
+      "route": "/mapseekai/emap/examples/filter-fields/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "flatgeobuf-viewer": {
+      "file": "flatgeobuf-viewer.jpg",
+      "route": "/mapseekai/emap/examples/flatgeobuf-viewer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "57ea6ef6b8a1d50634b21721c1eef59dd000a0896dbe6235111def94b61a7160"
+    },
+    "geometry-lod": {
+      "file": "geometry-lod.jpg",
+      "route": "/mapseekai/emap/examples/geometry-lod/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 38760,
+      "colors": 17,
+      "sha256": "bf4be2b38f03daa62b5c1d4fab36856df4a22e2494b7c01ba19922691d92d95d"
+    },
+    "geopackage-viewer": {
+      "file": "geopackage-viewer.jpg",
+      "route": "/mapseekai/emap/examples/geopackage-viewer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 157508,
+      "colors": 66,
+      "sha256": "102e0d43d4054826888429178ea106f11e2984b982f7f900a15facf84d423feb"
+    },
+    "geoparquet-viewer": {
+      "file": "geoparquet-viewer.jpg",
+      "route": "/mapseekai/emap/examples/geoparquet-viewer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "79631ba8af33f3353deae1cbde3e6a471850000c9afcfcc2d5e66efe7acbac7a"
+    },
+    "geotiff-viewer": {
+      "file": "geotiff-viewer.jpg",
+      "route": "/mapseekai/emap/examples/geotiff-viewer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 121452,
+      "colors": 256,
+      "sha256": "a94ebb020b1b0b03a27d24d8344f2cc4dfb8a0f162660cbb40007755daa918f3"
+    },
+    "getting-started/lines": {
+      "file": "getting-started/lines.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/lines/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6134,
+      "colors": 5,
+      "sha256": "18af20a607902a2ac01f5cf2dbb8bb2f5bc3f57defc9d13def1cd933b7aaeec9"
+    },
+    "getting-started/point-style": {
+      "file": "getting-started/point-style.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/point-style/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 439,
+      "colors": 38,
+      "sha256": "320a94bc62de0133ab8c2586d4dd99f09c3cb26515be264f511fc2eda0b2e45b"
+    },
+    "getting-started/points": {
+      "file": "getting-started/points.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/points/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 116,
+      "colors": 26,
+      "sha256": "f997b49a36cfe433392cce01e90a5ec8f5a4fe2586315548d48d8281e2bce8ff"
+    },
+    "getting-started/polygon-fill": {
+      "file": "getting-started/polygon-fill.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/polygon-fill/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 2446,
+      "colors": 5,
+      "sha256": "acf88a117982a255b25f7cc7f69705dce70ef74af921daf1df2fbaef0d505e75"
+    },
+    "getting-started/polygons": {
+      "file": "getting-started/polygons.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/polygons/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "22229e86096b6ddc810be36498a1c889f8b87c3927ebdcea466c22780a1ece57"
+    },
+    "getting-started/vector-file": {
+      "file": "getting-started/vector-file.jpg",
+      "route": "/mapseekai/emap/examples/getting-started/vector-file/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 2856,
+      "colors": 4,
+      "sha256": "400bd77b2e6841b6799ef286cecb4d6490addb4b5a749b304c5e1594a072fba1"
+    },
+    "innerlines": {
+      "file": "innerlines.jpg",
+      "route": "/mapseekai/emap/examples/innerlines/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 858,
+      "colors": 3,
+      "sha256": "4a6876d264ff504193fda5c9ff1aed1730cb7f5c79002a92559c7244f2b2b6b1"
+    },
+    "interaction-handlers": {
+      "file": "interaction-handlers.jpg",
+      "route": "/mapseekai/emap/examples/interaction-handlers/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "79631ba8af33f3353deae1cbde3e6a471850000c9afcfcc2d5e66efe7acbac7a"
+    },
+    "join": {
+      "file": "join.jpg",
+      "route": "/mapseekai/emap/examples/join/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "labels": {
+      "file": "labels.jpg",
+      "route": "/mapseekai/emap/examples/labels/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 35920,
+      "colors": 256,
+      "sha256": "612436bb79aeee46d960d9a2f111b79998dcad962093c4d3a7f8bdeacf503b0a"
+    },
+    "lasso-select": {
+      "file": "lasso-select.jpg",
+      "route": "/mapseekai/emap/examples/lasso-select/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "luma-25d": {
+      "file": "luma-25d.jpg",
+      "route": "/mapseekai/emap/examples/luma-25d/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 63890,
+      "colors": 3,
+      "sha256": "ee9c4d210f584c17bd167ad0624b5709ad912e18e4bbb6dc7a6f21fafb79298c"
+    },
+    "luma-benchmark": {
+      "file": "luma-benchmark.jpg",
+      "route": "/mapseekai/emap/examples/luma-benchmark/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 185681,
+      "colors": 14,
+      "sha256": "3a1ab800f46558d456243df4161004d764a1f61288059adf15c0c6cc5a6e817d"
+    },
+    "luma-raster": {
+      "file": "luma-raster.jpg",
+      "route": "/mapseekai/emap/examples/luma-raster/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 121801,
+      "colors": 256,
+      "sha256": "860b60d7f9a8567a12037b3e4dea32508e8dd4053c9962881c39dd975cc7acf2"
+    },
+    "luma-vertex-editing": {
+      "file": "luma-vertex-editing.jpg",
+      "route": "/mapseekai/emap/examples/luma-vertex-editing/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 174664,
+      "colors": 39,
+      "sha256": "73661ae902312608ef0f1a05b513c0b5e6d2fe8a36d1df04ea2369d0048973a0"
+    },
+    "measurement": {
+      "file": "measurement.jpg",
+      "route": "/mapseekai/emap/examples/measurement/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "76bbb145e2d00eeb2d2003d165356bb23a122235881cdb87336e39e0df2d0494"
+    },
+    "merge-layers": {
+      "file": "merge-layers.jpg",
+      "route": "/mapseekai/emap/examples/merge-layers/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 5768,
+      "colors": 5,
+      "sha256": "ccc72d1d4421c0a29fcafe8e573573a688a2b76020bb11eaf79c378e9e696987"
+    },
+    "merge-selected": {
+      "file": "merge-selected.jpg",
+      "route": "/mapseekai/emap/examples/merge-selected/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "mixed-data-viewer": {
+      "file": "mixed-data-viewer.jpg",
+      "route": "/mapseekai/emap/examples/mixed-data-viewer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 66266,
+      "colors": 9,
+      "sha256": "e80cfd0be40eaa91cccceef2fa223fa64eb1704a60564fd854a990980dacf66c"
+    },
+    "mosaic": {
+      "file": "mosaic.jpg",
+      "route": "/mapseekai/emap/examples/mosaic/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "22229e86096b6ddc810be36498a1c889f8b87c3927ebdcea466c22780a1ece57"
+    },
+    "online-map-services": {
+      "file": "online-map-services.jpg",
+      "route": "/mapseekai/emap/examples/online-map-services/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 79048,
+      "colors": 8,
+      "sha256": "1844a0a9166d2ec619503a4f7d3c9af289e3675e8f71f30b6ac0ca4812f8692f"
+    },
+    "plugin-capability": {
+      "file": "plugin-capability.jpg",
+      "route": "/mapseekai/emap/examples/plugin-capability/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "f3a44473f8786f4f256d9a1af9a4441b02f3bb0be5e1c01c5c7f40b802eb2dc7"
+    },
+    "plugin-install": {
+      "file": "plugin-install.jpg",
+      "route": "/mapseekai/emap/examples/plugin-install/",
+      "renderer": "webgl2",
+      "width": 1032,
+      "height": 430,
+      "kind": "runtime-inspector",
+      "painted": 0,
+      "colors": 1,
+      "sha256": "4b43243f79f4242d84cba0f35affd068c45321659af90e4ef8705aad4fa67743"
+    },
+    "point-icons": {
+      "file": "point-icons.jpg",
+      "route": "/mapseekai/emap/examples/point-icons/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 1082,
+      "colors": 245,
+      "sha256": "823575d6ebe133cdf2427dc43984b424d0e3623d93303fd47f6ef3949cdacdf1"
+    },
+    "point-lod": {
+      "file": "point-lod.jpg",
+      "route": "/mapseekai/emap/examples/point-lod/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 153477,
+      "colors": 256,
+      "sha256": "644c44c6600ab79b75d816ff97f8da6d4844745ef9df6d8d481981367cda1b14"
+    },
+    "project": {
+      "file": "project.jpg",
+      "route": "/mapseekai/emap/examples/project/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "07bc81b96ccc3efc239437b2c58e12cf9b92499da28590afebf301c0d63418bf"
+    },
+    "rebuild-topology": {
+      "file": "rebuild-topology.jpg",
+      "route": "/mapseekai/emap/examples/rebuild-topology/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "22229e86096b6ddc810be36498a1c889f8b87c3927ebdcea466c22780a1ece57"
+    },
+    "rename-fields": {
+      "file": "rename-fields.jpg",
+      "route": "/mapseekai/emap/examples/rename-fields/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "rename-layer": {
+      "file": "rename-layer.jpg",
+      "route": "/mapseekai/emap/examples/rename-layer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "831fcc2e4d2b87e6d3a366f012cf99115bf32071177d9ad0e23c905d1701088a"
+    },
+    "reshape-ring-part": {
+      "file": "reshape-ring-part.jpg",
+      "route": "/mapseekai/emap/examples/reshape-ring-part/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 103516,
+      "colors": 13,
+      "sha256": "7b80bdde4733531aa0d6035c43f91410c6818be6ba8734e605036361bda3911c"
+    },
+    "simplify": {
+      "file": "simplify.jpg",
+      "route": "/mapseekai/emap/examples/simplify/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "07bc81b96ccc3efc239437b2c58e12cf9b92499da28590afebf301c0d63418bf"
+    },
+    "simplify-control": {
+      "file": "simplify-control.jpg",
+      "route": "/mapseekai/emap/examples/simplify-control/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "4d1d72be24ef430279d6b4e22a3cb37cf52482665e7327f2319031d23ddc343a"
+    },
+    "snap-layer": {
+      "file": "snap-layer.jpg",
+      "route": "/mapseekai/emap/examples/snap-layer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 2836,
+      "colors": 5,
+      "sha256": "fb5c7b549fc31a3b6a6f1b5ba78e3ea21ef1e94ceb08448d1b5e563f5f4e32b0"
+    },
+    "snapshot": {
+      "file": "snapshot.jpg",
+      "route": "/mapseekai/emap/examples/snapshot/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "sort-features": {
+      "file": "sort-features.jpg",
+      "route": "/mapseekai/emap/examples/sort-features/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "split-features": {
+      "file": "split-features.jpg",
+      "route": "/mapseekai/emap/examples/split-features/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 6258,
+      "colors": 5,
+      "sha256": "f0221ba2e92aca33d3b2582f61d37a45992c657071521ad79d0762cf37bf05c0"
+    },
+    "split-layer": {
+      "file": "split-layer.jpg",
+      "route": "/mapseekai/emap/examples/split-layer/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "transaction": {
+      "file": "transaction.jpg",
+      "route": "/mapseekai/emap/examples/transaction/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "undo-redo": {
+      "file": "undo-redo.jpg",
+      "route": "/mapseekai/emap/examples/undo-redo/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "2b1fb7d01b32ae682f5479b7f5d1f7a35994dd60791a9e6cfd24786338696e87"
+    },
+    "union": {
+      "file": "union.jpg",
+      "route": "/mapseekai/emap/examples/union/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "kind": "map",
+      "painted": 6826,
+      "colors": 5,
+      "sha256": "de1fb0d16be59012ab6031d72e3c3d4f7e53fd558e66da774585548940a8d5a7"
+    },
+    "unique-features": {
+      "file": "unique-features.jpg",
+      "route": "/mapseekai/emap/examples/unique-features/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "734a9593b4771cf1da26b270b9b5a39b2dacaedc40bccab44d9d280cd40201b2"
+    },
+    "vertex-editing": {
+      "file": "vertex-editing.jpg",
+      "route": "/mapseekai/emap/examples/vertex-editing/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 3370,
+      "colors": 5,
+      "sha256": "1070a1820616d3bbeb3416659fc2daa8e7869b7b0116b58a88905577cde2f717"
+    },
+    "web-worker": {
+      "file": "web-worker.jpg",
+      "route": "/mapseekai/emap/examples/web-worker/",
+      "renderer": "webgl2",
+      "width": 1030,
+      "height": 429,
+      "painted": 4765,
+      "colors": 5,
+      "sha256": "07bc81b96ccc3efc239437b2c58e12cf9b92499da28590afebf301c0d63418bf"
+    }
+  }
+}

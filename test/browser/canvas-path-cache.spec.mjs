@@ -8,7 +8,7 @@ for (const dpr of [1, 1.25, 2]) test(`Canvas exact path replay and invalidation 
     const page = await context.newPage(), errors = [];
     page.on('pageerror', error => errors.push(String(error)));
     await installCanvasReadback(page);
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     await page.evaluate(async () => {
       lumaBenchmark.dispose(); document.body.replaceChildren();

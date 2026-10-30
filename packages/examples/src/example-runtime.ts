@@ -1,8 +1,6 @@
 import { installExampleRendererToolbar } from './renderer-choice';
 import { monitorExampleMap } from './performance-render-source';
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
-import * as Prism from 'prismjs';
-import 'prismjs/themes/prism-tomorrow.css';
 import {
   resolveRuntimeAssets,
   type RuntimeAssetOptions,
@@ -170,7 +168,7 @@ function openExampleSourceDialog(sourceText: string, root: Document): void {
   const source = root.createElement('pre');
   const code = root.createElement('code');
   code.className = 'language-html';
-  code.innerHTML = Prism.highlight(sourceText, Prism.languages.markup, 'html');
+  code.textContent = sourceText;
   source.append(code);
   dialog.append(dialogHeader, source);
   root.body.append(dialog);
@@ -180,6 +178,7 @@ function openExampleSourceDialog(sourceText: string, root: Document): void {
   else dialog.setAttribute('open', '');
 }
 function installExampleIntro(root: Document): void {
+  if (root.body.classList.contains('example-detail')) return;
   const body = root.querySelector('.emap-example-workbench-body');
   if (!body || body.querySelector('.emap-example-lede')) return;
   const path = root.location?.pathname ?? '';

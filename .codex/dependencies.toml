@@ -2,7 +2,7 @@
 schema_version = 1
 verified_on = "2026-10-30"
 source_repository = "https://github.com/mapseekai/emap"
-source_commit = "6d10bd8e70eb68e7ba971f7d79127b12d11ac9d8"
+source_commit = "ca0a640789ba4494d2fdd184c4f30d68a92816c1"
 source_worktree_dirty = true
 lockfile = "pnpm-lock.yaml"
 manifests = ["package.json", "packages/examples/package.json"]
@@ -15,9 +15,9 @@ cli_version = "0.3.38"
 
 [coverage]
 scope = "所有直接外部依赖、workspace 包，以及全部已安装直接/间接依赖中的自有包。其他间接依赖在发现问题时核验并补齐路由。"
-lock_package_records = 715
-lock_snapshot_records = 716
-installed_external_name_version_pairs = 629
+lock_package_records = 756
+lock_snapshot_records = 757
+installed_external_name_version_pairs = 670
 uninstalled_optional_paths = 86
 owned_external_packages = ["@mapseekai/tasklane", "@zwishing/epsg-index"]
 repository_basis = "第三方仓库来自实际安装 package.json.repository（LZW 另核对 GitHub package.json）；尚未逐一在线核验迁移，反馈前必须核验规范仓库与 fork。"
@@ -70,10 +70,10 @@ package_manager_declared = "pnpm@11.15.1"
 platform = "darwin/arm64"
 lzw_repository = "GitHub developmentseed/lzw-tiff-decoder 的 package.json 与已安装 @developmentseed/lzw-tiff-decoder@0.2.2 元数据一致；未误映射至 manzt 或 kylebarron 同名仓库。"
 lzw_source = "https://api.github.com/repos/developmentseed/lzw-tiff-decoder/contents/package.json"
-"package.json.sha256" = "ed14bb8a6fe5c7ae4c69d3eb4002f4395b17edabe5ec6017d600eb2791c46452"
-"packages/examples/package.json.sha256" = "92ad13ba85038ddf40cf3c4a7409b420058abf3ecbd262f6761927feabdc1f41"
+"package.json.sha256" = "b322ed12767963354d12a81d655a684e93abf4496c3e535e92c2e3818acb114a"
+"packages/examples/package.json.sha256" = "d5cf92338f51aa0228262ac4728bb4e69fefc9c8bbc44dd61c0b73966e063175"
 "pnpm-workspace.yaml.sha256" = "dc15e0c365a1c95df461ee25bed94dd0374b3887220229a753bc1a933ebf2aac"
-"pnpm-lock.yaml.sha256" = "198a81abd375e665bcbe8b036ced75d6227a2e4fef764e1d7a4150c50feadb98"
+"pnpm-lock.yaml.sha256" = "b37e29d9b41369065e4995b395bf0053bedb9e19cbe0cdfcc6ba427dd9f6a9c8"
 
 # versions 为所有实际安装版本；多版本包的 direct_version 指明直接入口。
 # 未指定 target 的依赖先补齐已确认绑定；仓库地址不等于 Multica 项目 ID。
@@ -100,7 +100,6 @@ lzw_source = "https://api.github.com/repos/developmentseed/lzw-tiff-decoder/cont
 "@tmcw/togeojson" = { repository = "https://github.com/placemark/togeojson", versions = ["5.8.1"], declared_in = ["package.json#dependencies"] }
 "@types/jsdom" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["30.0.0"], declared_in = ["package.json#devDependencies"] }
 "@types/node" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["10.17.60", "20.19.43", "24.13.1", "8.10.66"], direct_version = "24.13.1", declared_in = ["package.json#devDependencies"] }
-"@types/prismjs" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["1.26.6"], declared_in = ["packages/examples/package.json#devDependencies"] }
 "@webgpu/types" = { repository = "https://github.com/gpuweb/types", versions = ["0.1.72"], declared_in = ["package.json#devDependencies"] }
 "@zwishing/epsg-index" = { repository = "https://github.com/mapseekai/epsg-index", versions = ["3.0.0"], declared_in = ["package.json#devDependencies"], target = "epsg-index" }
 "apache-arrow" = { repository = "https://github.com/apache/arrow", versions = ["17.0.0"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
@@ -123,10 +122,12 @@ lzw_source = "https://api.github.com/repos/developmentseed/lzw-tiff-decoder/cont
 "mproj" = { repository = "https://github.com/mbloch/mapshaper-proj", versions = ["0.0.40", "0.1.3"], direct_version = "0.1.3", declared_in = ["package.json#dependencies"] }
 "msdfgen-wasm" = { repository = "https://github.com/md5crypt/msdfgen-wasm", versions = ["1.0.0"], declared_in = ["package.json#dependencies"] }
 "parquet-wasm" = { repository = "https://github.com/kylebarron/parquet-wasm", versions = ["0.7.2"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
-"prismjs" = { repository = "https://github.com/PrismJS/prism", versions = ["1.30.0"], declared_in = ["packages/examples/package.json#dependencies"] }
+"parse5" = { repository = "https://github.com/inikulin/parse5", versions = ["8.0.1"], declared_in = ["packages/examples/package.json#devDependencies"] }
+"prettier" = { repository = "https://github.com/prettier/prettier", versions = ["3.9.10"], declared_in = ["packages/examples/package.json#devDependencies"] }
 "rollup" = { repository = "https://github.com/rollup/rollup", versions = ["4.57.1"], declared_in = ["package.json#devDependencies"] }
 "rollup-plugin-polyfill-node" = { repository = "https://github.com/FredKSchott/rollup-plugin-polyfill-node", versions = ["0.13.0"], declared_in = ["package.json#devDependencies"] }
 "rollup-plugin-postcss" = { repository = "https://github.com/egoist/rollup-plugin-postcss", versions = ["4.0.2"], declared_in = ["package.json#devDependencies"] }
+"shiki" = { repository = "https://github.com/shikijs/shiki", versions = ["4.5.0"], declared_in = ["packages/examples/package.json#devDependencies"] }
 "typedoc" = { repository = "https://github.com/TypeStrong/TypeDoc", versions = ["0.28.20"], declared_in = ["package.json#devDependencies"] }
 "typescript" = { repository = "https://github.com/microsoft/TypeScript", versions = ["5.9.3"], declared_in = ["package.json#devDependencies"] }
 "typescript-eslint" = { repository = "https://github.com/typescript-eslint/typescript-eslint", versions = ["8.71.2"], declared_in = ["package.json#devDependencies"] }

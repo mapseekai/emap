@@ -5,7 +5,7 @@ for (const gpu of ['webgl', 'webgpu']) for (const file of ['big.geojson','lucc.g
   test(`${gpu} ${file}: near-to-far uses screen paths and resident fills after eviction`, async ({page}, info) => {
     test.skip(!directory, 'Requires the complete authorized real file.');test.setTimeout(180000);
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+gpu+'&pointLod=off');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+gpu+'&pointLod=off');
     await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
     await page.locator('#file-input').setInputFiles(join(directory,file));await page.locator('#load-file').click();
     await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state),null,{timeout:120000});

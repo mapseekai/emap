@@ -36,6 +36,19 @@ describe('streaming FeatureCollection framing', () => {
       }).toThrow();
     }
   });
+  it.each(['before', 'after'])('accepts metadata larger than 2 MiB %s features', (position) => {
+    const description = 'x'.repeat(2 * 1024 ** 2 + 1);
+    const features = [{ type: 'Feature', properties: { id: 1 }, geometry: null }];
+    const input = JSON.stringify({
+      type: 'FeatureCollection',
+      ...(position === 'before' ? { description, features } : { features, description }),
+    });
+    const found: unknown[] = [];
+    const framer = new GeoJSONFeatureFramer((value) => found.push(value));
+    for (let i = 0; i < input.length; i += 65536) framer.push(input.slice(i, i + 65536));
+    expect(framer.finish().description).toBe(description);
+    expect(found).toEqual(features);
+  });
   it('accepts UTF-8 BOM and escaped JSON property names', () => {
     const framer = new GeoJSONFeatureFramer(() => {});
     framer.push('\uFEFF{"type":"FeatureCollection","\\u0066eatures":[]}');

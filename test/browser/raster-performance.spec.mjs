@@ -31,7 +31,7 @@ test('measure raster source-cold and warm navigation throughput', async ({ page 
       }
     };
   });
-  await page.goto('/mapseekai/emap/examples/geotiff-viewer/');
+  await page.goto('/mapseekai/emap/examples/geotiff-viewer/?parameters=open');
   await expect(page.locator('#levels')).toHaveText('4');
   await page.locator('#file-input').setInputFiles(file);
   await page.locator('#overview-input').setInputFiles(file + '.ovr');

@@ -5,7 +5,7 @@ import { createReadStream } from 'node:fs';
 const directory=process.env.EMAP_BENCHMARK_DATA_DIR;
 async function digest(path){const h=createHash('sha256');for await(const chunk of createReadStream(path))h.update(chunk);return h.digest('hex');}
 async function load(page,file,backend){
- await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend+'&pointLod=off&screenFilter=on');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+backend+'&pointLod=off&screenFilter=on');
  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
  await page.locator('#fast-nav').uncheck();
  await page.locator('#file-input').setInputFiles(join(directory,file));await page.locator('#load-file').click();

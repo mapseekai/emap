@@ -9,7 +9,7 @@ for(const gpu of ['webgl','webgpu'])test(`${gpu}: LUCC loading is atomic and com
  const path=join(directory,'lucc.geojson'),hash=await digest(path),errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  await page.setViewportSize({width:1280,height:1000});
- await page.goto('/mapseekai/emap/examples/luma-vertex-editing/?gpu='+gpu);
+ await page.goto('/mapseekai/emap/examples/luma-vertex-editing/?parameters=open&gpu='+gpu);
  await page.waitForFunction(()=>window.lumaEditor?.state==='idle',null,{timeout:60000});
  await page.evaluate(()=>{
   window.refreshTrace={frames:[],commits:[],workerBuilds:[]};let previous=-1;

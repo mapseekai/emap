@@ -12,7 +12,7 @@ for(const dpr of [1,2])test.describe(`folder DPR ${dpr}`,()=>{
   test.skip(!directory,'Requires authorized cdf20250916042716 files.');test.setTimeout(180000);
   const folder=join(directory,'cdf20250916042716'),path=join(folder,name),before=await stat(path),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/luma-raster/?gpu='+backend);await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
+  await page.goto('/mapseekai/emap/examples/luma-raster/?parameters=open&gpu='+backend);await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
   await page.locator('#folder-input').setInputFiles(folder);
   const selections=await page.evaluate(()=>window.lumaRaster.selections.map(s=>({name:s.file.name,path:s.path,ovr:s.overview?.name})));
   expect(selections).toHaveLength(5);const index=selections.findIndex(s=>s.name===name);
@@ -43,7 +43,7 @@ for(const dpr of [1,2])test.describe(`folder DPR ${dpr}`,()=>{
 });
 test('Canvas folder selection pairs all four external overviews and loads all five files',async({page})=>{
  test.skip(!directory,'Requires authorized real folder.');test.setTimeout(180000);
- await page.goto('/mapseekai/emap/examples/luma-raster/?gpu=canvas');await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-raster/?parameters=open&gpu=canvas');await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
  await page.locator('#folder-input').setInputFiles(join(directory,'cdf20250916042716'));
  for(let i=0;i<5;i++){
   await page.locator('#file-select').selectOption(String(i));await page.locator('#load').click();await page.waitForFunction(()=>['ready','error'].includes(window.lumaRaster.state));

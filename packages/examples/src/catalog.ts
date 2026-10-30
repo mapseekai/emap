@@ -1,12 +1,14 @@
 import { exampleTopics, type ExampleDefinition } from '../../../docs-meta/examples';
+import { categoryDescription, featuredExamples } from './example-content';
+import { createExamplePreview } from './example-preview';
+import { exampleNavigationUrl } from './renderer-choice';
 
 type ExampleLocale = 'zh' | 'en';
 
 const catalogCopy = {
   zh: {
-    title: 'Emap 文档示例',
-    eyebrow: 'Emap 示例',
-    intro: '按任务打开示例：加载数据、设置样式、查询编辑、几何分析和 DuckDB。',
+    title: 'Emap 示例',
+    intro: '运行示例，调整参数，查看实现。',
     catalogLabel: '示例目录',
     allCategories: '全部',
     languageLabel: '语言',
@@ -19,10 +21,8 @@ const catalogCopy = {
     resultCount: (count: number) => `${count} 个示例`,
   },
   en: {
-    title: 'Emap Documentation Example',
-    eyebrow: 'Emap examples',
-    intro:
-      'Open an example by task: load data, style it, query and edit, analyze geometry, or run DuckDB.',
+    title: 'Emap Examples',
+    intro: 'Run an example, adjust its parameters, and explore the code.',
     catalogLabel: 'Example catalog',
     allCategories: 'All',
     languageLabel: 'Language',
@@ -99,8 +99,19 @@ export const examplePublicHref = (id: string): string =>
   `/mapseekai/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
 
 export function renderCatalog(root: HTMLElement, examples: readonly ExampleDefinition[]): void {
-  const state: CatalogState = { locale: 'zh', category: 'all', query: '' };
+  const params = catalogUrl()?.searchParams;
+  const category = params?.get('category') ?? 'all';
+  const state: CatalogState = {
+    locale: params?.get('lang') === 'en' ? 'en' : 'zh',
+    category: examples.some((example) => example.category === category) ? category : 'all',
+    query: params?.get('q') ?? '',
+  };
   renderCatalogLocale(root, examples, state);
+}
+
+function catalogUrl(): URL | undefined {
+  const url = new URL(window.location.href);
+  return /\/mapseekai\/emap\/examples\/(?:index\.html)?$/.test(url.pathname) ? url : undefined;
 }
 
 function renderCatalogLocale(
@@ -113,6 +124,7 @@ function renderCatalogLocale(
   document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
   document.title = copy.title;
   document.body.classList.add('catalog-root');
+  root.dataset.view ??= 'grid';
   root.replaceChildren();
 
   const page = document.createElement('main');
@@ -128,17 +140,15 @@ function renderCatalogLocale(
   const brandMark = document.createElement('img');
   brandMark.src = '/mapseekai/emap/examples/emap.svg';
   brandMark.alt = '';
+  brandMark.width = brandMark.height = 24;
+  brand.setAttribute('aria-label', locale === 'zh' ? 'emap 示例首页' : 'emap examples home');
 
   const brandText = document.createElement('span');
-  brandText.textContent = 'Emap / Examples';
+  brandText.textContent = 'emap';
   brand.append(brandMark, brandText);
 
   const utilityMeta = document.createElement('div');
   utilityMeta.className = 'catalog-utility-meta';
-
-  const totalCount = document.createElement('span');
-  totalCount.className = 'catalog-total-count';
-  totalCount.textContent = copy.resultCount(examples.length);
 
   const languageField = document.createElement('label');
   languageField.className = 'catalog-language';
@@ -149,20 +159,23 @@ function renderCatalogLocale(
   languageSelect.append(new Option('简体中文', 'zh'), new Option('English', 'en'));
   languageSelect.value = locale;
   languageField.append(languageText, languageSelect);
-  utilityMeta.append(totalCount, languageField);
+  const docsLink = document.createElement('a');
+  docsLink.href = '/mapseekai/emap/';
+  docsLink.textContent = locale === 'zh' ? '文档' : 'Documentation';
+  const github = document.createElement('a');
+  github.href = 'https://github.com/mapseekai/emap';
+  github.textContent = 'GitHub';
+  utilityMeta.append(docsLink, github, languageField);
   utility.append(brand, utilityMeta);
 
   const header = document.createElement('header');
   header.className = 'catalog-header';
 
-  const eyebrow = document.createElement('p');
-  eyebrow.className = 'eyebrow';
-  eyebrow.textContent = copy.eyebrow;
-
   const title = document.createElement('h1');
-  title.textContent = copy.title;
+  title.textContent = locale === 'zh' ? '地图示例' : 'Examples';
 
   const intro = document.createElement('p');
+  intro.className = 'catalog-intro';
   intro.textContent = copy.intro;
 
   const searchField = document.createElement('div');
@@ -191,7 +204,7 @@ function renderCatalogLocale(
 
   searchControl.append(searchInput, clearSearch);
   searchField.append(searchLabel, searchControl);
-  header.append(eyebrow, title, intro, searchField);
+  header.append(title, intro, searchField);
 
   const categories = orderedCategoryCounts(examples);
 
@@ -200,10 +213,25 @@ function renderCatalogLocale(
 
   const sidebar = document.createElement('aside');
   sidebar.className = 'catalog-sidebar';
+  const sidebarTitle = document.createElement('p');
+  sidebarTitle.className = 'catalog-sidebar-title';
+  sidebarTitle.textContent = copy.catalogLabel;
+  sidebar.append(sidebarTitle);
 
   const categoryNavigation = document.createElement('nav');
   categoryNavigation.className = 'catalog-category-navigation';
   categoryNavigation.setAttribute('aria-label', copy.catalogLabel);
+
+  const categoryTabs = document.createElement('nav');
+  categoryTabs.className = 'catalog-category-tabs';
+  categoryTabs.setAttribute('aria-label', locale === 'zh' ? '按分类浏览' : 'Browse categories');
+  const pageNavigation = document.createElement('aside');
+  pageNavigation.className = 'catalog-page-navigation';
+  const pageNavigationTitle = document.createElement('h2');
+  pageNavigationTitle.textContent = locale === 'zh' ? '本页目录' : 'On this page';
+  const pageNavigationLinks = document.createElement('nav');
+  pageNavigationLinks.setAttribute('aria-label', pageNavigationTitle.textContent);
+  pageNavigation.append(pageNavigationTitle, pageNavigationLinks);
 
   for (const [category, count] of [['all', examples.length] as const, ...categories]) {
     const button = document.createElement('button');
@@ -213,20 +241,65 @@ function renderCatalogLocale(
     button.setAttribute('aria-pressed', String(state.category === category));
 
     const label = document.createElement('span');
+    label.className = 'catalog-category-label';
     label.textContent =
       category === 'all' ? copy.allCategories : (categoryLabels[locale][category] ?? category);
+    button.title = label.textContent;
     const categoryCount = document.createElement('span');
     categoryCount.className = 'catalog-category-count';
     categoryCount.textContent = String(count);
     button.append(label, categoryCount);
 
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'catalog-category-tab';
+    tab.dataset.category = category;
+    tab.textContent = label.textContent;
+    tab.setAttribute('aria-pressed', String(state.category === category));
+    tab.addEventListener('click', () => selectCategory(category));
+    categoryTabs.append(tab);
+
     button.addEventListener('click', () => {
       selectCategory(category);
     });
     categoryNavigation.append(button);
+    if (category !== 'all') {
+      const links = document.createElement('div');
+      links.className = 'catalog-example-navigation';
+      for (const example of examples.filter((item) => item.category === category)) {
+        const item = document.createElement('a');
+        item.href = exampleNavigationUrl(examplePublicHref(example.id));
+        item.textContent = example.title[locale];
+        item.title = example.title[locale];
+        item.dataset.search = [example.title.zh, example.title.en, example.id, ...example.api]
+          .join(' ')
+          .toLowerCase();
+        links.append(item);
+      }
+      categoryNavigation.append(links);
+      const anchor = document.createElement('a');
+      anchor.href = `#category-${category}`;
+      anchor.dataset.category = category;
+      anchor.textContent = label.textContent;
+      anchor.title = label.textContent;
+      anchor.addEventListener('click', () => {
+        for (const link of pageNavigationLinks.querySelectorAll('a'))
+          link.removeAttribute('aria-current');
+        anchor.setAttribute('aria-current', 'location');
+      });
+      pageNavigationLinks.append(anchor);
+    }
   }
 
-  sidebar.append(categoryNavigation);
+  const sidebarNote = document.createElement('div');
+  sidebarNote.className = 'catalog-sidebar-note';
+  const noteTitle = document.createElement('strong');
+  noteTitle.textContent = locale === 'zh' ? '开始使用' : 'Getting started';
+  const noteLink = document.createElement('a');
+  noteLink.href = '/mapseekai/emap/intro';
+  noteLink.textContent = locale === 'zh' ? '入门文档' : 'Introduction';
+  sidebarNote.append(noteTitle, noteLink);
+  sidebar.append(categoryNavigation, sidebarNote);
 
   const content = document.createElement('div');
   content.className = 'catalog-content';
@@ -255,18 +328,89 @@ function renderCatalogLocale(
   results.setAttribute('aria-label', copy.catalogLabel);
 
   const resultSummary = document.createElement('p');
-  resultSummary.className = 'catalog-results-summary';
+  resultSummary.className = 'catalog-results-summary catalog-total-count';
   resultSummary.setAttribute('role', 'status');
   resultSummary.setAttribute('aria-live', 'polite');
 
+  const toolbar = document.createElement('div');
+  toolbar.className = 'catalog-results-toolbar';
+  const viewButtons = document.createElement('div');
+  viewButtons.className = 'catalog-view-options';
+  viewButtons.setAttribute('role', 'group');
+  viewButtons.setAttribute('aria-label', locale === 'zh' ? '显示方式' : 'Display mode');
+  for (const [view, label] of [
+    ['grid', locale === 'zh' ? '卡片' : 'Cards'],
+    ['list', locale === 'zh' ? '列表' : 'List'],
+  ]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-pressed', String(view === root.dataset.view));
+    button.addEventListener('click', () => {
+      root.dataset.view = view;
+      for (const sibling of viewButtons.querySelectorAll('button'))
+        sibling.setAttribute('aria-pressed', String(sibling === button));
+    });
+    viewButtons.append(button);
+  }
+  toolbar.append(resultSummary, viewButtons);
+
   const resultGroups = document.createElement('div');
   resultGroups.className = 'catalog-result-groups';
-  results.append(resultSummary, resultGroups);
+  results.append(toolbar, resultGroups);
+
+  const starters = document.createElement('section');
+  starters.className = 'catalog-starters';
+  const starterTitle = document.createElement('h2');
+  starterTitle.textContent = locale === 'zh' ? '常用示例' : 'Quick links';
+  starters.append(starterTitle);
+  const starterList = document.createElement('div');
+  starterList.className = 'catalog-starter-list';
+  for (const id of featuredExamples) {
+    const example = examples.find((item) => item.id === id);
+    if (!example) continue;
+    const link = document.createElement('a');
+    link.className = 'catalog-starter';
+    link.href = exampleNavigationUrl(examplePublicHref(id));
+    const preview = createExamplePreview(example);
+    preview.querySelector('img')!.loading = 'eager';
+    link.append(preview);
+    const text = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = example.title[locale];
+    text.append(strong);
+    const description = document.createElement('p');
+    description.textContent = example.description[locale];
+    text.append(description);
+    link.append(text);
+    starterList.append(link);
+  }
+  starters.append(starterList);
 
   function updateResults(): void {
     const resultCount = renderCatalogResults(resultGroups, examples, categories, state, clearQuery);
     resultSummary.textContent = copy.resultCount(resultCount);
     clearSearch.hidden = state.query.trim().length === 0;
+    starters.hidden = state.query.trim().length > 0 || state.category !== 'all';
+    const query = state.query.trim().toLowerCase();
+    for (const link of categoryNavigation.querySelectorAll<HTMLAnchorElement>('[data-search]')) {
+      link.hidden = !link.dataset.search!.includes(query);
+    }
+    for (const link of pageNavigationLinks.querySelectorAll<HTMLAnchorElement>('[data-category]')) {
+      link.hidden = !resultGroups.querySelector(`#category-${link.dataset.category}`);
+    }
+    const url = catalogUrl();
+    if (url) {
+      for (const [key, value] of Object.entries({
+        category: state.category === 'all' ? '' : state.category,
+        q: state.query,
+        lang: locale === 'zh' ? '' : locale,
+      })) {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+      }
+      window.history.replaceState(null, '', url);
+    }
   }
 
   function clearQuery(): void {
@@ -278,9 +422,10 @@ function renderCatalogLocale(
 
   function selectCategory(category: string): void {
     state.category = category;
-    for (const button of categoryNavigation.querySelectorAll<HTMLButtonElement>(
-      '.catalog-category-button',
-    )) {
+    for (const button of [
+      ...categoryNavigation.querySelectorAll<HTMLButtonElement>('.catalog-category-button'),
+      ...categoryTabs.querySelectorAll<HTMLButtonElement>('button'),
+    ]) {
       button.setAttribute('aria-pressed', String(button.dataset.category === category));
     }
     mobileCategorySelect.value = category;
@@ -296,9 +441,9 @@ function renderCatalogLocale(
 
   updateResults();
 
-  content.append(mobileCategory, results);
-  shell.append(sidebar, content);
-  page.append(utility, header, shell);
+  content.append(header, mobileCategory, categoryTabs, starters, results);
+  shell.append(sidebar, content, pageNavigation);
+  page.append(utility, shell);
   root.append(page);
 
   languageSelect.addEventListener('change', () => {
@@ -353,6 +498,7 @@ function renderCatalogResults(
 
     const group = document.createElement('section');
     group.className = 'catalog-group';
+    group.id = `category-${category}`;
 
     const groupHeader = document.createElement('header');
     groupHeader.className = 'catalog-group-header';
@@ -365,7 +511,10 @@ function renderCatalogResults(
     groupCount.className = 'catalog-group-count';
     groupCount.textContent = String(groupExamples.length);
     groupHeader.append(groupTitle, groupCount);
-    group.append(groupHeader);
+    const groupDescription = document.createElement('p');
+    groupDescription.className = 'catalog-group-description';
+    groupDescription.textContent = categoryDescription(category, state.locale);
+    group.append(groupHeader, groupDescription);
 
     const directExamples = groupExamples.filter(
       (example) =>
@@ -395,6 +544,7 @@ function renderExampleGrid(
 ): HTMLDivElement {
   const list = document.createElement('div');
   list.className = ['example-grid', className].filter(Boolean).join(' ');
+  if (examples.length === 1) list.classList.add('example-grid-single');
   for (const example of examples) {
     list.append(renderExampleCard(example, locale));
   }
@@ -455,6 +605,8 @@ function matchesCatalogQuery(example: ExampleDefinition, state: CatalogState): b
   return [
     example.title[state.locale],
     example.description[state.locale],
+    example.title.zh,
+    example.title.en,
     example.id,
     ...example.tags,
     ...example.api,
@@ -467,7 +619,7 @@ function matchesCatalogQuery(example: ExampleDefinition, state: CatalogState): b
 function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): HTMLElement {
   const card = document.createElement('a');
   card.className = 'example-card';
-  card.href = examplePublicHref(example.id);
+  card.href = exampleNavigationUrl(examplePublicHref(example.id));
   card.setAttribute(
     'aria-label',
     `${catalogCopy[locale].openExample}${locale === 'zh' ? '：' : ': '}${example.title[locale]}`,
@@ -483,7 +635,6 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
   const arrow = document.createElement('span');
   arrow.className = 'example-card-arrow';
   arrow.setAttribute('aria-hidden', 'true');
-  arrow.textContent = '↗';
   heading.append(title, arrow);
 
   const description = document.createElement('p');
@@ -493,7 +644,7 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
   const apiList = document.createElement('div');
   apiList.className = 'example-api-list';
   for (const api of example.api.slice(0, 2)) {
-    const chip = document.createElement('span');
+    const chip = document.createElement('code');
     chip.className = 'example-api-chip';
     chip.textContent = api;
     apiList.append(chip);
@@ -505,6 +656,12 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
     apiList.append(overflow);
   }
 
-  card.append(heading, description, apiList);
+  const body = document.createElement('div');
+  body.className = 'example-card-body';
+  body.append(heading, description, apiList);
+  const preview = createExamplePreview(example);
+  card.dataset.preview = 'true';
+  card.append(preview);
+  card.append(body);
   return card;
 }

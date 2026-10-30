@@ -53,7 +53,7 @@ test.beforeEach(async ({ page }) => {
 
 test('real Mapshaper Worker can be terminated per task while another job and a retry complete', async ({ page }) => {
   await page.route(/\/(?:emap|emap-worker|mapshaper-vendor)\.js$/, (route) => route.fulfill({ path: resolve('dist', basename(new URL(route.request().url()).pathname)), contentType: 'text/javascript' }));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     const source = new emap.TopologySource('cancel');

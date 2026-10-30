@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { installCanvasReadback } from './fixtures/canvas-readback.mjs';
 async function boot(page,renderer,exact=false,precision=false) {
  await installCanvasReadback(page);
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  await page.evaluate(async({renderer,exact,precision})=>{
   lumaBenchmark.dispose();document.body.replaceChildren();const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:600px';document.body.append(host);
   // These cases exercise the opt-in screen-space stroke formats.

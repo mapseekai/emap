@@ -52,6 +52,17 @@
           <label for="file-input">文件</label>
           <input id="file-input" type="file" accept=".gpkg" />
         </div>
+        <div id="crs-recovery" class="emap-example-field" hidden>
+          <label for="source-crs">源坐标系</label>
+          <input id="source-crs" list="source-crs-options" placeholder="EPSG 编号、WKT 或 PROJ" aria-describedby="crs-message" />
+          <datalist id="source-crs-options">
+            <option value="EPSG:4326">WGS84</option>
+            <option value="EPSG:4490">CGCS2000</option>
+            <option value="EPSG:3857">Web Mercator</option>
+          </datalist>
+          <p id="crs-message"></p>
+          <button id="crs-continue" class="emap-example-primary-button" disabled>继续导入</button>
+        </div>
         <div class="emap-example-field">
           <label class="emap-example-check"><input id="worker" type="checkbox" checked /> Web Worker</label>
         </div>
@@ -91,17 +102,26 @@ const map = await Emap.create({ renderer: getExampleRenderer(), container: 'map'
 await map.addControl(new NavigationControl(), 'top-left');
 const base = '/mapseekai/emap/examples/';
 const status = document.getElementById('status');
-let generation = 0, currentFiber, controller;
-const state = { map, source: null, dataset: null, worker: true, error: null, loading: false };
+let generation = 0, currentFiber, controller, pendingImport;
+const crsRecovery = document.getElementById('crs-recovery');
+const sourceCrsInput = document.getElementById('source-crs');
+const continueButton = document.getElementById('crs-continue');
+const state = { map, source: null, dataset: null, worker: true, error: null, loading: false, needsCrs: false };
 window.geopackageDemo = state;
 
-async function load(bytes, filename) {
+async function load(bytes, filename, sourceCrs) {
   const run = ++generation;
+  // Keep a retry copy: a worker is allowed to transfer its input buffer.
+  const retryBytes = bytes.slice(0);
   controller?.abort();
   const abort = controller = new AbortController();
+  pendingImport = null; crsRecovery.hidden = true; continueButton.disabled = true;
+  state.needsCrs = false;
+  if (sourceCrs === undefined) sourceCrsInput.value = '';
   if (currentFiber) await currentFiber.dispose();
   const inWorker = document.getElementById('worker').checked;
   state.loading = true; state.error = null; state.worker = inWorker;
+  status.dataset.state = 'loading';
   document.getElementById('cancel').disabled = false;
   const started = performance.now();
   const fiber = currentFiber = map.ctx.plugin(geoPackagePlugin({
@@ -114,8 +134,24 @@ async function load(bytes, filename) {
     const source = new TopologySource('gpkg', { formats: map.formats });
     await source.setData({ filename, content: new Uint8Array(bytes) });
     if (run !== generation || abort.signal.aborted) return;
+    // Validate under a temporary id so the current map stays visible while a
+    // missing/invalid CRS is supplied. Registration retains the example's gpkg id.
+    const preflight = await map.preflightSource({ id: `gpkg-check-${run}`, source, sourceCrs });
+    if (run !== generation || abort.signal.aborted) return;
+    if (preflight.status === 'needs-input') {
+      pendingImport = { bytes: retryBytes, filename };
+      state.needsCrs = true; crsRecovery.hidden = false;
+      sourceCrsInput.setAttribute('aria-invalid', String(preflight.requirements.some(item => item.reason === 'invalid')));
+      document.getElementById('crs-message').textContent = preflight.diagnostics.map(item => item.message).join(' ') || '文件未声明坐标系，请选择正确的源坐标系后继续。';
+      continueButton.disabled = !sourceCrsInput.value.trim();
+      status.dataset.state = 'needs-input';
+      status.textContent = '请选择源坐标系后继续导入。';
+      return;
+    }
+    if (preflight.status === 'rejected') throw new Error(preflight.diagnostics.map(item => item.message).join(' '));
     if (map.getSource('gpkg')) map.removeSource('gpkg');
-    await map.addSource('gpkg', source);
+    await map.addSource('gpkg', source, { sourceCrs: preflight.summary.sourceCrs });
+    if (run !== generation || abort.signal.aborted) return;
     const dataset = source.getDataset();
     state.source = source; state.dataset = dataset;
     const body = document.getElementById('layer-rows'); body.replaceChildren();
@@ -137,13 +173,15 @@ async function load(bytes, filename) {
     document.getElementById('arcs').textContent = String(source.getArcs()?.size() ?? 0);
     document.getElementById('duration').textContent = `${Math.round(performance.now()-started)} ms`;
     document.getElementById('log').textContent = JSON.stringify(dataset.info.geopackage, null, 2);
+    status.dataset.state = 'ready';
     status.textContent = `${filename} · ${inWorker ? 'Web Worker' : '主线程'} · 完成：全部矢量图层位于一个 dataset`;
   } catch (error) {
     if (run !== generation) return;
+    status.dataset.state = abort.signal.aborted ? 'ready' : 'error';
     state.error = String(error); status.textContent = abort.signal.aborted ? '已取消；没有提交部分数据' : `导入失败：${error.message}`;
     if (!abort.signal.aborted) console.error(error);
   } finally {
-    if (run === generation) { state.loading = false; document.getElementById('cancel').disabled = true; }
+    if (run === generation) { state.loading = false; document.getElementById('cancel').disabled = !pendingImport; }
   }
 }
 state.load = load;
@@ -153,7 +191,18 @@ async function sample() {
   await load(await response.arrayBuffer(), 'example-geopackage.gpkg');
 }
 document.getElementById('sample').onclick = () => { void sample(); };
-document.getElementById('cancel').onclick = () => controller?.abort();
+document.getElementById('cancel').onclick = () => {
+  controller?.abort();
+  if (pendingImport) {
+    pendingImport = null; state.needsCrs = false; crsRecovery.hidden = true;
+    status.dataset.state = 'ready'; status.textContent = '已取消；没有提交部分数据';
+    document.getElementById('cancel').disabled = true;
+  }
+};
+sourceCrsInput.oninput = () => { continueButton.disabled = state.loading || !sourceCrsInput.value.trim(); };
+continueButton.onclick = () => {
+  if (pendingImport && sourceCrsInput.value.trim()) void load(pendingImport.bytes, pendingImport.filename, sourceCrsInput.value.trim());
+};
 document.getElementById('file-input').onchange = async event => {
   const file = event.target.files?.[0];
   if (file) await load(await file.arrayBuffer(), file.name);

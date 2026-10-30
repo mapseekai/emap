@@ -4,7 +4,7 @@ const points={type:'FeatureCollection',features:[[-2,2],[2,2],[-2,-2],[2,-2]].ma
 const nameFor=route=>route==='luma-25d'?'luma25d':'lumaBenchmark';
 async function load(page,route,backend){
  const name=nameFor(route);
- await page.goto(`/mapseekai/emap/examples/${route}/?gpu=${backend}`);await page.waitForFunction(name=>window[name],name);
+ await page.goto(`/mapseekai/emap/examples/${route}/?parameters=open&gpu=${backend}`);await page.waitForFunction(name=>window[name],name);
  await page.waitForFunction(name=>['ready','idle'].includes(window[name].state),name);
  await page.locator('#file-input').setInputFiles({name:'icon-points.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(points))});
  if(route==='luma-benchmark')await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));
@@ -70,7 +70,7 @@ for(const backend of ['webgl','webgpu'])test(`${backend}: DPR 2 keeps icon CSS s
 });
 test('real point data: enabling image symbols preserves point LOD and warm geometry uploads',async({page},info)=>{
  test.skip(!process.env.EMAP_BENCHMARK_DATA_DIR,'Requires authorized points.geojson');test.setTimeout(120000);
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  await page.locator('#file-input').setInputFiles(join(process.env.EMAP_BENCHMARK_DATA_DIR,'points.geojson'));
  await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));await page.waitForFunction(()=>lumaBenchmark.state==='ready');
  const before=await page.evaluate(()=>({gpu:{...lumaBenchmark.gpuStats},lod:{...lumaBenchmark.lodStats},source:lumaBenchmark.scene.vertexCount}));const url=await atlas(page);
@@ -86,7 +86,7 @@ test('real point data: enabling image symbols preserves point LOD and warm geome
 
 test('public Emap icon API preserves filters, visibility, parent order and ordinary point fallback',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');const url=await atlas(page);
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');const url=await atlas(page);
  await page.evaluate(async({url,points})=>{
   lumaBenchmark.dispose();const host=document.createElement('div');host.id='formal-icon-test';Object.assign(host.style,{position:'fixed',inset:'0',width:'800px',height:'600px',background:'white',zIndex:'9999'});document.body.append(host);
   const map=await emap.Emap.create({container:host,preset:'viewer',renderer:'canvas2d'}),source=new emap.TopologySource('poi');

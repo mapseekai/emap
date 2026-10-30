@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 async function boot(page,renderer){
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  await page.evaluate(async renderer=>{
   lumaBenchmark.dispose();document.body.replaceChildren();const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:600px';document.body.append(host);
   window.commandMap=await emap.Emap.create({container:host,renderer,preset:'viewer'});window.commandErrors=[];commandMap.on('error',e=>commandErrors.push(String(e.error)));

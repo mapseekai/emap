@@ -13,7 +13,7 @@ const files = (
   'big.geojson,lucc.geojson,building.geojson,points.geojson,pppp.geojson'
 ).split(',');
 const apis = (process.env.EMAP_NAV_APIS ?? 'webgl,webgpu').split(',');
-const route = '/mapseekai/emap/examples/luma-benchmark/';
+const route = '/mapseekai/emap/examples/luma-benchmark/?parameters=open';
 async function snapshotReady(page) {
   await page.waitForFunction(
     () => {
@@ -37,7 +37,7 @@ for (const api of apis)
       page.on('console', (m) => {
         if (m.type() === 'error') errors.push(m.text());
       });
-      await page.goto(route + '?gpu=' + api + '&pointLod=off&screenFilter=off');
+      await page.goto(route + '&gpu=' + api + '&pointLod=off&screenFilter=off');
       await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle', null, {
         timeout: 60000,
       });

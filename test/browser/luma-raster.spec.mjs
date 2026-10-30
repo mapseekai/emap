@@ -13,7 +13,7 @@ for(const backend of ['webgl','webgpu'])for(const filename of files){
   const path=join(directory,filename),before=await stat(path),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend+'&pointLod=off');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+backend+'&pointLod=off');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
   await page.locator('#file-input').setInputFiles(path);await page.locator('#load-file').click();
   await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state));

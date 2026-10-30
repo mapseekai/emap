@@ -9,7 +9,7 @@ for(const dpr of [1,2])test.describe(`progress DPR ${dpr}`,()=>{
   test.skip(!directory,'Requires the authorized real TIFFs; generated data is not a performance substitute.');test.setTimeout(120000);
   const path=join(directory,name),before=await stat(path),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto('/mapseekai/emap/examples/luma-raster/?gpu='+backend);
+  await page.goto('/mapseekai/emap/examples/luma-raster/?parameters=open&gpu='+backend);
   await page.waitForFunction(()=>window.lumaRaster?.state==='idle');
   await page.locator('#file-input').setInputFiles(path);await page.locator('#load').click();
   await page.waitForFunction(()=>['ready','error'].includes(window.lumaRaster.state));await page.evaluate(()=>window.lumaRaster.settle());

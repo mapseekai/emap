@@ -19,7 +19,7 @@ async function hash(page,name){return page.evaluate(async name=>{
 for(const gpu of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-25d'])test(`${gpu} ${route}: mapped symbols equal native pixels and retain existing GPU caches`,async({page},info)=>{
  test.setTimeout(120000);const name=route==='luma-25d'?'luma25d':'lumaBenchmark', errors=[];
  page.on('pageerror',e=>errors.push(e.message));
- await page.goto(`/mapseekai/emap/examples/${route}/?gpu=${gpu}&nav=off`);
+ await page.goto(`/mapseekai/emap/examples/${route}/?parameters=open&gpu=${gpu}&nav=off`);
  await page.waitForFunction(name=>window[name]&&['ready','idle'].includes(window[name].state),name);
  await page.locator('#file-input').setInputFiles({name:'mapped-symbols.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(data))});
  if(route==='luma-benchmark')await page.evaluate(()=>lumaBenchmark.loadFile(document.querySelector('#file-input').files[0]));
@@ -72,7 +72,7 @@ for(const gpu of ['webgl','webgpu'])for(const route of ['luma-benchmark','luma-2
 });
 
 test('public Emap addLayer symbol maps settings with no new layer, keeps parent filter and rolls back invalid edits',async({page})=>{
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  const result=await page.evaluate(async({svg,data})=>{
   lumaBenchmark.dispose();const host=document.createElement('div');Object.assign(host.style,{position:'fixed',inset:'0',width:'800px',height:'600px'});document.body.append(host);
   const map=await emap.Emap.create({container:host,preset:'viewer'}),source=new emap.TopologySource('poi');
@@ -91,7 +91,7 @@ test('public Emap addLayer symbol maps settings with no new layer, keeps parent 
 
 
 test('local image URLs live as long as their named symbol resource, not only its visible icon',async({page})=>{
- await page.goto('/mapseekai/emap/examples/luma-25d/');await page.waitForFunction(()=>window.luma25d&&['idle','ready'].includes(luma25d.state));
+ await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open');await page.waitForFunction(()=>window.luma25d&&['idle','ready'].includes(luma25d.state));
  await page.locator('#file-input').setInputFiles({name:'points.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify({...data,features:data.features.slice(0,2)}))});
  await page.waitForFunction(()=>luma25d.state==='ready');
  await page.locator('#icon-settings>summary').click();

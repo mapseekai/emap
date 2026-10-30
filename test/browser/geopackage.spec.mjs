@@ -1,6 +1,39 @@
 import { test, expect } from '@playwright/test';
 
-const route = '/mapseekai/emap/examples/geopackage-viewer/';
+const route = '/mapseekai/emap/examples/geopackage-viewer/?parameters=open';
+
+test('undefined CRS prompts for a source CRS and keeps the current data until confirmed', async ({ page }) => {
+  await page.goto(route);
+  await expect(page.locator('#layers')).toHaveText('4');
+  const before = await page.evaluate(() => window.geopackageDemo.source.getLayers().map(layer => layer.name));
+  await page.locator('#file-input').setInputFiles('packages/examples/public/fixtures/example-geopackage-undefined-crs.gpkg');
+  await expect(page.locator('#crs-recovery')).toBeVisible();
+  await expect(page.locator('#source-crs')).toHaveValue('');
+  expect(await page.evaluate(() => window.geopackageDemo.source.getLayers().map(layer => layer.name))).toEqual(before);
+  await page.locator('#source-crs').fill('EPSG:4326');
+  await page.locator('#crs-continue').click();
+  await expect(page.locator('#status')).toContainText('undefined-crs.gpkg · Web Worker · 完成');
+  await expect(page.locator('#crs-recovery')).not.toBeVisible();
+  await expect(page.locator('#features')).toHaveText('6');
+  expect(await page.evaluate(() => window.geopackageDemo.source.getCRS())).toBe('EPSG:4326');
+});
+
+test('invalid CRS can be corrected or cancelled without replacing the current dataset', async ({ page }) => {
+  await page.goto(route);
+  await expect(page.locator('#layers')).toHaveText('4');
+  await page.locator('#file-input').setInputFiles('packages/examples/public/fixtures/example-geopackage-undefined-crs.gpkg');
+  await expect(page.locator('#crs-recovery')).toBeVisible();
+  await page.locator('#source-crs').fill('invalid-crs');
+  await page.locator('#crs-continue').click();
+  await expect(page.locator('#source-crs')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#layers')).toHaveText('4');
+  await page.locator('#cancel').click();
+  await expect(page.locator('#crs-recovery')).not.toBeVisible();
+  await expect(page.locator('#status')).toContainText('已取消');
+  await expect(page.locator('#layers')).toHaveText('4');
+  await page.locator('#sample').click();
+  await expect(page.locator('#status')).toContainText('example-geopackage.gpkg · Web Worker · 完成');
+});
 
 test('GeoPackage worker imports all vector tables into one rendered source without external assets', async ({ page }) => {
   const errors = [];

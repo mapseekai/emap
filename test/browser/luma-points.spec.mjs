@@ -14,7 +14,7 @@ test.beforeAll(async()=>{
 for(const backend of ['webgl','webgpu'])test(`${backend}: original real points preserve compositing across colors, symbols, opacity and DPR`,async({page},info)=>{
   test.skip(!directory,'Supply the authorized real-data directory; no generated replacement.');
   test.setTimeout(180000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu='+backend+'&pointLod=off');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu='+backend+'&pointLod=off');
   await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
   expect(await page.evaluate(()=>!!window.lumaBenchmark.gpuStats)).toBe(true);
   await page.locator('#file-input').setInputFiles(join(directory,'points.geojson'));

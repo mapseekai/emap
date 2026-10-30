@@ -35,6 +35,10 @@ for (const routePath of authoredRoutes) {
 }
 
 for (const example of examples) {
+  const previewPath = join('packages/examples/public/previews', `${example.id}.jpg`);
+  if (!(await fileExists(resolve(root, previewPath)))) {
+    violations.push({ path: previewPath, reason: `missing preview capture for ${example.id}` });
+  }
   const routePath = await resolveRoutePath(example.id);
   if (!routePath) {
     violations.push({

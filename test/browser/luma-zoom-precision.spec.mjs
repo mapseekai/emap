@@ -15,7 +15,7 @@ for (const backend of ['webgl', 'webgpu']) {
   test(`${backend}: real LUCC deep-zoom positions match double-precision CPU projection`, async ({ page }, info) => {
     test.skip(!directory, 'Requires the authorized complete LUCC file.'); test.setTimeout(240000);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/?gpu=' + backend + '&pointLod=off');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open&gpu=' + backend + '&pointLod=off');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     await page.locator('#file-input').setInputFiles(join(directory, 'lucc.geojson')); await page.locator('#load-file').click();
     await page.waitForFunction(() => ['ready', 'error'].includes(window.lumaBenchmark.state), null, { timeout: 180000 });
@@ -44,7 +44,7 @@ for (const backend of ['webgl', 'webgpu']) for (const dpr of [1.25, 2]) {
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     try {
-      await page.goto('/mapseekai/emap/examples/luma-vertex-editing/?gpu=' + backend);
+      await page.goto('/mapseekai/emap/examples/luma-vertex-editing/?parameters=open&gpu=' + backend);
       await page.waitForFunction(() => window.lumaEditor?.state === 'idle');
       await page.locator('#file-input').setInputFiles(join(directory, 'lucc.geojson')); await page.locator('#load').click();
       await page.waitForFunction(() => ['ready', 'error'].includes(window.lumaEditor.state), null, { timeout: 180000 });

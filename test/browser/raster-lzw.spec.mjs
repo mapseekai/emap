@@ -21,7 +21,7 @@ for (const unavailable of [false, true]) {
       path: resolve('dist', basename(new URL(route.request().url()).pathname)),
       contentType: 'text/javascript',
     }));
-    await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+    await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
     await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
     const bytes = Array.from(makeRasterFixture({
       width: 32, height: 16, bits: 16, bands: 3, compression: 'lzw',

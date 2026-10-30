@@ -10,7 +10,7 @@ test('native reader cache reports and trimming preserve pixels and release resid
     path: resolve('dist', basename(new URL(route.request().url()).pathname)),
     contentType: 'text/javascript',
   }));
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     const { openGeoTIFF } = await import('../emap-geotiff.mjs');
@@ -48,7 +48,7 @@ test('native reader cache reports and trimming preserve pixels and release resid
 });
 
 test('Mapshaper binary tasks preserve 50000 point shapes and release borrowed runtime ownership', async ({page}) => {
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     const source = new emap.TopologySource('worker-fixture');
@@ -74,7 +74,7 @@ test('Mapshaper binary tasks preserve 50000 point shapes and release borrowed ru
 });
 
 test('public map operations retain CRS sanitization, worker events and map-owned disposal', async ({page}) => {
-  await page.goto('/mapseekai/emap/examples/web-worker/');
+  await page.goto('/mapseekai/emap/examples/web-worker/?parameters=open');
   await expect(page.locator('#clean-btn')).toBeEnabled();
   await page.selectOption('#mode','on');
   await page.locator('#rebuild-btn').click();
@@ -93,7 +93,7 @@ test('public map operations retain CRS sanitization, worker events and map-owned
 });
 
 test('real classic Mapshaper Worker preserves Date fields',async({page})=>{
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  const result=await page.evaluate(async()=>{
   const when=new Date('2026-09-25T00:00:00Z');
@@ -116,7 +116,7 @@ test('real classic Mapshaper Worker preserves Date fields',async({page})=>{
 });
 
 test('large native arc buffers cross the real Worker without detaching the source', async ({ page }) => {
-  await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+  await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
   await page.waitForFunction(() => window.lumaBenchmark?.state === 'idle');
   const result = await page.evaluate(async () => {
     const source = new emap.TopologySource('large-arcs');

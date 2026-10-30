@@ -36,6 +36,10 @@
             <input id="geometry-column" type="text" placeholder="留空自动检测" />
           </div>
           <div class="emap-example-field">
+            <label for="output-crs">输出坐标系</label>
+            <input id="output-crs" type="text" value="EPSG:4326" placeholder="与查询结果的几何坐标一致" />
+          </div>
+          <div class="emap-example-field">
             <label for="sql">SQL</label>
             <textarea id="sql">SELECT * FROM input LIMIT 100</textarea>
           </div>
@@ -61,6 +65,7 @@ await installExampleMapUi(map, emap);
 const fileInput = document.getElementById("file");
 const entrypointSelect = document.getElementById("entrypoint");
 const layerNameInput = document.getElementById("layer-name");
+const outputCrsInput = document.getElementById("output-crs");
 const geometryColumnInput = document.getElementById("geometry-column");
 const sqlInput = document.getElementById("sql");
 const runButton = document.getElementById("run");
@@ -129,7 +134,7 @@ async function addDatasetSource(id, dataset) {
     const source = new TopologySource(id);
     removeSourceWithLayers(id);
     await source.replaceDataset(dataset);
-    await map.addSource(id, source);
+    await map.addSource(id, source, { sourceCrs: outputCrsInput.value.trim() || undefined });
     addDisplayLayers(id, source, "duckdb-geoparquet-output", {
         fill: "#dcfce7",
         fillOpacity: 0.52,

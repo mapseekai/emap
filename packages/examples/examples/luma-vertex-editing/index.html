@@ -17,7 +17,7 @@
 <button id="undo" disabled>撤销</button><button id="redo" disabled>重做</button><button id="export" data-selected>导出选中 GeoJSON</button>
 </section>
 <section class="bench-toolbar"><label><input id="fast-nav" type="checkbox" checked data-ready>快照导航（停止后按当前过滤设置重绘）</label><label><input id="path-culling" type="checkbox" checked data-ready>视口路径过滤（不化简）</label><label><input id="small-arc-filter" type="checkbox" checked data-lock>Canvas 微小 arc 过滤</label><label><input id="half-pixel-filter" type="checkbox" data-lock>半设备像素重复点过滤</label></section><p id="navigation-info" role="status"></p>
-  <p id="status" role="status" data-state="idle">选择本地文件开始；不会自动生成测试数据。</p>
+  <p id="status" role="status" data-state="idle">请选择 GeoJSON 文件。</p>
 <div class="workspace">
 <section id="map" class="map-panel"><div class="badge"><strong id="renderer">luma.gl / WebGL2</strong><span id="render-time"></span></div>
 <div id="stage" tabindex="0" aria-label="选择要素或拖动原始顶点"><canvas id="canvas2d" hidden></canvas><canvas id="webgl"></canvas></div><p id="lod-info"></p><p id="screen-filter-info" role="status"></p></section>

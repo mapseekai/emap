@@ -3,7 +3,7 @@ for(const renderer of ['webgl2','webgpu'])test(`${renderer}: bounded styles and 
  test.setTimeout(120000);const errors=[],warnings=[];
  page.on('pageerror',e=>errors.push(e.message));
  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());else if(m.type()==='warning')warnings.push(m.text());});
- await page.goto('/mapseekai/emap/examples/luma-benchmark/');
+ await page.goto('/mapseekai/emap/examples/luma-benchmark/?parameters=open');
  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle');
  await page.evaluate(async(renderer)=>{
   lumaBenchmark.dispose();document.body.replaceChildren();const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:600px;background:white';document.body.append(host);

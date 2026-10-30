@@ -147,6 +147,7 @@
     "api:build": "typedoc --options typedoc.json",
     "examples:dev": "pnpm --filter @mapseekai/emap-examples dev",
     "examples:build": "pnpm --filter @mapseekai/emap-examples build",
+    "examples:previews": "node scripts/capture-example-previews.mjs",
     "examples:build:cdn": "node scripts/build-examples-cdn.mjs",
     "examples:check": "node scripts/check-examples.mjs",
     "release:verify": "npm run release:verify:local && npm run browser:check",

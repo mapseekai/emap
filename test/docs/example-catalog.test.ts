@@ -267,7 +267,9 @@ describe('example catalog metadata', () => {
     expect(source).not.toContain('const recipes:');
     expect(source).not.toContain('function module(');
     expect(source).not.toContain('recipes[');
-    expect(viteConfig).toContain("import { exampleIds } from '../../docs-meta/examples';");
+    expect(viteConfig).toMatch(
+      /import\s*\{[^}]*\bexampleIds\b[^}]*\}\s*from\s*['"]\.\.\/\.\.\/docs-meta\/examples['"]/,
+    );
     expect(viteConfig).toContain('const routeIds = exampleIds;');
     expect(viteConfig).not.toContain("'getting-started/geojson-viewer'");
   });
@@ -620,8 +622,8 @@ describe('example catalog metadata', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
     expect(document.documentElement.lang).toBe('zh-CN');
-    expect(document.title).toBe('Emap 文档示例');
-    expect(root.querySelector('h1')?.textContent).toBe('Emap 文档示例');
+    expect(document.title).toBe('Emap 示例');
+    expect(root.querySelector('h1')?.textContent).toBe('地图示例');
     expect(root.querySelector('.example-card-title')?.textContent).toBe(examples[0].title.zh);
     expect(root.querySelector('.example-description')?.textContent).toBe(
       examples[0].description.zh,
@@ -640,8 +642,8 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.example-description')?.textContent).toBe(
       examples[0].description.en,
     );
-    expect(document.title).toBe('Emap Documentation Example');
-    expect(root.querySelector('h1')?.textContent).toBe('Emap Documentation Example');
+    expect(document.title).toBe('Emap Examples');
+    expect(root.querySelector('h1')?.textContent).toBe('Examples');
     expect(root.querySelector('a.example-card')?.getAttribute('aria-label')).toBe(
       `Open example: ${examples[0].title.en}`,
     );

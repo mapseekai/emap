@@ -1,5 +1,8 @@
 import {
   getExampleGpuBackend,
+  getExamplePixelRatio,
+  getExamplePointLodEnabled,
+  getExampleFastNavigationEnabled,
   installExampleRendererToolbar,
   navigateExampleRenderer,
 } from '../renderer-choice';
@@ -109,6 +112,8 @@ gpuSelector.addEventListener('change', () =>
 );
 const pointLodToggle = el<HTMLInputElement>('point-lod-enabled');
 const pointLodCell = el<HTMLInputElement>('point-lod-cell');
+pointLodToggle.checked = getExamplePointLodEnabled();
+renderers.setPointLod(pointLodToggle.checked);
 async function setPointLod(enabled: boolean, cellSize = 3): Promise<void> {
   if (phase === 'loading' || phase === 'updating') throw new Error('请等待当前任务结束。');
   renderers.setPointLod(enabled, cellSize);
@@ -152,7 +157,7 @@ for (const control of [smallArcToggle, halfPixelToggle])
   });
 const fastNavToggle = el<HTMLInputElement>('fast-nav'),
   pathCullingToggle = el<HTMLInputElement>('path-culling');
-renderers.navigation.setEnabled(new URLSearchParams(location.search).get('nav') !== 'off');
+renderers.navigation.setEnabled(getExampleFastNavigationEnabled());
 renderers.pathCullingEnabled = new URLSearchParams(location.search).get('cull') !== 'off';
 fastNavToggle.checked = renderers.navigation.enabled;
 pathCullingToggle.checked = renderers.pathCullingEnabled;
@@ -262,7 +267,7 @@ function resize(): void {
   const r = stage.getBoundingClientRect(),
     w = Math.max(80, Math.floor(r.width)),
     h = Math.max(80, Math.floor(r.height)),
-    pr = devicePixelRatio || 1;
+    pr = getExamplePixelRatio();
   if (w === width && h === height && pr === dpr) return;
   view.translate((w - width) / 2, (h - height) / 2);
   width = w;
@@ -705,6 +710,6 @@ async function start(): Promise<void> {
   if (!renderers.gpu) {
     el('renderer').textContent = '所选 GPU 后端不可用（未回退到 Canvas）';
     state(renderers.unavailableReason ?? 'WebGL2 unavailable', 'error');
-  } else state('选择本地文件开始；不会自动生成测试数据。', 'idle');
+  } else state('请选择 GeoJSON 文件。', 'idle');
 }
 void start().catch(fail);

@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 const directory=process.env.EMAP_BENCHMARK_DATA_DIR;
 const gpu=process.env.EMAP_GPU_BACKEND??'webgl';
-const route='/mapseekai/emap/examples/luma-vertex-editing/?gpu='+gpu;
+const route='/mapseekai/emap/examples/luma-vertex-editing/?parameters=open&gpu='+gpu;
 async function ready(page){await page.goto(route);await page.waitForFunction(()=>window.lumaEditor?.state==='idle');}
 async function settled(page){await page.waitForFunction(()=>['ready','error'].includes(window.lumaEditor.state),null,{timeout:240000});expect(await page.locator('#status').getAttribute('data-state'),await page.locator('#status').textContent()).toBe('ready');}
 async function digest(file){const h=createHash('sha256');for await(const b of createReadStream(file))h.update(b);return h.digest('hex');}
