@@ -1,9 +1,6 @@
 node_modules/
 .pnpm-store/
 dist/
-packages/docs/.docusaurus/
-packages/docs/build/
-packages/docs/static/api/
 playwright-report/
 test-results/
 .DS_Store

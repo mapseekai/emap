@@ -1,34 +1,6 @@
 {
-  "expiresOn": "2026-12-31",
   "minimumSeverity": "high",
-  "allowedAdvisoryIds": [
-    "1113686",
-    "1124252",
-    "1130588",
-    "1130720",
-    "1130737",
-    "1138115",
-    "1138808",
-    "1138809",
-    "1138811",
-    "1139427",
-    "1139510",
-    "1153171",
-    "1153172",
-    "1153189",
-    "1158521",
-    "1158524",
-    "1158527",
-    "1158530",
-    "1193727",
-    "1193736",
-    "1240991",
-    "1240992"
-  ],
-  "allowedFindingPrefixes": [
-    "packages/docs>",
-    "packages__docs>",
-    "@mapseekai/emap-docs>"
-  ],
-  "reason": "Temporary allowance for the listed high-severity advisories reachable only through the Docusaurus documentation build toolchain. On 2026-10-03 the release owner deferred 1240991 (http-cache-semantics) and 1240992 (braces); both retain locked local patches and test/security/docs-toolchain-dependencies.test.ts regression coverage pending upstream releases. New advisory IDs, non-documentation paths, critical findings, and expired entries remain blocking."
+  "allowedAdvisoryIds": [],
+  "allowedFindingPrefixes": [],
+  "reason": "No production dependency audit exceptions are currently authorized."
 }

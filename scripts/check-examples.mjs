@@ -1,30 +1,20 @@
 #!/usr/bin/env node
 import { join, resolve } from 'node:path';
 import {
-  buildDocReferenceSet,
   buildReflectionIndex,
-  collectDocs,
   collectFiles,
   fileExists,
-  normalizeDocReference,
   parseRootArg,
   readExamples,
-  readFrontMatterStringList,
   readReflections,
   relativePath,
   reportViolations,
-} from './docs-check-utils.mjs';
+} from './api-example-utils.mjs';
 
 const root = parseRootArg();
 const examples = await readExamples(root);
-const docs = await collectDocs(root, 'packages/docs/docs');
-const englishDocs = await collectDocs(
-  root,
-  'packages/docs/i18n/en/docusaurus-plugin-content-docs/current',
-);
 const reflections = await readReflections(root);
 const { byName } = buildReflectionIndex(reflections);
-const docReferences = buildDocReferenceSet(docs);
 const violations = [];
 
 const exampleIds = new Set(examples.map((example) => example.id));
@@ -44,18 +34,6 @@ for (const routePath of authoredRoutes) {
   });
 }
 
-for (const authoredDocs of [docs, englishDocs]) {
-  for (const doc of authoredDocs.values()) {
-    for (const exampleId of readFrontMatterStringList(doc.frontMatter, 'examples')) {
-      if (exampleIds.has(exampleId)) continue;
-      violations.push({
-        path: relativePath(root, doc.path),
-        reason: `missing example catalog entry ${exampleId}`,
-      });
-    }
-  }
-}
-
 for (const example of examples) {
   const routePath = await resolveRoutePath(example.id);
   if (!routePath) {
@@ -71,15 +49,6 @@ for (const example of examples) {
       violations.push({
         path: join('docs-meta/examples.ts', `#${example.id}`),
         reason: `missing fixture ${fixture}`,
-      });
-    }
-  }
-
-  for (const reference of example.docs) {
-    if (!docReferences.has(normalizeDocReference(reference))) {
-      violations.push({
-        path: join('docs-meta/examples.ts', `#${example.id}`),
-        reason: `missing docs ID ${reference}`,
       });
     }
   }

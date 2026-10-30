@@ -5,7 +5,7 @@ const allowlist = {
   expiresOn: '2026-12-31',
   minimumSeverity: 'high',
   allowedAdvisoryIds: ['1234'],
-  allowedFindingPrefixes: ['packages/docs>', 'packages__docs>', '@mapseekai/emap-docs>'],
+  allowedFindingPrefixes: ['tooling-fixture>', 'tooling_fixture>', '@test/tooling>'],
 };
 
 function report(path: string, severity = 'high') {
@@ -21,10 +21,22 @@ function report(path: string, severity = 'high') {
 }
 
 describe('production dependency audit allowlist', () => {
-  it('allows high findings only when every path belongs to the docs workspace', () => {
+  it('requires no expiry when there are no exceptions and blocks all high findings', () => {
+    const empty = { allowedAdvisoryIds: [], allowedFindingPrefixes: [] };
+    const future = new Date('2030-01-01T00:00:00Z');
+    expect(evaluateAuditReport({ metadata: { vulnerabilities: {} } }, empty, future)).toEqual({
+      allowed: [],
+      blocking: [],
+    });
+    const result = evaluateAuditReport(report('tooling-fixture>vulnerable-package'), empty, future);
+    expect(result.allowed).toEqual([]);
+    expect(result.blocking).toHaveLength(1);
+  });
+
+  it('allows high findings only when every path belongs to the approved fixture', () => {
     expect(
       evaluateAuditReport(
-        report('packages/docs>@docusaurus/core>webpack-dev-server'),
+        report('tooling-fixture>toolchain>vulnerable-package'),
         allowlist,
         new Date('2026-09-04T00:00:00Z'),
       ),
@@ -33,16 +45,16 @@ describe('production dependency audit allowlist', () => {
         {
           id: '1234',
           severity: 'high',
-          path: 'packages/docs>@docusaurus/core>webpack-dev-server',
+          path: 'tooling-fixture>toolchain>vulnerable-package',
         },
       ],
       blocking: [],
     });
   });
 
-  it('never allows critical findings even when the id and docs path were approved', () => {
+  it('never allows critical findings even when the id and fixture path were approved', () => {
     const result = evaluateAuditReport(
-      report('packages/docs>@docusaurus/core>vulnerable-package', 'critical'),
+      report('tooling-fixture>toolchain>vulnerable-package', 'critical'),
       allowlist,
       new Date('2026-09-04T00:00:00Z'),
     );
@@ -50,13 +62,13 @@ describe('production dependency audit allowlist', () => {
     expect(result.blocking).toHaveLength(1);
   });
 
-  it('blocks unapproved high advisory ids even on documentation paths', () => {
+  it('blocks unapproved high advisory ids even on approved paths', () => {
     const result = evaluateAuditReport(
       {
         advisories: {
           '9999': {
             severity: 'high',
-            findings: [{ paths: ['packages/docs>@docusaurus/core>new-vulnerability'] }],
+            findings: [{ paths: ['tooling-fixture>toolchain>new-vulnerability'] }],
           },
         },
         metadata: { vulnerabilities: { high: 1 } },
@@ -70,7 +82,7 @@ describe('production dependency audit allowlist', () => {
       {
         id: '9999',
         severity: 'high',
-        path: 'packages/docs>@docusaurus/core>new-vulnerability',
+        path: 'tooling-fixture>toolchain>new-vulnerability',
       },
     ]);
   });
@@ -108,10 +120,10 @@ describe('production dependency audit allowlist', () => {
     ).toThrow(/missing vulnerability metadata/);
   });
 
-  it('fails closed when the temporary docs allowlist expires', () => {
+  it('fails closed when the temporary allowlist expires', () => {
     expect(() =>
       evaluateAuditReport(
-        report('packages/docs>@docusaurus/core>webpack-dev-server'),
+        report('tooling-fixture>toolchain>vulnerable-package'),
         allowlist,
         new Date('2027-01-01T00:00:00Z'),
       ),

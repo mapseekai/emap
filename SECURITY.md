@@ -44,7 +44,7 @@ map.setExpressionPolicy('trusted');
 
 Select `'disabled'` before processing externally supplied expression strings.
 For attribute-based styles, use the validated style expression operators described
-in the [styling guide](packages/docs/docs/guides/styling.md).
+in the [styling guide](https://mapseekai.github.io/mapseekai/emap/guides/styling).
 
 ### Upgrade configuration
 
@@ -58,7 +58,7 @@ explicitly for each workflow:
 ## Upload and asynchronous work
 
 Configure source-size and ZIP expansion budgets for public uploads; the
-[file upload guide](packages/docs/docs/recipes/file-upload.md) documents those
+[file upload guide](https://mapseekai.github.io/mapseekai/emap/recipes/file-upload) documents those
 parameters. Prepare archives with unique entry basenames. Worker results commit
 against the current source identity and geometry/attribute versions, preserving
 the active editing state when asynchronous jobs finish.

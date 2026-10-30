@@ -1,0 +1,5 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+developer_instructions = """
+Dependency feedback (emap): Before task work, locate this repository root (git rev-parse --show-toplevel) and fully read .codex/dependency-feedback.md and .codex/dependencies.toml relative to that root; follow them throughout development, integration, debugging, testing and implementation. If either file is unavailable, report the gap and continue independent work without guessing a feedback target.
+The user authorizes dependency Issue creation, necessary evidence comments and necessary confirmed Multica project/repository bindings under these rules. Proactively investigate, deduplicate and report dependency defects or concrete shared-capability needs via the existing multica CLI; continue the current task without modifying upstream dependencies or assigning, starting or rerunning other agents.
+"""

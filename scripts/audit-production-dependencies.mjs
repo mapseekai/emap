@@ -59,12 +59,16 @@ export function evaluateAuditReport(report, allowlist, now = new Date()) {
     throw new Error(`Unsupported audit severity '${minimumSeverity}'`);
   }
 
-  const expiry = new Date(`${allowlist.expiresOn}T23:59:59.999Z`);
-  if (!Number.isFinite(expiry.getTime())) {
-    throw new Error('security/audit-allowlist.json contains an invalid expiresOn date');
-  }
-  if (now.getTime() > expiry.getTime()) {
-    throw new Error(`Documentation audit allowlist expired on ${allowlist.expiresOn}`);
+  const hasExceptions = (allowlist.allowedAdvisoryIds?.length ?? 0) > 0 ||
+    (allowlist.allowedFindingPrefixes?.length ?? 0) > 0;
+  if (hasExceptions) {
+    const expiry = new Date(`${allowlist.expiresOn}T23:59:59.999Z`);
+    if (!Number.isFinite(expiry.getTime())) {
+      throw new Error('security/audit-allowlist.json contains an invalid expiresOn date');
+    }
+    if (now.getTime() > expiry.getTime()) {
+      throw new Error(`Dependency audit allowlist expired on ${allowlist.expiresOn}`);
+    }
   }
 
   const prefixes = allowlist.allowedFindingPrefixes ?? [];
@@ -157,7 +161,9 @@ async function main() {
   }
 
   console.log(
-    `Production dependency audit passed; ${allowed.length} documentation-only finding path(s) are temporarily allowed until ${allowlist.expiresOn}.`,
+    allowed.length
+      ? `Production dependency audit passed; ${allowed.length} finding path(s) are temporarily allowed until ${allowlist.expiresOn}.`
+      : 'Production dependency audit passed; no exceptions used.',
   );
 }
 

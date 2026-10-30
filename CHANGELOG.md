@@ -89,9 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Describe supported map, data, editing, and plugin capabilities through practical
   workflows in the bilingual guides, with explicit configuration and host responsibilities.
-- Improve navigation between [installation](packages/docs/docs/getting-started/installation.md),
-  [the first map](packages/docs/docs/getting-started/quick-start.md),
-  [concepts](packages/docs/docs/concepts/overview.md), API references, and runnable examples.
+- Improve navigation between [installation](https://mapseekai.github.io/mapseekai/emap/getting-started/installation),
+  [the first map](https://mapseekai.github.io/mapseekai/emap/getting-started/quick-start),
+  [concepts](https://mapseekai.github.io/mapseekai/emap/concepts/overview), API references, and runnable examples.
 
 ### Release scope
 

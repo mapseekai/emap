@@ -39,7 +39,7 @@
 
 ## 本地栅格文件
 
-可选的 [`/geotiff` 集成](packages/docs/docs/data/geotiff.md) 通过 Worker 从文件引用按窗口读取本地 GeoTIFF/BigTIFF。超过 2GiB 的文件使用有效的内部或外部金字塔完成按需解码。组合 `rasterPlugin()` 与 `geoTIFFPlugin()`，部署 `emap-geotiff-worker.js`；工程保存外部引用，文件句柄由宿主负责。高位深自动拉伸到 8 位显示，同时保留原始数值；导航期间保留已有画面，停止后逐块更新，未就绪区域继续使用裁剪后的旧分辨率缓存。示例目录新增 `geotiff-viewer`，包含整数和浮点测试影像，以及 RGB / 单波段灰度和波段选择。支持 north-up 网格；输入编码、金字塔配置、资源预算和已测数据规模见指南。
+可选的 [`/geotiff` 集成](https://mapseekai.github.io/mapseekai/emap/data/geotiff) 通过 Worker 从文件引用按窗口读取本地 GeoTIFF/BigTIFF。超过 2GiB 的文件使用有效的内部或外部金字塔完成按需解码。组合 `rasterPlugin()` 与 `geoTIFFPlugin()`，部署 `emap-geotiff-worker.js`；工程保存外部引用，文件句柄由宿主负责。高位深自动拉伸到 8 位显示，同时保留原始数值；导航期间保留已有画面，停止后逐块更新，未就绪区域继续使用裁剪后的旧分辨率缓存。示例目录新增 `geotiff-viewer`，包含整数和浮点测试影像，以及 RGB / 单波段灰度和波段选择。支持 north-up 网格；输入编码、金字塔配置、资源预算和已测数据规模见指南。
 
 ## 安装
 
@@ -265,7 +265,7 @@ await source.setData({ filename: file.name, content: new Uint8Array(await file.a
 await map.addSource('gpkg', source);
 ```
 
-[部署资源、CRS、多图层、Z/M 与内存预算](packages/docs/docs/data/geopackage.md)。
+[部署资源、CRS、多图层、Z/M 与内存预算](https://mapseekai.github.io/mapseekai/emap/data/geopackage)。
 
 ## 可选 DuckDB-Wasm
 
@@ -319,15 +319,15 @@ const map = await Emap.create({
 
 ## 文档
 
-- [安装](packages/docs/docs/getting-started/installation.md)
-- [快速开始](packages/docs/docs/getting-started/quick-start.md)
-- [Emap 核心概念](packages/docs/docs/concepts/emap.md)
-- [技术架构与源码组织](packages/docs/docs/concepts/architecture.md)
-- [编辑指南](packages/docs/docs/guides/editing.md)
-- [样式指南](packages/docs/docs/guides/styling.md)
-- [Worker 指南](packages/docs/docs/guides/worker.md)
-- [DuckDB 指南](packages/docs/docs/data/duckdb.md)
-- [兼容性](packages/docs/docs/reference/compatibility.md)
+- [安装](https://mapseekai.github.io/mapseekai/emap/getting-started/installation)
+- [快速开始](https://mapseekai.github.io/mapseekai/emap/getting-started/quick-start)
+- [Emap 核心概念](https://mapseekai.github.io/mapseekai/emap/concepts/emap)
+- [技术架构与源码组织](https://mapseekai.github.io/mapseekai/emap/concepts/architecture)
+- [编辑指南](https://mapseekai.github.io/mapseekai/emap/guides/editing)
+- [样式指南](https://mapseekai.github.io/mapseekai/emap/guides/styling)
+- [Worker 指南](https://mapseekai.github.io/mapseekai/emap/guides/worker)
+- [DuckDB 指南](https://mapseekai.github.io/mapseekai/emap/data/duckdb)
+- [兼容性](https://mapseekai.github.io/mapseekai/emap/reference/compatibility)
 - [可运行示例](packages/examples/examples)
 - [llms.txt](https://mapseekai.github.io/mapseekai/emap/llms.txt) — 面向 AI 编程助手的文档站点索引
 
@@ -372,7 +372,7 @@ DOM 指针输入
 
 单元测试严格使用 `foo.ts` + `foo.test.ts` 同目录同名，一个实现文件最多一个单元测试文件。跨模块回归/集成测试进入 `test/integration/`；浏览器、构建、类型契约、文档、示例、安全测试分别进入 `test/` 对应目录。`test-layout:check` 和 `typecheck:contracts` 自动约束这套规则。
 
-完整说明见 [当前技术架构与源码组织](packages/docs/docs/concepts/architecture.md)。
+完整说明见 [当前技术架构与源码组织](https://mapseekai.github.io/mapseekai/emap/concepts/architecture)。
 
 ## 开发
 
@@ -399,19 +399,19 @@ pnpm run test:run
 pnpm run test:duckdb
 pnpm run build
 pnpm run bundle:smoke
-pnpm run docs:verify
+pnpm run examples:verify
 pnpm run audit:prod
 pnpm pack --dry-run
 ```
 
-本地启动示例或文档站：
+本地启动或构建示例站：
 
 ```bash
 pnpm run examples:dev
-pnpm run docs:dev
+pnpm run examples:build
 ```
 
-`packages/docs/static/api/` 下由 TypeDoc 生成的文件被有意忽略，`api:build`、`docs:build` 和 `docs:verify` 会重新生成。
+TypeDoc 的生成结果位于 `dist/api/`，由 `api:build` 重新生成，不提交到仓库。文档正文、翻译、主题与网站发布在独立的 `emap-web` 项目中维护。
 
 DuckDB 集成套件通过 `pnpm run test:duckdb` 运行，该命令对 `src/integrations/duckdb` 与 `test/integration/duckdb` 全目录设置 `DUCKDB_WASM_INTEGRATION=1`。
 

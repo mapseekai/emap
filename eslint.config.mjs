@@ -8,8 +8,6 @@ export default defineConfig(
     'test-results/**',
     '**/node_modules/**',
     '**/*.test-d.ts',
-    'packages/docs/build/**',
-    'packages/docs/.docusaurus/**',
     'packages/examples/dist/**',
   ]),
   {
@@ -17,8 +15,6 @@ export default defineConfig(
       'src/**/*.ts',
       'test/**/*.ts',
       'packages/examples/**/*.ts',
-      'packages/docs/**/*.ts',
-      'packages/docs/**/*.tsx',
       'docs-meta/**/*.ts',
       '*.ts',
     ],
@@ -26,11 +22,7 @@ export default defineConfig(
     extends: [tseslint.configs.recommendedTypeCheckedOnly],
     languageOptions: {
       parserOptions: {
-        project: [
-          './tsconfig.lint.json',
-          './tsconfig.tooling.json',
-          './packages/docs/tsconfig.json',
-        ],
+        project: ['./tsconfig.lint.json', './tsconfig.tooling.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },

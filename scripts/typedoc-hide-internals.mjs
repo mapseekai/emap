@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Comment, CommentTag, Converter, ReflectionKind } from 'typedoc';
 
-const DOCS_ROOT = 'packages/docs/docs';
+const DOCS_ROOT = process.env.EMAP_DOCS_DIR;
 const INTERNAL_MAP_HOST_SOURCE = 'src/engine/map/map.ts';
 const INTERNAL_HOST_MEMBER = /\b_[A-Za-z][A-Za-z0-9]*\b/g;
 
@@ -35,7 +35,7 @@ function markdownFiles(root) {
 
 function exampleAssociations(root) {
   const associations = new Map();
-  for (const file of markdownFiles(resolve(root, DOCS_ROOT))) {
+  for (const file of DOCS_ROOT ? markdownFiles(resolve(root, DOCS_ROOT)) : []) {
     const metadata = frontMatter(readFileSync(file, 'utf8'));
     const examples = frontMatterList(metadata, 'examples');
     for (const api of frontMatterList(metadata, 'api')) {

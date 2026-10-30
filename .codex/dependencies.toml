@@ -1,0 +1,134 @@
+# 人工路由快照；非 Codex 原生配置。提交前按 dependency-feedback.md 重新核验。
+schema_version = 1
+verified_on = "2026-10-30"
+source_repository = "https://github.com/mapseekai/emap"
+source_commit = "6d10bd8e70eb68e7ba971f7d79127b12d11ac9d8"
+source_worktree_dirty = true
+lockfile = "pnpm-lock.yaml"
+manifests = ["package.json", "packages/examples/package.json"]
+pending_directory = ".agent/dependency-feedback/pending"
+
+[multica]
+workspace_name = "mapseekai"
+workspace_id = "6265acfe-9f1b-4902-a197-16ea5437f872"
+cli_version = "0.3.38"
+
+[coverage]
+scope = "所有直接外部依赖、workspace 包，以及全部已安装直接/间接依赖中的自有包。其他间接依赖在发现问题时核验并补齐路由。"
+lock_package_records = 715
+lock_snapshot_records = 716
+installed_external_name_version_pairs = 629
+uninstalled_optional_paths = 86
+owned_external_packages = ["@mapseekai/tasklane", "@zwishing/epsg-index"]
+repository_basis = "第三方仓库来自实际安装 package.json.repository（LZW 另核对 GitHub package.json）；尚未逐一在线核验迁移，反馈前必须核验规范仓库与 fork。"
+binding_gap = "已读取 mapseekai 工作区全部 17 个项目及其资源。除下列 targets 外，直接第三方包均未找到匹配的项目绑定，故省略 target；不得默认为 emap。出现真实问题时按规则复查并补齐必要项目，无法确认则留草稿。"
+installation_boundary = "pnpm 依赖树含当前 darwin/arm64 未安装的 86 个平台可选包路径；未将它们计入实际安装版本，也未为补齐覆盖安装依赖。"
+
+[targets.emap]
+kind = "current-workspace"
+repository = "https://github.com/mapseekai/emap"
+repository_id = 1147949743
+repository_aliases = ["https://github.com/zwishing/emap"]
+project_name = "emap"
+project_id = "4006d7b8-7451-46e7-a385-5c5a806a306e"
+github_resource_id = "8bef058c-fa8e-4966-9d50-a21c05a6e149"
+binding = "verified"
+evidence = "origin 与 package.json；GitHub 旧 URL 重定向 ID 和新仓库 ID 一致；现有 Multica GitHub 资源从旧 URL 更新为规范 URL，保留原资源和本地目录关联。"
+
+[targets.tasklane]
+kind = "owned-external"
+repository = "https://github.com/mapseekai/tasklane"
+repository_id = 1384655637
+fork = false
+project_name = "tasklane"
+project_id = "23cab55e-cf8e-4ae7-b895-acdc42d58ebe"
+github_resource_id = "21bf2257-8c07-495e-85f6-9819b6c95667"
+binding = "verified"
+evidence = "已安装 @mapseekai/tasklane@0.2.0-beta.2 的 repository、GitHub API 与 Multica github_repo 资源一致；复用现有项目。"
+
+[targets.epsg-index]
+kind = "owned-external-fork"
+repository = "https://github.com/mapseekai/epsg-index"
+repository_id = 1264889294
+repository_aliases = ["https://github.com/zwishing/epsg-index"]
+fork = true
+upstream_repository = "https://github.com/derhuerst/epsg-index"
+project_name = "epsg-index"
+project_id = "292155f9-b91f-46c3-81f6-38158ee53c51"
+github_resource_id = "e08976c3-b197-4e48-a9e8-e04d0ad7292b"
+binding = "verified"
+evidence = "npm scope 仍为 @zwishing；已安装元数据指向 zwishing/epsg-index，GitHub 重定向 ID 与 mapseekai/epsg-index 一致；parent/source 为 derhuerst/epsg-index。Multica 已关联迁移后仓库，不能使用旧 homepage 推断目标。"
+
+[workspace_packages]
+"@mapseekai/emap" = { path = ".", version = "0.15.0", target = "emap" }
+"@mapseekai/emap-examples" = { path = "packages/examples", version = "0.0.0", target = "emap", private = true, local_dependency = "@mapseekai/emap workspace:* -> ../.." }
+
+[evidence]
+codex_version = "0.162.1"
+node_version = "22.23.1"
+package_manager_declared = "pnpm@11.15.1"
+platform = "darwin/arm64"
+lzw_repository = "GitHub developmentseed/lzw-tiff-decoder 的 package.json 与已安装 @developmentseed/lzw-tiff-decoder@0.2.2 元数据一致；未误映射至 manzt 或 kylebarron 同名仓库。"
+lzw_source = "https://api.github.com/repos/developmentseed/lzw-tiff-decoder/contents/package.json"
+"package.json.sha256" = "ed14bb8a6fe5c7ae4c69d3eb4002f4395b17edabe5ec6017d600eb2791c46452"
+"packages/examples/package.json.sha256" = "92ad13ba85038ddf40cf3c4a7409b420058abf3ecbd262f6761927feabdc1f41"
+"pnpm-workspace.yaml.sha256" = "dc15e0c365a1c95df461ee25bed94dd0374b3887220229a753bc1a933ebf2aac"
+"pnpm-lock.yaml.sha256" = "198a81abd375e665bcbe8b036ced75d6227a2e4fef764e1d7a4150c50feadb98"
+
+# versions 为所有实际安装版本；多版本包的 direct_version 指明直接入口。
+# 未指定 target 的依赖先补齐已确认绑定；仓库地址不等于 Multica 项目 ID。
+[dependencies]
+"@biomejs/biome" = { repository = "https://github.com/biomejs/biome", versions = ["2.4.16"], declared_in = ["package.json#devDependencies"] }
+"@developmentseed/lzw-tiff-decoder" = { repository = "https://github.com/developmentseed/lzw-tiff-decoder", versions = ["0.2.2"], declared_in = ["package.json#dependencies"] }
+"@duckdb/duckdb-wasm" = { repository = "https://github.com/duckdb/duckdb-wasm", versions = ["1.33.1-dev64.0"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
+"@fontsource-variable/geist-mono" = { repository = "https://github.com/fontsource/font-files", versions = ["5.3.0"], declared_in = ["packages/examples/package.json#dependencies"] }
+"@fontsource/noto-sans-mono" = { repository = "https://github.com/fontsource/font-files", versions = ["5.3.0"], declared_in = ["package.json#devDependencies"] }
+"@fontsource/noto-sans-sc" = { repository = "https://github.com/fontsource/font-files", versions = ["5.3.0"], declared_in = ["package.json#devDependencies"] }
+"@fontsource/noto-serif-sc" = { repository = "https://github.com/fontsource/font-files", versions = ["5.3.0"], declared_in = ["package.json#devDependencies"] }
+"@luma.gl/core" = { repository = "https://github.com/visgl/luma.gl", versions = ["10.0.0-alpha.4"], declared_in = ["package.json#dependencies"] }
+"@luma.gl/shadertools" = { repository = "https://github.com/visgl/luma.gl", versions = ["10.0.0-alpha.4"], declared_in = ["package.json#dependencies"] }
+"@luma.gl/webgl" = { repository = "https://github.com/visgl/luma.gl", versions = ["10.0.0-alpha.4"], declared_in = ["package.json#dependencies"] }
+"@luma.gl/webgpu" = { repository = "https://github.com/visgl/luma.gl", versions = ["10.0.0-alpha.4"], declared_in = ["package.json#dependencies"] }
+"@mapseekai/tasklane" = { repository = "https://github.com/mapseekai/tasklane", versions = ["0.2.0-beta.2"], declared_in = ["package.json#dependencies"], target = "tasklane" }
+"@ngageoint/geopackage" = { repository = "https://github.com/ngageoint/geopackage-js", versions = ["4.2.9"], declared_in = ["package.json#devDependencies"] }
+"@playwright/test" = { repository = "https://github.com/microsoft/playwright", versions = ["1.64.0-alpha-2026-10-02"], declared_in = ["package.json#devDependencies"] }
+"@rollup/plugin-alias" = { repository = "https://github.com/rollup/plugins", versions = ["6.0.0"], declared_in = ["package.json#devDependencies"] }
+"@rollup/plugin-commonjs" = { repository = "https://github.com/rollup/plugins", versions = ["25.0.8"], declared_in = ["package.json#devDependencies"] }
+"@rollup/plugin-json" = { repository = "https://github.com/rollup/plugins", versions = ["6.1.0"], declared_in = ["package.json#devDependencies"] }
+"@rollup/plugin-node-resolve" = { repository = "https://github.com/rollup/plugins", versions = ["15.3.1"], declared_in = ["package.json#devDependencies"] }
+"@rollup/plugin-terser" = { repository = "https://github.com/rollup/plugins", versions = ["1.0.0"], declared_in = ["package.json#devDependencies"] }
+"@tmcw/togeojson" = { repository = "https://github.com/placemark/togeojson", versions = ["5.8.1"], declared_in = ["package.json#dependencies"] }
+"@types/jsdom" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["30.0.0"], declared_in = ["package.json#devDependencies"] }
+"@types/node" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["10.17.60", "20.19.43", "24.13.1", "8.10.66"], direct_version = "24.13.1", declared_in = ["package.json#devDependencies"] }
+"@types/prismjs" = { repository = "https://github.com/DefinitelyTyped/DefinitelyTyped", versions = ["1.26.6"], declared_in = ["packages/examples/package.json#devDependencies"] }
+"@webgpu/types" = { repository = "https://github.com/gpuweb/types", versions = ["0.1.72"], declared_in = ["package.json#devDependencies"] }
+"@zwishing/epsg-index" = { repository = "https://github.com/mapseekai/epsg-index", versions = ["3.0.0"], declared_in = ["package.json#devDependencies"], target = "epsg-index" }
+"apache-arrow" = { repository = "https://github.com/apache/arrow", versions = ["17.0.0"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
+"bidi-js" = { repository = "https://github.com/lojjic/bidi-js", versions = ["1.0.3"], declared_in = ["package.json#dependencies"] }
+"cordis" = { repository = "https://github.com/cordiverse/cordis", versions = ["4.0.0-rc.10"], declared_in = ["package.json#dependencies"] }
+"earcut" = { repository = "https://github.com/mapbox/earcut", versions = ["3.2.3"], declared_in = ["package.json#dependencies"] }
+"esbuild" = { repository = "https://github.com/evanw/esbuild", versions = ["0.25.12", "0.28.1"], direct_version = "0.25.12", declared_in = ["package.json#devDependencies"] }
+"eslint" = { repository = "https://github.com/eslint/eslint", versions = ["10.13.0"], declared_in = ["package.json#devDependencies"] }
+"fflate" = { repository = "https://github.com/101arrowz/fflate", versions = ["0.8.3"], declared_in = ["package.json#dependencies"] }
+"flatbush" = { repository = "https://github.com/mourner/flatbush", versions = ["3.3.1", "4.6.2"], direct_version = "4.6.2", declared_in = ["package.json#dependencies"] }
+"flatgeobuf" = { repository = "https://github.com/flatgeobuf/flatgeobuf", versions = ["4.4.0"], declared_in = ["packages/examples/package.json#devDependencies"] }
+"geographiclib-geodesic" = { repository = "https://github.com/geographiclib/geographiclib-js", versions = ["2.2.0"], declared_in = ["package.json#dependencies"] }
+"geotiff" = { repository = "https://github.com/geotiffjs/geotiff.js", versions = ["3.0.5", "3.1.0-beta.0"], direct_version = "3.0.5", declared_in = ["package.json#dependencies"] }
+"harfbuzzjs" = { repository = "https://github.com/harfbuzz/harfbuzzjs", versions = ["0.10.3"], declared_in = ["package.json#dependencies"] }
+"jsdom" = { repository = "https://github.com/jsdom/jsdom", versions = ["29.1.0"], declared_in = ["package.json#devDependencies"] }
+"kdbush" = { repository = "https://github.com/mourner/kdbush", versions = ["3.0.0", "4.1.0"], direct_version = "4.1.0", declared_in = ["package.json#dependencies"] }
+"libtess" = { repository = "https://github.com/brendankenny/libtess.js", versions = ["1.2.2"], declared_in = ["package.json#dependencies"] }
+"maplibre-gl" = { repository = "https://github.com/maplibre/maplibre-gl-js", versions = ["6.8.0"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
+"mapshaper" = { repository = "https://github.com/mbloch/mapshaper", versions = ["0.6.121"], declared_in = ["package.json#devDependencies"] }
+"mproj" = { repository = "https://github.com/mbloch/mapshaper-proj", versions = ["0.0.40", "0.1.3"], direct_version = "0.1.3", declared_in = ["package.json#dependencies"] }
+"msdfgen-wasm" = { repository = "https://github.com/md5crypt/msdfgen-wasm", versions = ["1.0.0"], declared_in = ["package.json#dependencies"] }
+"parquet-wasm" = { repository = "https://github.com/kylebarron/parquet-wasm", versions = ["0.7.2"], declared_in = ["package.json#devDependencies", "package.json#peerDependencies"] }
+"prismjs" = { repository = "https://github.com/PrismJS/prism", versions = ["1.30.0"], declared_in = ["packages/examples/package.json#dependencies"] }
+"rollup" = { repository = "https://github.com/rollup/rollup", versions = ["4.57.1"], declared_in = ["package.json#devDependencies"] }
+"rollup-plugin-polyfill-node" = { repository = "https://github.com/FredKSchott/rollup-plugin-polyfill-node", versions = ["0.13.0"], declared_in = ["package.json#devDependencies"] }
+"rollup-plugin-postcss" = { repository = "https://github.com/egoist/rollup-plugin-postcss", versions = ["4.0.2"], declared_in = ["package.json#devDependencies"] }
+"typedoc" = { repository = "https://github.com/TypeStrong/TypeDoc", versions = ["0.28.20"], declared_in = ["package.json#devDependencies"] }
+"typescript" = { repository = "https://github.com/microsoft/TypeScript", versions = ["5.9.3"], declared_in = ["package.json#devDependencies"] }
+"typescript-eslint" = { repository = "https://github.com/typescript-eslint/typescript-eslint", versions = ["8.71.2"], declared_in = ["package.json#devDependencies"] }
+"vite" = { repository = "https://github.com/vitejs/vite", versions = ["7.3.7"], declared_in = ["package.json#devDependencies"] }
+"vitest" = { repository = "https://github.com/vitest-dev/vitest", versions = ["4.1.9"], declared_in = ["package.json#devDependencies"] }

@@ -10,12 +10,12 @@ guidance only when the task matches the stated condition.
 
 | Task | Guidance |
 | --- | --- |
-| Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture) and the [architecture guide](packages/docs/docs/concepts/architecture.md) |
+| Locate responsibilities or change architecture/runtime composition | [README architecture](README.md#architecture) and the [architecture guide](https://mapseekai.github.io/mapseekai/emap/concepts/architecture) |
 | Install dependencies or select development commands | [README development](README.md#development); `package.json` defines executable commands |
 | Change public APIs or package entry points | The explicit export list in `src/index.ts` and affected type contracts |
-| Change DuckDB SQL, tables, or data access | [DuckDB guide](packages/docs/docs/data/duckdb.md) |
+| Change DuckDB SQL, tables, or data access | [DuckDB guide](https://mapseekai.github.io/mapseekai/emap/data/duckdb) |
 | Change expression execution or untrusted input handling; report a vulnerability | [SECURITY.md](SECURITY.md) |
-| Publish a package, deploy docs, or prepare a release | [Release checklist](docs/release-checklist.md) and relevant `.github/workflows/` file |
+| Publish a package or prepare a release | [Release checklist](docs/release-checklist.md) and relevant `.github/workflows/` file |
 | Navigate/refactor code with graph tools | [Code intelligence](docs/agent-tools.md#code-intelligence) |
 | Investigate WebGL2/WebGPU performance, GPU memory, or resource leaks | [luma.gl profiling guide](https://luma.gl/docs/developer-guide/profiling) and the installed `lumagl` skill |
 | Use or maintain a skill | [Skill selection and maintenance](docs/agent-tools.md#skills) |
@@ -89,7 +89,7 @@ then verify the intended contract. Select checks for the affected area:
   affected lifecycle tests. AI capability changes: `pnpm run capabilities:check`.
 - Other code changes: affected tests, typecheck, and build when output is affected.
 - Agent instructions or prose only: inspect links, command names, and conflicting
-  rules. Product documentation/API/example changes use `pnpm run docs:verify`.
+  rules. API/example changes use `pnpm run examples:verify`; website content is maintained and verified in the separate `emap-web` project.
 - Release preparation: the complete `pnpm run release:verify` gate remains required.
 
 Once applicable checks pass, repeat or broaden them only for new changes,

@@ -32,10 +32,7 @@ describe('type-aware lint gate', () => {
     30_000,
   );
 
-  it.each([
-    'packages/docs/src/theme/MDXComponents/A/index.tsx',
-    'vitest.config.ts',
-  ])('checks Promise ownership in %s', async (filePath) => {
+  it.each(['vitest.config.ts'])('checks Promise ownership in %s', async (filePath) => {
     const [result] = await eslint.lintText('Promise.resolve(1);', { filePath });
     expect(
       result.messages.some(
@@ -72,7 +69,6 @@ describe('semantic TypeScript coverage', () => {
         'tsconfig.test.json',
         'tsconfig.type-tests.json',
         'packages/examples/tsconfig.json',
-        'packages/docs/tsconfig.json',
         'tsconfig.tooling.json',
       ].flatMap((path) => {
         const parsed = config(path);
@@ -85,22 +81,13 @@ describe('semantic TypeScript coverage', () => {
     const files = ts.sys.readDirectory(
       process.cwd(),
       ['.ts', '.tsx', '.mts'],
-      [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/.docusaurus/**',
-        'packages/docs/build/**',
-        '**/.worktrees/**',
-        '**/.git/**',
-      ],
+      ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/.git/**'],
       ['src/**/*', 'test/**/*', 'packages/**/*', 'docs-meta/**/*', '*.ts', '*.mts'],
     );
     expect(files.filter((path) => !covered.has(path))).toEqual([]);
   }, 30_000);
 
   it.each([
-    ['packages/docs/tsconfig.json', 'packages/docs/sidebars.ts'],
-    ['packages/docs/tsconfig.json', 'packages/docs/src/theme/MDXComponents/A/index.tsx'],
     ['tsconfig.tooling.json', 'vitest.config.ts'],
   ])('reports semantic errors in %s: %s', (project, path) => {
     const parsed = config(project);

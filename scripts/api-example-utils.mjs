@@ -44,86 +44,6 @@ export async function collectFiles(dir, extensions) {
   return nested.flat().sort();
 }
 
-function parseFrontMatter(markdown) {
-  const match = /^---\r?\n(?<body>[\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
-  if (!match?.groups?.body) return {};
-
-  return Object.fromEntries(
-    match.groups.body
-      .split(/\r?\n/)
-      .map((line) => line.match(/^(?<key>[\w-]+):\s*(?<value>.*)$/))
-      .filter((lineMatch) => Boolean(lineMatch?.groups))
-      .map((lineMatch) => [lineMatch.groups.key, lineMatch.groups.value.trim()]),
-  );
-}
-
-export function hasFrontMatterField(frontMatter, key) {
-  return Object.prototype.hasOwnProperty.call(frontMatter, key);
-}
-
-export function readFrontMatterString(frontMatter, key) {
-  const value = frontMatter[key];
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-export function readFrontMatterStringList(frontMatter, key) {
-  const value = frontMatter[key];
-  if (Array.isArray(value)) return value.filter((item) => typeof item === 'string');
-  if (typeof value !== 'string') return [];
-
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
-
-  return [trimmed];
-}
-
-export async function collectDocs(root, docsRoot) {
-  const absoluteRoot = resolve(root, docsRoot);
-  const files = await collectFiles(absoluteRoot, ['.md', '.mdx']);
-  const docs = new Map();
-
-  for (const file of files) {
-    const markdown = await readFile(file, 'utf8');
-    const rel = toPosixPath(relative(absoluteRoot, file)).replace(/\.mdx?$/, '');
-    docs.set(rel, {
-      path: file,
-      rel,
-      frontMatter: parseFrontMatter(markdown),
-    });
-  }
-
-  return docs;
-}
-
-export function normalizeDocReference(reference) {
-  let value = reference.trim();
-  if (value.startsWith('/docs')) value = value.slice('/docs'.length);
-  if (value.endsWith('/index.html')) value = value.slice(0, -'/index.html'.length);
-  value = value.replace(/\.mdx?$/, '');
-  value = value.replace(/\/$/, '');
-  return value === '' ? '/' : value.replace(/^\//, '');
-}
-
-export function buildDocReferenceSet(docs) {
-  const references = new Set();
-  for (const doc of docs.values()) {
-    references.add(doc.rel);
-    const id = readFrontMatterString(doc.frontMatter, 'id');
-    const slug = readFrontMatterString(doc.frontMatter, 'slug');
-    if (id) references.add(normalizeDocReference(id));
-    if (slug) references.add(normalizeDocReference(slug));
-  }
-  return references;
-}
-
 export async function readExamples(root) {
   const catalogPath = resolve(root, 'docs-meta/examples.ts');
   const moduleUrl = `${pathToFileURL(catalogPath).href}?check=${Date.now()}`;
@@ -135,7 +55,7 @@ export async function readExamples(root) {
 }
 
 export async function readReflections(root) {
-  const reflectionPath = resolve(root, 'packages/docs/static/api/reflections.json');
+  const reflectionPath = resolve(root, 'dist/api/reflections.json');
   return JSON.parse(await readFile(reflectionPath, 'utf8'));
 }
 
@@ -208,29 +128,6 @@ function isModuleLevelPublicReflection(node, ancestors) {
 
 function isSourceFile(fileName) {
   return typeof fileName === 'string' && (fileName.startsWith('src/') || fileName.includes('/src/'));
-}
-
-export function hasExampleTag(node) {
-  return (
-    Array.isArray(node.comment?.blockTags) &&
-    node.comment.blockTags.some((tag) => tag.tag === '@example' && commentSummaryContentText(tag).trim())
-  ) || (
-    Array.isArray(node.signatures) &&
-    node.signatures.some((signature) => hasExampleTag(signature))
-  );
-}
-
-function commentSummaryContentText(comment) {
-  if (!comment || typeof comment !== 'object') return '';
-
-  const chunks = [];
-  if (Array.isArray(comment.summary)) {
-    chunks.push(...comment.summary.map((part) => part.text ?? ''));
-  }
-  if (Array.isArray(comment.content)) {
-    chunks.push(...comment.content.map((part) => part.text ?? ''));
-  }
-  return chunks.join(' ');
 }
 
 export function reportViolations(violations) {

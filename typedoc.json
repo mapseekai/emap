@@ -69,11 +69,11 @@
   "outputs": [
     {
       "name": "html",
-      "path": "packages/docs/static/api"
+      "path": "dist/api"
     },
     {
       "name": "json",
-      "path": "packages/docs/static/api/reflections.json"
+      "path": "dist/api/reflections.json"
     }
   ],
   "plugin": ["./scripts/typedoc-hide-internals.mjs"],

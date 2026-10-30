@@ -24,7 +24,7 @@
 
 ### Local raster files
 
-The optional [`/geotiff` integration](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/data/geotiff.md) reads local GeoTIFF/BigTIFF windows in a Worker directly from file references. Files strictly above 2GiB require valid internal or external pyramids before decoding. Use `rasterPlugin()` with `geoTIFFPlugin()`; deploy `emap-geotiff-worker.js`. Host projects store external file references and display settings. High-depth values auto-stretch to display bytes while preserving original samples; navigation preserves existing coverage, then presents each ready tile with clipped old-resolution fallback for unfinished regions. Try the numeric TIFF fixtures and RGB/single-band channel selectors in `geotiff-viewer`. Use north-up grids and select input files according to the supported encodings, pyramid requirements, and resource budgets in the guide.
+The optional [`/geotiff` integration](https://mapseekai.github.io/mapseekai/emap/en/data/geotiff) reads local GeoTIFF/BigTIFF windows in a Worker directly from file references. Files strictly above 2GiB require valid internal or external pyramids before decoding. Use `rasterPlugin()` with `geoTIFFPlugin()`; deploy `emap-geotiff-worker.js`. Host projects store external file references and display settings. High-depth values auto-stretch to display bytes while preserving original samples; navigation preserves existing coverage, then presents each ready tile with clipped old-resolution fallback for unfinished regions. Try the numeric TIFF fixtures and RGB/single-band channel selectors in `geotiff-viewer`. Use north-up grids and select input files according to the supported encodings, pyramid requirements, and resource budgets in the guide.
 
 ## What you can build
 
@@ -269,7 +269,7 @@ await source.setData({ filename: file.name, content: new Uint8Array(await file.a
 await map.addSource('gpkg', source);
 ```
 
-[Assets, CRS, multi-layer, Z/M and memory contracts](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/data/geopackage.md).
+[Assets, CRS, multi-layer, Z/M and memory contracts](https://mapseekai.github.io/mapseekai/emap/en/data/geopackage).
 
 ## Optional DuckDB-Wasm
 
@@ -323,15 +323,15 @@ The integration owns MapLibre source/layer registration, revision cancellation, 
 
 ## Documentation
 
-- [Installation](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/getting-started/installation.md)
-- [Quick start](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/getting-started/quick-start.md)
-- [Core concepts](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/concepts/emap.md)
-- [Architecture and source layout](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/concepts/architecture.md)
-- [Editing](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/editing.md)
-- [Styling](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/styling.md)
-- [Worker execution](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/worker.md)
-- [DuckDB](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/data/duckdb.md)
-- [Compatibility](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/reference/compatibility.md)
+- [Installation](https://mapseekai.github.io/mapseekai/emap/en/getting-started/installation)
+- [Quick start](https://mapseekai.github.io/mapseekai/emap/en/getting-started/quick-start)
+- [Core concepts](https://mapseekai.github.io/mapseekai/emap/en/concepts/emap)
+- [Architecture and source layout](https://mapseekai.github.io/mapseekai/emap/en/concepts/architecture)
+- [Editing](https://mapseekai.github.io/mapseekai/emap/en/guides/editing)
+- [Styling](https://mapseekai.github.io/mapseekai/emap/en/guides/styling)
+- [Worker execution](https://mapseekai.github.io/mapseekai/emap/en/guides/worker)
+- [DuckDB](https://mapseekai.github.io/mapseekai/emap/en/data/duckdb)
+- [Compatibility](https://mapseekai.github.io/mapseekai/emap/en/reference/compatibility)
 - [Runnable examples](packages/examples/examples)
 - [llms.txt](https://mapseekai.github.io/mapseekai/emap/llms.txt) — docs site index for AI coding assistants
 
@@ -376,7 +376,7 @@ Responsibilities:
 
 Unit tests are colocated as `foo.ts` + `foo.test.ts`, with at most one unit test file per implementation. Cross-module regression/integration tests live under `test/integration/`; browser, package/build, type-contract, docs, examples, and security checks live in their dedicated `test/` subdirectories. `test-layout:check` and `typecheck:contracts` enforce this layout.
 
-See [Current architecture and source layout](packages/docs/i18n/en/docusaurus-plugin-content-docs/current/concepts/architecture.md).
+See [Current architecture and source layout](https://mapseekai.github.io/mapseekai/emap/en/concepts/architecture).
 
 ## Development
 
@@ -405,19 +405,19 @@ pnpm run test:run
 pnpm run test:duckdb
 pnpm run build
 pnpm run bundle:smoke
-pnpm run docs:verify
+pnpm run examples:verify
 pnpm run audit:prod
 pnpm pack --dry-run
 ```
 
-Start examples or documentation locally:
+Start or build examples locally:
 
 ```bash
 pnpm run examples:dev
-pnpm run docs:dev
+pnpm run examples:build
 ```
 
-Generated TypeDoc files under `packages/docs/static/api/` are intentionally ignored. `api:build`, `docs:build`, and `docs:verify` regenerate them.
+Generated TypeDoc files under `dist/api/` are ignored and regenerated by `api:build`. Website source, translations, themes, and deployment belong to the separate `emap-web` project.
 
 DuckDB integration suites run under `pnpm run test:duckdb`, which sets `DUCKDB_WASM_INTEGRATION=1` across `src/integrations/duckdb` and `test/integration/duckdb`.
 

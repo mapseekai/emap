@@ -1,11 +1,8 @@
-# Documentation Release Checklist
+# Engine Release Checklist
 
-Use this checklist before publishing or handing off the documentation platform.
-It records the static outputs, required gates, and manual evidence expected for
-the docs, examples, and API surfaces.
+Use this checklist before publishing the emap engine. It covers the package, API reference, examples, and release gates. Website content, translations, themes, and deployment are maintained and verified separately in `emap-web`.
 
-Load this checklist for release or documentation-platform handoff work. Routine
-local edits use [scoped verification](../AGENTS.md#verification). Publishing, tagging, and deployment each require explicit authorization for that action.
+Routine local edits use [scoped verification](../AGENTS.md#verification). Publishing, tagging, and deployment each require explicit authorization.
 
 ## Version and Commit
 
@@ -14,26 +11,19 @@ match `package.json` and point at the verified release commit. Local publication
 `release:verify:local`; automatic CI and GitHub publication use the same non-browser gate.
 Perform version updates, tag creation, and publication as separate authorized release steps.
 
-Use `verifiedVersion: unreleased` for guides describing unreleased work. Before tagging,
-replace it with the actual version validated for that release and promote the matching
-`CHANGELOG.md` entries. Keep `unreleased` during development and set the validated version in the reviewed release commit.
-
 CI runs the non-browser gate in `Core quality and build` and retains `Minimum Node compatibility`.
 Update any repository rules that previously required the retired per-area jobs before merging.
 The publication workflow independently runs the non-browser gate on its checked-out release tag.
 Browser automation runs only when explicitly requested through the `Browser tests`
 workflow or a local browser verification command.
 
-## Static Outputs
+## Build Outputs
 
-- Documentation site: `packages/docs/build/`.
-- Chinese documentation entry: `packages/docs/build/index.html`.
-- English documentation entry: `packages/docs/build/en/index.html`.
-- Static API documentation: `packages/docs/static/api/index.html`, copied into
-  the Docusaurus build as `/api/`.
-- Runnable examples site: `packages/examples/dist/`, composed into the
-  Docusaurus build as `/examples/`.
-- Example catalog entry: `packages/docs/build/examples/index.html`.
+- Engine bundles, declarations, and workers: `dist/`.
+- Generated API reference and reflections: `dist/api/` (`pnpm run api:build`).
+- Runnable examples: `packages/examples/dist/` (`pnpm run examples:build`).
+
+`emap-web` consumes the API and examples build artifacts. It owns the combined website build; no website source or compatibility copy is kept here.
 
 ## Required Gates
 
@@ -42,7 +32,7 @@ when dependency installation uses a mirror. Authenticate with
 `npm login --registry=https://registry.npmjs.org/` before publishing.
 
 Local `npm publish` runs `release:verify:local` through `prepublishOnly`. It retains
-source, package, documentation, distribution and dependency-audit checks, but does
+source, package, API, examples, distribution and dependency-audit checks, but does
 not install or launch browsers. Automatic CI and GitHub publication use this same gate:
 
 ```bash
@@ -90,10 +80,9 @@ at the first failed gate and reusing one production build:
 
 | Stage | Gates |
 | --- | --- |
-| Source | `runtime:check`, `format:check`, `lint`, `typecheck`, `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `architecture:check`, `capabilities:check` |
+| Source | `runtime:check`, `format:check`, `lint`, `typecheck`, `typecheck:tests`, `typecheck:tooling`, `typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `architecture:check`, `capabilities:check` |
 | Package | `build`, `bundle:smoke`, `test:run`, `test:duckdb` |
-| Documentation | `examples:build`, `docs:build`, `docs:compose-examples` |
-| Documentation contracts | `docs:check-i18n`, `docs:check-api`, `examples:check` |
+| API and examples | `examples:build`, `api:build`, `examples:check` |
 | Distribution | `pnpm pack --dry-run`, `audit:prod` |
 | Real browsers (complete gate only) | `browser:check`: Playwright plus Canvas pixel checks in Chrome, Firefox, and WebKit |
 
@@ -106,49 +95,18 @@ WebGPU adapter. WebGPU cases are explicitly named and excluded only from the
 WebKit project; renderer-switch tests retain its Canvas2D/WebGL2 transitions.
 Safari/WebGPU acceptance requires a separate run on a Safari environment with
 a WebGPU adapter. Enable those cases after completing that acceptance.
-`docs:check-api` checks generated API page and anchor targets in both documentation languages.
+For API or example changes, `pnpm run examples:verify` chains typechecking, public API checks, example builds, API generation, and catalog validation. The complete release gate already includes these stages. Agent-instruction-only edits use link, command, and rule-consistency checks.
 
-For product documentation, API, or example changes, `npm run docs:verify` chains `typecheck`,
-`typecheck:contracts`, `typecheck:examples`, `test-layout:check`, `api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
-`docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` runs `api:build` to generate
-the TypeDoc API reference before Docusaurus starts in the same command. The complete release gate already includes these stages.
-Agent-instruction-only edits use link, command, and rule-consistency checks.
+`pnpm run audit:prod` fails closed when the registry cannot return a complete report. No dependency exceptions are currently authorized in `security/audit-allowlist.json`; all high and critical findings block publication. Any future exception requires explicit advisory IDs, exact dependency path prefixes, and an expiry date. Critical findings cannot be exempted.
 
-`npm run audit:prod` fails closed when the registry cannot return a complete
-report. The only temporary exceptions are the exact advisory IDs and
-documentation-only paths recorded in `security/audit-allowlist.json`; the file
-expires on its declared date, and any new high or critical finding remains
-blocking.
+## Examples and Manual Evidence
 
-## Local Preview
+Use `pnpm run examples:dev` to inspect examples locally. Use `pnpm run examples:build:cdn` only for an exact published package version that has passed CDN availability and integrity checks.
 
-Build, compose, and serve the documentation, API, examples, fixtures, vendor
-assets, and worker with a single process and port:
-
-```bash
-pnpm run docs:preview
-```
-
-Open `http://127.0.0.1:3000/mapseekai/emap/`. This command serves the local `examples:build` and documentation assets together
-from one process and port.
-
-Use `pnpm run examples:build:cdn` only for an exact package version that is
-already published and has passed the CDN availability and integrity checks.
-After that release build, run `docs:build` and `docs:compose-examples` before
-serving the composed output.
-
-## Manual Evidence
-
-- Open the Chinese first-map page from the documentation build.
-- Switch to the English first-map page and confirm the same route is available
-  under the English locale.
-- Traverse from a documented API parameter link to the generated API page.
-- Follow the linked runnable example and confirm it opens the expected example
-  route.
-- Use the example page's `Return to docs` link and confirm it returns to the
-  matching documentation locale.
-- Record representative browser checks for current Chromium, Firefox, and
-  Safari or note the browser that was unavailable.
+- Confirm changed examples load their expected routes, fixtures, workers, and runtime assets.
+- Check edited API signatures against generated TypeDoc output and public type contracts.
+- Record browser coverage for current Chromium, Firefox, and Safari, including unavailable platforms.
+- Run website-specific verification in `emap-web` when publishing the combined documentation site.
 
 ## Source/test layout
 
@@ -156,11 +114,7 @@ Before publishing, `src/` must contain only the six responsibility zones `domain
 
 ## Review Criteria
 
-- Bilingual documents have matching IDs, slugs, API front matter, example front
-  matter, stability, and verified version.
-- Public API names are explicitly exported, cataloged in documentation, and
-  associated with runnable examples where the guide declares them.
-- Example catalog entries point to existing routes, fixtures, docs IDs, and API
-  reflections.
-- Root docs link to the static documentation, generated API, examples catalog,
-  and this release checklist; the generated API reference provides the full contract.
+- Public API names are explicitly exported and reflected in the generated reference.
+- Example catalog entries point to existing routes, fixtures, and API reflections.
+- Package contents include the intended entry points and workers without generated website assets.
+- All applicable gates pass for the exact commit and version being published.
