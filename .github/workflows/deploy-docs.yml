@@ -1,0 +1,26 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [master]
+
+permissions: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create a website deployment token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.EMAP_PAGES_APP_ID }}
+          private-key: ${{ secrets.EMAP_PAGES_APP_PRIVATE_KEY }}
+          owner: mapseekai
+          repositories: mapseekai.github.io
+          permission-actions: write
+      - name: Trigger website deployment
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh workflow run pages.yml --repo mapseekai/mapseekai.github.io --ref main
