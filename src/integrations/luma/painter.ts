@@ -4,6 +4,7 @@ import { PolygonPresentation, type PolygonChannel } from './polygon-presentation
 import type { MeshDraw } from './mesh-command-cache';
 import { compactStrokeCompatible } from '../../engine/rendering/luma/compact-stroke';
 import { screenPathFrame } from '../../engine/rendering/luma/screen-path-frame';
+import { SLOW_FRAME_MS } from '../../engine/rendering/render-scheduler';
 import { fillStorageBounds } from '../../engine/rendering/luma/fill-storage';
 import type { GeometryEntry } from './geometry-cache';
 import { GeometryChunkCache, type GeometryOwner, type GeometryRequest } from './geometry-cache';
@@ -199,6 +200,7 @@ export class LumaPainter implements EditPainter {
   private completionMs: number | null = null;
   private queueBusyMs: number | null = null;
   private navigationCpuMs = 0;
+  private previousNavigationSlow = false;
   private disposed = false;
   private colors: GpuColors;
   private cache: PainterGeometryCache;
@@ -222,6 +224,7 @@ export class LumaPainter implements EditPainter {
   framePresented = false;
   private requests: GeometryRequest[] = [];
   private polygonScope: { channels: PolygonChannel[]; order: number } | null = null;
+  private hasViewportPolygon = false;
   private polygons = new Map<
     string,
     { signature: string; sourceId: string; layerId: string; presentation: PolygonPresentation }
@@ -321,6 +324,20 @@ export class LumaPainter implements EditPainter {
       memory: this.gpu.memoryStats,
     };
   }
+  prefersFastNavigation(lastFrameMs: number): boolean {
+    const chunked = this.drawnEntries.size > 0 || !this.frameComplete;
+    const cost = this.navigationFrameMs;
+    if (chunked)
+      return lastFrameMs > SLOW_FRAME_MS || cost > SLOW_FRAME_MS || !this.hasViewportPolygon;
+    // One cold upload or a single long frame does not make a small scene slow to navigate.
+    const slow = lastFrameMs > SLOW_FRAME_MS;
+    const consistentlySlow = slow && this.previousNavigationSlow;
+    this.previousNavigationSlow = slow;
+    return (
+      consistentlySlow ||
+      (this.completionSample !== null && (this.queueBusyMs ?? 0) > SLOW_FRAME_MS)
+    );
+  }
   get navigationPending(): boolean {
     // Poll the fence now; its most recent observation may predate this recovery timer.
     void this.navigationFrameMs;
@@ -334,7 +351,7 @@ export class LumaPainter implements EditPainter {
       const status = sample.probe.poll();
       if (status === 'pending') {
         // A nonblocking poll actually observed unfinished work at this instant.
-        this.queueBusyMs = now - sample.start;
+        this.queueBusyMs = now - this.completionSampleAt;
       } else {
         this.completionMs = status === 'complete' ? now - sample.start : null;
         if (status === 'unavailable') this.queueBusyMs = null;
@@ -349,10 +366,11 @@ export class LumaPainter implements EditPainter {
   /** One outstanding fence, at most every 250 ms during camera-only replay.
    * A changed full presentation starts a new sample generation. */
   private measureCompletion(start: number): void {
-    this.navigationCpuMs = performance.now() - start;
-    if (this.completionSample || start - this.completionSampleAt < 250) return;
+    const submitted = performance.now();
+    this.navigationCpuMs = submitted - start;
+    if (this.completionSample || submitted - this.completionSampleAt < 250) return;
     this.completionSample = { start, probe: this.gpu.probeCompletion() };
-    this.completionSampleAt = start;
+    this.completionSampleAt = submitted;
     this.completionMs = null;
     // Zero is the observed lower bound of queue pressure, NOT a GPU duration.
     this.queueBusyMs = 0;
@@ -398,6 +416,7 @@ export class LumaPainter implements EditPainter {
     }
   }
   setInteracting(value: boolean): void {
+    this.previousNavigationSlow = false;
     this.chunks.setInteracting(value);
     if (!value) this.resetNavigationTiming();
   }
@@ -448,6 +467,7 @@ export class LumaPainter implements EditPainter {
     this.selected = [];
     this.requests = [];
     this.polygonScope = null;
+    this.hasViewportPolygon = false;
     this.polygonKeys.clear();
     this.polygonSlots.clear();
     this.polygonFrames = [];
@@ -609,6 +629,7 @@ export class LumaPainter implements EditPainter {
     if (
       this.disposed ||
       this.bitmapRetained ||
+      this.hasViewportPolygon ||
       this.active ||
       this.paintedContent === null ||
       this.paintedDimensions !== [this.width, this.height, this.pixelRatio].join(':')
@@ -1403,9 +1424,16 @@ export class LumaPainter implements EditPainter {
     } finally {
       this.polygonScope = previousScope;
     }
-    if (!scope?.channels.length) return;
-    const commands = this.commands.splice(start);
+    if (!scope) return;
     const completeCall = this.passGuard();
+    // Fills keep whole rings, but their outlines can omit arcs outside the prepared view.
+    if (options.strokeFilter || options.shapeIndices || options.viewBBox || scope.channels.length) {
+      this.preparations.push(() => {
+        if (completeCall()) this.hasViewportPolygon = true;
+      });
+    }
+    if (!scope.channels.length) return;
+    const commands = this.commands.splice(start);
     if (scope.channels.length !== commands.length || !this.context) {
       // A custom non-cacheable filter can mix immediate and chunked primitives.
       // Keep that uncommon combination atomic without changing its geometry.

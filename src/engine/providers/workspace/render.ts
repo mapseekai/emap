@@ -207,10 +207,7 @@ export class CanvasRenderService {
 
   _endNavGesture(): void {
     const hasPendingNav = this._pendingAction === 'nav' && this._pendingRender > 0;
-    const refreshLabels =
-      this._navSnapshotTransform !== null &&
-      this._labels !== null &&
-      !this._painter?.renderNavigation;
+    const refreshLabels = this._navSnapshotTransform !== null && this._labels !== null;
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) {
       clearTimeout(this._wheelSettleTimer);
@@ -218,7 +215,7 @@ export class CanvasRenderService {
     }
     this._painter?.setInteracting?.(false);
     this._scheduler.notifyInteractionEnd(hasPendingNav);
-    // Adaptive Canvas frames can leave labels paused without a queued settle redraw.
+    // Adaptive navigation can finish without a queued redraw for the final label layout.
     if (refreshLabels || this._painter?.frameComplete === false)
       this._scheduleRender('redraw', undefined, true);
     this.deps.events.fire('interactionend');
@@ -736,17 +733,14 @@ export class CanvasRenderService {
     this._overlayPainter = await this._createPainter(this._overlayCanvas, 'overlay');
     this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
-    this._scheduler = new RenderScheduler(
-      {
-        fullRedraw: () => this._renderFull(),
-        requestRedraw: () => this._scheduleRender('redraw', undefined, true),
-        fastNav: (delta) => this._applyFastTransform(delta),
-        getSnapshot: () => this._captureRenderSnapshot(),
-      },
-      this._painter.backend === 'webgl2' || this._painter.backend === 'webgpu'
-        ? 'snapshot'
-        : 'adaptive',
-    );
+    this._scheduler = new RenderScheduler({
+      fullRedraw: () => this._renderFull(),
+      requestRedraw: () => this._scheduleRender('redraw', undefined, true),
+      fastNav: (delta) => this._applyFastTransform(delta),
+      preferFastNav: (ms) =>
+        !!this._canvas.style.transform || this._painter.prefersFastNavigation?.(ms),
+      getSnapshot: () => this._captureRenderSnapshot(),
+    });
     this._updateSize();
   }
   private async _createPainter(

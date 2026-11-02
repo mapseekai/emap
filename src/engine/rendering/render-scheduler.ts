@@ -14,6 +14,7 @@ export interface RenderCallbacks {
   fullRedraw: () => void;
   requestRedraw: () => void;
   fastNav: (delta: AffineDelta) => void;
+  preferFastNav?: (lastFrameMs: number) => boolean | undefined;
   getSnapshot: () => RenderSnapshot;
 }
 
@@ -25,12 +26,7 @@ export class RenderScheduler {
   private _settleRequested = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(
-    private _callbacks: RenderCallbacks,
-    // CPU submit time does not measure GPU execution. GPU maps reuse complete
-    // frames during navigation; legacy Canvas/custom painters keep adaptive mode.
-    private readonly _navigationMode: 'adaptive' | 'snapshot' = 'adaptive',
-  ) {}
+  constructor(private _callbacks: RenderCallbacks) {}
 
   schedule(req: RenderRequest = {}): void {
     const action: RenderAction = req.action ?? 'redraw';
@@ -89,7 +85,8 @@ export class RenderScheduler {
 
   private _shouldUseFastNav(): boolean {
     if (!this._snapshot) return false;
-    if (this._navigationMode === 'adaptive' && this._lastFrameMs <= SLOW_FRAME_MS) return false;
+    if (!(this._callbacks.preferFastNav?.(this.lastFrameMs) ?? this.lastFrameMs > SLOW_FRAME_MS))
+      return false;
 
     const current = this._callbacks.getSnapshot();
     if (current.canvasWidth <= 0 || current.canvasHeight <= 0) return false;

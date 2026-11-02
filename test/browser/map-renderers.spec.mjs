@@ -373,25 +373,25 @@ test('published ESM default backend and sibling MSDF resources work without expe
 });
 
 
-async function composedPointPixel(page) {
+async function composedPointPixel(page, point = [0, 0]) {
   // Read the compositor, not a new GPU frame. Calling map.render() here would
   // hide a broken snapshot/navigation path, especially on WebGPU.
   const image = await page.screenshot({ clip: { x: 0, y: 0, width: 800, height: 600 } });
-  return page.evaluate(async data => {
+  return page.evaluate(async ({ data, point }) => {
     const image = new Image(); image.src = 'data:image/png;base64,' + data; await image.decode();
     const canvas = document.createElement('canvas'); canvas.width=image.width; canvas.height=image.height;
     const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
-    const [x,y]=formalMap.getTransform().project(0,0);
-    const pixel=[...ctx.getImageData(Math.round(x),Math.round(y),1,1).data];
+    const [x,y]=formalMap.getTransform().project(...point);
+    const pixel=[...ctx.getImageData(Math.round(x*image.width/800),Math.round(y*image.height/600),1,1).data];
     canvas.width=canvas.height=0;return pixel;
-  }, image.toString('base64'));
+  }, { data: image.toString('base64'), point });
 }
 async function settleRequests(page) {
   await page.evaluate(async()=>{await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);});
   await expect.poll(()=>page.evaluate(()=>formalMap.ctx.render._pendingRender)).toBe(0);
 }
 for (const renderer of ['webgl2','webgpu']) {
-  test(`${renderer}: formal GPU navigation replays resident buffers at CSS size and settles the current camera`, async({page},info)=>{
+  test(`${renderer}: small scenes redraw at the current camera during drag and wheel zoom`, async({page},info)=>{
     const errors=[];page.on('pageerror',e=>errors.push(e.stack??e.message));
     await runtime(page);await create(page,renderer);await settleRequests(page);
     await page.evaluate(()=>{
@@ -405,7 +405,8 @@ for (const renderer of ['webgl2','webgpu']) {
     await page.mouse.move(690,540);await page.mouse.down();
     for(let i=1;i<=20;i++){await page.mouse.move(690+i*4,540+i);await page.waitForTimeout(16);}
     const during=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,fast:formalMap.ctx.render._scheduler.fastActive}));
-    expect(during.presentation.replays).toBeGreaterThan(before.presentation.replays);expect(during.uploads).toBe(before.uploads);
+    expect(during.fast).toBe(false);expect(during.presentation.replays).toBe(before.presentation.replays);
+    expect(during.presentation.complete).toBeGreaterThan(before.presentation.complete);
     expect(await page.evaluate(()=>formalMap.ctx.render._navSnapshotTransform!==null)).toBe(true);
     const pixel=await composedPointPixel(page);expect(pixel[0]).toBeGreaterThan(180);expect(pixel[1]).toBeLessThan(90);
     await page.screenshot({path:info.outputPath('snapshot-'+renderer+'.png')});
@@ -417,10 +418,41 @@ for (const renderer of ['webgl2','webgpu']) {
     await page.mouse.move(500,300);
     for(let i=0;i<5;i++){await page.mouse.wheel(0,-30);await page.waitForTimeout(25);}
     const zoom=await page.evaluate(()=>({...formalMap.ctx.render._painter.stats,fast:formalMap.ctx.render._scheduler.fastActive}));
-    expect(zoom.presentation.replays).toBeGreaterThan(wheel.presentation.replays);expect(zoom.uploads).toBe(wheel.uploads);
+    expect(zoom.fast).toBe(false);expect(zoom.presentation.replays).toBe(wheel.presentation.replays);
     await expect.poll(()=>page.evaluate(()=>formalMap.ctx.render._scheduler.fastActive)).toBe(false);await settleRequests(page);
     expect(await page.evaluate(()=>formalMap.ctx.render._painter.stats.presentation.complete)).toBeGreaterThan(wheel.presentation.complete);
     await page.evaluate(()=>formalMap.dispose());expect(errors).toEqual([]);
+  });
+  test(`${renderer}: a polygon edge entering the view is outlined before zoom settles`, async ({page}) => {
+    await runtime(page); await create(page, renderer);
+    await page.evaluate(async () => {
+      const source = new emap.TopologySource('box');
+      await source.setData({ filename: 'box.topojson', content: new TextEncoder().encode(JSON.stringify({
+        type: 'Topology', objects: { box: { type: 'Polygon', arcs: [[0,1,2,3]] } },
+        arcs: [[[-6,-4],[6,-4]],[[6,-4],[6,4]],[[6,4],[-6,4]],[[-6,4],[-6,-4]]],
+      })) });
+      await formalMap.addSource('box', source);
+      formalMap.addLayer({ id: 'box', source: 'box', type: 'fill', paint: {
+        'fill-color': '#ff0000', 'line-color': '#0000ff', 'line-width': 4,
+      } });
+      formalMap.setExtent(new emap.Bounds(-2,-2,2,2));
+    });
+    await settleRequests(page);
+    await page.evaluate(() => {
+      const r = formalMap.ctx.render;
+      // Even a slow initial upload is not the cost of redrawing this four-arc polygon.
+      r._scheduler.recordFrame(40, r._captureRenderSnapshot());
+      Object.defineProperty(r._painter, 'navigationFrameMs', { configurable: true, value: 0 });
+      r.beginNavigation(); r.deps.view._viewport.transform.scale(.3,400,300); r.updateNavigation();
+    });
+    await settleRequests(page);
+    const fill = await composedPointPixel(page, [5,0]), edge = await composedPointPixel(page, [6,0]);
+    expect(fill[0]).toBeGreaterThan(180); expect(fill[2]).toBeLessThan(90);
+    expect(edge[2]).toBeGreaterThan(180); expect(edge[0]).toBeLessThan(90);
+    await page.evaluate(() => formalMap.ctx.render.endNavigation());
+    await settleRequests(page);
+    expect(await composedPointPixel(page, [6,0])).toEqual(edge);
+    await page.evaluate(() => formalMap.dispose());
   });
   test(`${renderer}: style/filter/source invalidations replace snapshots during a live gesture`,async({page})=>{
     const errors=[];page.on('pageerror',e=>errors.push(e.stack??e.message));
@@ -460,9 +492,9 @@ for (const renderer of ['webgl2','webgpu']) {
 for(const renderer of ['webgl2','webgpu'])test(`${renderer}: consecutive gestures before settle retain the painted camera reference`,async({page})=>{
   await runtime(page);await create(page,renderer);await settleRequests(page);
   await page.evaluate(()=>{
-    // This case asserts native replay counts, so select the fast-device policy
-    // explicitly; slow snapshot navigation has its own pixel regression below.
+    // Exercise consecutive native replays independently of the small fixture's redraw policy.
     const r=formalMap.ctx.render;
+    Object.defineProperty(r._painter,'prefersFastNavigation',{configurable:true,value:()=>true});
     Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:0});
     Object.defineProperty(r._painter,'navigationFrameMs',{configurable:true,value:0});
   });
@@ -494,12 +526,15 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: slow GPU navigat
   await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._icons?.stats.images; })).toBe(1);
   await expect.poll(() => page.evaluate(async () => { await flushFormal(); return formalMap.ctx.render._labels?.stats.placed; })).toBe(1);
   await settleRequests(page);
-  const before = await page.evaluate(() => {
+  const before = await page.evaluate(async () => {
     const r = formalMap.ctx.render;
     // Deterministic slow-device policy boundary; real GPU pixels and frame submissions below.
-    Object.defineProperty(r._painter, 'navigationFrameMs', {configurable: true, value: 50});
+    Object.defineProperty(r._scheduler, 'lastFrameMs', {configurable: true, value: 50});
+    // The first live step measures the warm scene; the next must use the snapshot.
+    r.beginNavigation(); formalMap.ctx.view._viewport.pan(5, 0); r.updateNavigation();
+    await new Promise(requestAnimationFrame);
     const stats = {...r._painter.stats};
-    r.beginNavigation(); formalMap.ctx.view._viewport.pan(30, 10); r.updateNavigation();
+    formalMap.ctx.view._viewport.pan(25, 10); r.updateNavigation();
     return stats;
   });
   await expect.poll(() => page.evaluate(() => formalMap.ctx.render._canvas.style.transform)).not.toBe('');
@@ -553,7 +588,7 @@ for (const renderer of ['webgl2', 'webgpu']) test(`${renderer}: slow GPU navigat
   expect(prepared.uploads).toBeGreaterThan(settledUploads);
   expect((await composedPointPixel(page))[1]).toBeGreaterThan(180);
   await info.attach('slow-navigation-evidence', {body: JSON.stringify({beforeFrames: before.frames, updated, settledFrames, settledUploads, prepared}), contentType: 'application/json'});
-  await page.evaluate(() => { delete formalMap.ctx.render._painter.navigationFrameMs; return formalMap.dispose(); });
+  await page.evaluate(() => { delete formalMap.ctx.render._scheduler.lastFrameMs; return formalMap.dispose(); });
   expect(errors).toEqual([]);
 });
 
@@ -585,8 +620,8 @@ for (const renderer of ['canvas2d', 'webgl2', 'webgpu']) test(`${renderer}: came
   await runtime(page); await create(page,renderer); await settleRequests(page);
   const scale=await page.evaluate(() => {
     const map=formalMap,r=map.ctx.render;
-    // Deterministically select the slow-Canvas path without delaying the test.
-    r._scheduler.recordFrame(100,r._captureRenderSnapshot());
+    // Keep navigation over budget after the first GPU camera frame as well.
+    Object.defineProperty(r._scheduler,'lastFrameMs',{configurable:true,value:100});
     const scale=Math.abs(map.getTransform().mx);
     // Keep the animation active until a real navigation frame is observed.
     map.easeTo({scale:scale*1.5,duration:10_000});

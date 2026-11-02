@@ -57,15 +57,13 @@ describe('navigation snapshots during a continuous gesture', () => {
       cost = 5;
     };
     render._renderEditOverlay = () => {};
-    render._scheduler = new RenderScheduler(
-      {
-        fullRedraw: () => render._renderFull(),
-        requestRedraw: () => render._scheduleRender('redraw', undefined, true),
-        fastNav: (delta) => render._applyFastTransform(delta),
-        getSnapshot: () => render._captureRenderSnapshot(),
-      },
-      'snapshot',
-    );
+    render._scheduler = new RenderScheduler({
+      fullRedraw: () => render._renderFull(),
+      requestRedraw: () => render._scheduleRender('redraw', undefined, true),
+      fastNav: (delta) => render._applyFastTransform(delta),
+      preferFastNav: () => true,
+      getSnapshot: () => render._captureRenderSnapshot(),
+    });
     render._scheduler.recordFrame(5, render._captureRenderSnapshot());
     render.beginNavigation();
     const step = () => {
@@ -200,9 +198,12 @@ describe('navigation snapshots during a continuous gesture', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('refreshes paused Canvas2D labels after an adaptive gesture that needed no snapshot redraw', () => {
+  it.each([
+    'canvas2d',
+    'webgl2',
+  ])('refreshes %s labels after an adaptive gesture without a snapshot', (backend) => {
     const f = fixture();
-    Reflect.set(f.render._painter, 'renderNavigation', undefined);
+    if (backend === 'canvas2d') Reflect.set(f.render._painter, 'renderNavigation', undefined);
     Reflect.set(f.render, '_labels', {});
     f.render._scheduler = new RenderScheduler({
       fullRedraw: () => f.render._renderFull(),

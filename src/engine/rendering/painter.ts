@@ -117,6 +117,8 @@ export interface CorePainter {
   setRenderPassErrorHandler?(report: ((error: unknown) => void) | null): void;
   /** @internal A progressive scene may be presented before every request is ready. */
   readonly framePresented?: boolean;
+  /** @internal Prefer navigation reuse over a full redraw for the current scene. */
+  prefersFastNavigation?(lastFrameMs: number): boolean;
   renderNavigation?(view: AffineTransform, labels?: LabelFrame): boolean;
   /** @internal Navigation CPU/observed queue-pressure budget, not isolated GPU time.
    * Infinity means unavailable/stale: the scheduler must retain bounded recovery probes. */

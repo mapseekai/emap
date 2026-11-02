@@ -175,7 +175,7 @@ describe('RenderScheduler', () => {
   });
 });
 
-describe('GPU navigation policy', () => {
+describe('navigation for scenes that prefer reuse', () => {
   afterEach(() => vi.useRealTimers());
   function gpu(current = snapshot()) {
     const callbacks = {
@@ -183,11 +183,12 @@ describe('GPU navigation policy', () => {
       requestRedraw: vi.fn(),
       fastNav: vi.fn(),
       getSnapshot: () => current,
+      preferFastNav: vi.fn(() => true),
     };
-    return { callbacks, scheduler: new RenderScheduler(callbacks, 'snapshot') };
+    return { callbacks, scheduler: new RenderScheduler(callbacks) };
   }
   const nav = { action: 'nav' as const, navDelta: { tx: 12, ty: 3, sx: 1.2, sy: 1.2 } };
-  it('reuses a valid GPU frame even when CPU submission took less than one millisecond', () => {
+  it('reuses a preferred frame even when CPU submission took less than one millisecond', () => {
     const { scheduler, callbacks } = gpu();
     scheduler.recordFrame(0.1, snapshot());
     scheduler.schedule(nav);
@@ -196,6 +197,18 @@ describe('GPU navigation policy', () => {
     scheduler.notifyInteractionEnd();
     scheduler.notifyInteractionEnd();
     expect(callbacks.requestRedraw).toHaveBeenCalledOnce();
+    scheduler.dispose();
+  });
+  it('returns to live redraw when a smaller replacement scene no longer needs reuse', () => {
+    const { scheduler, callbacks } = gpu();
+    scheduler.recordFrame(2, snapshot());
+    scheduler.schedule(nav);
+    scheduler.schedule({ action: 'redraw' });
+    callbacks.preferFastNav.mockReturnValue(false);
+    scheduler.recordFrame(2, snapshot());
+    scheduler.schedule(nav);
+    expect(callbacks.fullRedraw).toHaveBeenCalledTimes(2);
+    expect(scheduler.fastActive).toBe(false);
     scheduler.dispose();
   });
   it('does not snapshot before a full frame, after a failed frame, or after resize/DPR changes', () => {

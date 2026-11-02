@@ -509,6 +509,43 @@ describe('formal GPU prepared path selection', () => {
 describe('navigation timing samples', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('does not charge cold preparation to a warm camera frame or the GPU queue', async () => {
+    const f = await fixture();
+    let time = 0,
+      pending = true;
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+    f.gpu.drawMesh.mockImplementationOnce(() => {
+      time = 40;
+      f.gpu.stats.drawCalls++;
+    });
+    f.gpu.probeCompletion.mockReturnValue({
+      poll: () => (pending ? 'pending' : 'complete'),
+      dispose: vi.fn(),
+    });
+    const shapes = [[[1, 1]]];
+    const draw = () => f.painter.drawPoints(shapes, { radius: 4 });
+    try {
+      f.frame(draw);
+      f.painter.setInteracting(true);
+      time = 45;
+      expect(f.painter.prefersFastNavigation(40)).toBe(false);
+      time = 80;
+      expect(f.painter.prefersFastNavigation(4)).toBe(true);
+      pending = false;
+      f.frame(draw);
+      expect(f.gpu.begin).toHaveBeenCalledOnce();
+      expect(f.painter.navigationFrameMs).toBeGreaterThan(33.3);
+      expect(f.painter.prefersFastNavigation(1)).toBe(false);
+      expect(f.painter.prefersFastNavigation(40)).toBe(false);
+      f.frame(draw);
+      expect(f.painter.prefersFastNavigation(40)).toBe(true);
+      f.painter.setInteracting(false);
+      expect(f.painter.prefersFastNavigation(40)).toBe(false);
+    } finally {
+      f.painter.dispose();
+    }
+  });
+
   it('does not mistake late observation of a completed fence for GPU execution time', async () => {
     const f = await fixture();
     let time = 0;
@@ -1643,6 +1680,9 @@ it.each([
     });
     expect(path.input.viewBounds).toBeDefined();
     expect(!!path.input.screen).toBe(screen);
+    const wider = f.view.transform.clone();
+    wider.scale(0.5, 400, 300);
+    expect(f.painter.renderNavigation(wider)).toBe(false);
     const uploads = f.gpu.createMesh.mock.calls.length;
     frame(true);
     expect(chunks.current().find((r: GeometryRequest) => r.input.kind === 'path')).toBe(path);
