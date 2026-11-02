@@ -100,7 +100,7 @@ for (const id of ['getting-started/lines', 'geotiff-viewer', 'luma-25d', 'luma-b
 test('gallery: category search, language, and list view keep the matching example', async ({ page }) => {
   await page.goto(base);
   await expect(page.locator('#app')).toHaveAttribute('data-view', 'grid');
-  await expect(page.locator('.catalog-example-navigation a')).toHaveCount(105);
+  await expect(page.locator('.catalog-example-navigation a')).toHaveCount(examples.length);
   await expect(page.locator('.catalog-page-navigation')).toBeVisible();
   await page.locator('.catalog-category-tabs [data-category="style"]').click();
   await expect(page.locator('a.example-card')).toHaveCount(7);

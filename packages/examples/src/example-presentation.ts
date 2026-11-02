@@ -274,7 +274,16 @@ export function installExamplePresentation(root: Document = document): (() => vo
   if (runtimeStatus) application.append(runtimeStatus);
   const panes = element(root, 'div', 'example-panels');
   panes.append(panels.live, panels.source);
-  main.append(heading, panes);
+  main.append(heading);
+  if (example.plugins.length) {
+    const plugins = element(root, 'div', 'example-plugin-tags');
+    plugins.setAttribute('role', 'group');
+    plugins.setAttribute('aria-label', '示例涉及的插件');
+    for (const name of example.plugins)
+      plugins.append(element(root, 'span', 'example-plugin-tag', name));
+    main.append(plugins);
+  }
+  main.append(panes);
   layout.append(navigation, main);
   root.body.append(siteHeader, layout);
   view.requestAnimationFrame(() => {

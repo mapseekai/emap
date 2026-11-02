@@ -842,6 +842,22 @@
       "colors": 8,
       "sha256": "1844a0a9166d2ec619503a4f7d3c9af289e3675e8f71f30b6ac0ca4812f8692f"
     },
+    "online-vector-data": {
+      "file": "online-vector-data.jpg",
+      "route": "/mapseekai/emap/examples/online-vector-data/",
+      "renderer": "webgl2",
+      "width": 1105,
+      "height": 520,
+      "kind": "map",
+      "painted": 49593,
+      "colors": 5,
+      "sha256": "d0f80db5a95784dceed70f7afd47f806175eef873f0e2265b2376a14ce7abc99",
+      "viewport": {
+        "width": 1355,
+        "height": 695,
+        "devicePixelRatio": 2
+      }
+    },
     "plugin-capability": {
       "file": "plugin-capability.jpg",
       "route": "/mapseekai/emap/examples/plugin-capability/",

@@ -7,15 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { examples, exampleTopics, type ExampleDefinition } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
 const expectedModules = [
-  { key: 'getting-started', zh: '入门' },
-  { key: 'data-layers', zh: '数据与图层' },
+  { key: 'data-layers', zh: '数据加载' },
+  { key: 'coordinates', zh: '坐标系' },
   { key: 'style', zh: '样式' },
-  { key: 'interaction', zh: '交互' },
+  { key: 'attributes', zh: '属性' },
   { key: 'editing', zh: '编辑' },
-  { key: 'analysis', zh: '几何分析' },
-  { key: 'duckdb', zh: 'DuckDB' },
-  { key: 'rendering', zh: '渲染与性能' },
-  { key: 'extension', zh: '扩展' },
+  { key: 'analysis', zh: '分析' },
+  { key: 'tools', zh: '配套工具' },
 ] as const;
 function createTopicFixture(
   id: string,
@@ -26,7 +24,7 @@ function createTopicFixture(
 ): ExampleDefinition {
   return {
     id,
-    category: 'duckdb',
+    category: 'analysis',
     title: { zh: id, en: id },
     description: { zh: id, en: id },
     learningGoals: { zh: ['目标'], en: ['Goal'] },
@@ -34,6 +32,7 @@ function createTopicFixture(
     api: ['Emap'],
     tags: [id],
     featureFlags: [],
+    plugins: [],
     fixtures: [],
     source: { html: `packages/examples/examples/${id}/index.html` },
     route: `/examples/${id}/`,
@@ -322,6 +321,63 @@ describe('example catalog metadata', () => {
     expect(new Set(examples.map((example) => example.description.zh)).size).toBe(examples.length);
     expect(new Set(examples.map((example) => example.description.en)).size).toBe(examples.length);
   });
+  it('classifies representative examples by user task', () => {
+    const byId = new Map(examples.map((example) => [example.id, example.category]));
+    for (const [id, category] of Object.entries({
+      'getting-started/vector-file': 'data-layers',
+      'geotiff-viewer': 'data-layers',
+      'online-map-services': 'data-layers',
+      'point-lod': 'data-layers',
+      'geometry-lod': 'data-layers',
+      'crs-switch': 'coordinates',
+      project: 'coordinates',
+      'duckdb/data-management/reproject': 'analysis',
+      'getting-started/lines': 'style',
+      'feature-attributes': 'attributes',
+      'filter-features': 'attributes',
+      'attribute-editing': 'editing',
+      'filter-fields': 'editing',
+      'rename-fields': 'editing',
+      'feature-selection': 'editing',
+      'lasso-select': 'editing',
+      'vertex-editing': 'editing',
+      buffer: 'analysis',
+      'duckdb-buffer': 'analysis',
+      'luma-25d': 'tools',
+      'export-formats': 'tools',
+      'web-worker': 'tools',
+    })) {
+      expect(byId.get(id), id).toBe(category);
+    }
+  });
+  it('reports the optional plugins involved in each example', async () => {
+    const byId = new Map(examples.map((example) => [example.id, example.plugins]));
+    expect(byId.get('geotiff-viewer')).toEqual(['mapLibrePlugin', 'rasterPlugin', 'geoTIFFPlugin']);
+    expect(byId.get('mixed-data-viewer')).toEqual([
+      'mapLibrePlugin',
+      'arrowFormatsPlugin',
+      'geoPackagePlugin',
+      'flatgeobuf',
+      'rasterPlugin',
+      'geoTIFFPlugin',
+    ]);
+    expect(byId.get('flatgeobuf-viewer')).toEqual(['mapLibrePlugin', 'flatgeobuf']);
+    expect(byId.get('plugin-install')).toEqual([
+      'mapLibrePlugin',
+      'arrowFormatsPlugin',
+      'duckDbPlugin',
+    ]);
+    expect(byId.get('duckdb/data-management/reproject')).toEqual(['mapLibrePlugin']);
+    expect(byId.get('luma-25d')).toEqual([]);
+    for (const example of examples) {
+      const html = await readFile(resolve(example.source.html), 'utf8');
+      const sharedUi =
+        html.includes('installExampleMapUi(') || html.includes('mountDuckDbSpatialExample(');
+      expect(example.plugins.includes('mapLibrePlugin'), example.id).toBe(
+        sharedUi || example.id === 'plugin-install',
+      );
+    }
+  });
   it('preserves representative fixture and feature associations', () => {
     const byId = new Map(examples.map((example) => [example.id, example]));
     expect(byId.get('getting-started/points')?.fixtures).toEqual([
@@ -357,7 +413,7 @@ describe('example catalog metadata', () => {
       'fixtures/example-geoparquet.parquet',
     ]);
     expect(byId.get('join')?.category).toBe('analysis');
-    expect(byId.get('web-worker')?.category).toBe('rendering');
+    expect(byId.get('web-worker')?.category).toBe('tools');
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
@@ -405,7 +461,7 @@ describe('example catalog metadata', () => {
     ).toEqual(expectedModules.map(({ zh }) => zh));
     const mapDataCount = examples.filter(({ category }) => category === 'data-layers').length;
     root.querySelector<HTMLButtonElement>('[data-category="data-layers"]')?.click();
-    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('数据与图层');
+    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('数据加载');
     expect(root.querySelectorAll('a.example-card')).toHaveLength(mapDataCount);
     expect(root.querySelector('[data-category="data-layers"]')?.getAttribute('aria-pressed')).toBe(
       'true',
@@ -419,7 +475,9 @@ describe('example catalog metadata', () => {
     renderCatalog(root, examples);
     const topic = root.querySelector('.catalog-topic');
     if (!topic) throw new Error('DuckDB topic was not rendered');
-    const duckDbExamples = examples.filter((example) => example.topic?.id === 'duckdb');
+    const duckDbExamples = examples.filter(
+      (example) => example.topic?.id === 'duckdb' && example.category === 'analysis',
+    );
     expect(topic.querySelectorAll('a.example-card')).toHaveLength(duckDbExamples.length);
     expect(
       Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
@@ -612,10 +670,10 @@ describe('example catalog metadata', () => {
     const mobileCategory = root.querySelector<HTMLSelectElement>('.catalog-mobile-category select');
     expect(mobileCategory?.options).toHaveLength(expectedModules.length + 1);
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
-    mobileCategory.value = 'duckdb';
+    mobileCategory.value = 'analysis';
     mobileCategory.dispatchEvent(new Event('change'));
     expect(root.querySelectorAll('a.example-card')).toHaveLength(
-      examples.filter(({ category }) => category === 'duckdb').length,
+      examples.filter(({ category }) => category === 'analysis').length,
     );
   });
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -655,19 +713,21 @@ describe('example catalog metadata', () => {
     root.querySelector<HTMLButtonElement>('[data-category="data-layers"]')?.click();
     const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!search) throw new Error('Catalog search was not rendered');
-    search.value = 'export';
+    search.value = 'geoparquet-viewer';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
     if (!language) throw new Error('Catalog language selector was not rendered');
     language.value = 'en';
     language.dispatchEvent(new Event('change'));
-    expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('export');
+    expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe(
+      'geoparquet-viewer',
+    );
     expect(root.querySelector('[data-category="data-layers"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
-    ).toEqual(['Export formats']);
+    ).toEqual(['GeoParquet / GeoArrow viewer']);
   });
   it('ships one canonical runnable HTML page for every metadata entry', async () => {
     for (const example of examples) {
@@ -739,13 +799,16 @@ describe('example catalog metadata', () => {
         expect(parsed.querySelector('form#create-form')).not.toBeNull();
         expect(parsed.querySelector('#create')).not.toBeNull();
         expect(html).toContain('map.createLayer(');
+      } else if (example.id === 'online-vector-data') {
+        expect(parsed.querySelector('input[type="url"]')).not.toBeNull();
+        expect(html).toContain('TopologySource.fromUrl(');
       } else if (example.id !== 'plugin-install') {
         expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       }
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
         /\.\.\/\.\.\/(?:dist|src)\//,
       );
-      if (example.id !== 'china-editing') {
+      if (!['china-editing', 'online-vector-data'].includes(example.id)) {
         expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
       }
     }

@@ -50,6 +50,22 @@ function mount() {
     <script id="emap-example-source" type="application/json">${JSON.stringify('<html><body>Example source</body></html>')}</script>`;
 }
 describe('example presentation', () => {
+  it('shows the example plugin names as tags', () => {
+    mount();
+    window.history.replaceState(null, '', '/mapseekai/emap/examples/geotiff-viewer/');
+    dispose = installExamplePresentation();
+    const group = document.querySelector('[aria-label="示例涉及的插件"]');
+    expect(group?.getAttribute('role')).toBe('group');
+    expect(
+      [...document.querySelectorAll('.example-plugin-tag')].map((node) => node.textContent),
+    ).toEqual(['mapLibrePlugin', 'rasterPlugin', 'geoTIFFPlugin']);
+  });
+  it('does not show a plugin group when the example has no optional plugin', () => {
+    mount();
+    window.history.replaceState(null, '', '/mapseekai/emap/examples/plugin-capability/');
+    dispose = installExamplePresentation();
+    expect(document.querySelector('.example-plugin-tags')).toBeNull();
+  });
   it('opens operations on the map and preserves controls through collapse and keyboard recovery', () => {
     mount();
     dispose = installExamplePresentation();

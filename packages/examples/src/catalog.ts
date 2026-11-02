@@ -1,5 +1,10 @@
 import { exampleTopics, type ExampleDefinition } from '../../../docs-meta/examples';
-import { categoryDescription, featuredExamples } from './example-content';
+import {
+  categoryDescription,
+  categoryLabel,
+  exampleCategories,
+  featuredExamples,
+} from './example-content';
 import { createExamplePreview } from './example-preview';
 import { exampleNavigationUrl } from './renderer-choice';
 
@@ -42,50 +47,13 @@ interface CatalogState {
   query: string;
 }
 
-const categoryOrder = [
-  'getting-started',
-  'data-layers',
-  'style',
-  'interaction',
-  'editing',
-  'analysis',
-  'duckdb',
-  'rendering',
-  'extension',
-] as const;
-
-const categoryLabels: Record<ExampleLocale, Readonly<Record<string, string>>> = {
-  zh: {
-    'getting-started': '入门',
-    'data-layers': '数据与图层',
-    style: '样式',
-    interaction: '交互',
-    editing: '编辑',
-    analysis: '几何分析',
-    duckdb: 'DuckDB',
-    rendering: '渲染与性能',
-    extension: '扩展',
-  },
-  en: {
-    'getting-started': 'Getting started',
-    'data-layers': 'Data & layers',
-    style: 'Styling',
-    interaction: 'Interaction',
-    editing: 'Editing',
-    analysis: 'Geometry analysis',
-    duckdb: 'DuckDB',
-    rendering: 'Rendering & performance',
-    extension: 'Extensions',
-  },
-};
-
 function orderedCategoryCounts(examples: readonly ExampleDefinition[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const example of examples) {
     counts.set(example.category, (counts.get(example.category) ?? 0) + 1);
   }
   const ordered = new Map<string, number>();
-  for (const category of categoryOrder) {
+  for (const [category] of exampleCategories) {
     const count = counts.get(category);
     if (count) ordered.set(category, count);
   }
@@ -242,8 +210,7 @@ function renderCatalogLocale(
 
     const label = document.createElement('span');
     label.className = 'catalog-category-label';
-    label.textContent =
-      category === 'all' ? copy.allCategories : (categoryLabels[locale][category] ?? category);
+    label.textContent = category === 'all' ? copy.allCategories : categoryLabel(category, locale);
     button.title = label.textContent;
     const categoryCount = document.createElement('span');
     categoryCount.className = 'catalog-category-count';
@@ -313,8 +280,7 @@ function renderCatalogLocale(
   const mobileCategorySelect = document.createElement('select');
   mobileCategorySelect.setAttribute('aria-label', copy.catalogLabel);
   for (const category of ['all', ...categories.keys()]) {
-    const label =
-      category === 'all' ? copy.allCategories : (categoryLabels[locale][category] ?? category);
+    const label = category === 'all' ? copy.allCategories : categoryLabel(category, locale);
     mobileCategorySelect.append(new Option(label, category));
   }
   mobileCategorySelect.value = state.category;
@@ -505,7 +471,7 @@ function renderCatalogResults(
 
     const groupTitle = document.createElement('h2');
     groupTitle.className = 'catalog-group-title';
-    groupTitle.textContent = categoryLabels[state.locale][category] ?? category;
+    groupTitle.textContent = categoryLabel(category, state.locale);
 
     const groupCount = document.createElement('span');
     groupCount.className = 'catalog-group-count';

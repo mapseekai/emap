@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 加载在线矢量数据</title>
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>加载在线矢量数据</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>加载在线矢量数据</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="online-source">示例数据</label>
+          <select id="online-source">
+            <option value="topojson">中国行政区划 · TopoJSON</option>
+            <option value="geojson">中国行政区划 · GeoJSON</option>
+            <option value="shapefile">世界国家 · Shapefile ZIP</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="source-url">在线数据地址</label>
+          <input id="source-url" type="url" value="https://geojson.cn/api/china/1.6.3/china.topo.json" />
+        </div>
+        <button id="load-data" type="button" class="emap-example-primary-button">加载数据</button>
+        <p id="status" class="emap-example-status" role="status">正在加载在线数据…</p>
+        <p class="emap-example-hint">中国行政区划来自 geojson.cn，世界国家数据来自 Natural Earth。自定义地址需允许跨域访问；Shapefile 请使用包含配套文件的 ZIP。</p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+
+const emap = await loadExampleRuntime();
+const { Emap, TopologySource } = emap;
+const map = await Emap.create({ container: 'map', preset: 'viewer', renderer: getExampleRenderer() });
+await map.addControl(new emap.NavigationControl(), 'top-left');
+await installExampleMapUi(map, emap);
+
+const datasets = {
+  topojson: 'https://geojson.cn/api/china/1.6.3/china.topo.json',
+  geojson: 'https://geojson.cn/api/china/1.6.3/china.json',
+  shapefile: 'https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip',
+};
+const selector = document.getElementById('online-source');
+const urlInput = document.getElementById('source-url');
+const loadButton = document.getElementById('load-data');
+const status = document.getElementById('status');
+let currentSourceId = null;
+
+async function loadOnlineData() {
+  selector.disabled = urlInput.disabled = loadButton.disabled = true;
+  status.textContent = '正在加载在线数据…';
+  try {
+    let url;
+    try { url = new URL(urlInput.value.trim()); }
+    catch { throw new Error('请输入有效的 HTTP 或 HTTPS 数据地址。'); }
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('请输入 HTTP 或 HTTPS 数据地址。');
+    const nextId = currentSourceId === 'online-data-0' ? 'online-data-1' : 'online-data-0';
+    const source = await TopologySource.fromUrl(nextId, url.href, {
+      resourceLimits: { maxInputBytes: 64 * 1024 * 1024 },
+      zipLimits: { maxCompressedBytes: 64 * 1024 * 1024, maxBytes: 256 * 1024 * 1024, maxEntries: 1000 },
+    });
+    await map.addSource(nextId, source);
+    if (currentSourceId) map.removeSource(currentSourceId);
+    currentSourceId = nextId;
+    map.setExtent(source.getExtent());
+    status.textContent = '在线数据已加载。';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    status.textContent = `加载失败：${message}${currentSourceId ? '；保留上一份数据。' : ''}`;
+  } finally {
+    selector.disabled = urlInput.disabled = loadButton.disabled = false;
+  }
+}
+
+selector.addEventListener('change', () => {
+  urlInput.value = datasets[selector.value];
+  void loadOnlineData();
+});
+loadButton.addEventListener('click', () => void loadOnlineData());
+window.addEventListener('resize', () => map.resize());
+window.addEventListener('pagehide', () => { void map.dispose().catch(console.error); }, { once: true });
+await loadOnlineData();
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@ type LocalizedText = { zh: string; en: string };
 
 export const exampleTopics = {
   duckdb: {
-    category: 'duckdb',
+    category: 'analysis',
     title: { zh: 'DuckDB 空间数据分析', en: 'DuckDB spatial data analysis' },
     sections: [
       { id: 'query', title: { zh: '查询与数据接入', en: 'Query and data access' } },
@@ -32,6 +32,7 @@ export interface ExampleDefinition {
   api: readonly string[];
   tags: readonly string[];
   featureFlags: readonly string[];
+  plugins: readonly string[];
   fixtures: readonly string[];
   source: { html: string };
   route: string;
@@ -235,6 +236,10 @@ const exampleDescriptions = {
   'lasso-select': {
     zh: '在矩形框选和自由套索之间切换，比较两种区域选择的结果。',
     en: 'Switches between rectangular and freehand area selection and compares the results.',
+  },
+  'online-vector-data': {
+    zh: '从网络加载 GeoJSON、TopoJSON 或 Shapefile ZIP，切换示例数据或输入自定义地址。',
+    en: 'Loads GeoJSON, TopoJSON, or Shapefile ZIP from a sample or custom online URL.',
   },
   'china-editing': {
     zh: '默认在线加载中国行政区划 TopoJSON，可切换为 GeoJSON 或上传本地数据后编辑几何。',
@@ -645,16 +650,59 @@ const exampleDescriptions = {
 
 type ExampleId = keyof typeof exampleDescriptions;
 
+const examplesWithoutMapUi = new Set<ExampleId>([
+  'luma-25d',
+  'luma-benchmark',
+  'luma-raster',
+  'luma-vertex-editing',
+  'plugin-install',
+  'plugin-capability',
+]);
+
+const examplePlugins: Partial<Record<ExampleId, readonly string[]>> = {
+  'geotiff-viewer': ['rasterPlugin', 'geoTIFFPlugin'],
+  'mixed-data-viewer': [
+    'arrowFormatsPlugin',
+    'geoPackagePlugin',
+    'flatgeobuf',
+    'rasterPlugin',
+    'geoTIFFPlugin',
+  ],
+  'geopackage-viewer': ['geoPackagePlugin'],
+  'flatgeobuf-viewer': ['flatgeobuf'],
+  'geoparquet-viewer': ['arrowFormatsPlugin'],
+  'export-formats': ['flatgeobuf', 'arrowFormatsPlugin'],
+  'luma-raster': ['rasterPlugin'],
+  'plugin-install': ['mapLibrePlugin', 'arrowFormatsPlugin', 'duckDbPlugin'],
+};
+
+function pluginsForExample(id: ExampleId): readonly string[] {
+  return [
+    ...(examplesWithoutMapUi.has(id) ? [] : ['mapLibrePlugin']),
+    ...(examplePlugins[id] ?? []),
+  ];
+}
+
 export const examples: readonly ExampleDefinition[] = [
   recipe(
     'getting-started/vector-file',
-    'getting-started',
+    'data-layers',
     '打开矢量文件',
     'Open a vector file',
     [docsFormats, docsCrs, docsFileUpload, docsFitBounds],
     'TopologySource',
     ['formats', 'crs', 'geojson', 'shapefile', 'topojson', 'kml'],
     ['fixtures/getting-started-geojson-viewer.geojson'],
+  ),
+  recipe(
+    'online-vector-data',
+    'data-layers',
+    '加载在线矢量数据',
+    'Load online vector data',
+    [docsFormats, docsCrs],
+    'TopologySource.fromUrl',
+    ['formats', 'online', 'geojson', 'topojson', 'shapefile'],
+    [],
   ),
   recipe(
     'geotiff-viewer',
@@ -714,7 +762,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'export-formats',
-    'data-layers',
+    'tools',
     '格式导出',
     'Export formats',
     [docsFormats],
@@ -734,7 +782,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'crs-switch',
-    'data-layers',
+    'coordinates',
     '坐标系切换',
     'CRS switch',
     [docsCrs],
@@ -744,7 +792,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'project',
-    'data-layers',
+    'coordinates',
     '投影转换',
     'Project CRS',
     [docsCrs, docsOperations],
@@ -754,7 +802,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'rename-layer',
-    'data-layers',
+    'tools',
     '图层重命名',
     'Rename layer',
     [docsSourceLayer, docsOperations],
@@ -764,7 +812,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'split-layer',
-    'data-layers',
+    'tools',
     '图层拆分',
     'Split layer',
     [docsSourceLayer, docsOperations, docsAttributes],
@@ -774,7 +822,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'merge-layers',
-    'data-layers',
+    'tools',
     '合并图层',
     'Merge layers',
     [docsSourceLayer, docsOperations],
@@ -844,7 +892,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'interaction-handlers',
-    'interaction',
+    'tools',
     '交互 Handler',
     'Interaction handlers',
     [docsEvents, docsControls],
@@ -854,7 +902,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'measurement',
-    'interaction',
+    'tools',
     '球面测量',
     'Spherical measurement',
     [docsControls, docsCrs],
@@ -864,7 +912,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'feature-attributes',
-    'interaction',
+    'attributes',
     '要素属性查询',
     'Feature attributes',
     [docsAttributes, docsEvents],
@@ -874,7 +922,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'feature-selection',
-    'interaction',
+    'editing',
     '要素选择',
     'Feature selection',
     [docsSelection],
@@ -884,7 +932,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'lasso-select',
-    'interaction',
+    'editing',
     '区域选择',
     'Area selection',
     [docsSelection, docsControls],
@@ -934,7 +982,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'filter-features',
-    'analysis',
+    'attributes',
     '要素过滤',
     'Filter features',
     [docsAttributes, docsOperations],
@@ -1014,7 +1062,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'snapshot',
-    'editing',
+    'tools',
     '多源快照保存 / 恢复',
     'Snapshot save and restore',
     [docsEditing],
@@ -1054,7 +1102,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'web-worker',
-    'rendering',
+    'tools',
     'Web Worker 重命令',
     'Web Worker heavy operations',
     [docsWorker, docsPerformance],
@@ -1104,7 +1152,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'luma-25d',
-    'rendering',
+    'tools',
     'luma 2.5D 地图',
     'luma 2.5D map',
     [docsPerformance, docsCrs],
@@ -1114,7 +1162,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'luma-raster',
-    'rendering',
+    'tools',
     'luma 动态栅格',
     'luma dynamic raster',
     [docsPerformance],
@@ -1124,7 +1172,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'luma-benchmark',
-    'rendering',
+    'tools',
     'luma WebGL2 性能对照',
     'luma WebGL2 benchmark',
     [docsPerformance],
@@ -1134,7 +1182,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'point-lod',
-    'rendering',
+    'data-layers',
     '密集点 LOD',
     'Dense point LOD',
     [docsPerformance, docsStyling, docsSelection],
@@ -1144,7 +1192,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'geometry-lod',
-    'rendering',
+    'data-layers',
     '线面自动简化',
     'Line and polygon display LOD',
     [docsPerformance],
@@ -1204,7 +1252,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'snap-layer',
-    'analysis',
+    'editing',
     '批量吸附',
     'Snap layer',
     [docsOperations],
@@ -1244,7 +1292,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-query',
-    'duckdb',
+    'analysis',
     'DuckDB 受限 SELECT',
     'DuckDB restricted SELECT',
     [docsDuckDb, docsStatusControl, docsErrorHandling],
@@ -1255,7 +1303,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-geoparquet-query',
-    'duckdb',
+    'analysis',
     'DuckDB GeoParquet 查询',
     'DuckDB GeoParquet query',
     [docsDuckDb, docsFormats, docsStatusControl],
@@ -1266,7 +1314,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-buffer',
-    'duckdb',
+    'analysis',
     'DuckDB 缓冲区',
     'DuckDB buffer',
     [docsDuckDb, docsErrorHandling],
@@ -1277,7 +1325,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-overlay',
-    'duckdb',
+    'analysis',
     'DuckDB Overlay',
     'DuckDB overlay',
     [docsDuckDb, docsOperations],
@@ -1288,7 +1336,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-spatial-aggregate-join',
-    'duckdb',
+    'analysis',
     'DuckDB 空间聚合连接',
     'DuckDB spatial aggregate join',
     [docsDuckDb, docsOperations],
@@ -1299,7 +1347,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/centroid',
-    'duckdb',
+    'analysis',
     'DuckDB 几何中心',
     'DuckDB centroid',
     [docsDuckDb, docsOperations],
@@ -1310,7 +1358,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/envelope',
-    'duckdb',
+    'analysis',
     'DuckDB 外包矩形',
     'DuckDB envelope',
     [docsDuckDb, docsOperations],
@@ -1321,7 +1369,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/convex-hull',
-    'duckdb',
+    'analysis',
     'DuckDB 凸包',
     'DuckDB convex hull',
     [docsDuckDb, docsOperations],
@@ -1332,7 +1380,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/boundary',
-    'duckdb',
+    'analysis',
     'DuckDB 边界',
     'DuckDB boundary',
     [docsDuckDb, docsOperations],
@@ -1343,7 +1391,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/simplify',
-    'duckdb',
+    'analysis',
     'DuckDB 几何简化',
     'DuckDB simplify',
     [docsDuckDb, docsOperations],
@@ -1354,7 +1402,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/simplify-preserve-topology',
-    'duckdb',
+    'analysis',
     'DuckDB 保拓扑简化',
     'DuckDB simplify preserve topology',
     [docsDuckDb, docsOperations],
@@ -1365,7 +1413,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/make-valid',
-    'duckdb',
+    'analysis',
     'DuckDB 修复无效几何',
     'DuckDB make valid',
     [docsDuckDb, docsOperations],
@@ -1376,7 +1424,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/attribute/geometry-type',
-    'duckdb',
+    'analysis',
     'DuckDB 几何类型属性',
     'DuckDB geometry type attribute',
     [docsDuckDb, docsAttributes],
@@ -1387,7 +1435,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/densify',
-    'duckdb',
+    'analysis',
     'DuckDB 顶点加密',
     'DuckDB densify',
     [docsDuckDb, docsOperations],
@@ -1398,7 +1446,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/multipart-to-singlepart',
-    'duckdb',
+    'analysis',
     'DuckDB 多部件转单部件',
     'DuckDB multipart to singlepart',
     [docsDuckDb, docsOperations],
@@ -1409,7 +1457,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/geometry/extract-vertices',
-    'duckdb',
+    'analysis',
     'DuckDB 顶点提取',
     'DuckDB extract vertices',
     [docsDuckDb, docsOperations],
@@ -1420,7 +1468,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/transform/point-to-line',
-    'duckdb',
+    'analysis',
     'DuckDB 点转线',
     'DuckDB point to line',
     [docsDuckDb, docsOperations],
@@ -1431,7 +1479,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/transform/line-to-polygon',
-    'duckdb',
+    'analysis',
     'DuckDB 线转面',
     'DuckDB line to polygon',
     [docsDuckDb, docsOperations],
@@ -1442,7 +1490,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/transform/polygon-to-line',
-    'duckdb',
+    'analysis',
     'DuckDB 面转线',
     'DuckDB polygon to line',
     [docsDuckDb, docsOperations],
@@ -1453,7 +1501,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/proximity/near',
-    'duckdb',
+    'analysis',
     'DuckDB 邻近距离',
     'DuckDB near',
     [docsDuckDb, docsOperations],
@@ -1464,7 +1512,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/proximity/nearest',
-    'duckdb',
+    'analysis',
     'DuckDB 最近要素',
     'DuckDB nearest',
     [docsDuckDb, docsOperations],
@@ -1475,7 +1523,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/selection/spatial-filter',
-    'duckdb',
+    'analysis',
     'DuckDB 空间过滤',
     'DuckDB spatial filter',
     [docsDuckDb, docsOperations],
@@ -1486,7 +1534,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/join/spatial-join',
-    'duckdb',
+    'analysis',
     'DuckDB 空间连接',
     'DuckDB spatial join',
     [docsDuckDb, docsOperations],
@@ -1497,7 +1545,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/join/attribute-join',
-    'duckdb',
+    'analysis',
     'DuckDB 属性连接',
     'DuckDB attribute join',
     [docsDuckDb, docsOperations],
@@ -1508,7 +1556,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/aggregate/dissolve',
-    'duckdb',
+    'analysis',
     'DuckDB 融合',
     'DuckDB dissolve',
     [docsDuckDb, docsOperations],
@@ -1519,7 +1567,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/aggregate/collect',
-    'duckdb',
+    'analysis',
     'DuckDB 几何收集',
     'DuckDB collect',
     [docsDuckDb, docsOperations],
@@ -1530,7 +1578,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/data-management/merge',
-    'duckdb',
+    'analysis',
     'DuckDB 图层合并',
     'DuckDB merge',
     [docsDuckDb, docsOperations],
@@ -1541,7 +1589,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/data-management/append',
-    'duckdb',
+    'analysis',
     'DuckDB 要素追加',
     'DuckDB append',
     [docsDuckDb, docsOperations],
@@ -1552,7 +1600,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/data-management/reproject',
-    'duckdb',
+    'analysis',
     'DuckDB 投影转换',
     'DuckDB reproject',
     [docsDuckDb, docsCrs],
@@ -1563,7 +1611,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb-toolbox',
-    'duckdb',
+    'analysis',
     'DuckDB 工具箱',
     'DuckDB toolbox',
     [docsDuckDb, docsOperations],
@@ -1575,7 +1623,7 @@ export const examples: readonly ExampleDefinition[] = [
 
   recipe(
     'duckdb/attribute/measures',
-    'duckdb',
+    'analysis',
     'DuckDB 几何度量',
     'DuckDB geometry measures',
     [docsDuckDb, docsAttributes],
@@ -1586,7 +1634,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/attribute/coordinates',
-    'duckdb',
+    'analysis',
     'DuckDB 坐标属性',
     'DuckDB coordinate attributes',
     [docsDuckDb, docsAttributes],
@@ -1597,7 +1645,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/attribute/geometry-checks',
-    'duckdb',
+    'analysis',
     'DuckDB 几何检查属性',
     'DuckDB geometry checks',
     [docsDuckDb, docsAttributes],
@@ -1608,7 +1656,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'duckdb/relation/spatial-relations',
-    'duckdb',
+    'analysis',
     'DuckDB 空间关系',
     'DuckDB spatial relations',
     [docsDuckDb, docsOperations],
@@ -1619,7 +1667,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'drop-layer',
-    'data-layers',
+    'tools',
     '删除图层',
     'Drop layer',
     [docsOperations, docsAttributes],
@@ -1629,7 +1677,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'sort-features',
-    'data-layers',
+    'tools',
     '排序要素',
     'Sort features',
     [docsOperations, docsAttributes],
@@ -1639,7 +1687,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'unique-features',
-    'data-layers',
+    'tools',
     '要素去重',
     'Unique features',
     [docsOperations, docsAttributes],
@@ -1649,7 +1697,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'filter-fields',
-    'data-layers',
+    'editing',
     '筛选字段',
     'Filter fields',
     [docsOperations, docsAttributes],
@@ -1659,7 +1707,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'rename-fields',
-    'data-layers',
+    'editing',
     '重命名字段',
     'Rename fields',
     [docsOperations, docsAttributes],
@@ -1719,7 +1767,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'plugin-install',
-    'extension',
+    'tools',
     '安装插件',
     'Install a plugin',
     [docsPlugins, docsEmap],
@@ -1729,7 +1777,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'plugin-capability',
-    'extension',
+    'tools',
     '调用 Capability',
     'Call a capability',
     [docsPlugins],
@@ -1768,6 +1816,7 @@ function seed(
     api: [api],
     tags: ['getting-started', 'local-fixture'],
     featureFlags: [],
+    plugins: pluginsForExample(id),
     fixtures: [fixture],
     source: { html: sourceHtml(id) },
     route: route(id),
@@ -1804,6 +1853,7 @@ function recipe(
     api: [api],
     tags: [category, id, ...featureFlags],
     featureFlags,
+    plugins: pluginsForExample(id),
     fixtures,
     source: { html },
     route: route(id),
