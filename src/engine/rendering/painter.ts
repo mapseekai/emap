@@ -147,6 +147,8 @@ export interface CorePainter {
       geometryLod?: boolean;
     } | null,
   ): void;
+  /** @internal A project pack can prepare its first layout while the geometry frame is queued. */
+  readonly prepareInitialLabels?: boolean;
   createLabelAtlas?(): import('./labels/text-types').LabelAtlasProvider;
   clearLabels?(): void;
   forgetImage?(image: CanvasImageSource): void;

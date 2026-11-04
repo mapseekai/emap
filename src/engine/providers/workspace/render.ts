@@ -60,6 +60,7 @@ export class CanvasRenderService {
     return this._painter?.backend ?? null;
   }
   private _labels: BoundLabelManager | null = null;
+  private _initialLabelsQueued = false;
   private _icons: PointIconImages | null = null;
   private readonly _passes = new Map<RenderPass, RenderPassStage>();
   private _sourceOrder: string[] = [];
@@ -275,6 +276,31 @@ export class CanvasRenderService {
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
     }
+    if (
+      action === 'redraw' &&
+      this._painter?.prepareInitialLabels &&
+      !this._labels &&
+      !this._initialLabelsQueued
+    ) {
+      this._initialLabelsQueued = true;
+      // Layer/source updates and fit-to-view can share a turn. Prepare the resulting view before paint.
+      queueMicrotask(() => {
+        this._initialLabelsQueued = false;
+        if (
+          this._disposed ||
+          this.deps.signal.aborted ||
+          !this._pendingRender ||
+          this._labels ||
+          this._navSnapshotTransform
+        )
+          return;
+        try {
+          this._requestBoundLabels();
+        } catch (error) {
+          this.deps.events.fire('error', { error });
+        }
+      });
+    }
   }
 
   private _schedulePreparedRender(): void {
@@ -412,12 +438,7 @@ export class CanvasRenderService {
           typeof color === 'string' &&
           ((/^#[\da-f]{8}$/i.test(color) && color.slice(-2).toLowerCase() !== 'ff') ||
             /^rgba\([^()]+,\s*(?:0(?:\.\d+)?|\.\d+)\s*\)$/i.test(color));
-        if (
-          layer.icon ||
-          layer.pointLod !== false ||
-          layer.paint?.['circle-fill'] === false ||
-          !translucent
-        )
+        if (layer.icon || layer.pointLod || layer.paint?.['circle-fill'] === false || !translucent)
           return null;
         const radius = layer.paint?.['circle-radius'] ?? 4;
         if (!Number.isFinite(radius) || radius < 0) return null;
@@ -626,6 +647,14 @@ export class CanvasRenderService {
 
   private _renderBoundLabels(): void {
     if (!this._painter.drawLabels) return;
+    const frame = this._requestBoundLabels();
+    if (frame) this._painter.drawLabels(frame);
+    else {
+      this._retireLabels();
+      this._painter.clearLabels?.();
+    }
+  }
+  private _requestBoundLabels() {
     const bindings: LabelBinding[] = [];
     for (const spec of this.deps.layers._getEffectiveLayers()) {
       if (!spec.label || spec.label.enabled === false || spec.layout?.visibility === 'none')
@@ -654,11 +683,7 @@ export class CanvasRenderService {
             : undefined,
       });
     }
-    if (!bindings.length) {
-      this._retireLabels();
-      this._painter.clearLabels?.();
-      return;
-    }
+    if (!bindings.length) return;
     this._labels ??= new BoundLabelManager(
       () => this._schedulePreparedRender(),
       (error) => this.deps.events.fire('error', { error }),
@@ -667,16 +692,14 @@ export class CanvasRenderService {
     );
     this._labels.pause(this._navSnapshotTransform !== null && !this._painter.renderNavigation);
     const view = this.deps.view._viewport;
-    this._painter.drawLabels(
-      this._labels.request(
-        bindings,
-        view.transform,
-        view.width,
-        view.height,
-        window.devicePixelRatio || 1,
-        this._navSnapshotTransform !== null && !!this._painter.renderNavigation,
-        Math.min(1, view.getMapScale()),
-      ),
+    return this._labels.request(
+      bindings,
+      view.transform,
+      view.width,
+      view.height,
+      window.devicePixelRatio || 1,
+      this._navSnapshotTransform !== null && !!this._painter.renderNavigation,
+      Math.min(1, view.getMapScale()),
     );
   }
 

@@ -7,8 +7,8 @@ const LARGE_DATASET_THRESHOLD = 5e5;
 
 /**
  * Wraps a Mapshaper ArcCollection and provides Level of Detail (LOD) switching.
- * For large datasets (>500k points), generates a low-detail copy for faster
- * rendering at zoomed-out scales.
+ * For large datasets (>500k points), prepares a low-detail copy on the first
+ * explicit LOD request.
  *
  * Based on Mapshaper's gui-display-arcs.mjs implementation.
  */
@@ -17,8 +17,8 @@ export class DisplayArcs {
   private _filteredArcs: ArcCollection | null = null;
   private _filteredSegLen = 0;
   /**
-   * Set by {@link markDirty} when an in-place edit (translate / vertex move /
-   * shared-arc split / …) mutates the underlying arcs. Cleared the next time
+   * Set for a new large dataset and by {@link markDirty} after an in-place
+   * edit (translate / vertex move / shared-arc split). Cleared the next time
    * {@link getScaledArcs} actually needs the filtered copy and rebuilds it.
    *
    * The flag lets per-frame edit sessions defer the (~O(N)) filtered-copy
@@ -26,7 +26,7 @@ export class DisplayArcs {
    * where the unfiltered arcs are used directly, so the rebuild often fires
    * exactly once — at the next zoom-out.
    */
-  private _dirty = false;
+  private _dirty: boolean;
   private _controller: AbortController | null = null;
   private _ready: Promise<void> = Promise.resolve();
   private _disposed = false;
@@ -37,11 +37,7 @@ export class DisplayArcs {
     private readonly onError?: (error: unknown) => void,
   ) {
     this._unfilteredArcs = arcs;
-    const pointCount = arcs.getPointCount?.() ?? 0;
-    if (pointCount > LARGE_DATASET_THRESHOLD) {
-      if (onReady) this._prepare();
-      else this._initFilteredArcs();
-    }
+    this._dirty = (arcs.getPointCount?.() ?? 0) > LARGE_DATASET_THRESHOLD;
   }
 
   /**
@@ -111,16 +107,16 @@ export class DisplayArcs {
   /**
    * Returns the appropriate arc collection based on current zoom level.
    * @param unitsPerPixel - Map units per screen pixel (1 / transform.mx)
+   * @param pixelTolerance - Zero (default) keeps source detail at every zoom.
    * @returns Low-detail arcs when zoomed out, full-detail arcs when zoomed in
    */
-  getScaledArcs(unitsPerPixel: number, pixelTolerance = 0.5): ArcCollection {
-    if (pixelTolerance === 0) return this._unfilteredArcs;
+  getScaledArcs(unitsPerPixel: number, pixelTolerance = 0): ArcCollection {
+    if (pixelTolerance === 0 || this._disposed) return this._unfilteredArcs;
     unitsPerPixel *= pixelTolerance / 0.5;
     if (this.onReady) {
       if (this._filteredArcs && this._filteredArcs.size() !== this._unfilteredArcs.size())
         this.markDirty();
       if (
-        !this._disposed &&
         this._dirty &&
         (this._unfilteredArcs.getPointCount?.() ?? 0) > LARGE_DATASET_THRESHOLD &&
         unitsPerPixel > this._filteredSegLen * 1.5
@@ -146,8 +142,7 @@ export class DisplayArcs {
         this._dirty = false;
       }
     } else if (this._dirty) {
-      // No LOD copy yet but caller marked dirty — only matters once the
-      // dataset crosses the LARGE_DATASET_THRESHOLD via append. Re-check.
+      // First LOD request, or an append that may have crossed the threshold.
       const pointCount = this._unfilteredArcs.getPointCount?.() ?? 0;
       if (pointCount > LARGE_DATASET_THRESHOLD) {
         this._initFilteredArcs();

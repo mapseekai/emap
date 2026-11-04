@@ -12,7 +12,7 @@ function fixture() {
     ]),
   };
   const dataset: MapshaperDataset = { layers: [layer], editVersion: 0, attributeVersion: 0 };
-  const spec: CircleLayerSpecification = { id: 'dots', source: 's', type: 'circle' };
+  const spec: CircleLayerSpecification = { id: 'dots', source: 's', type: 'circle', pointLod: {} };
   const cache = new PointLod();
   const bounds = [-100, -100, 100, 100];
   const query = (scale = 1, mask: Uint8Array | null = null) =>
@@ -192,7 +192,12 @@ describe('point LOD review regressions', () => {
           [(random() * width) / 2, (random() * height) / 2],
         ]),
       };
-      const spec: CircleLayerSpecification = { id: 'dots', source: 's', type: 'circle' };
+      const spec: CircleLayerSpecification = {
+        id: 'dots',
+        source: 's',
+        type: 'circle',
+        pointLod: {},
+      };
       const dataset = { layers: [layer] };
       const cache = new PointLod();
       const bounds = [0, 0, width / 2, height / 2];
@@ -266,7 +271,12 @@ describe('bounded LOD fallback and painted crops', () => {
       shapes: Array.from({ length: 160_000 }, (_, id) => [[id % 400, Math.floor(id / 400)]]),
     };
     const dataset = { layers: [layer] };
-    const spec: CircleLayerSpecification = { id: 'dots', source: 's', type: 'circle' };
+    const spec: CircleLayerSpecification = {
+      id: 'dots',
+      source: 's',
+      type: 'circle',
+      pointLod: {},
+    };
     const cache = new PointLod();
     for (const scale of [0.5, 1, 2, 3]) {
       const bounds = [0, 0, 128 / scale, 128 / scale];

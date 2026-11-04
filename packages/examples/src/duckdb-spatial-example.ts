@@ -1,3 +1,4 @@
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from './example-map-style';
 import { getExampleRenderer } from './renderer-choice';
 import {
   append,
@@ -475,9 +476,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     const maskSource = map.getSource(MASK_SOURCE_ID);
     if (inputSource) {
       addDisplayLayers(INPUT_SOURCE_ID, inputSource, 'duckdb-spatial-input', {
-        fill: '#dbeafe',
-        fillOpacity: 0.45,
-        line: '#1d4ed8',
+        fill: EXAMPLE_FEATURE_COLOR,
+        fillOpacity: EXAMPLE_FILL_OPACITY,
+        line: EXAMPLE_FEATURE_COLOR,
         lineWidth: 1.5,
         pointRadius: 4,
       });
@@ -485,9 +486,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     }
     if (maskSource) {
       addDisplayLayers(MASK_SOURCE_ID, maskSource, 'duckdb-spatial-mask', {
-        fill: '#dcfce7',
-        fillOpacity: 0.45,
-        line: '#15803d',
+        fill: EXAMPLE_FEATURE_COLOR,
+        fillOpacity: EXAMPLE_FILL_OPACITY,
+        line: EXAMPLE_FEATURE_COLOR,
         lineWidth: 1.5,
         pointRadius: 4,
       });
@@ -858,9 +859,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
           return;
         }
         addDisplayLayers(OUTPUT_SOURCE_ID, outputSource, 'duckdb-spatial-output', {
-          fill: '#fef3c7',
-          fillOpacity: 0.5,
-          line: '#b45309',
+          fill: EXAMPLE_FEATURE_COLOR,
+          fillOpacity: EXAMPLE_FILL_OPACITY,
+          line: EXAMPLE_FEATURE_COLOR,
           lineWidth: 2.5,
           pointRadius: 5,
         });

@@ -30,7 +30,7 @@ const MAX_CACHE_BYTES = 64 * 1024 ** 2;
  * enqueuing one expensive build for every intermediate pointer event.
  */
 export class PointLodRenderCache {
-  enabled = true;
+  enabled = false;
   cellSize = DEFAULT_LUMA_POINT_LOD_CELL_SIZE;
   private generation = 0;
   private clock = 0;

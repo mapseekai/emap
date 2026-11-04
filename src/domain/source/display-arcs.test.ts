@@ -10,7 +10,7 @@ import type { ArcCollection } from '../../shared/types/mapshaper-types';
 // `DisplayArcs` is the LOD layer between rendering and the source's
 // raw arc collection. Tests pin its three lifecycle states:
 //   - small dataset: no LOD copy, getScaledArcs returns unfiltered;
-//   - large dataset: LOD copy ready at construction;
+//   - large dataset: full detail until the first explicit LOD request;
 //   - markDirty + zoomed-out request: rebuild LOD lazily.
 //
 // We stub the adapter so we don't touch real mapshaper internals.
@@ -61,10 +61,13 @@ describe('DisplayArcs lifecycle', () => {
     expect(da.getArcs()).toBe(arcs);
   });
 
-  it('large dataset (>500k points) builds a filtered copy at construction', () => {
+  it('keeps large datasets at source detail at any zoom until LOD is requested', () => {
     const arcs = makeMockArcs(600_000);
     const da = new DisplayArcs(arcs);
-    expect(da.hasLOD()).toBe(true);
+    expect(da.getScaledArcs(0.001)).toBe(arcs);
+    expect(da.getScaledArcs(100)).toBe(arcs);
+    expect(da.hasLOD()).toBe(false);
+    expect(da.getScaledArcs(100, 0.5)).not.toBe(arcs);
   });
 
   it('getScaledArcs returns unfiltered when no LOD copy exists', () => {
@@ -78,16 +81,15 @@ describe('DisplayArcs lifecycle', () => {
   it('getScaledArcs returns unfiltered when zoomed in (small unitsPerPixel)', () => {
     const arcs = makeMockArcs(600_000);
     const da = new DisplayArcs(arcs);
-    expect(da.hasLOD()).toBe(true);
     // unitsPerPixel below the LOD threshold → unfiltered.
-    expect(da.getScaledArcs(0.001)).toBe(arcs);
+    expect(da.getScaledArcs(0.001, 0.5)).toBe(arcs);
   });
 
   it('getScaledArcs returns filtered when zoomed out (large unitsPerPixel)', () => {
     const arcs = makeMockArcs(600_000);
     const da = new DisplayArcs(arcs);
     // Large unitsPerPixel → filtered copy.
-    const result = da.getScaledArcs(100);
+    const result = da.getScaledArcs(100, 0.5);
     expect(result).not.toBe(arcs);
     expect((result as any).isFilteredCopy).toBe(true);
   });
@@ -99,7 +101,7 @@ describe('DisplayArcs lifecycle', () => {
     expect(da.getScaledArcs(1, 2)).not.toBe(arcs);
     expect(da.getScaledArcs(100, 0)).toBe(arcs);
     expect(da.getScaledArcs(100, 0.001)).toBe(arcs);
-    expect(da.getScaledArcs(100)).not.toBe(arcs);
+    expect(da.getScaledArcs(100, 0.5)).not.toBe(arcs);
   });
 });
 
@@ -118,13 +120,13 @@ describe('cooperative display LOD', () => {
     return arcs;
   }
   for (const thresholds of [false, true])
-    it(`prepares the same LOD as mapshaper without blocking construction (ZZ=${thresholds})`, async () => {
+    it(`prepares the same LOD as mapshaper after opt-in without blocking the first draw (ZZ=${thresholds})`, async () => {
       const arcs = largeArcs(thresholds),
         ready = vi.fn();
-      const expected = new DisplayArcs(arcs).getScaledArcs(100);
+      const expected = new DisplayArcs(arcs).getScaledArcs(100, 0.5);
       const actual = new DisplayArcs(arcs, ready);
       expect(actual.hasLOD()).toBe(false);
-      expect(actual.getScaledArcs(100) === arcs).toBe(true);
+      expect(actual.getScaledArcs(100, 0.5) === arcs).toBe(true);
       let ticks = 0;
       const timer = setInterval(() => ticks++, 0);
       try {
@@ -134,7 +136,9 @@ describe('cooperative display LOD', () => {
       }
       expect(ticks).toBeGreaterThan(1);
       expect(ready).toHaveBeenCalledOnce();
-      expect(actual.getScaledArcs(100).getVertexData!()).toMatchObject(expected.getVertexData!());
+      expect(actual.getScaledArcs(100, 0.5).getVertexData!()).toMatchObject(
+        expected.getVertexData!(),
+      );
       expect(actual.getScaledArcs(100, 0)).toBe(arcs);
       expect(arcs.getRetainedInterval!()).toBe(thresholds ? 2 : 0);
       actual.dispose();
@@ -143,16 +147,17 @@ describe('cooperative display LOD', () => {
     const arcs = largeArcs(false),
       ready = vi.fn();
     const actual = new DisplayArcs(arcs, ready);
+    actual.getScaledArcs(100, 0.5);
     const initial = actual.ready;
     actual.markDirty();
     arcs.getVertexData!().xx[0] = -100;
-    expect(actual.getScaledArcs(100) === arcs).toBe(true);
+    expect(actual.getScaledArcs(100, 0.5) === arcs).toBe(true);
     await initial;
     await actual.ready;
     expect(ready).toHaveBeenCalledOnce();
-    expect(actual.getScaledArcs(100).getVertexData!().xx[0]).toBe(-100);
+    expect(actual.getScaledArcs(100, 0.5).getVertexData!().xx[0]).toBe(-100);
     actual.markDirty();
-    actual.getScaledArcs(100);
+    actual.getScaledArcs(100, 0.5);
     actual.dispose();
     await actual.ready;
     expect(ready).toHaveBeenCalledOnce();
@@ -171,7 +176,7 @@ describe('DisplayArcs.markDirty', () => {
     const arcs = makeMockArcs(1000);
     const da = new DisplayArcs(arcs);
     da.markDirty();
-    expect(da.getScaledArcs(0.001)).toBe(arcs);
+    expect(da.getScaledArcs(0.001, 0.5)).toBe(arcs);
     expect(da.hasLOD()).toBe(false);
   });
 
@@ -179,20 +184,21 @@ describe('DisplayArcs.markDirty', () => {
     const arcs = makeMockArcs(600_000);
     const getFilteredCopy = vi.spyOn(arcs, 'getFilteredCopy');
     const da = new DisplayArcs(arcs);
+    da.getScaledArcs(100, 0.5);
     expect(getFilteredCopy).toHaveBeenCalledOnce();
     da.markDirty();
-    expect(da.getScaledArcs(0.001)).toBe(arcs);
+    expect(da.getScaledArcs(0.001, 0.5)).toBe(arcs);
     expect(getFilteredCopy).toHaveBeenCalledOnce();
-    da.getScaledArcs(100);
+    da.getScaledArcs(100, 0.5);
     expect(getFilteredCopy).toHaveBeenCalledTimes(2);
   });
 
   it('on a large dataset, markDirty + zoomed-out request triggers a rebuild', () => {
     const arcs = makeMockArcs(600_000);
     const da = new DisplayArcs(arcs);
-    const first = da.getScaledArcs(100);
+    const first = da.getScaledArcs(100, 0.5);
     da.markDirty();
-    const second = da.getScaledArcs(100);
+    const second = da.getScaledArcs(100, 0.5);
     // After markDirty, getScaledArcs at the same zoom returns a NEW
     // filtered copy (different identity) because it rebuilt.
     expect(first).not.toBe(second);
@@ -210,7 +216,7 @@ describe('DisplayArcs ZZ-vs-fallback path', () => {
   it('uses the ZZ threshold path when vertexData.zz is present', () => {
     const arcs = makeMockArcs(600_000, { hasZZ: true });
     const da = new DisplayArcs(arcs);
-    const filtered = da.getScaledArcs(100);
+    const filtered = da.getScaledArcs(100, 0.5);
     // ZZ path: filtered copy comes from arcs.getFilteredCopy(), not adapter.
     expect((filtered as any).fromFastPath).toBeUndefined();
     expect((filtered as any).isFilteredCopy).toBe(true);
@@ -219,7 +225,7 @@ describe('DisplayArcs ZZ-vs-fallback path', () => {
   it('falls back to adapter.simplifyArcsFast when zz is missing', () => {
     const arcs = makeMockArcs(600_000, { hasZZ: false });
     const da = new DisplayArcs(arcs);
-    const filtered = da.getScaledArcs(100);
+    const filtered = da.getScaledArcs(100, 0.5);
     // Fallback path: filtered copy comes from adapter.simplifyArcsFast.
     expect((filtered as any).fromFastPath).toBe(true);
   });

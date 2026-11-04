@@ -97,7 +97,7 @@ export class FeatureQuery {
     getTransform: () => AffineTransform,
     getSize: () => { width: number; height: number },
     getInitialMX: () => number,
-    private readonly getGeometryLodTolerance: () => number = () => 0.5,
+    private readonly getGeometryLodTolerance: () => number = () => 0,
   ) {
     this._sources = sources;
     this._getTransform = getTransform;

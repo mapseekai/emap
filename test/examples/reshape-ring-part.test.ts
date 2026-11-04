@@ -1,3 +1,7 @@
+import {
+  EXAMPLE_FEATURE_COLOR,
+  EXAMPLE_FILL_OPACITY,
+} from '../../packages/examples/src/example-map-style';
 import { getExampleRenderer } from '../../packages/examples/src/renderer-choice';
 // @vitest-environment jsdom
 import { readFile } from 'node:fs/promises';
@@ -86,6 +90,8 @@ async function executeExample() {
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     await new AsyncFunction(
+      'EXAMPLE_FEATURE_COLOR',
+      'EXAMPLE_FILL_OPACITY',
       'getExampleRenderer',
       'installExampleMapUi',
       'autoLoadExampleFixtures',
@@ -93,6 +99,8 @@ async function executeExample() {
       'document',
       script,
     )(
+      EXAMPLE_FEATURE_COLOR,
+      EXAMPLE_FILL_OPACITY,
       getExampleRenderer,
       installExampleMapUi,
       autoLoadExampleFixtures,

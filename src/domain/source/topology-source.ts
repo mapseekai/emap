@@ -878,7 +878,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   /**
    * Returns the DisplayArcs wrapper for LOD support.
-   * Use getScaledArcs(unitsPerPixel) to get the appropriate LOD.
+   * Pass a positive pixel tolerance to getScaledArcs() to request display LOD.
    * @internal
    */
   getDisplayArcs(): DisplayArcs | null {
@@ -897,7 +897,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
-   * Replace DisplayArcs and start preparing LOD from the current dataset.
+   * Replace DisplayArcs so the next LOD request uses the current dataset.
    * Original arcs remain usable until preparation publishes a display event.
    * Per-frame in-place edits should prefer {@link markDisplayArcsDirty}.
    * @internal

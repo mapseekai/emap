@@ -32,7 +32,7 @@ const MIN_PATH_LEN = 0.35;
  */
 export class Viewport {
   /** Display-only line/polygon detail; zero disables automatic simplification. */
-  geometryLodTolerance = 0.5;
+  geometryLodTolerance = 0;
   screenPathFiltering = false;
   private _transform: AffineTransform = new AffineTransform();
   private _extent: Bounds = new Bounds();

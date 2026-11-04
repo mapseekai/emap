@@ -2,6 +2,71 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasRenderService } from './render';
 import { AffineTransform } from '../../../domain/geo/transform';
 import { RenderScheduler } from '../../rendering/render-scheduler';
+import type { BoundLabelManager } from '../../rendering/labels/manager';
+
+it('prepares project labels while the first paint is queued and draws them in that paint when ready', async () => {
+  let paint!: FrameRequestCallback;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    paint = callback;
+    return 1;
+  });
+  vi.stubGlobal('window', { devicePixelRatio: 1 });
+  vi.stubGlobal('document', {});
+  const layer = {
+    geometry_type: 'point',
+    shapes: [[[50, 50]]],
+    data: { getRecordAt: () => ({ name: 'Room' }) },
+  };
+  const dataset = { layers: [layer] };
+  const render = new CanvasRenderService({
+    signal: new AbortController().signal,
+    document: {
+      _sources: new Map([['rooms', { getDataset: () => dataset }]]),
+      layers: { resolve: () => layer },
+    },
+    layers: {
+      _getEffectiveLayers: () => [
+        { id: 'rooms', source: 'rooms', type: 'circle', label: { field: 'name' } },
+      ],
+    },
+    view: {
+      _viewport: {
+        transform: new AffineTransform(1, -1, 0, 100),
+        width: 100,
+        height: 100,
+        getMapScale: () => 1,
+      },
+    },
+  } as never);
+  const draw = vi.fn(),
+    create = vi.fn(() => ({
+      begin() {},
+      measure: () => ({ width: 8, height: 8 }),
+      get: () => ({ width: 8, height: 8 }),
+      clear() {},
+      dispose() {},
+    }));
+  render._painter = {
+    prepareInitialLabels: true,
+    drawLabels: draw,
+    createLabelAtlas: create,
+  } as never;
+  render.render = () => Reflect.get(render, '_renderBoundLabels').call(render);
+  try {
+    render._scheduleRender();
+    render._scheduleRender();
+    await Promise.resolve();
+    const manager = Reflect.get(render, '_labels') as BoundLabelManager | null;
+    expect(manager).not.toBeNull();
+    await manager!.settled();
+    expect(draw).not.toHaveBeenCalled();
+    paint(16);
+    expect(draw.mock.calls[0][0].labels.map((l: { text: string }) => l.text)).toEqual(['Room']);
+    expect(create).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 describe('map canvas teardown', () => {
   it('releases backing pixel storage before detaching canvases, even if handles remain reachable', () => {

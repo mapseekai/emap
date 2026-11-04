@@ -51,6 +51,209 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 const signal = () => new AbortController().signal;
 describe('MSDF atlas ownership and reuse', () => {
+  it('loads only the shaped ID ranges of unseen names and decodes the same pixels as msdfgen', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { resolve } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const { MsdfFontEngine } = await import('./font-engine');
+    const { GLYPHS_PER_SHARD, shardPath } = await import('./protocol');
+    const root = 'packages/examples/public/glyphs/noto-sans-sc/';
+    const sdk = 'https://cdn.test/msdf/';
+    const engine = await MsdfFontEngine.create(sdk, async (url) => {
+      const file = await readFile(
+        new URL(String(url).slice(sdk.length), pathToFileURL(resolve('dist/msdf') + '/')),
+      );
+      return new Uint8Array(file).buffer;
+    });
+    const report = vi.fn(),
+      loads: string[] = [];
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const path = new URL(String(url)).pathname;
+      loads.push(path);
+      return new Response(
+        new Uint8Array(
+          await readFile(
+            path.endsWith('/assets.sha256')
+              ? 'dist/msdf/assets.sha256'
+              : root + path.slice('/project/'.length),
+          ),
+        ),
+      );
+    });
+    mock.shape.mockImplementation(async (rs: ShapeRequest[]) =>
+      Promise.all(rs.map((r) => engine.shape(r, signal()))),
+    );
+    const { createEmapWorkerRuntime } = await import('../tasklane/runtime');
+    const runtime = createEmapWorkerRuntime({
+      urls: { msdf: 'https://cdn.test/custom-worker.js' },
+    });
+    const atlas = new MsdfLabelAtlas(new URL('https://sdk.test/worker.js'), document, runtime, {
+      url: 'https://app.test/project/manifest.json',
+      report,
+    });
+    try {
+      const first = { text: '消防泵房 P2 · ffi', options: {} };
+      const req = { text: first.text, key: 'truth', font: { family: 'sans-serif', weight: 400 } };
+      const shape = await engine.shape(req, signal());
+      expect(shape.missing).toBe(0);
+      const { assets } = JSON.parse(await readFile(root + 'manifest.json', 'utf8'));
+      const expected = new Set(
+        shape.glyphs.map(
+          (g) =>
+            '/project/' +
+            shardPath(
+              assets,
+              g.font.slice(sdk.length),
+              32,
+              Math.floor(g.id / GLYPHS_PER_SHARD) * GLYPHS_PER_SHARD,
+            ),
+        ),
+      );
+      await atlas.prepare([first], signal());
+      await atlas.prepareGlyphs([first], signal());
+      expect(loads.filter((p) => p.endsWith('.msdf')).sort()).toEqual([...expected].sort());
+      const raster = atlas.get(first.text, {}, 1);
+      if (!raster || !('glyphs' in raster)) throw new Error('Expected MSDF quads');
+      for (const [i, q] of raster.glyphs.entries()) {
+        const g = shape.glyphs[i],
+          oracle = await engine.glyph({ ...g, range: 32, key: '' }, signal());
+        const [x, y, w, h] = q.rect;
+        expect([w, h, q.path]).toEqual([oracle.width, oracle.height, oracle.path]);
+        const pixels = new Uint8Array(w * h * 4);
+        for (let row = 0; row < h; row++)
+          pixels.set(
+            q.page.data.subarray(
+              ((row + y) * q.page.width + x) * 4,
+              ((row + y) * q.page.width + x + w) * 4,
+            ),
+            row * w * 4,
+          );
+        expect(Buffer.compare(pixels, oracle.data)).toBe(0);
+      }
+      const calls = fetch.mock.calls.length;
+      const next = { text: 'P2 消防泵房 ffi', options: {} };
+      await atlas.prepare([next], signal());
+      await atlas.prepareGlyphs([next], signal());
+      expect(atlas.get(next.text, {}, 2)).toBeTruthy();
+      expect(fetch.mock.calls.length).toBe(calls);
+      expect(mock.glyphs).not.toHaveBeenCalled();
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      atlas.dispose();
+      await runtime.dispose();
+      engine.dispose();
+    }
+  });
+  it('recovers a transient manifest error and uses the same native font metrics as an explicit URL', async () => {
+    const stamp = '3'.repeat(64),
+      own = 'font-' + '4'.repeat(64) + '.otf',
+      base = 'https://app.test/fonts/';
+    let manifestReads = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).endsWith('assets.sha256')) return new Response(stamp);
+      if (String(url) === base + 'manifest.json') {
+        if (++manifestReads === 1) return new Response(null, { status: 503 });
+        return new Response(
+          JSON.stringify({
+            version: 2,
+            assets: stamp,
+            ranges: [32],
+            faces: { [own]: 3 },
+            defaultFont: { family: 'sans-serif', weight: 400, face: own },
+          }),
+        );
+      }
+      return new Response(null, { status: 404 });
+    });
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const atlas = new MsdfLabelAtlas(new URL('https://cdn.test/worker.js'), document, undefined, {
+      url: base + 'manifest.json',
+      report: vi.fn(),
+    });
+    const text = 'Office P3',
+      options = { fontStyle: 'italic' as const };
+    try {
+      await atlas.prepare([{ text, options }], signal());
+      expect(mock.shape.mock.calls[0][0][0].font.url).toBeUndefined();
+      clock.mockReturnValue(62000);
+      const run = signal();
+      await atlas.prepare([{ text, options }], run);
+      expect(mock.shape).toHaveBeenCalledTimes(2);
+      expect(mock.shape.mock.calls[1][0][0].font.url).toBe(base + own);
+      const explicit = { ...options, fontUrl: base + own };
+      await atlas.prepare([{ text, options: explicit }], run);
+      await atlas.prepareGlyphs([{ text, options }], run);
+      const inherited = atlas.get(text, options, 1),
+        direct = atlas.get(text, explicit, 1);
+      expect(inherited).toMatchObject({ shear: 0 });
+      expect(inherited?.width).toBe(direct?.width);
+      expect(atlas.get(text, explicit, 1)).toBeTruthy();
+    } finally {
+      atlas.dispose();
+    }
+  });
+  it.each([
+    'missing',
+    'corrupt',
+    'stale',
+  ])('reports one %s manifest and keeps labels visible', async (kind) => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).endsWith('assets.sha256')) return new Response('0'.repeat(64));
+      if (kind === 'missing') return new Response(null, { status: 404 });
+      return new Response(
+        kind === 'corrupt'
+          ? '{'
+          : JSON.stringify({ version: 2, assets: '1'.repeat(64), ranges: [32], faces: {} }),
+      );
+    });
+    const report = vi.fn(),
+      atlas = new MsdfLabelAtlas(new URL('https://cdn.test/worker.js'), document, undefined, {
+        url: 'https://app.test/manifest.json',
+        report,
+      });
+    try {
+      for (const text of ['A', 'B']) {
+        const labels = [{ text, options: {} }];
+        await atlas.prepare(labels, signal());
+        await atlas.prepareGlyphs(labels, signal());
+        expect(atlas.get(text, {}, 1)).toBeTruthy();
+      }
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      atlas.dispose();
+    }
+  });
+  it('cancels a layout without cancelling the shared download, and releases it on dispose', async () => {
+    let downloadSignal: AbortSignal | null | undefined;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      downloadSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) =>
+        downloadSignal?.addEventListener('abort', () => reject(downloadSignal?.reason), {
+          once: true,
+        }),
+      );
+    });
+    const report = vi.fn(),
+      atlas = new MsdfLabelAtlas(new URL('https://cdn.test/worker.js'), document, undefined, {
+        url: 'https://app.test/manifest.json',
+        report,
+      });
+    const first = new AbortController(),
+      second = new AbortController();
+    const labels = [{ text: '北站', options: {} }];
+    const initial = atlas.prepare(labels, first.signal);
+    first.abort();
+    await expect(initial).rejects.toThrow();
+    const next = atlas.prepare(labels, second.signal);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(downloadSignal?.aborted).toBe(false);
+    atlas.dispose();
+    await expect(next).rejects.toThrow();
+    expect(downloadSignal?.aborted).toBe(true);
+    expect(report).not.toHaveBeenCalled();
+    expect(mock.shape).not.toHaveBeenCalled();
+  });
   it('keeps a displayed page immutable when the next layout recycles its atlas slot', async () => {
     mock.shape.mockImplementation(async (requests: ShapeRequest[]) =>
       requests.map((r) => ({

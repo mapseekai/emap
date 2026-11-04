@@ -7,6 +7,7 @@ void Emap.create({
   container: 'map',
   renderer: 'webgpu',
   msdfWorkerUrl: new URL('https://example.test/emap-msdf-worker.js'),
+  msdfGlyphPackUrl: '/fonts/manifest.json',
   geometryWorkerUrl: new URL('https://example.test/emap-geometry-worker.js'),
   screenPathFiltering: false,
 });

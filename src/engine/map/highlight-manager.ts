@@ -80,7 +80,7 @@ export class HighlightManager {
     lineScale: number,
     visibleLayers?: VisibleLayerLookup,
     featureMask?: (sourceId: string, layerId: string) => Uint8Array | null,
-    pixelTolerance = 0.5,
+    pixelTolerance = 0,
   ): void {
     if (this._highlighted.size === 0) return;
     const highlightColor = this._highlightStyle.color || EMAP_THEME_COLORS.primary;

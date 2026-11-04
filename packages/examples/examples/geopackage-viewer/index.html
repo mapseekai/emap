@@ -92,6 +92,7 @@
 
   <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 import { geoPackagePlugin } from '@mapseekai/emap/geopackage';
 import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
@@ -163,7 +164,7 @@ async function load(bytes, filename, sourceCrs) {
       body.append(tr);
       const type = layer.geometry_type === 'point' ? 'circle' : layer.geometry_type === 'polygon' ? 'fill' : layer.geometry_type === 'polyline' ? 'line' : null;
       if (!type) continue;
-      const paint = type === 'fill' ? { 'fill-color': '#77ad8b', 'fill-opacity': 0.45 } : type === 'line' ? { 'line-color': '#446bcb', 'line-width': 3 } : { 'circle-color': '#dc7a33', 'circle-radius': 6 };
+      const paint = type === 'fill' ? { 'fill-color': EXAMPLE_FEATURE_COLOR, 'fill-opacity': EXAMPLE_FILL_OPACITY } : type === 'line' ? { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 3 } : { 'circle-color': EXAMPLE_FEATURE_COLOR, 'circle-radius': 6 };
       map.addLayer({ id: `gpkg-${index}`, source: 'gpkg', 'source-layer': layer.name, type, paint });
     }
     if (source.getExtent().hasBounds()) map.fitBounds(source.getExtent(), { padding: 35, duration: 0 });

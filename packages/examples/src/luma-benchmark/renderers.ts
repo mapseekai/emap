@@ -1,3 +1,4 @@
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '../example-map-style';
 import { replaceLayerSymbol, changeSymbolProperty } from '../../../../src/engine/map/symbol-layer';
 import { withSymbolIcon, withSymbolLabel } from '../../../../src/engine/map/symbol-compat';
 import type { SymbolStyle, SymbolLayout, SymbolPaint } from '../../../../src/engine/map/symbol';
@@ -44,12 +45,12 @@ import { registerPerformanceSource } from '../performance-monitor';
 import { gpuMetrics } from '../performance-render-source';
 export type Backend = 'canvas' | 'luma';
 export type PassMode = 'all' | 'fill' | 'stroke' | 'points';
-const LINE_COLOR = '#0f766e',
-  FILL_COLOR = '#d97706';
+const LINE_COLOR = EXAMPLE_FEATURE_COLOR,
+  FILL_COLOR = EXAMPLE_FEATURE_COLOR;
 
-const linePaint: MeshPaint = { color: [15 / 255, 118 / 255, 110 / 255, 1], width: 1.2 };
-const fillPaint: MeshPaint = { color: [217 / 255, 119 / 255, 6 / 255, 0.55] };
-const outlinePaint: MeshPaint = { color: [15 / 255, 118 / 255, 110 / 255, 1], width: 0.6 };
+const linePaint: MeshPaint = { color: [0, 166 / 255, 61 / 255, 1], width: 1.2 };
+const fillPaint: MeshPaint = { color: [0, 166 / 255, 61 / 255, EXAMPLE_FILL_OPACITY] };
+const outlinePaint: MeshPaint = { color: [0, 166 / 255, 61 / 255, 1], width: 0.6 };
 // Soft budget for non-visible data. A visible full-detail working set is never simplified.
 const CACHE_BYTES = 256 * 1024 ** 2;
 interface Entry {
@@ -292,7 +293,7 @@ export class BenchmarkRenderers {
   readonly cpu: CanvasPainter;
   readonly navigation: FastNavPreview;
   pathCullingEnabled = true;
-  smallArcFilterEnabled = true;
+  smallArcFilterEnabled = false;
   halfPixelFilterEnabled = false;
   private screenPaths: ScreenPathCache | null = null;
   private initialScale = 1;
@@ -408,7 +409,7 @@ export class BenchmarkRenderers {
 
   readonly initializationMs: { canvas: number; luma: number | null };
   private pointLod: PointLodRenderCache | null = null;
-  pointLodEnabled = true;
+  pointLodEnabled = false;
   pointLodCellSize = DEFAULT_LUMA_POINT_LOD_CELL_SIZE;
   get pointLodStats() {
     return {
@@ -478,7 +479,7 @@ export class BenchmarkRenderers {
   buildMs = 0;
   uploadSubmitMs = 0;
   passMode: PassMode = 'all';
-  readonly pointPaint: MeshPaint = { color: [37 / 255, 99 / 255, 235 / 255, 1], radius: 3 };
+  readonly pointPaint: MeshPaint = { color: [0, 166 / 255, 61 / 255, 1], radius: 3 };
   setPointStyle(radius: number, opacity: number): void {
     if (
       !Number.isFinite(radius) ||
@@ -996,11 +997,11 @@ export class BenchmarkRenderers {
           if (icon) this.cpu.drawPointIcons(shapes, icon);
           else
             this.cpu.drawPoints(shapes, {
-              color: `rgba(37,99,235,${this.pointPaint.color[3]})`,
+              color: `rgba(0,166,61,${this.pointPaint.color[3]})`,
               radius: this.pointPaint.radius,
             });
         } else if (chunk.kind === 'fill' && arcs)
-          this.cpu.drawPolygonFill(shapes, arcs, FILL_COLOR, undefined, 0.55);
+          this.cpu.drawPolygonFill(shapes, arcs, FILL_COLOR, undefined, EXAMPLE_FILL_OPACITY);
         else if (arcs)
           this.cpu.drawArcs(arcs, { color: LINE_COLOR, width: this.paint(chunk).width });
       }

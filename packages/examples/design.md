@@ -58,8 +58,8 @@ and page contents. A detail page dedicates one viewport to the running map.
   Native examples must use `getExamplePixelRatio()` without their own DPR cap.
 - Vector and numeric raster WebGPU devices explicitly select the `core` profile
   with the same `high-performance` adapter preference.
-- Native vector examples default to a 3 CSS px point grid and enabled snapshot
-  navigation. They all honor the `pointLod=off` and `nav=off` URL settings.
+- Native vector examples draw full-detail geometry and keep snapshot navigation
+  enabled. Use `pointLod=on` for the 3 CSS px point grid or `nav=off` to disable snapshots.
 - Raster examples start with nearest sampling, automatic stretch and full
   opacity. Data-specific bands and the perspective camera keep their own controls.
 

@@ -1,3 +1,4 @@
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '../example-map-style';
 import type { Emap, LayerSpecification } from '@mapseekai/emap';
 import { autoLoadExampleFixtures } from '../example-runtime';
 import { installIconControls, presets } from './icon-controls';
@@ -91,10 +92,10 @@ export async function mountSymbolStyleExample(
           type: geometry === 'point' ? 'circle' : geometry === 'polygon' ? 'fill' : 'line',
           paint:
             geometry === 'point'
-              ? { 'circle-radius': 6, 'circle-color': '#2563eb' }
+              ? { 'circle-radius': 6, 'circle-color': EXAMPLE_FEATURE_COLOR }
               : geometry === 'polygon'
-                ? { 'fill-color': '#4c956c', 'fill-opacity': 0.3 }
-                : { 'line-color': '#2563eb', 'line-width': 2 },
+                ? { 'fill-color': EXAMPLE_FEATURE_COLOR, 'fill-opacity': EXAMPLE_FILL_OPACITY }
+                : { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 2 },
           symbol: labels
             ? {
                 layout: field ? { 'text-field': ['get', field], 'text-size': 16 } : {},

@@ -366,7 +366,7 @@ describe('formal GPU prepared path selection', () => {
     f.frame(() =>
       f.painter.drawArcs(f.arcs, { width: 2, color: '#00ff00' }, f.view.getArcFilter(f.arcs), ids),
     );
-    expect(f.arcs.arcIsSmaller).toHaveBeenCalledTimes(3);
+    expect(f.arcs.arcIntersectsBBox).toHaveBeenCalledTimes(3);
     expect(f.gpu.createMesh).toHaveBeenCalledOnce();
     expect(f.gpu.drawMesh).toHaveBeenCalledTimes(2);
     f.painter.dispose();
@@ -378,7 +378,7 @@ describe('formal GPU prepared path selection', () => {
     f.view.pan(1, 0);
     f.frame(draw);
     f.frame(draw);
-    expect(f.arcs.arcIsSmaller).toHaveBeenCalledTimes(6);
+    expect(f.arcs.arcIntersectsBBox).toHaveBeenCalledTimes(6);
     expect(f.gpu.createMesh).toHaveBeenCalledOnce();
     f.painter.dispose();
   });
@@ -416,7 +416,7 @@ describe('formal GPU prepared path selection', () => {
       f.painter.drawPaths(shapes, { width: 1 }, f.arcs, f.view.getArcFilter(f.arcs), ids, 0);
     f.frame(draw);
     f.frame(draw);
-    expect(f.arcs.arcIsSmaller).toHaveBeenCalledTimes(2);
+    expect(f.arcs.arcIntersectsBBox).toHaveBeenCalledTimes(2);
     ids[1] = 1;
     f.frame(draw);
     expect(f.gpu.createMesh).toHaveBeenCalledTimes(2);

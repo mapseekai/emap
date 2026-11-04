@@ -3,6 +3,7 @@ import {
   getExampleGpuBackend,
   getExamplePixelRatio,
   getExamplePointLodEnabled,
+  getExampleScreenFilters,
   getExampleFastNavigationEnabled,
   installExampleRendererToolbar,
   navigateExampleRenderer,
@@ -132,12 +133,7 @@ pathCullingToggle.addEventListener('change', () => {
 
 const smallArcToggle = el<HTMLInputElement>('small-arc-filter'),
   halfPixelToggle = el<HTMLInputElement>('half-pixel-filter');
-const filterParams = new URLSearchParams(location.search);
-renderers.setScreenFilters(
-  filterParams.get('screenFilter') !== 'off' && filterParams.get('smallArcs') !== 'off',
-  filterParams.get('screenFilter') !== 'off' &&
-    (filterParams.get('halfPixel') ?? filterParams.get('screenFilter')) === 'on',
-);
+renderers.setScreenFilters(...getExampleScreenFilters());
 smallArcToggle.checked = renderers.smallArcFilterEnabled;
 halfPixelToggle.checked = renderers.halfPixelFilterEnabled;
 async function setScreenFilters(smallArcs: boolean, halfPixel: boolean): Promise<void> {
@@ -391,10 +387,8 @@ for (const control of [pointLodToggle, pointLodCell])
   control.addEventListener('change', () => {
     void setPointLod(pointLodToggle.checked, Number(pointLodCell.value)).catch(fail);
   });
-if (!getExamplePointLodEnabled()) {
-  renderers.setPointLod(false, 3);
-  pointLodToggle.checked = false;
-}
+pointLodToggle.checked = getExamplePointLodEnabled();
+renderers.setPointLod(pointLodToggle.checked);
 
 function updatePointStyle() {
   renderers.setPointStyle(Number(pointRadius.value), Number(pointOpacity.value));

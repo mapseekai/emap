@@ -33,6 +33,7 @@
   </details>
   <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
@@ -71,7 +72,7 @@ function style() {
     map.addLayer({ id: 'dots', type: 'circle', source: 'points',
         pointLod: lod.checked ? { cellSize: Number(cell.value) } : false,
         ...(filter.checked ? { filter: ['==', ['get', 'group'], 0] } : {}),
-        paint: { 'circle-radius': 3, 'circle-color': ['match', ['get', 'group'], 0, '#2474b5', '#cf7637'] },
+        paint: { 'circle-radius': 3, 'circle-color': EXAMPLE_FEATURE_COLOR },
     });
     updateStatus();
 }

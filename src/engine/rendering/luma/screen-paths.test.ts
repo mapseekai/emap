@@ -107,6 +107,7 @@ describe('Canvas screen-path parity (not geometry LOD)', () => {
   it('uses exactly the viewport threshold, including the zoomed-out cap and strict bbox test', () => {
     for (const scale of [0.04, 1, 8]) {
       const v = new Viewport();
+      v.geometryLodTolerance = 0.5;
       Reflect.set(v, '_initialMX', 1);
       Reflect.set(v, '_transform', new AffineTransform(scale, -scale));
       let threshold = 0;

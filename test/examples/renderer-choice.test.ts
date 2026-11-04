@@ -10,6 +10,7 @@ import {
   exampleNavigationUrl,
   getExamplePixelRatio,
   getExamplePointLodEnabled,
+  getExampleScreenFilters,
   getExampleFastNavigationEnabled,
 } from '../../packages/examples/src/renderer-choice';
 
@@ -213,13 +214,23 @@ describe('shared example renderer selection', () => {
       expect(getExamplePixelRatio({ devicePixelRatio })).toBe(devicePixelRatio);
     expect(getExamplePixelRatio({ devicePixelRatio: 0 })).toBe(1);
   });
-  it('uses the same point grid default and explicit opt-out across native vector examples', () => {
+  it('uses the point grid only on request across native vector examples', () => {
     for (const id of ['luma-benchmark', 'luma-25d', 'luma-vertex-editing']) {
-      expect(getExamplePointLodEnabled(new URL(base + id + '/'))).toBe(true);
+      expect(getExamplePointLodEnabled(new URL(base + id + '/'))).toBe(false);
+      expect(getExamplePointLodEnabled(new URL(base + id + '/?pointLod=on'))).toBe(true);
       expect(getExamplePointLodEnabled(new URL(base + id + '/?pointLod=off'))).toBe(false);
       expect(getExampleFastNavigationEnabled(new URL(base + id + '/'))).toBe(true);
       expect(getExampleFastNavigationEnabled(new URL(base + id + '/?nav=off'))).toBe(false);
     }
+  });
+  it('only filters strokes when requested and honors individual overrides', () => {
+    const filters = (query: string) => getExampleScreenFilters(new URL(base + query));
+    expect(filters('')).toEqual([false, false]);
+    expect(filters('?smallArcs=on')).toEqual([true, false]);
+    expect(filters('?halfPixel=on')).toEqual([false, true]);
+    expect(filters('?screenFilter=on')).toEqual([true, true]);
+    expect(filters('?screenFilter=on&smallArcs=off')).toEqual([false, true]);
+    expect(filters('?screenFilter=off&halfPixel=on')).toEqual([false, false]);
   });
   it.each([
     '',

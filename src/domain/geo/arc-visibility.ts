@@ -16,7 +16,7 @@ export function arcVisibilityFilter(
 ): Predicate {
   const bbox = bounds?.slice() ?? null;
   const filter: Predicate = (id) => {
-    if (arcs.arcIsSmaller?.(id, minLength)) return false;
+    if (minLength > 0 && arcs.arcIsSmaller?.(id, minLength)) return false;
     if (bbox && arcs.arcIntersectsBBox && !arcs.arcIntersectsBBox(id, bbox)) return false;
     return true;
   };

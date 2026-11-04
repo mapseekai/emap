@@ -1658,11 +1658,16 @@ describe('source registration LOD ownership', () => {
     source.setDataset(dataset);
     const old = source.getDisplayArcs()!;
     expect(old.hasLOD()).toBe(false);
+    old.getScaledArcs(100, 0.5);
     source.setDataset({ layers: [] });
     await old.ready;
     expect(display).not.toHaveBeenCalled();
     source.setDataset(dataset);
-    await source.getDisplayArcs()!.ready;
+    const current = source.getDisplayArcs()!;
+    await current.ready;
+    expect(display).not.toHaveBeenCalled();
+    current.getScaledArcs(100, 0.5);
+    await current.ready;
     expect(display).toHaveBeenCalledOnce();
     expect(data).toHaveBeenCalledTimes(3);
   });

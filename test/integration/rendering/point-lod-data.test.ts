@@ -27,7 +27,7 @@ function fixture() {
   const lod = new PointLod();
   const query = () =>
     lod.query(
-      { id: 'dots', source: 's', type: 'circle' },
+      { id: 'dots', source: 's', type: 'circle', pointLod: {} },
       dataset.layers[0],
       dataset,
       null,

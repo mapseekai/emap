@@ -2,6 +2,7 @@ import {
   getExampleGpuBackend,
   getExamplePixelRatio,
   getExamplePointLodEnabled,
+  getExampleScreenFilters,
   getExampleFastNavigationEnabled,
   installExampleRendererToolbar,
   navigateExampleRenderer,
@@ -142,12 +143,7 @@ invalidatePreviewOnError = () => {
 };
 const smallArcToggle = el<HTMLInputElement>('small-arc-filter'),
   halfPixelToggle = el<HTMLInputElement>('half-pixel-filter');
-const filterParams = new URLSearchParams(location.search);
-renderers.setScreenFilters(
-  filterParams.get('screenFilter') !== 'off' && filterParams.get('smallArcs') !== 'off',
-  filterParams.get('screenFilter') !== 'off' &&
-    (filterParams.get('halfPixel') ?? filterParams.get('screenFilter')) === 'on',
-);
+renderers.setScreenFilters(...getExampleScreenFilters());
 smallArcToggle.checked = renderers.smallArcFilterEnabled;
 halfPixelToggle.checked = renderers.halfPixelFilterEnabled;
 for (const control of [smallArcToggle, halfPixelToggle])

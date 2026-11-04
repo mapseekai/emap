@@ -44,6 +44,7 @@
 
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -170,9 +171,9 @@ fileInput.addEventListener('change', async () => {
         applyInputCrs();
         await map.addSource(SOURCE_ID, source);
         addDisplayLayers(SOURCE_ID, source, 'duckdb-input', {
-            fill: '#dbeafe',
-            fillOpacity: 0.55,
-            line: '#1d4ed8',
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 1.5,
             pointRadius: 4,
         });
@@ -221,9 +222,9 @@ runBtn.addEventListener('click', async () => {
         }, runtime);
         const source = await addDatasetSource(OUTPUT_ID, result);
         addDisplayLayers(OUTPUT_ID, source, 'duckdb-output', {
-            fill: '#f97316',
-            fillOpacity: 0.35,
-            line: '#ea580c',
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 2,
             pointRadius: 4,
         });

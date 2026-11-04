@@ -46,9 +46,15 @@ export function getExampleRenderer(): RendererBackend {
 export function getExamplePixelRatio(view: Pick<Window, 'devicePixelRatio'> = window): number {
   return view.devicePixelRatio || 1;
 }
-/** Shared opt-out for the point-grid rendering used by the native vector examples. */
+/** Native vector examples draw original points unless the grid is requested. */
 export function getExamplePointLodEnabled(url: URL = currentUrl()): boolean {
-  return url.searchParams.get('pointLod') !== 'off';
+  return url.searchParams.get('pointLod') === 'on';
+}
+export function getExampleScreenFilters(url: URL = currentUrl()): [boolean, boolean] {
+  const params = url.searchParams;
+  const both = params.get('screenFilter');
+  if (both === 'off') return [false, false];
+  return [(params.get('smallArcs') ?? both) === 'on', (params.get('halfPixel') ?? both) === 'on'];
 }
 export function getExampleFastNavigationEnabled(url: URL = currentUrl()): boolean {
   return url.searchParams.get('nav') !== 'off';

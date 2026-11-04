@@ -89,8 +89,8 @@ const exampleDescriptions = {
     en: 'Selects real features, drags original vertices and undoes edits with luma while background LOD preserves native topology for editing.',
   },
   'luma-benchmark': {
-    zh: '加载真实本地大数据，对照共享空间裁剪和显示 LOD 下的 Canvas2D 与 luma WebGL2；保留原生 mapshaper dataset。',
-    en: 'Loads real local datasets to compare Canvas2D and luma WebGL2 with shared spatial culling and display LOD while preserving the native mapshaper dataset.',
+    zh: '加载真实本地大数据，对照共享空间裁剪和显示 LOD 下的 Canvas2D 与 WebGL2；保留原生 mapshaper dataset。',
+    en: 'Loads real local datasets to compare Canvas2D and WebGL2 with shared spatial culling and display LOD while preserving the native mapshaper dataset.',
   },
   'create-layer': {
     zh: '设置名称、几何类型、坐标系和字段，从空图层开始绘制并查看默认属性。',
@@ -650,16 +650,8 @@ const exampleDescriptions = {
 
 type ExampleId = keyof typeof exampleDescriptions;
 
-const examplesWithoutMapUi = new Set<ExampleId>([
-  'luma-25d',
-  'luma-benchmark',
-  'luma-raster',
-  'luma-vertex-editing',
-  'plugin-install',
-  'plugin-capability',
-]);
-
 const examplePlugins: Partial<Record<ExampleId, readonly string[]>> = {
+  'online-map-services': ['mapLibrePlugin'],
   'geotiff-viewer': ['rasterPlugin', 'geoTIFFPlugin'],
   'mixed-data-viewer': [
     'arrowFormatsPlugin',
@@ -675,13 +667,6 @@ const examplePlugins: Partial<Record<ExampleId, readonly string[]>> = {
   'luma-raster': ['rasterPlugin'],
   'plugin-install': ['mapLibrePlugin', 'arrowFormatsPlugin', 'duckDbPlugin'],
 };
-
-function pluginsForExample(id: ExampleId): readonly string[] {
-  return [
-    ...(examplesWithoutMapUi.has(id) ? [] : ['mapLibrePlugin']),
-    ...(examplePlugins[id] ?? []),
-  ];
-}
 
 export const examples: readonly ExampleDefinition[] = [
   recipe(
@@ -762,7 +747,7 @@ export const examples: readonly ExampleDefinition[] = [
   ),
   recipe(
     'export-formats',
-    'tools',
+    'data-layers',
     '格式导出',
     'Export formats',
     [docsFormats],
@@ -1153,8 +1138,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe(
     'luma-25d',
     'tools',
-    'luma 2.5D 地图',
-    'luma 2.5D map',
+    '2.5D 地图',
+    '2.5D map',
     [docsPerformance, docsCrs],
     'Emap',
     ['luma', 'camera', 'raster'],
@@ -1163,8 +1148,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe(
     'luma-raster',
     'tools',
-    'luma 动态栅格',
-    'luma dynamic raster',
+    '动态栅格',
+    'Dynamic raster',
     [docsPerformance],
     'Emap',
     ['raster', 'luma-raster'],
@@ -1173,8 +1158,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe(
     'luma-benchmark',
     'tools',
-    'luma WebGL2 性能对照',
-    'luma WebGL2 benchmark',
+    'WebGL2 性能对照',
+    'WebGL2 benchmark',
     [docsPerformance],
     'TopologySource',
     ['luma-benchmark'],
@@ -1816,7 +1801,7 @@ function seed(
     api: [api],
     tags: ['getting-started', 'local-fixture'],
     featureFlags: [],
-    plugins: pluginsForExample(id),
+    plugins: examplePlugins[id] ?? [],
     fixtures: [fixture],
     source: { html: sourceHtml(id) },
     route: route(id),
@@ -1853,7 +1838,7 @@ function recipe(
     api: [api],
     tags: [category, id, ...featureFlags],
     featureFlags,
-    plugins: pluginsForExample(id),
+    plugins: examplePlugins[id] ?? [],
     fixtures,
     source: { html },
     route: route(id),

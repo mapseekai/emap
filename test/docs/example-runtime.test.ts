@@ -220,9 +220,26 @@ describe('example runtime assets', () => {
   });
 });
 describe('shared example map UI', () => {
+  it('keeps ordinary examples free of the MapLibre plugin when switching CRS', async () => {
+    document.body.innerHTML = '<div id="header"><strong>Example</strong></div>';
+    const map = new ExampleMapStub();
+    await installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
+    expect(map.ctx.plugin).not.toHaveBeenCalled();
+    expect(map.controls).toHaveLength(2);
+    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toBe('');
+    const selector = document.querySelector<HTMLSelectElement>('.emap-example-crs-select')!;
+    selector.value = 'EPSG:3857';
+    selector.dispatchEvent(new Event('change'));
+    await settleDomEvents();
+    expect(map.reprojectCalls).toEqual(['EPSG:3857']);
+    expect(map.ctx.plugin).not.toHaveBeenCalled();
+    expect(map.controls).toHaveLength(2);
+    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toBe('');
+  });
   it('keeps the basemap unavailable in 4326 and enables it after switching to 3857', async () => {
     document.body.innerHTML = '<div id="header"><strong>Example</strong></div>';
     const map = new ExampleMapStub();
+    await map.ctx.plugin();
     await installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
     expect(map.controls).toHaveLength(2);
     expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
@@ -237,8 +254,8 @@ describe('shared example map UI', () => {
     expect(map.reprojectCalls).toEqual(['EPSG:3857']);
     expect(map.controls).toHaveLength(3);
     expect(map.controls[2]?.control).toBeInstanceOf(BasemapControlStub);
-    expect(map.controls[2]?.position).toBe('top-right');
-    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('右上角');
+    expect(map.controls[2]?.position).toBe('top-left');
+    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('左上角');
     selector.value = 'EPSG:4326';
     selector.dispatchEvent(new Event('change'));
     await settleDomEvents();

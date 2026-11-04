@@ -43,19 +43,15 @@ function setup(
     invalidate = vi.fn(),
     report = vi.fn();
   const source = { chunks: [chunk], queryPointLod: query } as unknown as ChunkGeometryAccess;
-  return {
-    gpu,
-    query,
+  const cache = new PointLodRenderCache(
+    source,
+    dataset,
+    gpu as unknown as GpuRenderer,
     invalidate,
     report,
-    cache: new PointLodRenderCache(
-      source,
-      dataset,
-      gpu as unknown as GpuRenderer,
-      invalidate,
-      report,
-    ),
-  };
+  );
+  cache.configure(true, cache.cellSize);
+  return { gpu, query, invalidate, report, cache };
 }
 describe('point LOD view/upload lifecycle', () => {
   it('defaults to 3 CSS px and reuses GPU geometry on pan and DPR changes', async () => {

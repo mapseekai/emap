@@ -1,4 +1,8 @@
 import { getExampleRenderer } from '../../packages/examples/src/renderer-choice';
+import {
+  EXAMPLE_FEATURE_COLOR,
+  EXAMPLE_FILL_OPACITY,
+} from '../../packages/examples/src/example-map-style';
 import { mapLibrePlugin } from '../../src/integrations/maplibre/plugin';
 // @vitest-environment jsdom
 import { access, readFile } from 'node:fs/promises';
@@ -70,6 +74,7 @@ async function executeOnlineMapServicesExample(
   const constructorOptions: unknown[] = [];
   const maps: FakeEmap[] = [];
   const controls: unknown[] = [];
+  const controlPositions = new Map<unknown, string>();
   const layers: Array<Record<string, unknown>> = [];
   const sharedUiCalls: Array<{
     map: unknown;
@@ -122,8 +127,9 @@ async function executeOnlineMapServicesExample(
       constructorOptions.push(options);
       maps.push(this);
     }
-    public addControl(control: unknown): void {
+    public addControl(control: unknown, position: string): void {
       controls.push(control);
+      controlPositions.set(control, position);
     }
     public async addSource(): Promise<void> {}
     public addLayer(layer: Record<string, unknown>): void {
@@ -167,6 +173,8 @@ async function executeOnlineMapServicesExample(
       'document',
       'window',
       'mapLibrePlugin',
+      'EXAMPLE_FEATURE_COLOR',
+      'EXAMPLE_FILL_OPACITY',
       script,
     )(
       getExampleRenderer,
@@ -176,6 +184,8 @@ async function executeOnlineMapServicesExample(
       document,
       fakeWindow,
       mapLibrePlugin,
+      EXAMPLE_FEATURE_COLOR,
+      EXAMPLE_FILL_OPACITY,
     );
     const customServiceSubmissions = customService
       ? Array.isArray(customService)
@@ -240,6 +250,7 @@ async function executeOnlineMapServicesExample(
       constructorOptions,
       maps,
       controls,
+      controlPositions,
       layers,
       sharedUiCalls,
       fixtureRequests,
@@ -344,37 +355,36 @@ describe('example catalog metadata', () => {
       buffer: 'analysis',
       'duckdb-buffer': 'analysis',
       'luma-25d': 'tools',
-      'export-formats': 'tools',
+      'export-formats': 'data-layers',
       'web-worker': 'tools',
     })) {
       expect(byId.get(id), id).toBe(category);
     }
   });
-  it('reports the optional plugins involved in each example', async () => {
+  it('reports the optional plugins involved in each example', () => {
     const byId = new Map(examples.map((example) => [example.id, example.plugins]));
-    expect(byId.get('geotiff-viewer')).toEqual(['mapLibrePlugin', 'rasterPlugin', 'geoTIFFPlugin']);
+    expect(byId.get('geotiff-viewer')).toEqual(['rasterPlugin', 'geoTIFFPlugin']);
     expect(byId.get('mixed-data-viewer')).toEqual([
-      'mapLibrePlugin',
       'arrowFormatsPlugin',
       'geoPackagePlugin',
       'flatgeobuf',
       'rasterPlugin',
       'geoTIFFPlugin',
     ]);
-    expect(byId.get('flatgeobuf-viewer')).toEqual(['mapLibrePlugin', 'flatgeobuf']);
+    expect(byId.get('flatgeobuf-viewer')).toEqual(['flatgeobuf']);
+    expect(byId.get('online-map-services')).toEqual(['mapLibrePlugin']);
     expect(byId.get('plugin-install')).toEqual([
       'mapLibrePlugin',
       'arrowFormatsPlugin',
       'duckDbPlugin',
     ]);
-    expect(byId.get('duckdb/data-management/reproject')).toEqual(['mapLibrePlugin']);
+    expect(byId.get('getting-started/vector-file')).toEqual([]);
+    expect(byId.get('online-vector-data')).toEqual([]);
+    expect(byId.get('duckdb/data-management/reproject')).toEqual([]);
     expect(byId.get('luma-25d')).toEqual([]);
     for (const example of examples) {
-      const html = await readFile(resolve(example.source.html), 'utf8');
-      const sharedUi =
-        html.includes('installExampleMapUi(') || html.includes('mountDuckDbSpatialExample(');
       expect(example.plugins.includes('mapLibrePlugin'), example.id).toBe(
-        sharedUi || example.id === 'plugin-install',
+        example.id === 'online-map-services' || example.id === 'plugin-install',
       );
     }
   });
@@ -439,6 +449,7 @@ describe('example catalog metadata', () => {
   it('renders catalog cards as direct public routes without hashes', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
+    expect(root.querySelector('.catalog-starters')).toBeNull();
     const links = Array.from(root.querySelectorAll<HTMLAnchorElement>('a.example-card'));
     expect(links).toHaveLength(examples.length);
     const hrefs = links.map((link) => link.getAttribute('href'));
@@ -590,6 +601,21 @@ describe('example catalog metadata', () => {
     search.value = 'box-select';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
+    search.value = 'geoTIFFPlugin';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(
+      Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(
+      examples
+        .filter((example) => example.plugins.includes('geoTIFFPlugin'))
+        .map((example) => example.title.zh),
+    );
+    for (const example of examples.filter((item) => item.plugins.includes('geoTIFFPlugin'))) {
+      const sidebarLink = root.querySelector<HTMLAnchorElement>(
+        `.catalog-example-navigation a[href="/mapseekai/emap/examples/${example.id}/"]`,
+      );
+      expect(sidebarLink?.hidden).toBe(false);
+    }
     const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
     if (!language) throw new Error('Catalog language selector was not rendered');
     language.value = 'en';
@@ -654,6 +680,8 @@ describe('example catalog metadata', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
     expect(document.body.classList.contains('catalog-root')).toBe(true);
+    expect(root.querySelector('.catalog-brand span')?.textContent).toBe('Emap');
+    expect(root.querySelector('.catalog-intro')).toBeNull();
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
@@ -664,6 +692,27 @@ describe('example catalog metadata', () => {
       'a.example-card[href="/mapseekai/emap/examples/getting-started/vector-file/"]',
     );
     expect(firstCard?.querySelector('.example-api-chip')?.textContent).toBe('TopologySource');
+    expect(firstCard?.querySelector('.example-card-plugins')).toBeNull();
+    expect(firstCard?.getAttribute('aria-label')).toBe('打开示例：打开矢量文件');
+    const rasterCard = root.querySelector<HTMLAnchorElement>(
+      'a.example-card[href="/mapseekai/emap/examples/geotiff-viewer/"]',
+    );
+    expect(
+      Array.from(
+        rasterCard?.querySelectorAll('.example-card-plugin') ?? [],
+        (node) => node.textContent,
+      ),
+    ).toEqual(['rasterPlugin', 'geoTIFFPlugin']);
+    expect(
+      root.querySelector(
+        'a.example-card[href="/mapseekai/emap/examples/online-map-services/"] .example-card-plugin',
+      )?.textContent,
+    ).toBe('mapLibrePlugin');
+    expect(
+      root.querySelector(
+        'a.example-card[href="/mapseekai/emap/examples/luma-25d/"] .example-card-plugins',
+      ),
+    ).toBeNull();
     expect(firstCard?.querySelector('.example-card-arrow')?.getAttribute('aria-hidden')).toBe(
       'true',
     );
@@ -921,6 +970,10 @@ describe('example catalog metadata', () => {
     expect(
       result.controls.filter((control) => control instanceof result.FakeLayerControl),
     ).toHaveLength(1);
+    const layerControl = result.controls.find(
+      (control) => control instanceof result.FakeLayerControl,
+    );
+    expect(result.controlPositions.get(layerControl)).toBe('top-left');
     expect(result.layers).toEqual([
       expect.objectContaining({ id: 'business-polygons', source: 'business-data', type: 'fill' }),
     ]);

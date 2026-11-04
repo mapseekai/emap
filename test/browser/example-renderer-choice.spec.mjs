@@ -87,8 +87,8 @@ test.describe('consistent rendering: device pixel ratio', () => {
 });
 
 for (const id of ['luma-benchmark', 'luma-vertex-editing', 'luma-25d'])
-  test(`consistent rendering: ${id} honors pointLod=off in controls and renderer`, async ({ page }) => {
-    await page.goto(base + id + '/?parameters=open&pointLod=off&nav=off');
+  test(`consistent rendering: ${id} defaults to full point detail in controls and renderer`, async ({ page }) => {
+    await page.goto(base + id + '/?parameters=open&nav=off');
     await expect.poll(() => page.evaluate(id => {
       if (id === 'luma-25d') return window.luma25d?.snapshot.pointLod.enabled;
       return (id === 'luma-benchmark' ? window.lumaBenchmark : window.lumaEditor)?.pointLodStats.enabled;

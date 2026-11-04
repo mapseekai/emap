@@ -1,4 +1,5 @@
-import { mkdir, readFile, copyFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, copyFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
@@ -13,6 +14,8 @@ await copyFile(join(root,'node_modules/msdfgen-wasm/wasm/msdfgen.wasm'),join(out
 await copyFile(join(root,'node_modules/harfbuzzjs/hb.wasm'),join(output,'hb.wasm'));
 for (const [from,to] of [['msdfgen-wasm/LICENCE','msdfgen-LICENSE.txt'],['harfbuzzjs/LICENSE','harfbuzzjs-LICENSE.txt'],['bidi-js/LICENSE.txt','bidi-LICENSE.txt']]) await copyFile(join(root,'node_modules',from),join(output,to));
 const manifest = {};
+const revision = createHash('sha256');
+for (const name of ['hb.wasm','msdfgen.wasm']) revision.update(await readFile(join(output,name)));
 for (const [group,name] of [['sans-serif','noto-sans-sc'],['serif','noto-serif-sc'],['monospace','noto-sans-mono']]) {
   const source = join(root,'node_modules/@fontsource',name);
   await copyFile(join(source,'LICENSE'),join(output,'fonts',`${name}-LICENSE.txt`));
@@ -24,10 +27,15 @@ for (const [group,name] of [['sans-serif','noto-sans-sc'],['serif','noto-serif-s
       if (!file || !range) throw new Error(`Invalid Fontsource font declaration in ${name}`);
       const ranges = range.split(',').map(r=>{const [a,b]=r.trim().replace(/^U\+/i,'').split('-');return [parseInt(a,16),parseInt(b??a,16)];});
       await copyFile(join(source,'files',file),join(output,'fonts',file));
+      revision.update(await readFile(join(output,'fonts',file)));
       entries.unshift({url:`fonts/${file}`,ranges});
     }
     manifest[`${group}:${weight}`] = entries;
   }
 }
 await writeFile(join(output,'fonts.json'),JSON.stringify(manifest));
+await writeFile(join(output,'assets.sha256'),revision.update(JSON.stringify(manifest)).digest('hex'));
+const cli = join(root, 'dist/emap-glyph-pack.cjs');
+await build({ entryPoints: [join(root, 'scripts/generate-glyph-pack.mjs')], outfile: cli, bundle: true, platform: 'node', format: 'cjs', minify: true, target: 'node22', banner: {js: '#!/usr/bin/env node'} });
+await chmod(cli, 0o755);
 console.log('Built local MSDF worker, HarfBuzz/msdfgen WASM and lazy OFL font subsets.');

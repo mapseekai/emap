@@ -15,6 +15,9 @@
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
+  "bin": {
+    "emap-glyph-pack": "dist/emap-glyph-pack.cjs"
+  },
   "browser": "dist/emap.js",
   "types": "dist/index.d.ts",
   "typesVersions": {
@@ -118,6 +121,7 @@
     "dist/sql-wasm.wasm",
     "dist/emap-geotiff-worker.js",
     "dist/emap-msdf-worker.js",
+    "dist/emap-glyph-pack.cjs",
     "dist/msdf",
     "dist/emap-geometry-worker.js"
   ],
@@ -171,6 +175,7 @@
     "benchmark:luma:raster:dynamic": "node scripts/benchmark-luma-raster-dynamic.mjs",
     "profile:luma:raster:memory": "node scripts/profile-luma-raster-memory.mjs",
     "build:msdf": "node scripts/build-msdf-worker.mjs",
+    "examples:glyphs": "node dist/emap-glyph-pack.cjs packages/examples/public/glyphs/noto-sans-sc",
     "benchmark:formal:geometry": "node scripts/benchmark-formal-geometry.mjs",
     "benchmark:geopackage:browser": "node scripts/benchmark-geopackage-browser.mjs",
     "lint:types": "eslint . --max-warnings 0",

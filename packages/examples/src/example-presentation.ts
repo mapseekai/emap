@@ -66,8 +66,8 @@ export function installExamplePresentation(root: Document = document): (() => vo
   logo.src = `${base}emap.svg`;
   logo.alt = '';
   logo.width = logo.height = 24;
-  brand.setAttribute('aria-label', 'emap 示例首页');
-  brand.append(logo, 'emap');
+  brand.setAttribute('aria-label', 'Emap 示例首页');
+  brand.append(logo, 'Emap');
   const siteNav = element(root, 'nav', 'example-site-links');
   siteNav.setAttribute('aria-label', '站点导航');
   siteNav.append(

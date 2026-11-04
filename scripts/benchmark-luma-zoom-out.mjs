@@ -33,7 +33,7 @@ try{for(const gpu of apis)for(const file of files){
  try{
  const page=await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1});
  page.on('pageerror',e=>r.errors.push(e.message));page.on('console',e=>{if(e.type()==='error')r.errors.push(e.text());});
- await page.goto('http://127.0.0.1:4195'+prefix+'luma-benchmark/?gpu='+gpu+'&pointLod=off');
+ await page.goto('http://127.0.0.1:4195'+prefix+'luma-benchmark/?smallArcs=on&gpu='+gpu+'&pointLod=off');
  await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
  const started=Date.now();await page.locator('#file-input').setInputFiles(join(directory,file));await page.locator('#load-file').click();
  await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state),null,{timeout:240000});

@@ -61,6 +61,7 @@ interface Options {
   signal?: AbortSignal;
   workerRuntime?: WorkerRuntime;
   msdfWorkerUrl?: string | URL;
+  msdfGlyphPackUrl?: string | URL;
   geometryWorkerUrl?: string | URL;
   screenPathFiltering?: boolean;
 }
@@ -382,6 +383,9 @@ export class LumaPainter implements EditPainter {
     this.completionMs = this.queueBusyMs = null;
     this.navigationCpuMs = 0;
   }
+  get prepareInitialLabels(): boolean {
+    return Boolean(this.options.msdfGlyphPackUrl);
+  }
   createLabelAtlas(): MsdfLabelAtlas {
     const url = this.options.msdfWorkerUrl;
     return new MsdfLabelAtlas(
@@ -390,6 +394,9 @@ export class LumaPainter implements EditPainter {
         : new URL('emap-msdf-worker.js', import.meta.url),
       this.canvas.ownerDocument,
       this.options.workerRuntime,
+      this.options.msdfGlyphPackUrl
+        ? { url: this.options.msdfGlyphPackUrl, report: this.options.report }
+        : undefined,
     );
   }
   clearLabels(): void {

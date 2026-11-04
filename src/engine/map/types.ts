@@ -51,11 +51,13 @@ export interface MapOptions {
   renderer?: import('./renderer').RendererBackend;
   /** Optional MSDF worker URL for GPU labels; publish its sibling msdf/ assets too. */
   msdfWorkerUrl?: string | URL;
+  /** URL of a project-owned MSDF font manifest. GPU labels fetch only the glyph shards they use. */
+  msdfGlyphPackUrl?: string | URL;
   /** Bounded GPU geometry preparation Worker. Defaults to the sibling emap-geometry-worker.js. */
   geometryWorkerUrl?: string | URL;
   /** Independent half-device-pixel filtering for opaque solid strokes in every renderer. Defaults to false; source coordinates never change. */
   screenPathFiltering?: boolean;
-  /** Display-only line/polygon LOD. False restores source detail; pixelTolerance is >0..64 CSS pixels (default 0.5). */
+  /** Omit or pass false for full source detail. An object enables line/polygon display LOD (pixelTolerance: >0..64 CSS pixels, default 0.5). */
   geometryLod?: false | { pixelTolerance?: number };
   container: string | HTMLElement;
   interactive?: boolean;

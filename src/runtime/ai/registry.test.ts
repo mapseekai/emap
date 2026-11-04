@@ -172,7 +172,7 @@ describe('GIS capability integration', () => {
       });
       expect(viewport.geometryLodTolerance).toBe(2);
       await map.capabilities.execute('view.setGeometryLod');
-      expect(viewport.geometryLodTolerance).toBe(0.5);
+      expect(viewport.geometryLodTolerance).toBe(0);
       await invokeAgentTool(map.capabilities, 'view.setScreenPathFiltering', { enabled: true });
       expect(viewport.screenPathFiltering).toBe(true);
       await map.capabilities.execute('view.setScreenPathFiltering');
@@ -180,7 +180,7 @@ describe('GIS capability integration', () => {
       await expect(
         invokeAgentTool(map.capabilities, 'view.setGeometryLod', { options: true }),
       ).rejects.toThrow();
-      expect(viewport.geometryLodTolerance).toBe(0.5);
+      expect(viewport.geometryLodTolerance).toBe(0);
     } finally {
       await map.dispose();
     }

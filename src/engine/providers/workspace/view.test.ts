@@ -13,16 +13,18 @@ function setup() {
 }
 
 describe('geometry LOD configuration', () => {
-  it('defaults to the existing tolerance, changes immediately and can be disabled or reset', () => {
+  it('defaults to full detail, uses 0.5 for an explicit empty object and resets to full detail', () => {
     const { view, requestRender } = setup();
-    expect(view._viewport.geometryLodTolerance).toBe(0.5);
+    expect(view._viewport.geometryLodTolerance).toBe(0);
     view.setGeometryLod({ pixelTolerance: 2 });
     expect(view._viewport.geometryLodTolerance).toBe(2);
     expect(requestRender).toHaveBeenCalledOnce();
     view.setGeometryLod(false);
     expect(view._viewport.geometryLodTolerance).toBe(0);
-    view.setGeometryLod();
+    view.setGeometryLod({});
     expect(view._viewport.geometryLodTolerance).toBe(0.5);
+    view.setGeometryLod();
+    expect(view._viewport.geometryLodTolerance).toBe(0);
     view.dispose();
   });
 
@@ -42,7 +44,7 @@ describe('geometry LOD configuration', () => {
     it(`rejects invalid configuration without changing rendering: ${JSON.stringify(options)}`, () => {
       const { view, requestRender } = setup();
       expect(() => view.setGeometryLod(options as any)).toThrow(/geometryLod/);
-      expect(view._viewport.geometryLodTolerance).toBe(0.5);
+      expect(view._viewport.geometryLodTolerance).toBe(0);
       expect(requestRender).not.toHaveBeenCalled();
       view.dispose();
     });

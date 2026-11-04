@@ -33,9 +33,8 @@ export class ViewServiceImpl {
     return this._projection.crs;
   }
 
-  public setGeometryLod(options?: MapOptions['geometryLod']): void {
+  public setGeometryLod(options: MapOptions['geometryLod'] = false): void {
     if (
-      options !== undefined &&
       options !== false &&
       (!options ||
         typeof options !== 'object' ||
@@ -48,7 +47,7 @@ export class ViewServiceImpl {
             options.pixelTolerance > 64)))
     )
       throw new Error('geometryLod must be false or { pixelTolerance: >0..64 }.');
-    const tolerance = options === false ? 0 : (options?.pixelTolerance ?? 0.5);
+    const tolerance = options === false ? 0 : (options.pixelTolerance ?? 0.5);
     if (tolerance === this._viewport.geometryLodTolerance) return;
     this._viewport.geometryLodTolerance = tolerance;
     this.deps.signals.requestRender();

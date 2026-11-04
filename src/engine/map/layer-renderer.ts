@@ -146,7 +146,7 @@ export function renderLayers(
   pixelSize: number,
   lineScale: number,
 ): void {
-  const tolerance = ctx.viewport.geometryLodTolerance ?? 0.5;
+  const tolerance = ctx.viewport.geometryLodTolerance ?? 0;
   const pointLod = pointLodForPainter(ctx.painter);
   pointLod.retainLayers(ctx.retainLayerIds ?? new Set(ctx.layers.map((layer) => layer.id)));
   for (const layer of ctx.layers) {

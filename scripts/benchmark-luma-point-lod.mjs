@@ -24,7 +24,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1.25});
    page.on('pageerror',e=>record.errors.push(e.message));page.on('console',m=>{if(m.type()==='error')record.errors.push(m.text());});
-   await page.goto(base+'luma-benchmark/?gpu='+gpu);await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
+   await page.goto(base+'luma-benchmark/?pointLod=on&gpu='+gpu);await page.waitForFunction(()=>window.lumaBenchmark?.state==='idle',null,{timeout:60000});
    await page.locator('#file-input').setInputFiles(join(directory,file));await page.locator('#load-file').click();
    await page.waitForFunction(()=>['ready','error'].includes(window.lumaBenchmark.state),null,{timeout:180000});
    if(await page.evaluate(()=>window.lumaBenchmark.state)!=='ready')throw new Error(await page.locator('#status').textContent());

@@ -61,9 +61,3 @@ export function categoryDescription(category: string, locale: ExampleLocale): st
   const item = exampleCategories.find(([id]) => id === category);
   return item?.[locale === 'zh' ? 3 : 4] ?? '';
 }
-
-export const featuredExamples = [
-  'getting-started/vector-file',
-  'getting-started/lines',
-  'luma-25d',
-];

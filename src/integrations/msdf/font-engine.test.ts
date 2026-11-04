@@ -8,7 +8,7 @@ afterEach(() => vi.unstubAllGlobals());
 async function engine() {
   vi.stubGlobal(
     'fetch',
-    async (url: string | URL) => new Response(await readFile(fileURLToPath(url))),
+    vi.fn(async (url: string | URL) => new Response(await readFile(fileURLToPath(url)))),
   );
   return MsdfFontEngine.create(pathToFileURL(resolve('dist/msdf') + '/').href);
 }
@@ -32,8 +32,14 @@ describe('MSDF shaping and outline identity', () => {
       );
       expect(mono.glyphs.slice(-2).every((g) => g.font.includes('noto-sans-mono-'))).toBe(true);
       expect(a.bottom).toBeGreaterThan(1);
+      expect(
+        vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('msdfgen.wasm')),
+      ).toBe(false);
       const g = a.glyphs[0],
         bitmap = await e.glyph({ font: g.font, id: g.id, key: 'g', range: 32 }, signal());
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('msdfgen.wasm')),
+      ).toHaveLength(1);
       expect(bitmap.path.length).toBeGreaterThan(20);
       expect(bitmap.data.length).toBe(bitmap.width * bitmap.height * 4);
       expect(e.stats.fontBytes).toBeGreaterThan(0);

@@ -334,13 +334,20 @@ export class LayerServiceImpl {
           const ml = mapshaperLayers[i];
           const layerId = getLayerId(ml, i);
           const geomType = ml.geometry_type;
-          // Default polygon rendering is outline-only (`type: 'line'`) to match
-          // mapshaper GUI's behaviour and emap's pre-layer-concept default.
-          // Canvas 2D fill is significantly more expensive than stroke for
-          // many-polygon datasets (winding-rule rasterization vs straight
-          // strokes). Callers who want a filled appearance add an explicit
-          // `type: 'fill'` layer via addLayer().
-          if (geomType === 'point') {
+          if (geomType === 'polygon') {
+            defaults.push({
+              id: `${sourceId}:${layerId}`,
+              type: 'fill',
+              source: sourceId,
+              'source-layer': layerId,
+              paint: {
+                'fill-color': DEFAULT_LAYER_COLOR,
+                'fill-opacity': 0.25,
+                'line-color': DEFAULT_LAYER_COLOR,
+                'line-width': 0.8,
+              },
+            });
+          } else if (geomType === 'point') {
             defaults.push({
               id: `${sourceId}:${layerId}`,
               type: 'circle',

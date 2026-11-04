@@ -1,3 +1,4 @@
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from './example-map-style';
 import type { Emap, LayerSpecification, TopologySource } from '@mapseekai/emap';
 import { importGeoPackageInWorker } from '@mapseekai/emap/geopackage';
 import { autoLoadExampleFixtures } from './example-runtime';
@@ -19,7 +20,7 @@ export async function mountGeometryLodExample(
   let disposed = false;
   let loading = false;
   let loadController: AbortController | undefined;
-  let appliedTolerance = 0.5;
+  let appliedTolerance = 0;
   let statsTimer: number | undefined;
   let thresholdTask: { source: TopologySource; promise: Promise<void> } | undefined;
 
@@ -190,12 +191,12 @@ export async function mountGeometryLodExample(
           paint:
             layer.geometry_type === 'polygon'
               ? {
-                  'fill-color': '#4c956c',
-                  'fill-opacity': 0.25,
-                  'line-color': '#28704a',
+                  'fill-color': EXAMPLE_FEATURE_COLOR,
+                  'fill-opacity': EXAMPLE_FILL_OPACITY,
+                  'line-color': EXAMPLE_FEATURE_COLOR,
                   'line-width': 1.5,
                 }
-              : { 'line-color': '#2563eb', 'line-width': 2 },
+              : { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 2 },
         } as LayerSpecification);
       }
       if (source) {

@@ -24,7 +24,7 @@ if (counts.some((count) => !Number.isInteger(count) || count < 10_000))
 const sizes = counts.length ? counts : [100_000, 1_000_000, 5_000_000];
 const seed = 0x5eed1234;
 const transform = new AffineTransform(1, -1);
-const spec = { id: 'points', source: 'benchmark', type: 'circle' };
+const spec = { id: 'points', source: 'benchmark', type: 'circle', pointLod: {} };
 const percentile = (values, fraction) =>
   [...values].sort((a, b) => a - b)[
     Math.min(values.length - 1, Math.floor(values.length * fraction))

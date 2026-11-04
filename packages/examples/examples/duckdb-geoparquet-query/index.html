@@ -50,6 +50,7 @@
     </details>
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -136,9 +137,9 @@ async function addDatasetSource(id, dataset) {
     await source.replaceDataset(dataset);
     await map.addSource(id, source, { sourceCrs: outputCrsInput.value.trim() || undefined });
     addDisplayLayers(id, source, "duckdb-geoparquet-output", {
-        fill: "#dcfce7",
-        fillOpacity: 0.52,
-        line: "#15803d",
+        fill: EXAMPLE_FEATURE_COLOR,
+        fillOpacity: EXAMPLE_FILL_OPACITY,
+        line: EXAMPLE_FEATURE_COLOR,
         lineWidth: 2.25,
         pointRadius: 5,
     });

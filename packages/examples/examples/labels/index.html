@@ -27,10 +27,13 @@
   </details>
   <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
-import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+import { fixtureUrl, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 import { mountSymbolStyleExample } from '/src/symbol-controls/main.ts';
 const emap = await loadExampleRuntime();
-const map = await emap.Emap.create({ container: 'map', renderer: getExampleRenderer(), preset: 'viewer' });
+const map = await emap.Emap.create({
+  container: 'map', renderer: getExampleRenderer(), preset: 'viewer',
+  msdfGlyphPackUrl: fixtureUrl('glyphs/noto-sans-sc/manifest.json'),
+});
 await map.addControl(new emap.NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);
 await mountSymbolStyleExample(map, emap);

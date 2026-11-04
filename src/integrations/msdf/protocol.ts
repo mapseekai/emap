@@ -57,3 +57,18 @@ export interface WorkerStats {
   heapBytes: number;
 }
 export const MSDF_EM_PIXELS = 48;
+export const PACK_HEADER_LIMIT = 2 * 1024 ** 2;
+// Partition physical glyph IDs, including unencoded HarfBuzz substitutions.
+export const GLYPHS_PER_SHARD = 16;
+export const GLYPH_RANGES = [32, 64, 128, 256] as const;
+export interface GlyphCatalog {
+  version: 2;
+  assets: string;
+  ranges: number[];
+  defaultFont?: { face: string; family: string; weight: number };
+  /** SDK faces are relative to msdf/; a project font is relative to this catalog. */
+  faces: Record<string, number>;
+}
+export function shardPath(assets: string, face: string, range: number, start: number): string {
+  return `v2/${assets}/${face}/${range}/${start}-${start + GLYPHS_PER_SHARD - 1}.msdf`;
+}

@@ -1,6 +1,5 @@
 import { installExampleRendererToolbar } from './renderer-choice';
 import { monitorExampleMap } from './performance-render-source';
-import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
 import {
   resolveRuntimeAssets,
   type RuntimeAssetOptions,
@@ -213,7 +212,6 @@ export async function installExampleMapUi(
   root: Document = document,
 ): Promise<void> {
   if (mapsWithExampleUi.has(map)) return;
-  if (!!!map.ctx.get('mapLibre')) await map.ctx.plugin(mapLibrePlugin);
   const header = root.querySelector<HTMLElement>('#header');
   if (!header) throw new Error('Example pages must provide a #header banner');
   installExampleIntro(root);
@@ -224,7 +222,12 @@ export async function installExampleMapUi(
   const tools = root.createElement('div');
   tools.className = 'emap-example-context-tools';
   tools.setAttribute('role', 'group');
-  tools.setAttribute('aria-label', 'Example source, map coordinate system, and basemap');
+  tools.setAttribute(
+    'aria-label',
+    map.ctx.get('mapLibre')
+      ? 'Example source, map coordinate system, and basemap'
+      : 'Example source and map coordinate system',
+  );
   const sourceText = embeddedExampleSource(root);
   if (sourceText) {
     const sourceButton = root.createElement('button');
@@ -258,15 +261,20 @@ export async function installExampleMapUi(
   const syncUi = async (): Promise<void> => {
     const currentCRS = canonicalExampleCRS(map.getCRS());
     selectCurrentCRS(crsSelect, currentCRS);
-    const supportsBasemap = currentCRS === 'EPSG:3857';
+    const hasMapLibre = Boolean(map.ctx.get('mapLibre'));
+    const supportsBasemap = hasMapLibre && currentCRS === 'EPSG:3857';
     if (supportsBasemap && !basemapControl) {
       basemapControl = new runtime.BasemapControl();
-      await map.addControl(basemapControl, 'top-right');
+      await map.addControl(basemapControl, 'top-left');
     } else if (!supportsBasemap && basemapControl) {
       await map.removeControl(basemapControl);
       basemapControl = null;
     }
-    basemapState.textContent = supportsBasemap ? '底图：右上角可选' : '底图：仅 EPSG:3857 可用';
+    basemapState.textContent = hasMapLibre
+      ? supportsBasemap
+        ? '底图：左上角可选'
+        : '底图：仅 EPSG:3857 可用'
+      : '';
   };
   map.on('crschange', () => {
     void syncUi().catch((error: unknown) => console.error(error));

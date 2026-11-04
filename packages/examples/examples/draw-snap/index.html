@@ -37,6 +37,7 @@
   </details>
   <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR } from '/src/example-map-style.ts';
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 const emap = await loadExampleRuntime();
 const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
@@ -76,7 +77,7 @@ async function loadExampleData(file) {
     type: 'line',
     source: SOURCE_ID,
     'source-layer': sourceLayer,
-    paint: { 'line-color': '#1e88e5', 'line-width': 3 },
+    paint: { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 3 },
   });
   document.getElementById('status').textContent = `已加载 ${file.name}。绘制时靠近参考线观察顶点和边吸附。`;
 }

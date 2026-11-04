@@ -14,7 +14,6 @@ describe('geometry LOD public configuration', () => {
   ])('honors screen filtering opt-in at creation (%s)', async (enabled) => {
     const map = await Emap.create({
       preset: 'headless',
-      geometryLod: false,
       screenPathFiltering: enabled,
     });
     try {
@@ -49,7 +48,7 @@ describe('geometry LOD public configuration', () => {
   });
 
   it('shares creation/runtime settings between line drawing and feature picking without removing source vertices', async () => {
-    const map = await Emap.create({ preset: 'headless', geometryLod: false });
+    const map = await Emap.create({ preset: 'headless' });
     try {
       const source = new TopologySource('s');
       const arcs = getDefaultMapshaperAdapter().createArcCollection([
@@ -87,9 +86,12 @@ describe('geometry LOD public configuration', () => {
           1 / Math.abs(map.getTransform().mx),
           1,
         );
-      draw();
-      expect(arcs.getRetainedInterval!()).toBe(0);
-      expect(map.queryFeatures(map.project(10, 20)).map((feature) => feature.id)).toEqual([0]);
+      for (const scale of [4, 1]) {
+        viewport.applyCameraState([15, 10], scale);
+        draw();
+        expect(arcs.getRetainedInterval!()).toBe(0);
+        expect(map.queryFeatures(map.project(10, 20)).map((feature) => feature.id)).toEqual([0]);
+      }
       map.setGeometryLod({ pixelTolerance: 2 });
       draw();
       expect(arcs.getRetainedInterval!()).toBe(2);
@@ -120,7 +122,7 @@ describe('geometry LOD public configuration', () => {
       });
       expect(map.ctx.view._viewport.geometryLodTolerance).toBe(2);
       await map.ctx.capabilities.execute('view.setGeometryLod');
-      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(0.5);
+      expect(map.ctx.view._viewport.geometryLodTolerance).toBe(0);
       await expect(
         map.ctx.capabilities.execute('view.setGeometryLod', {
           options: { pixelTolerance: 0 },

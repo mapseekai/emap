@@ -137,7 +137,9 @@ for (const gpu of ['webgl', 'webgpu']) for (const file of ['points.geojson', 'lu
     test.setTimeout(240000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open&gpu=' + gpu);
+    await page.goto('/mapseekai/emap/examples/luma-25d/?parameters=open&pointLod=on&gpu=' + gpu);
+    await optimizedFrameReady(page);
+    await page.locator('#screen-filters').check();
     await optimizedFrameReady(page);
     await page.locator('#file-input').setInputFiles(join(directory, file));
     await optimizedFrameReady(page);

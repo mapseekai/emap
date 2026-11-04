@@ -479,7 +479,7 @@ export class Emap extends EventDispatcher {
   public getCRS(): string {
     return this.ctx.view.getCRS();
   }
-  /** Change automatic line/polygon display simplification without modifying source geometry.
+  /** Opt into line/polygon display simplification. Omit the argument or pass false to restore source detail.
    * @example
    * map.setGeometryLod({ pixelTolerance: 1 });
    * map.setGeometryLod(false);

@@ -41,6 +41,7 @@
 </details>
 <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 import { installFlatGeobufFormat } from '/src/flatgeobuf-format.ts';
 import { listGeoTIFFs, openRasterPair } from '/src/local-raster-directory.ts';
@@ -66,13 +67,6 @@ const rasterLayers = new Map();
 let sequence = 0;
 let directoryHandle = null;
 let rasterQueue = Promise.resolve();
-const colors = [
-  { fill:'#5b8ff9', line:'#3867d6', point:'#3867d6' },
-  { fill:'#61dDAa', line:'#2d9d78', point:'#2d9d78' },
-  { fill:'#f6bd16', line:'#c28d00', point:'#c28d00' },
-  { fill:'#e8684a', line:'#c24f34', point:'#c24f34' },
-  { fill:'#9270ca', line:'#6f50aa', point:'#6f50aa' },
-];
 
 function updateCounts() {
   document.getElementById('vector-source-count').textContent = String(vectorSources.size);
@@ -85,18 +79,17 @@ function updateCounts() {
   }, null, 2);
 }
 
-function addVectorRenderLayers(sourceId, source, colorIndex) {
-  const color = colors[colorIndex % colors.length];
+function addVectorRenderLayers(sourceId, source) {
   const layerIds = [];
   for (const [index, layer] of source.getLayers().entries()) {
     const type = layer.geometry_type === 'point' ? 'circle' : layer.geometry_type === 'polyline' ? 'line' : layer.geometry_type === 'polygon' ? 'fill' : null;
     if (!type) continue;
     const layerId = `${sourceId}-layer-${index}`;
     const paint = type === 'fill'
-      ? { 'fill-color': color.fill, 'fill-opacity': 0.38 }
+      ? { 'fill-color': EXAMPLE_FEATURE_COLOR, 'fill-opacity': EXAMPLE_FILL_OPACITY }
       : type === 'line'
-        ? { 'line-color': color.line, 'line-width': 2.5 }
-        : { 'circle-color': color.point, 'circle-radius': 5 };
+        ? { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 2.5 }
+        : { 'circle-color': EXAMPLE_FEATURE_COLOR, 'circle-radius': 5 };
     map.addLayer({ id: layerId, source: sourceId, 'source-layer': layer.name, type, paint });
     layerIds.push(layerId);
   }
@@ -118,7 +111,7 @@ async function addVectorFile(file) {
   const source = new emap.TopologySource(id, { formats: map.formats });
   await source.setData({ filename:file.name, content:new Uint8Array(await file.arrayBuffer()) });
   await map.addSource(id, source);
-  const layerIds = addVectorRenderLayers(id, source, vectorSources.size);
+  const layerIds = addVectorRenderLayers(id, source);
   const row = document.createElement('div');
   row.className = 'vector-row';
   const label = document.createElement('span');

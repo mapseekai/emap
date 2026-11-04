@@ -58,6 +58,7 @@
     </details>
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
@@ -194,7 +195,7 @@ inputFile.addEventListener('change', async () => {
     removeSourceWithLayers(OUTPUT_SOURCE_ID);
     status.textContent = `正在加载输入数据 ${file.name}...`;
     try {
-        const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, 'duckdb-toolbox-input', { fill: '#dbeafe', fillOpacity: 0.42, line: '#1d4ed8', lineWidth: 1.5, pointRadius: 4 });
+        const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, 'duckdb-toolbox-input', { fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 1.5, pointRadius: 4 });
         inputDataset = dataset;
         populateLayerSelect(inputLayerSelect, dataset);
         map.setExtent(source.getExtent());
@@ -218,7 +219,7 @@ maskFile.addEventListener('change', async () => {
     removeSourceWithLayers(OUTPUT_SOURCE_ID);
     status.textContent = `正在加载 mask 数据 ${file.name}...`;
     try {
-        const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, 'duckdb-toolbox-mask', { fill: '#fecdd3', fillOpacity: 0.36, line: '#be123c', lineWidth: 2, pointRadius: 4 });
+        const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, 'duckdb-toolbox-mask', { fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 2, pointRadius: 4 });
         maskDataset = dataset;
         populateLayerSelect(maskLayerSelect, dataset);
         status.textContent = `已加载 mask 数据 ${file.name}。`;
@@ -256,7 +257,7 @@ runButton.addEventListener('click', async () => {
         const inputs = Object.fromEntries(tool.inputs.map((input, index) => [input.name, index === 0 ? layerAt(inputDataset, inputLayerSelect) : layerAt(maskDataset, maskLayerSelect)]));
         const runtime = await getRuntime();
         const resultDataset = await duckDbToolbox.execute(tool.id, { inputs, params, runtime });
-        const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-toolbox-output', { fill: '#fef3c7', fillOpacity: 0.58, line: '#b45309', lineWidth: 2.5, pointRadius: 5 });
+        const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-toolbox-output', { fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 2.5, pointRadius: 5 });
         map.setExtent(outputSource.getExtent());
         const count = resultDataset.layers.reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
         status.textContent = `${tool.title} 完成，输出 ${count} 个要素。`;

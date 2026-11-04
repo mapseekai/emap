@@ -122,6 +122,7 @@
 
   <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { mapLibrePlugin } from '@mapseekai/emap/maplibre';
@@ -222,7 +223,7 @@ const map = await Emap.create({ renderer: getExampleRenderer(), plugins: [mapLib
 });
 await map.addControl(new emap.NavigationControl(), 'top-left');
 await installExampleMapUi(map, emap);
-await map.addControl(new emap.LayerControl(), 'top-right');
+await map.addControl(new emap.LayerControl(), 'top-left');
 const SOURCE_ID = 'business-data';
 const LAYER_ID = 'business-polygons';
 const fileInput = document.getElementById('file-input');
@@ -326,9 +327,9 @@ function createWmsTileTemplate(endpoint, layerName) {
 }
 function createVectorOverlay(name, tileTemplate, sourceLayer, renderType) {
     const paint = {
-        fill: { 'fill-color': '#0f766e', 'fill-opacity': 0.5 },
-        line: { 'line-color': '#0f766e', 'line-width': 2 },
-        circle: { 'circle-color': '#0f766e', 'circle-radius': 4 },
+        fill: { 'fill-color': EXAMPLE_FEATURE_COLOR, 'fill-opacity': EXAMPLE_FILL_OPACITY },
+        line: { 'line-color': EXAMPLE_FEATURE_COLOR, 'line-width': 2 },
+        circle: { 'circle-color': EXAMPLE_FEATURE_COLOR, 'circle-radius': 4 },
     };
     const id = CUSTOM_SERVICE_IDS.vector;
     return {
@@ -431,14 +432,14 @@ async function loadBusinessLayer(file) {
             type: 'fill',
             source: SOURCE_ID,
             paint: {
-                'fill-color': '#e76f51',
-                'fill-opacity': 0.5,
-                'fill-outline-color': '#8f2d1d',
+                'fill-color': EXAMPLE_FEATURE_COLOR,
+                'fill-opacity': EXAMPLE_FILL_OPACITY,
+                'fill-outline-color': EXAMPLE_FEATURE_COLOR,
             },
         });
         map.setExtent(source.getExtent());
         hasBusinessLayer = true;
-        status.textContent = `${file.name} 已加载；右上角可切换底图和叠加层。`;
+        status.textContent = `${file.name} 已加载；左上角可切换底图和叠加层。`;
     }
     catch (error) {
         console.error(error);
@@ -469,7 +470,7 @@ customServiceForm.addEventListener('submit', async (event) => {
         }
         if (service.role === 'basemap')
             await map.mapLibreServices.setBasemap(service.id);
-        status.textContent = `${service.name} 已添加；右上角可控制显示。`;
+        status.textContent = `${service.name} 已添加；左上角可控制显示。`;
     }
     catch (error) {
         console.error(error);

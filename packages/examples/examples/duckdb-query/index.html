@@ -45,6 +45,7 @@
     </details>
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -192,9 +193,9 @@ fileInput.addEventListener("change", async () => {
             throw new Error("文件未生成可用 dataset");
         await map.addSource(SOURCE_ID, source);
         addDisplayLayers(SOURCE_ID, source, "duckdb-query-input", {
-            fill: "#dbeafe",
-            fillOpacity: 0.48,
-            line: "#1d4ed8",
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 1.5,
             pointRadius: 4,
         });
@@ -244,9 +245,9 @@ runButton.addEventListener("click", async () => {
             resultDataset = await attributeFilter(inputDataset, opts, runtime);
         }
         const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
-            fill: "#fef3c7",
-            fillOpacity: 0.56,
-            line: "#b45309",
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 2.25,
             pointRadius: 5,
         });

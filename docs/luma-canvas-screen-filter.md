@@ -15,7 +15,7 @@
 半像素指物理设备像素：先按视图与 DPR 投影，再采用 Canvas 的 `((coordinate * 2) | 0) / 2`。
 坐标朝零截断，只跳过连续重复命令；A→B→A 保留。
 全路径塌缩到同一位置时，保留 Canvas 的 0.1 **设备像素**短线。
-两个开关独立，默认开启。关闭两者恢复原始 GPU 几何。
+两个过滤开关独立，默认关闭，以完整几何绘制。
 
 ## 显示影响与安全边界
 
@@ -43,7 +43,7 @@ GPU Buffer 存 CSS 屏幕坐标；Canvas 对照重放相同设备像素命令，
 ## 测试入口与口径
 
 `/mapseekai/emap/examples/luma-benchmark/?gpu=webgl&pointLod=off`，WebGPU 改为 `gpu=webgpu`。
-当前半设备像素去重默认关闭，可用 `halfPixel=on` 单独开启，或 `screenFilter=on` 同时开启两项。`screenFilter=off` 同时关闭两项；`smallArcs=off` / `halfPixel=off` 可单独关闭。
+可用 `smallArcs=on` 或 `halfPixel=on` 单独开启微小弧段过滤或半像素去重，也可用 `screenFilter=on` 同时开启两项。`screenFilter=off` 同时关闭两项；`smallArcs=off` / `halfPixel=off` 可单独关闭。
 顶点编辑入口接受相同参数。
 
 页面 `A/B 原始几何导航` 保持原始 Buffer 的逐帧导航口径，显式排除屏幕过滤与快照，

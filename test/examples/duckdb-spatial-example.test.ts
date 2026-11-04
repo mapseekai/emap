@@ -1,4 +1,8 @@
 import type { MapshaperDataset } from '../../src/shared/types/mapshaper-types';
+import {
+  EXAMPLE_FEATURE_COLOR,
+  EXAMPLE_FILL_OPACITY,
+} from '../../packages/examples/src/example-map-style';
 // @vitest-environment jsdom
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -119,12 +123,13 @@ function fixture(
   options: {
     rejectDuplicateLayers?: boolean;
     setData?: (id: string) => Promise<void>;
+    geometryType?: 'point' | 'polygon';
     sourceInfo?: {
       crs_string?: string;
     };
   } = {},
 ) {
-  const { rejectDuplicateLayers = false, setData, sourceInfo } = options;
+  const { rejectDuplicateLayers = false, setData, sourceInfo, geometryType } = options;
   document.body.innerHTML = `
     <div id="map"></div>
     <input id="file" type="file">
@@ -191,6 +196,7 @@ function fixture(
   };
   const TopologySource = vi.fn(function (id: string) {
     const source = createSource(id, setData);
+    if (geometryType) source.dataset.layers[0].geometry_type = geometryType;
     if (sourceInfo) source.dataset.info = { ...sourceInfo };
     return source;
   });
@@ -875,6 +881,32 @@ describe('DuckDB spatial example runner', () => {
     document.getElementById('run')!.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(areaSources.has('duckdb-spatial-output')).toBe(true));
     expect(duckDb.area).toHaveBeenCalledTimes(1);
+  });
+  it('uses a consistent filled style for DuckDB input and output polygons', async () => {
+    const { map, sources } = fixture({ geometryType: 'polygon' });
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'envelope' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['polygon'], 'polygon.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
+    for (const source of ['duckdb-spatial-input', 'duckdb-spatial-output']) {
+      expect(map.addLayer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source,
+          type: 'fill',
+          paint: { 'fill-color': EXAMPLE_FEATURE_COLOR, 'fill-opacity': EXAMPLE_FILL_OPACITY },
+        }),
+      );
+      expect(map.addLayer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source,
+          type: 'line',
+          paint: expect.objectContaining({ 'line-color': EXAMPLE_FEATURE_COLOR }),
+        }),
+      );
+    }
   });
   it('runs the envelope helper on the selected input layer', async () => {
     const { sources } = fixture();

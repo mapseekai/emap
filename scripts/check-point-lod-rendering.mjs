@@ -61,7 +61,7 @@ try {
         const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
         let layer = { geometry_type: 'point', shapes: Array.from({ length: count }, () => [[random() * width / 2, random() * height / 2]]) };
         let dataset = { layers: [layer], editVersion: 0, attributeVersion: 0 };
-        let spec = { id: 'dots', source: 's', type: 'circle', paint: { 'circle-color': '#123456', 'circle-radius': 4 } };
+        let spec = { id: 'dots', source: 's', type: 'circle', pointLod: {}, paint: { 'circle-color': '#123456', 'circle-radius': 4 } };
         const source = { type: 'topology', getDataset: () => dataset, getLayers: () => [layer], getArcs: () => undefined, getDisplayArcs: () => null };
         const context = { layers: [spec], sources: new Map([['s', source]]), viewport, painter,
           filterResolver: new FilterResolver(), styleResolver: new StyleResolver(),
@@ -97,7 +97,7 @@ try {
         }
         layer = { geometry_type: 'point', shapes: [Array.from({ length: 10_000 }, (_, i) => [50 + i * 1e-9, 50])] };
         dataset = { layers: [layer], editVersion: 0, attributeVersion: 0 };
-        spec = { id: 'dots', source: 's', type: 'circle', paint: { 'circle-color': '#123456', 'circle-radius': 4 } };
+        spec = { id: 'dots', source: 's', type: 'circle', pointLod: {}, paint: { 'circle-color': '#123456', 'circle-radius': 4 } };
         const multipoint = paint(1);
         check('MultiPoint is thinned at coordinate level', multipoint.submitted > 0 && multipoint.submitted < 10);
         check('MultiPoint keeps original feature and component IDs', paintedIds.every((id) => id === 0) && paintedParts.length === multipoint.submitted);

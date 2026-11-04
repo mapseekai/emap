@@ -1,10 +1,5 @@
 import { exampleTopics, type ExampleDefinition } from '../../../docs-meta/examples';
-import {
-  categoryDescription,
-  categoryLabel,
-  exampleCategories,
-  featuredExamples,
-} from './example-content';
+import { categoryDescription, categoryLabel, exampleCategories } from './example-content';
 import { createExamplePreview } from './example-preview';
 import { exampleNavigationUrl } from './renderer-choice';
 
@@ -13,7 +8,6 @@ type ExampleLocale = 'zh' | 'en';
 const catalogCopy = {
   zh: {
     title: 'Emap 示例',
-    intro: '运行示例，调整参数，查看实现。',
     catalogLabel: '示例目录',
     allCategories: '全部',
     languageLabel: '语言',
@@ -27,7 +21,6 @@ const catalogCopy = {
   },
   en: {
     title: 'Emap Examples',
-    intro: 'Run an example, adjust its parameters, and explore the code.',
     catalogLabel: 'Example catalog',
     allCategories: 'All',
     languageLabel: 'Language',
@@ -109,10 +102,10 @@ function renderCatalogLocale(
   brandMark.src = '/mapseekai/emap/examples/emap.svg';
   brandMark.alt = '';
   brandMark.width = brandMark.height = 24;
-  brand.setAttribute('aria-label', locale === 'zh' ? 'emap 示例首页' : 'emap examples home');
+  brand.setAttribute('aria-label', locale === 'zh' ? 'Emap 示例首页' : 'Emap examples home');
 
   const brandText = document.createElement('span');
-  brandText.textContent = 'emap';
+  brandText.textContent = 'Emap';
   brand.append(brandMark, brandText);
 
   const utilityMeta = document.createElement('div');
@@ -142,10 +135,6 @@ function renderCatalogLocale(
   const title = document.createElement('h1');
   title.textContent = locale === 'zh' ? '地图示例' : 'Examples';
 
-  const intro = document.createElement('p');
-  intro.className = 'catalog-intro';
-  intro.textContent = copy.intro;
-
   const searchField = document.createElement('div');
   searchField.className = 'catalog-search';
 
@@ -172,7 +161,7 @@ function renderCatalogLocale(
 
   searchControl.append(searchInput, clearSearch);
   searchField.append(searchLabel, searchControl);
-  header.append(title, intro, searchField);
+  header.append(title, searchField);
 
   const categories = orderedCategoryCounts(examples);
 
@@ -238,7 +227,13 @@ function renderCatalogLocale(
         item.href = exampleNavigationUrl(examplePublicHref(example.id));
         item.textContent = example.title[locale];
         item.title = example.title[locale];
-        item.dataset.search = [example.title.zh, example.title.en, example.id, ...example.api]
+        item.dataset.search = [
+          example.title.zh,
+          example.title.en,
+          example.id,
+          ...example.api,
+          ...example.plugins,
+        ]
           .join(' ')
           .toLowerCase();
         links.append(item);
@@ -325,39 +320,10 @@ function renderCatalogLocale(
   resultGroups.className = 'catalog-result-groups';
   results.append(toolbar, resultGroups);
 
-  const starters = document.createElement('section');
-  starters.className = 'catalog-starters';
-  const starterTitle = document.createElement('h2');
-  starterTitle.textContent = locale === 'zh' ? '常用示例' : 'Quick links';
-  starters.append(starterTitle);
-  const starterList = document.createElement('div');
-  starterList.className = 'catalog-starter-list';
-  for (const id of featuredExamples) {
-    const example = examples.find((item) => item.id === id);
-    if (!example) continue;
-    const link = document.createElement('a');
-    link.className = 'catalog-starter';
-    link.href = exampleNavigationUrl(examplePublicHref(id));
-    const preview = createExamplePreview(example);
-    preview.querySelector('img')!.loading = 'eager';
-    link.append(preview);
-    const text = document.createElement('span');
-    const strong = document.createElement('strong');
-    strong.textContent = example.title[locale];
-    text.append(strong);
-    const description = document.createElement('p');
-    description.textContent = example.description[locale];
-    text.append(description);
-    link.append(text);
-    starterList.append(link);
-  }
-  starters.append(starterList);
-
   function updateResults(): void {
     const resultCount = renderCatalogResults(resultGroups, examples, categories, state, clearQuery);
     resultSummary.textContent = copy.resultCount(resultCount);
     clearSearch.hidden = state.query.trim().length === 0;
-    starters.hidden = state.query.trim().length > 0 || state.category !== 'all';
     const query = state.query.trim().toLowerCase();
     for (const link of categoryNavigation.querySelectorAll<HTMLAnchorElement>('[data-search]')) {
       link.hidden = !link.dataset.search!.includes(query);
@@ -407,7 +373,7 @@ function renderCatalogLocale(
 
   updateResults();
 
-  content.append(header, mobileCategory, categoryTabs, starters, results);
+  content.append(header, mobileCategory, categoryTabs, results);
   shell.append(sidebar, content, pageNavigation);
   page.append(utility, shell);
   root.append(page);
@@ -576,6 +542,7 @@ function matchesCatalogQuery(example: ExampleDefinition, state: CatalogState): b
     example.id,
     ...example.tags,
     ...example.api,
+    ...example.plugins,
   ]
     .join(' ')
     .toLocaleLowerCase()
@@ -586,9 +553,14 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
   const card = document.createElement('a');
   card.className = 'example-card';
   card.href = exampleNavigationUrl(examplePublicHref(example.id));
+  const pluginInfo = example.plugins.length
+    ? locale === 'zh'
+      ? `；插件：${example.plugins.join('、')}`
+      : `; Plugins: ${example.plugins.join(', ')}`
+    : '';
   card.setAttribute(
     'aria-label',
-    `${catalogCopy[locale].openExample}${locale === 'zh' ? '：' : ': '}${example.title[locale]}`,
+    `${catalogCopy[locale].openExample}${locale === 'zh' ? '：' : ': '}${example.title[locale]}${pluginInfo}`,
   );
 
   const heading = document.createElement('div');
@@ -625,6 +597,22 @@ function renderExampleCard(example: ExampleDefinition, locale: ExampleLocale): H
   const body = document.createElement('div');
   body.className = 'example-card-body';
   body.append(heading, description, apiList);
+  if (example.plugins.length) {
+    const plugins = document.createElement('div');
+    plugins.className = 'example-card-plugins';
+    plugins.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'example-card-plugin-label';
+    label.textContent = locale === 'zh' ? '插件' : 'Plugins';
+    plugins.append(label);
+    for (const name of example.plugins) {
+      const tag = document.createElement('span');
+      tag.className = 'example-card-plugin';
+      tag.textContent = name;
+      plugins.append(tag);
+    }
+    body.append(plugins);
+  }
   const preview = createExamplePreview(example);
   card.dataset.preview = 'true';
   card.append(preview);

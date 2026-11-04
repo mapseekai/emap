@@ -1,3 +1,7 @@
+import {
+  EXAMPLE_FEATURE_COLOR,
+  EXAMPLE_FILL_OPACITY,
+} from '../../packages/examples/src/example-map-style';
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -135,6 +139,8 @@ async function executeDuckDbExample(
   };
   const runtime = {};
   const bindings = {
+    EXAMPLE_FEATURE_COLOR,
+    EXAMPLE_FILL_OPACITY,
     getExampleRenderer,
     installExampleMapUi: vi.fn(),
     loadExampleRuntime: async () => ({

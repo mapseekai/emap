@@ -1416,18 +1416,28 @@ describe('Emap layer management', () => {
       expect(effective[0].id).toBe('src1:default');
       expect(effective[0].type).toBe('line');
     });
-    it('maps polygon geometry to a line (outline-only) layer by default', () => {
-      // Default polygon rendering is outline-only — Canvas 2D fill is much
-      // more expensive than stroke for many-polygon datasets, and matches
-      // mapshaper GUI's behaviour. Callers opt into fills via addLayer().
+    it('renders polygons as translucent fills with the same default color as lines and points', () => {
       const layers: MapshaperLayer[] = [
         { name: 'countries', geometry_type: 'polygon', shapes: [[[1]]] },
+        { name: 'roads', geometry_type: 'polyline', shapes: [[[1]]] },
+        { name: 'cities', geometry_type: 'point', shapes: [[0, 0]] },
       ];
-      const source = createMockSource(layers);
-      registerMockSource(map, 'src1', source);
-      const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
-      expect(effective[0].type).toBe('line');
-      expect((effective[0].paint as any)['line-color']).toBe(EMAP_THEME_COLORS.primary);
+      registerMockSource(map, 'src1', createMockSource(layers));
+      expect(map.getRenderedLayers()).toMatchObject([
+        {
+          id: 'src1:countries',
+          type: 'fill',
+          paint: {
+            'fill-color': EMAP_THEME_COLORS.primary,
+            'fill-opacity': 0.25,
+            'line-color': EMAP_THEME_COLORS.primary,
+            'line-width': 0.8,
+          },
+        },
+        { id: 'src1:roads', type: 'line', paint: { 'line-color': EMAP_THEME_COLORS.primary } },
+        { id: 'src1:cities', type: 'circle', paint: { 'circle-color': EMAP_THEME_COLORS.primary } },
+      ]);
+      expect(map.getLayers()).toEqual([]);
     });
   });
   describe('_getVisibleLayerKeys', () => {
@@ -8669,7 +8679,7 @@ describe('Emap point LOD integration', () => {
     );
     setPrivate(map, '_featureQuery', query);
     setPrivate(map, '_highlightManager', new HighlightManager());
-    map.addLayer({ id: 'dots', source: 's', type: 'circle' });
+    map.addLayer({ id: 'dots', source: 's', type: 'circle', pointLod: {} });
     return { map, layer, dataset, transform };
   }
   it('picks the drawn representative while range queries retain every original feature', async () => {
@@ -8688,7 +8698,7 @@ describe('Emap point LOD integration', () => {
       ]),
     ).toHaveLength(19999);
     map.removeLayer('dots');
-    map.addLayer({ id: 'dots', source: 's', type: 'circle', pointLod: false });
+    map.addLayer({ id: 'dots', source: 's', type: 'circle' });
     expect(map.queryFeatures([7, 1])[0].id).not.toBe(0);
   });
   it('keeps selected and highlighted original points pickable above LOD', async () => {
@@ -8772,7 +8782,7 @@ describe('Emap point LOD integration', () => {
       else await map.dispose();
       expect(
         cache.query(
-          { id: 'dots', source: 's', type: 'circle' },
+          { id: 'dots', source: 's', type: 'circle', pointLod: {} },
           layer,
           dataset,
           null,

@@ -58,7 +58,7 @@ describe('example presentation', () => {
     expect(group?.getAttribute('role')).toBe('group');
     expect(
       [...document.querySelectorAll('.example-plugin-tag')].map((node) => node.textContent),
-    ).toEqual(['mapLibrePlugin', 'rasterPlugin', 'geoTIFFPlugin']);
+    ).toEqual(['rasterPlugin', 'geoTIFFPlugin']);
   });
   it('does not show a plugin group when the example has no optional plugin', () => {
     mount();

@@ -3,6 +3,7 @@ import bindHarfBuzz from 'harfbuzzjs/hbjs.js';
 import createBidi from 'bidi-js';
 import { decodeFont } from './woff';
 import { MsdfGenerator } from './generator';
+import { fetchBytes } from './resource';
 import type {
   FontManifest,
   FontSelection,
@@ -22,37 +23,6 @@ interface LoadedFont {
   font: ReturnType<HB['createFont']>;
   unicodes: Set<number>;
   used: number;
-}
-export async function fetchBytes(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
-  const response = await fetch(url, { signal, credentials: 'same-origin' });
-  if (!response.ok) throw new Error(`MSDF resource HTTP ${response.status}: ${url}`);
-  if (Number(response.headers.get('content-length')) > 32 * 1024 ** 2)
-    throw new Error('MSDF resource exceeds 32 MiB.');
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('MSDF resource has no response body.');
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > 32 * 1024 ** 2) {
-        await reader.cancel();
-        throw new Error('MSDF resource exceeds 32 MiB.');
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const result = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, at);
-    at += chunk.length;
-  }
-  return result.buffer;
 }
 function scriptOf(cp: number): string {
   if ((cp >= 0x600 && cp <= 0x8ff) || (cp >= 0xfb50 && cp <= 0xfeff)) return 'Arab';
@@ -74,26 +44,29 @@ export class MsdfFontEngine {
   private clock = 0;
   private bytes = 0;
   private bidi = createBidi();
+  private disposed = false;
   private generated = 0;
   private shaped = 0;
+  private generator?: MsdfGenerator;
+  private loadingGenerator?: Promise<MsdfGenerator>;
   private constructor(
     private hb: HB,
     private hbModule: { HEAPU8: Uint8Array },
-    private generator: MsdfGenerator,
     private manifest: FontManifest,
     private base: string,
+    private readBytes: typeof fetchBytes,
   ) {}
-  static async create(base: string): Promise<MsdfFontEngine> {
-    const [hbBytes, sdfBytes, manifestBytes] = await Promise.all(
-      ['hb.wasm', 'msdfgen.wasm', 'fonts.json'].map((p) => fetchBytes(new URL(p, base).href)),
+  static async create(base: string, readBytes = fetchBytes): Promise<MsdfFontEngine> {
+    const [hbBytes, manifestBytes] = await Promise.all(
+      ['hb.wasm', 'fonts.json'].map((p) => readBytes(new URL(p, base).href)),
     );
     const module = await createHarfBuzz({ wasmBinary: hbBytes });
     return new MsdfFontEngine(
       bindHarfBuzz(module),
       module,
-      await MsdfGenerator.create(sdfBytes),
       JSON.parse(new TextDecoder().decode(manifestBytes)) as FontManifest,
       base,
+      readBytes,
     );
   }
   get stats(): WorkerStats {
@@ -102,17 +75,19 @@ export class MsdfFontEngine {
       fonts: this.fonts.size,
       glyphsGenerated: this.generated,
       shapedRuns: this.shaped,
-      heapBytes: this.generator.heapBytes + this.hbModule.HEAPU8.byteLength,
+      heapBytes: (this.generator?.heapBytes ?? 0) + this.hbModule.HEAPU8.byteLength,
     };
   }
   private async load(url: string, signal: AbortSignal): Promise<LoadedFont> {
+    if (this.disposed) throw new Error('MSDF font engine disposed.');
     const previous = this.fonts.get(url);
     if (previous) {
       previous.used = ++this.clock;
       return previous;
     }
-    const bytes = decodeFont(new Uint8Array(await fetchBytes(url, signal)));
+    const bytes = decodeFont(new Uint8Array(await this.readBytes(url, signal)));
     signal.throwIfAborted();
+    if (this.disposed) throw new Error('MSDF font engine disposed.');
     const blob = this.hb.createBlob(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
     );
@@ -282,10 +257,26 @@ export class MsdfFontEngine {
   async glyph(request: GlyphRequest, signal: AbortSignal): Promise<GeneratedGlyph> {
     try {
       const f = await this.load(request.font, signal);
-      this.generator.loadFont(f.url, f.bytes);
+      // A map backed by a complete glyph catalog never needs the msdfgen heap or WASM.
+      this.loadingGenerator ??= this.readBytes(new URL('msdfgen.wasm', this.base).href)
+        .then(MsdfGenerator.create)
+        .then((generator) => {
+          if (this.disposed) {
+            generator.dispose();
+            throw new Error('MSDF font engine disposed.');
+          }
+          return (this.generator = generator);
+        })
+        .catch((error) => {
+          this.loadingGenerator = undefined;
+          throw error;
+        });
+      const generator = await this.loadingGenerator;
+      signal.throwIfAborted();
+      generator.loadFont(f.url, f.bytes);
       const path = f.font.glyphToPath(request.id);
       if (path.length > 65536) throw new Error('Glyph outline exceeds the MSDF complexity budget.');
-      const result = this.generator.generate(request, path, f.face.upem);
+      const result = generator.generate(request, path, f.face.upem);
       this.generated++;
       return result;
     } finally {
@@ -293,6 +284,7 @@ export class MsdfFontEngine {
     }
   }
   dispose(): void {
+    this.disposed = true;
     for (const f of this.fonts.values()) {
       f.font.destroy();
       f.face.destroy();
@@ -300,6 +292,8 @@ export class MsdfFontEngine {
     }
     this.fonts.clear();
     this.bytes = 0;
-    this.generator.dispose();
+    this.generator?.dispose();
+    this.generator = undefined;
+    this.loadingGenerator = undefined;
   }
 }

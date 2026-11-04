@@ -71,6 +71,7 @@
 
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -177,7 +178,7 @@ async function registerAggregateOutput(dataset, isCurrent) {
         return undefined;
     }
     addDisplayLayers(OUTPUT_SOURCE_ID, source, 'duckdb-aggregate-output', {
-        fill: '#e4c36a', fillOpacity: 0.56, line: '#87651a', lineWidth: 2.5, pointRadius: 5,
+        fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 2.5, pointRadius: 5,
     });
     return { cleanup, source };
 }
@@ -251,7 +252,7 @@ targetFile.addEventListener('change', async () => {
     clearAggregateOutput();
     status.textContent = `正在加载目标行政区 ${file.name}...`;
     try {
-        const loaded = await loadDatasetFromFile(file, TARGET_SOURCE_ID, 'duckdb-aggregate-target', { fill: '#86b6c9', fillOpacity: 0.28, line: '#295e76', lineWidth: 1.5, pointRadius: 4 }, () => loadVersion === targetLoadVersion);
+        const loaded = await loadDatasetFromFile(file, TARGET_SOURCE_ID, 'duckdb-aggregate-target', { fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 1.5, pointRadius: 4 }, () => loadVersion === targetLoadVersion);
         if (!loaded || loadVersion !== targetLoadVersion)
             return;
         const { dataset, source } = loaded;
@@ -288,7 +289,7 @@ joinFile.addEventListener('change', async () => {
     clearAggregateOutput();
     status.textContent = `正在加载销售点 ${file.name}...`;
     try {
-        const loaded = await loadDatasetFromFile(file, JOIN_SOURCE_ID, 'duckdb-aggregate-join', { fill: '#d5653b', fillOpacity: 0.3, line: '#d5653b', lineWidth: 1.5, pointRadius: 5 }, () => loadVersion === joinLoadVersion);
+        const loaded = await loadDatasetFromFile(file, JOIN_SOURCE_ID, 'duckdb-aggregate-join', { fill: EXAMPLE_FEATURE_COLOR, fillOpacity: EXAMPLE_FILL_OPACITY, line: EXAMPLE_FEATURE_COLOR, lineWidth: 1.5, pointRadius: 5 }, () => loadVersion === joinLoadVersion);
         if (!loaded || loadVersion !== joinLoadVersion)
             return;
         const { dataset, source } = loaded;

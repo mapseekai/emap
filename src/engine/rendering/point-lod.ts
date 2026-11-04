@@ -84,7 +84,8 @@ function matches(
     entry.attribute === (dataset?.attributeVersion ?? 0) &&
     entry.crs === dataset?.info?.crs &&
     entry.mask === mask &&
-    entry.cellSize === (spec.pointLod === false ? 0 : (spec.pointLod?.cellSize ?? 8))
+    !!spec.pointLod &&
+    entry.cellSize === (spec.pointLod.cellSize ?? 8)
   );
 }
 
@@ -157,11 +158,11 @@ export class PointLod {
     bounds: readonly number[],
     view: PointLodView = DEFAULT_VIEW,
   ): PointLodSelection | null {
-    if (spec.pointLod === false || layer.geometry_type !== 'point' || !layer.shapes) {
+    if (!spec.pointLod || layer.geometry_type !== 'point' || !layer.shapes) {
       this.clear(spec.id);
       return null;
     }
-    const cellSize = spec.pointLod?.cellSize ?? 8;
+    const cellSize = spec.pointLod.cellSize ?? 8;
     // The binary cell is between half and one requested CSS cell. Allow two
     // viewports of cells, capped by a memory allowance; query bounds never enter it.
     const viewportCells = Math.ceil(

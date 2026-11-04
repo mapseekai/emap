@@ -59,6 +59,7 @@
     </details>
     <script type="module">
 import { getExampleRenderer } from '/src/renderer-choice.ts';
+import { EXAMPLE_FEATURE_COLOR, EXAMPLE_FILL_OPACITY } from '/src/example-map-style.ts';
 
 
 import { installExampleMapUi } from '/src/example-runtime.ts';
@@ -207,9 +208,9 @@ inputFile.addEventListener("change", async () => {
     status.textContent = `正在加载输入数据 ${file.name}...`;
     try {
         const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, "duckdb-overlay-input", {
-            fill: "#dbeafe",
-            fillOpacity: 0.42,
-            line: "#1d4ed8",
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 1.5,
             pointRadius: 4,
         });
@@ -237,9 +238,9 @@ maskFile.addEventListener("change", async () => {
     status.textContent = `正在加载 mask 数据 ${file.name}...`;
     try {
         const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, "duckdb-overlay-mask", {
-            fill: "#fecdd3",
-            fillOpacity: 0.36,
-            line: "#be123c",
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 2,
             pointRadius: 4,
         });
@@ -303,9 +304,9 @@ runButton.addEventListener("click", async () => {
             resultDataset = await symmetricDifference(inputDataset, maskDataset, opts, runtime);
         }
         const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, "duckdb-overlay-output", {
-            fill: "#fef3c7",
-            fillOpacity: 0.58,
-            line: "#b45309",
+            fill: EXAMPLE_FEATURE_COLOR,
+            fillOpacity: EXAMPLE_FILL_OPACITY,
+            line: EXAMPLE_FEATURE_COLOR,
             lineWidth: 2.5,
             pointRadius: 5,
         });

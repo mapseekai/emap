@@ -4271,7 +4271,7 @@ export const operationSchemas = {
                       },
                     ],
                     description:
-                      'Automatic density thinning; false draws all points. Cell size is in CSS pixels (default 8).',
+                      'Omit or pass false to draw all points. An object enables grid thinning (default cell size: 8 CSS pixels).',
                   },
                   paint: {
                     type: 'object',
