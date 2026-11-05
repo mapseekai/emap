@@ -259,7 +259,7 @@ export class MsdfFontEngine {
       const f = await this.load(request.font, signal);
       // A map backed by a complete glyph catalog never needs the msdfgen heap or WASM.
       this.loadingGenerator ??= this.readBytes(new URL('msdfgen.wasm', this.base).href)
-        .then(MsdfGenerator.create)
+        .then((wasm) => MsdfGenerator.create(wasm))
         .then((generator) => {
           if (this.disposed) {
             generator.dispose();
